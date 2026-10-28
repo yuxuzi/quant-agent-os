@@ -1,0 +1,16 @@
+# Offline portfolio-research example. All data is synthetic; no credentials or network needed.
+
+[request]
+goal = "Summarize the return and drawdown profile of the synthetic balanced portfolio"
+metrics = ["annualized_return", "max_drawdown"]
+
+[series]
+id = "synthetic-balanced-2025"
+periods_per_year = 12
+returns = [
+    0.012, -0.004, 0.018, 0.007, -0.021, 0.015,
+    0.009, -0.013, 0.011, 0.004, -0.006, 0.016,
+]
+
+[limits]
+max_steps = 4
