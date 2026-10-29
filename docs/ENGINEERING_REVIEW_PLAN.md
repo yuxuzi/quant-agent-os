@@ -2,8 +2,8 @@
 
 > **Location.** This plan moved from `pytemplate-uv` to `quant-agent-os/docs/` on 2026-10-28. In this
 > plan, "QuantAgentOS" is implemented by this repository (`quant_agent_os`). Sections about
-> uv-template describe the sibling `pytemplate-uv` project, whose Phase 2 work is tracked in its
-> own `PLAN.md`.
+> uv-template describe the sibling `pytemplate-uv` project, whose Phase 3.1–3.3 work is tracked
+> in its own [PLAN.md](https://github.com/yuxuzi/pytemplate-uv/blob/main/PLAN.md). Its Phase 2 record is archived in that repository's `docs/plans/`.
 
 ## Product direction
 
@@ -11,7 +11,7 @@
 
 The product should make it easier to create reliable projects through a combination of curated project profiles, explicit configuration, and AI-assisted guidance or generation where that is genuinely valuable. The basic generator must remain understandable, deterministic, and lightweight; AI features should be optional rather than becoming a hidden dependency of every generated project.
 
-`uv-template` is one component of the wider **QuantFoundry** ecosystem described below. Within that ecosystem it is the developer and application factory: it scaffolds QuantFoundry applications, QuantAgentOS tool packages, and MCP server projects. Its own generation path stays deterministic and does not depend on QuantAgentOS or any AI service.
+`uv-template` is one component of the wider **QuantFoundry** ecosystem described below. Within that ecosystem it is the developer and application factory. It is a generic tool: it knows nothing about QuantAgentOS. QuantAgentOS calls it to scaffold tool packages, MCP server projects, and applications from a template pack that QuantAgentOS owns (AD-8). Its generation path stays deterministic and does not depend on QuantAgentOS or any AI service.
 
 ## QuantFoundry ecosystem and QuantAgentOS
 
@@ -26,7 +26,7 @@ QuantFoundry is the umbrella ecosystem. QuantAgentOS is its agent runtime and ar
 | QuantFoundry | Umbrella brand and ecosystem | Naming, documentation, release coordination | — |
 | QuantAgentOS | Agent runtime, bounded orchestrator, tool registry, workflow execution, safety controls | Typed tool contract; provider and data-source interfaces | Registered tools only, never their internals |
 | Quant AI Assistant | Flagship user-facing application | User interface and report presentation | QuantAgentOS |
-| uv-template | Developer and application factory | Profiles, components, generation manifest | None at runtime |
+| uv-template (`pytemplate-uv`) | Generic developer and application factory | Profiles, components, external template packs, generation manifest, JSON CLI | Nothing in the ecosystem; QuantAgentOS invokes it through `uvx` |
 | Portfolio analytics (derived from `pyfolio-reloaded`; final name TBD) | Deterministic quantitative engine | Plain Python API, usable without an LLM | Numerical libraries only |
 | Quant Search | Research retrieval and evidence engine | Retrieval API returning passages with source identifiers and locations | User-supplied documents and stores |
 | MCP integrations | Interoperability boundary for supported tools and services | MCP servers that wrap library functions | The library they expose |
@@ -191,65 +191,62 @@ The `simple-modern-uv` project is a useful reference for a minimal, maintained `
 - **Agent-readable project guidance:** generate concise `AGENTS.md` instructions containing only the selected profile's build, test, lint, type-check, and security conventions. It must be useful to people and agents and must never authorize unreviewed deployment or secret access.
 - **Release and maintenance discipline:** provide trusted publishing, provenance, release documentation, changelogs, and an explicit upgrade/migration policy. Do not claim that generated projects can receive safe template updates until that capability has been designed and tested.
 
-### Phase 3.1 — Define the application-factory contract
+### Phases 3.1–3.3 — Generic factory contract, FastAPI foundation, and authentication
 
-Define the durable contract before adding another large template.
+These phases are generic and belong to `pytemplate-uv`. They are planned and tracked in its
+[PLAN.md](https://github.com/yuxuzi/pytemplate-uv/blob/main/PLAN.md) for the 3.0.0 PyPI release. Following AD-8, nothing in them depends on or names
+QuantAgentOS. The work is summarised below.
 
-Scope:
+- **3.1 Contract:** versioned profile and component manifests (`contract = 1`) and deterministic
+  resolution (`requires`, `conflicts`, compatibility) with actionable errors. Also:
+  - `plan`, `validate`, and `create` with `--json` and stable exit codes;
+  - `schema` exports JSON Schemas;
+  - manifest v2 with file ownership;
+  - explicit external **template packs** (`--template DIR|gh:org/repo --template-ref TAG`) under the same
+    `unsafe=False` rules;
+  - a documented compatibility policy and a `pytemplate.api` Python surface.
+- **3.2 FastAPI foundation:**
+  - a layered service (api, application, domain, infrastructure, bootstrap) with health and
+    readiness endpoints, structured logging with correlation IDs, and one error envelope;
+  - optional `database` (SQLAlchemy 2.x, Alembic, repository/unit of work, SQLite by default,
+    PostgreSQL group), `worker` (task-queue seam), and `container` components.
+- **3.3 Authentication:** an optional `auth` component in `api-key` or `oidc` mode, with:
+  - a principal-and-scopes boundary;
+  - an audit sink, log redaction, and a rate-limit seam;
+  - production checks that refuse placeholder secrets and permissive CORS.
 
-- Extend profile metadata with profile kind, version, supported Python versions, compatible components, configuration schema, lifecycle commands, and security posture.
-- Define a component manifest for capabilities such as `database`, `auth`, `api`, `market-data`, `research`, `backtest`, `worker`, `observability`, `ai-agent`, `agent-tool` (a package implementing the QuantAgentOS tool contract), and `mcp` (including an MCP server scaffold that wraps library functions).
-- Define deterministic component resolution: requested components, defaults, incompatible combinations, dependency groups, rendered files, and a machine-readable generation manifest saved in each project.
-- Add `describe-component`, `validate`, and non-interactive configuration-file support alongside the current CLI commands.
-- Establish a supported compatibility policy: component versions are pinned by generated project lockfiles, while profile/component contract changes follow documented compatibility rules.
-- Preserve selection decisions in the render request and generated manifest so later migration tooling can explain which capabilities it may safely add, update, or defer.
+Acceptance criteria that matter to this repository:
+- `uvx pytemplate-uv==3.0.* plan --json` and `schema request` let QuantAgentOS validate a
+  render request without importing `pytemplate-uv`.
+- A pack in a separate repository renders through `--template` with no change to
+  `pytemplate-uv`.
 
-Acceptance criteria:
+### Phase 3.1a — QuantAgentOS template pack (owned by quant-agent-os)
 
-- A user can inspect available profiles, components, inputs, constraints, and generated dependency groups without rendering a project.
-- Invalid combinations fail before rendering with a specific, actionable error.
-- A generated project contains a small manifest recording the generator/profile/component versions and selected options.
-- Adding a component does not require edits to the core CLI, renderer, or unrelated profiles.
-- A generated `agent-tool` package validates against the QuantAgentOS tool contract schema.
-- The generator, manifests, and contract unit tests pass on CPython 3.11, 3.12, 3.13, and 3.14.
-
-### Phase 3.2 — Establish a full-featured FastAPI backend foundation
-
-Evolve the current FastAPI profile into a dependable service foundation, while keeping advanced features opt-in.
-
-Scope:
-
-- Use a layered layout: HTTP routers and request/response schemas; application services/use cases; domain models and ports; infrastructure adapters; and settings/bootstrap code.
-- Keep FastAPI dependency injection as the boundary for databases, identity, external data, queues, and AI clients. Route handlers should not construct infrastructure clients directly.
-- Provide health and readiness endpoints, structured logging with request/correlation IDs, consistent error responses, environment-based settings, and a clear local-development command.
-- Supply a database component with SQLAlchemy 2.x, Alembic migrations, repository/unit-of-work boundaries, and a documented local SQLite option plus production PostgreSQL support. Database selection must remain configuration-driven and testable.
-- Provide a task/worker seam for long-running analysis, imports, or backtests, but defer choosing a queue implementation until a concrete workload requires one.
-- Include container support only as a reproducible local/deployment artifact; do not assume Docker is available to use or test the project.
-
-Acceptance criteria:
-
-- The default FastAPI service starts locally, passes its tests, and exposes health/readiness endpoints without requiring external infrastructure.
-- Enabling the database component produces repeatable migrations and isolated test-database fixtures; no hard-coded database URL exists in application code.
-- API, domain, and infrastructure layers can be unit-tested separately, and one integration test exercises a real request path.
-- Windows and Linux CI run the generated service tests successfully.
-
-### Phase 3.3 — Add security and authentication as explicit choices
-
-Authentication is essential for many deployed services, but it must not be a casually generated security system.
+Generation of QuantAgentOS-specific projects lives here, built on the pytemplate-uv pack
+interface rather than inside the generator.
 
 Scope:
-
-- Make authentication an optional component with clear modes: no authentication for local/internal prototypes; API-key authentication for service-to-service use; and standards-based OpenID Connect/OAuth2 integration for user-facing services.
-- Define authorization boundaries through roles/scopes and an application-level current-principal interface; do not scatter token parsing or provider SDK calls through routes.
-- Add secure defaults: password/token secrets supplied only by environment or a supported secret manager integration; redaction in logs; CORS and trusted-host configuration deny-by-default outside development; rate-limit integration seam; audit-event interface.
-- Document threat-model assumptions and deployment responsibilities. Explicitly defer building credential/password-account management unless a product requirement demands it.
+- Add a `templates/` pack to quant-agent-os (`pytemplate-pack.toml`, `contract = 1`). It holds an
+  `agent-tool` profile: a package of `@tool` functions with pydantic input and output models,
+  declared `Permission`s, and `warnings`/`evidence` outputs, plus an explicit registry builder.
+- Add an `mcp-server` component in the same pack. It wraps the tool package with
+  `quant_agent_os.mcp` and contains no business logic (decision 0002). It is gated on Phase 3.6's
+  concrete workflow before it becomes `stable`.
+- Add a `quant-agent-os new-tool NAME` command that writes a render request and runs
+  `uvx pytemplate-uv==3.0.* create-from-config <request.toml> --json`, where the request sets
+  `template` and `template_ref` to the pack. The CLI is the only
+  coupling: there is no import or dependency on `pytemplate-uv` (ask before adding one).
+- Later packs build on the same interface: `market-data`, `research`, `backtest` (3.4) and
+  `ai-agent` (3.5).
 
 Acceptance criteria:
-
-- A generated project can omit authentication entirely or enable exactly one documented mode through the component contract.
-- Authentication and authorization have positive and negative integration tests.
-- Tests use synthetic credentials and never require a live identity provider.
-- Production configuration refuses insecure placeholder secrets and permissive development CORS settings.
+- A generated `agent-tool` package validates against the QuantAgentOS tool contract: its
+  contract test builds a `ToolRegistry`, checks every `descriptor()`, and compares an MCP call
+  with a direct call.
+- The pack renders offline from a local path and from a `vX.Y.Z` git tag.
+- `pytemplate-uv` is not a dependency of `quant-agent-os`, and `quant-agent-os` is not a
+  dependency of `pytemplate-uv`.
 
 ### Phase 3.4 — Introduce quantitative research and data foundations
 
@@ -439,7 +436,8 @@ Unless the review supplies compelling evidence, defer:
 | AD-4 | BYOE with a small documented support set. | Users keep ownership of models, data, and storage without the project promising universal compatibility. | Decision |
 | AD-5 | All ecosystem names are provisional. | No availability or trademark checks have been done. | Decision |
 | AD-6 | Local documents without a mandatory vector database for Quant Search in the MVP. | Reduces infrastructure while still testing citation and evidence behavior. A vector store becomes a BYOE adapter later. | Recommendation |
-| AD-7 | Copier replaces Cookiecutter as the uv-template render engine; Typer remains the CLI. `copier update` is supported from the `vX.Y.Z` git tags of this repository (see Phase 3.7). | Validated questions, verbatim copy of non-`.jinja` files, and a future update path. Templates run with `unsafe=False` and declare no tasks. Details are in [PLAN.md](PLAN.md). | Decision |
+| AD-7 | Copier replaces Cookiecutter as the uv-template render engine; Typer remains the CLI. `copier update` is supported from the `vX.Y.Z` git tags of this repository (see Phase 3.7). | Validated questions, verbatim copy of non-`.jinja` files, and a future update path. Templates run with `unsafe=False` and declare no tasks. Details are in the pytemplate-uv [Phase 2 record](https://github.com/yuxuzi/pytemplate-uv/blob/main/docs/plans/phase-2.md). | Decision |
+| AD-8 | The dependency between uv-template and QuantAgentOS runs one way. `pytemplate-uv` is a generic factory with no QuantAgentOS code, dependency, or naming. QuantAgentOS invokes it as an external CLI (`uvx pytemplate-uv==3.0.*`, JSON in and out) and supplies its own profiles as a template pack. | Each package can be released and tested alone. The generator stays useful outside QuantFoundry, and contract-specific templates evolve with the contract they target. See Phases 3.1–3.3 and 3.1a. | Decision |
 
 ## Risks, release gates, and success metrics
 
@@ -473,7 +471,7 @@ Unless the review supplies compelling evidence, defer:
 
 ## Phase 2 review findings — current CLI generator
 
-> **Superseded.** The current Phase 2 critique, decisions, and step checklist are in [PLAN.md](PLAN.md). The findings below record the original Phase 1 baseline; most were fixed before the Copier migration and are kept for history.
+> **Superseded.** The Phase 2 critique, decisions, and step checklist are archived in the pytemplate-uv [Phase 2 record](https://github.com/yuxuzi/pytemplate-uv/blob/main/docs/plans/phase-2.md). The findings below record the original Phase 1 baseline; most were fixed before the Copier migration and are kept for history.
 
 The following findings are grounded in the Phase 1 inspection and test output. They describe the implementation at that time, not the desired design.
 
