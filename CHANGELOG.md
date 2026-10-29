@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0] — Unreleased
 
+### Changed
+
+- CI and release workflows use Node.js 24 actions (`actions/checkout@v7`,
+  `astral-sh/setup-uv@v10.3.2`, `actions/upload-artifact@v7`, `actions/download-artifact@v8`).
+
 ### Added
 
 - A tool contract (`ToolSpec`, `@tool`) with typed pydantic input and output, declared
