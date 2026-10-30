@@ -66,4 +66,4 @@ def test_serve_mcp_refuses_a_missing_store(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["serve-mcp", "--store", str(tmp_path / "absent.db")])
 
     assert result.exit_code == 1
-    assert "run quant-research ingest" in result.output
+    assert "run quant-research ingest" in " ".join(result.output.split())
