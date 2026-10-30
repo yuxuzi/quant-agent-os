@@ -2,15 +2,21 @@
 
 The schema is the relational design shared with the planned PostgreSQL adapter (decision 0004).
 Use ``":memory:"`` for tests.
+
+The executor runs tools on worker threads (and a timed-out call may still be running), so one
+connection is shared across threads and every public method holds a re-entrant lock.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sqlite3
-from collections.abc import Iterable, Sequence
+import threading
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
+from typing import Concatenate, ParamSpec, TypeVar
 
 from quant_research.domain.models import (
     Chunk,
@@ -75,6 +81,20 @@ ORDER BY hops, r.confidence DESC, r.id
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _locked(
+    method: Callable[Concatenate[SqliteKnowledgeStore, P], R],
+) -> Callable[Concatenate[SqliteKnowledgeStore, P], R]:
+    @functools.wraps(method)
+    def wrapper(self: SqliteKnowledgeStore, /, *args: P.args, **kwargs: P.kwargs) -> R:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
 
 class SqliteKnowledgeStore:
     """A `KnowledgeStore` in one SQLite file (or in memory)."""
@@ -82,22 +102,26 @@ class SqliteKnowledgeStore:
     def __init__(self, path: str | Path = ":memory:") -> None:
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(path))
+        self._lock = threading.RLock()
+        self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
         self._db.executescript(_SCHEMA)
         self.has_fts = _create_fts(self._db)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
+    @_locked
     def close(self) -> None:
         """Close the database connection."""
         self._db.close()
 
+    @_locked
     def has_document(self, sha256: str) -> bool:
         """Return whether a document with this content hash is stored."""
         row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = ?", (sha256,)).fetchone()
         return row is not None
 
+    @_locked
     def replace_document(
         self,
         document: Document,
@@ -171,6 +195,7 @@ class SqliteKnowledgeStore:
                 ],
             )
 
+    @_locked
     def upsert_entities(self, entities: Iterable[Entity]) -> None:
         """Insert or update canonical entities."""
         with self._db:
@@ -180,6 +205,7 @@ class SqliteKnowledgeStore:
                 [(e.id, e.type, e.name, json.dumps(e.aliases)) for e in entities],
             )
 
+    @_locked
     def record_snapshot(self, snapshot: CorpusSnapshot) -> None:
         """Append ``snapshot`` unless it is already the current one."""
         current = self.current_snapshot()
@@ -197,6 +223,7 @@ class SqliteKnowledgeStore:
                 ),
             )
 
+    @_locked
     def current_snapshot(self) -> CorpusSnapshot | None:
         """Return the most recently recorded snapshot, if any."""
         row = self._db.execute(
@@ -211,10 +238,12 @@ class SqliteKnowledgeStore:
             extractor_versions=json.loads(row["extractor_versions"]),
         )
 
+    @_locked
     def document_hashes(self) -> list[str]:
         """Return the content hashes of every stored document, sorted."""
         return [row[0] for row in self._db.execute("SELECT sha256 FROM documents ORDER BY sha256")]
 
+    @_locked
     def get_document(self, document_id: str) -> Document | None:
         """Return a document by id."""
         row = self._db.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
@@ -222,11 +251,13 @@ class SqliteKnowledgeStore:
             return None
         return Document.model_validate(dict(row) | {"authors": json.loads(row["authors"])})
 
+    @_locked
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         """Return a chunk by id."""
         row = self._db.execute("SELECT * FROM chunks WHERE id = ?", (chunk_id,)).fetchone()
         return None if row is None else Chunk.model_validate(dict(row))
 
+    @_locked
     def get_entities(self, entity_ids: Iterable[str]) -> dict[str, Entity]:
         """Return the known entities among ``entity_ids``."""
         rows = self._db.execute(
@@ -238,6 +269,7 @@ class SqliteKnowledgeStore:
             for row in rows
         }
 
+    @_locked
     def mentioned_entities(self, chunk_ids: Iterable[str]) -> dict[str, list[str]]:
         """Return entity ids mentioned in each chunk, in order of first mention."""
         found: dict[str, list[str]] = {}
@@ -251,6 +283,7 @@ class SqliteKnowledgeStore:
             found.setdefault(row["chunk_id"], []).append(row["entity_id"])
         return found
 
+    @_locked
     def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
         """Return chunk ids ranked by distinct entities mentioned, then by mention count."""
         rows = self._db.execute(
@@ -261,6 +294,7 @@ class SqliteKnowledgeStore:
         )
         return [row["chunk_id"] for row in rows]
 
+    @_locked
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
         """Return chunks ranked by BM25 (FTS5), or by term overlap when FTS5 is unavailable."""
         tokens = sorted({token.lower() for token in _TOKEN.findall(query)})
@@ -283,6 +317,7 @@ class SqliteKnowledgeStore:
         scored.sort(key=lambda hit: (-hit.score, hit.chunk_id))
         return scored[:limit]
 
+    @_locked
     def expand(
         self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
     ) -> list[GraphEdge]:

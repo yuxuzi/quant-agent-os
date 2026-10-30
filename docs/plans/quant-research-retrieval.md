@@ -31,6 +31,15 @@ Probing five queries gave these findings:
 
 Each step ends with all four quality gates passing and a commit.
 
+| Step | Status |
+| --- | --- |
+| R1 Characterization tests | Done (`9f5be8f`) |
+| R2 Evaluation harness | Done (`b58acbd`). Baseline: recall 0.75, precision 0.5972 |
+| R3 Quality fixes | Done (`b58acbd`). Recall 1.0, precision 0.9167, validity 1.0 |
+| R4 Injection resistance | Done |
+| R5 Tools, MCP, reporting | Done. It found and fixed a defect: SQLite connections were bound to one thread, so every executor and MCP call failed |
+| R6 Documentation sync | Done |
+
 ### R1. Characterization tests (no behaviour change)
 
 Tests:

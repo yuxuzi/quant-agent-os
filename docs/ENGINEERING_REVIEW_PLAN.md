@@ -129,7 +129,7 @@ platform's contract tests.
 
 1. `uvx --from 'quant-agent-os[mcp]' quant-agent-os serve-mcp` starts a stdio server. A local
    MCP client test lists the tools, and each call result equals the direct executor result.
-2. `quant-agent-os research ingest tests/fixtures/corpus` builds a SQLite knowledge store
+2. `quant-research ingest packages/quant-research/tests/fixtures/corpus` builds a SQLite knowledge store
    offline. The rerun is idempotent, and the corpus snapshot id stays stable.
 3. `find_related_signals` returns passages and graph paths. Every passage has a `SourceRef`
    with a location, and every graph edge cites a chunk.
@@ -221,7 +221,7 @@ onto the days below, so there is still only one timeline.
 - *Tests:* the CLI help test.
 - *Risk:* none.
 
-**B-05. Quant Research store and ingestion** (days 8–14)
+**B-05. Quant Research store and ingestion** (days 8–14). **Done** (commits `1f94aa5`–`b58acbd`).
 - *Rationale:* the core of product A.
 - *Files:*
   - `quant_research/domain/` (Document, Chunk, Entity, Relation, CorpusSnapshot, `KnowledgeStore`
@@ -229,7 +229,7 @@ onto the days below, so there is still only one timeline.
   - `infrastructure/sqlite_store.py` and `memory_store.py`;
   - `application/ingest.py`;
   - `vocabulary/quant-v1.toml`;
-  - the CLI `research ingest`;
+  - the CLI `quant-research ingest`;
   - `tests/fixtures/corpus/` (about 10 synthetic, freely licensed notes).
 - *Acceptance:*
   - ingestion is idempotent by content hash;
@@ -245,7 +245,7 @@ onto the days below, so there is still only one timeline.
 
 | ID | Task | Depends on | Acceptance (summary) |
 | --- | --- | --- | --- |
-| B-06 | Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations. Step plan: [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md) | B-05 | Criteria 3–4 in section 3 |
+| B-06 | **Done.** Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations. Step plan: [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md) | B-05 | Criteria 3–4 in section 3 |
 | B-07 | SDK `Platform` facade (`call`, `run`, `get_run`) | B-02 | Same records as the MCP path |
 | B-08 | `RunStore` (memory, SQLite) and append-only audit events | B-02 | Criterion 6; no secrets in the audit (test) |
 | B-09 | Approval gate, `approval_required` status, subprocess runner (decision 0005) | B-08 | Approvals bound to input hashes and single use; hard kill on timeout |

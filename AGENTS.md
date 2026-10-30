@@ -9,8 +9,10 @@ Quant-Agent-OS is an open-source quantitative intelligence and application-engin
 platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
   executor, one orchestrator, evidence-linked reports, and the MCP adapter.
-- **Quant Research** (`packages/quant-research`, planned): a Graph RAG knowledge system.
-- **Quant App Factory** (`packages/quant-app-factory`, planned): Python application
+- **Quant Research** (`packages/quant-research`): a Graph RAG knowledge system. It is layered
+  as `domain` → `application` → `infrastructure`, with `tools.py` and `cli.py` as interfaces and
+  `bootstrap.py` as the composition root.
+- **Quant App Factory** (`packages/quant-app-factory`, skeleton): Python application
   generation.
 
 Core must never import a product, and the products must not import each other. Quantitative
@@ -32,7 +34,8 @@ Read [docs/architecture.md](docs/architecture.md) and the plan in
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
-| Offline demo | `uv run python examples/portfolio-research/portfolio_research.py` |
+| Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py` |
+| Research evaluation | `uv run python packages/quant-research/tests/research_eval.py` (add `--update` to rebaseline) |
 
 Before reporting work as done, run the test, lint, format, and type-check commands and report
 the real results.

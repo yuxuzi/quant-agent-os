@@ -29,9 +29,16 @@ platform requires no infrastructure the user does not already own.
 - Re-evaluate a dedicated graph database only when measured queries exceed two hops, the scale
   exceeds what PostgreSQL handles comfortably, or a query pattern cannot be expressed with CTEs.
 
+## Implementation note (2026-10-30)
+
+The SQLite adapter covers unit tests through `":memory:"`, so no separate in-memory adapter
+exists. The schema, the FTS5 fallback, and recursive-CTE expansion are implemented in
+`quant_research.infrastructure.sqlite_store`. The connection is shared across threads under a
+lock, because `ToolExecutor` runs tools on worker threads.
+
 ## Consequences
 
 - The MVP adds no runtime dependency.
 - Moving to PostgreSQL is an adapter swap, verified by the shared adapter contract tests.
-- SQLite FTS5 availability depends on the Python build. The adapter detects a missing FTS5 and
-  falls back to a simpler keyword scorer with a warning.
+- SQLite FTS5 availability depends on the Python build. The adapter detects a missing FTS5
+  (`has_fts` is false) and falls back to a simpler term-overlap scorer.

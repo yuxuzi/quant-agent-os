@@ -1,6 +1,7 @@
 """Unit tests for ingestion and the SQLite knowledge store."""
 
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,10 @@ def test_cli_ingests_and_searches(tmp_path: Path) -> None:
     assert searched.exit_code == 0, searched.output
     assert "Order-flow imbalance" in searched.output
     assert missing.exit_code == 1
+
+
+def test_the_store_can_be_used_from_worker_threads(research: ResearchApp) -> None:
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: research.store.keyword_search("reversal", 3), range(8)))
+
+    assert all(result == results[0] and result for result in results)

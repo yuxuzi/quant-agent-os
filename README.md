@@ -21,9 +21,10 @@ It has two products built on one core platform:
 | --- | --- |
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
 | Core: MCP adapter | Implemented; stdio server is next (backlog B-01) |
+| Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store, approvals, SDK facade | Planned for the MVP |
-| Quant Research (Graph RAG) | Designed ([architecture §6–7](docs/architecture.md)); MVP in progress |
-| Quant App Factory | Designed ([architecture §8–9](docs/architecture.md)); foundation in the MVP |
+| Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation ([architecture §6–7](docs/architecture.md)) |
+| Quant App Factory | Designed ([architecture §8–9](docs/architecture.md)); package skeleton only |
 | Quant analytics | Example metrics only; separate package planned |
 
 The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
@@ -35,6 +36,7 @@ The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](
 ```bash
 uv sync
 uv run python examples/portfolio-research/portfolio_research.py   # offline end-to-end demo
+uv run python examples/quant-research/research_demo.py            # Graph RAG demo, offline
 uv run quant-agent-os info                                        # active settings, secrets hidden
 uv run pytest
 ```
@@ -94,8 +96,10 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   reporting/      Report models and Markdown rendering
   mcp/            MCP tool definitions and calls over the registry
   observability/  logging with secret redaction
+packages/quant-research/   Quant Research (Graph RAG) product
+packages/quant-app-factory/  Quant App Factory product (skeleton)
 apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
-examples/portfolio-research/
+examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
 docs/   architecture, configuration, security, getting started, decisions, roadmap
 ```

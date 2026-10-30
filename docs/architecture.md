@@ -211,7 +211,12 @@ Tool output and retrieved text are never fed back into **planning**. A tool may 
 text to a model for synthesis (section 6.5). The synthesized text is labelled `interpretation`
 and cannot choose tools.
 
-## 6. Quant Research: Graph RAG architecture (proposed)
+## 6. Quant Research: Graph RAG architecture
+
+**Confirmed** for keyword, mention, and graph retrieval over SQLite (`packages/quant-research`,
+step plan in [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)).
+**Proposed** for the vector channel, PostgreSQL, the LLM extractor, PDF loading, and
+server-side synthesis.
 
 Graph RAG is the defining capability of Quant Research: answers are assembled from explicit,
 typed relationships between quantitative concepts, plus the passages that justify each
@@ -221,7 +226,7 @@ relationship, not from vector similarity alone.
 
 ```text
  operator (CLI / SDK; never an agent tool in the MVP)
-   │  quant-agent-os research ingest ./corpus
+   │  quant-research ingest ./corpus
    ▼
  Loaders ─▶ Chunker ─▶ Extractors ───────────────▶ Entity resolution ─▶ KnowledgeStore
  md, txt,    passages    rule-based (vocabulary,     canonical ids,        documents, chunks,
@@ -250,11 +255,15 @@ relationship, not from vector similarity alone.
 ### 6.3 Extraction
 
 The extractors in the first version are deterministic:
-- a curated, versioned quant vocabulary of factors, signals, metrics, methods, and asset
-  classes, with aliases (for example "HML" → `factor:value`);
-- document frontmatter and metadata;
-- citation and reference parsing;
-- explicit cue patterns (for example "X predicts Y", "X is robust to Y").
+- a curated, versioned quant vocabulary (`quant-v1`, bundled) of factors, signals,
+  strategies, methods, metrics, asset classes, datasets, and concepts, with aliases (for
+  example "HML" → `factor:value`). The longest alias wins, and short all-capital aliases match
+  case-sensitively;
+- document front matter (title, authors, published, license);
+- cue phrases between two entities in the same sentence (for example "X predicts Y" or
+  "X is explained by Y"). Without a cue, the pair becomes a `related_to` edge with confidence
+  0.4, which the default `min_confidence` of 0.5 excludes;
+- citation and reference parsing (planned).
 
 Every extracted mention and relation stores the extractor name, version, confidence, and the
 chunk it came from. An LLM extractor is a later, opt-in adapter. Its relations are labelled
@@ -263,16 +272,24 @@ enabled by default.
 
 ### 6.4 Retrieval
 
-1. **Seed:** match entities in the query against the vocabulary and aliases, and run a keyword
-   search over chunks (SQLite FTS5 or PostgreSQL full-text search).
-2. **Expand:** traverse relations for `hops` (default 1, maximum 2) from the seed entities,
-   filtered by predicate and confidence. This uses a recursive CTE, which works on both SQLite
-   and PostgreSQL.
-3. **Vector** (later): use pgvector similarity with a bring-your-own embedding provider. Add it
-   only if the citation evaluation shows a gain.
-4. **Fuse:** combine the result lists with reciprocal rank fusion, deduplicate by chunk, and cap
-   the results at `k`.
-5. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
+1. **Seed:** match vocabulary entities in the query. When the query names none, seed from at
+   most 3 entities in the best keyword passage, report them as direct (`hops = 0`) results, and
+   warn.
+2. **Keyword channel:** BM25 over chunks (SQLite FTS5; PostgreSQL full-text search later),
+   using the query's content terms with stopwords removed. Without FTS5, a term-overlap scorer
+   is used.
+3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
+   topic rank well.
+4. **Graph channel:** traverse relations for `hops` (default 1, maximum 2) from the seeds with
+   `confidence >= min_confidence`, using a recursive CTE that works on both SQLite and
+   PostgreSQL. Related entities are scored by the sum of confidence divided by hops. The
+   results are capped at 10 entities with 3 links each, and the chunks of their links form the
+   ranking.
+5. **Vector channel** (later): pgvector similarity with a bring-your-own embedding provider,
+   added only if the evaluation shows a gain.
+6. **Fuse:** reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id
+   for determinism, capped at `k` passages.
+7. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
    paths whose edges cite their supporting chunks, the matched entities, the snapshot id, and
    warnings (for example "no source supports relation X directly").
 
@@ -290,13 +307,29 @@ enabled by default.
 
 The entity types are:
 - `paper`, `author`, `concept`, `factor`, `signal`, `strategy`, `instrument`, `asset_class`,
-  `method`, `dataset`, `empirical_result`.
+  `method`, `dataset`, `metric`, `empirical_result`.
 
-The predicates are:
-- `authored_by`, `defines`, `uses`, `tested_on`, `reports`, `extends`, `contradicts`,
-  `related_to`, `implemented_in`.
+The `rules-v2` predicates are:
+- `predicts`, `correlates_with`, `explained_by`, `extends`, `contradicts`, `uses`,
+  `tested_on`, `related_to`.
 
-Both lists are versioned with the vocabulary.
+The type and predicate lists live in `quant_research.domain.models`. A change to either, to
+the vocabulary, or to the extractor bumps the matching version, and therefore the corpus
+snapshot.
+
+### 6.7 Quality evaluation
+
+`packages/quant-research/tests/research_eval.py` scores a gold set
+(`tests/evaluation/gold.toml`) on the following metrics:
+- related-entity recall;
+- passage precision@k;
+- citation validity (every link's chunk mentions both entities);
+- location validity (every line range reproduces its text);
+- empty-query accuracy.
+
+Tests fail on any drop below `baseline.json`, and the two validity metrics must be 1.0. The
+current gold set is small and was written alongside the code, so a held-out set is needed
+before making quality claims.
 
 ## 7. Database and knowledge-graph design (proposed)
 
@@ -306,18 +339,27 @@ if traversal depth, scale, or query patterns exceed what recursive CTEs handle
 
 | Table | Key columns |
 | --- | --- |
-| `documents` | `id`, `sha256`, `uri`, `title`, `authors`, `published`, `license_note`, `loader_version`, `ingested_at` |
-| `chunks` | `id`, `document_id`, `ordinal`, `text`, `location`, `section`, `sha256` |
-| `entities` | `id` (`type:slug`), `type`, `name`, `aliases`, `vocabulary_version` |
-| `mentions` | `entity_id`, `chunk_id`, `span`, `extractor`, `confidence` |
-| `relations` | `id`, `subject_id`, `predicate`, `object_id`, `chunk_id`, `extractor`, `extractor_version`, `confidence` |
-| `embeddings` (later) | `chunk_id`, `model`, `dimensions`, `vector` |
-| `corpus_snapshots` | `id`, `created_at`, `document_hashes_digest`, `extractor_versions` |
+**Confirmed** in `SqliteKnowledgeStore` (schema version 1):
 
-`KnowledgeStore` is a `Protocol` with three adapters:
-- `InMemoryKnowledgeStore`, for unit tests;
-- `SqliteKnowledgeStore`, which uses only the standard library and FTS5 and serves the MVP,
-  the demo, and offline tests;
+| Table | Key columns |
+| --- | --- |
+| `documents` | `id` (`doc:` + hash prefix), `sha256` (unique), `uri` (unique), `title`, `authors`, `published`, `license_note`, `loader_version` |
+| `chunks` | `id` (`<document>#<ordinal>`), `document_id`, `ordinal`, `text`, `line_start`, `line_end`, `section` |
+| `chunks_fts` | FTS5 index of `chunks.text` (when the SQLite build has FTS5) |
+| `entities` | `id` (`type:slug`), `type`, `name`, `aliases` |
+| `mentions` | `entity_id`, `chunk_id`, `start`, `end`, `extractor`, `confidence` |
+| `relations` | `id`, `subject_id`, `predicate`, `object_id`, `chunk_id`, `extractor`, `extractor_version`, `confidence` |
+| `corpus_snapshots` | `seq`, `id`, `document_count`, `vocabulary_version`, `extractor_versions` |
+| `embeddings` (later) | `chunk_id`, `model`, `dimensions`, `vector` |
+
+Deleting a document cascades to its chunks, mentions, and relations. A changed file therefore
+replaces all of its records.
+
+`KnowledgeStore` and `SourceLoader` are `Protocol`s. The adapters are:
+- `SqliteKnowledgeStore`. It uses only the standard library, works as a file or as
+  `":memory:"` (for tests), and shares one locked connection because the executor runs tools on
+  worker threads.
+- `TextFileLoader`, for Markdown and text with front matter.
 - `PostgresKnowledgeStore`, which uses SQLAlchemy, psycopg, and pgvector, ships as an optional
   extra, and is planned for days 31–60.
 
@@ -404,7 +446,7 @@ Further rules:
 | --- | --- | --- | --- |
 | MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `mcp` adapter + official MCP Python SDK (optional extra) | Adapter confirmed; server proposed for the MVP |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor | Proposed for the MVP |
-| CLI | Operators | Typer: `info`, `serve-mcp`, `research ingest`, `factory plan/create` | Partly confirmed |
+| CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
 | REST | Web apps, non-Python clients, the hosted offering | FastAPI over the executor (optional extra) | Deferred until a client needs it |
 
 The rules that apply to every interface:

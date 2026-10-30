@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- uv workspace: Core stays at the root; `packages/quant-research` and
+  `packages/quant-app-factory` (skeleton) are members, and a contract test enforces the import
+  boundaries.
+- Run provenance: `call_id`, `run_id`, `started_at`, `input_sha256`, and `data_versions` on
+  every `ToolCallRecord`; `run_id`, `registry_digest`, and `data_versions` in `RunMetadata`;
+  `deterministic` and `idempotent` flags on `ToolSpec`.
+- Quant Research:
+  - Markdown and text ingestion with front matter;
+  - the bundled `quant-v1` vocabulary and rule-based extraction;
+  - a SQLite knowledge store (FTS5, recursive-CTE graph expansion);
+  - hybrid keyword, mention, and graph retrieval with rank fusion;
+  - evidence packets that cite every passage and graph edge;
+  - the read-only tools `find_related_signals` and `get_source_passage`;
+  - the `quant-research` CLI;
+  - a retrieval-quality evaluation with a recorded baseline;
+  - the `examples/quant-research` demo.
+
 ### Changed
 
 - Repositioned the project as Quant-Agent-OS: a platform consumed by AI clients over MCP and the
