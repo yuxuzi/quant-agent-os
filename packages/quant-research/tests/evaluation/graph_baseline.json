@@ -1,17 +1,17 @@
 {
-  "direction_errors": 2,
+  "direction_errors": 0,
   "empty_query_accuracy": 1.0,
-  "evidence_precision": 0.875,
+  "evidence_precision": 0.8958,
   "evidence_precision_without_graph": 0.8542,
   "evidence_recall": 1.0,
   "evidence_recall_without_graph": 1.0,
   "expected_path_accuracy": 0.0,
-  "extraction_f1": 0.8667,
-  "extraction_precision": 0.8125,
-  "extraction_recall": 0.9286,
+  "extraction_f1": 1.0,
+  "extraction_precision": 1.0,
+  "extraction_recall": 1.0,
   "multi_hop_evidence_recall": 1.0,
   "multi_hop_evidence_recall_without_graph": 1.0,
-  "negation_false_positives": 4,
+  "negation_false_positives": 0,
   "path_validity": 0.0,
   "related_recall": 1.0
 }
