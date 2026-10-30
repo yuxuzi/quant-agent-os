@@ -27,6 +27,7 @@ MAX_FALLBACK_SEEDS = 3
 MIN_VECTOR_SCORE = 0.2
 
 Channel = Literal["keyword", "mention", "graph", "vector"]
+ALL_CHANNELS: frozenset[Channel] = frozenset({"keyword", "mention", "graph", "vector"})
 
 
 class ResearchQuery(BaseModel):
@@ -111,7 +112,8 @@ class ResearchService:
     """Read-only queries over a knowledge store, with an optional vector channel.
 
     With an embedder and a vector index, chunks whose cosine similarity to the query is at
-    least `MIN_VECTOR_SCORE` form a fourth ranking in the fusion.
+    least `MIN_VECTOR_SCORE` form a fourth ranking in the fusion. ``channels`` limits which
+    rankings rank passages (for ablation studies); related entities always come from the graph.
     """
 
     def __init__(
@@ -121,6 +123,7 @@ class ResearchService:
         *,
         embedder: Embedder | None = None,
         vectors: VectorIndex | None = None,
+        channels: frozenset[Channel] = ALL_CHANNELS,
     ) -> None:
         if (embedder is None) != (vectors is None):
             raise ValueError("Pass both an embedder and a vector index, or neither.")
@@ -128,6 +131,7 @@ class ResearchService:
         self.matcher = EntityMatcher(vocabulary)
         self.embedder = embedder
         self.vectors = vectors
+        self.channels = channels
 
     def find_related(self, request: ResearchQuery) -> EvidencePacket:
         """Return entities of ``request.entity_types`` related to the query, with evidence."""
@@ -180,7 +184,8 @@ class ResearchService:
             ),
             "vector": self._vector_ranking(request.query, request.k * 3, warnings),
         }
-        fused = _fuse(rankings)[: request.k]
+        fused = _fuse({name: ids for name, ids in rankings.items() if name in self.channels})
+        fused = fused[: request.k]
         passages = [p for p in (self._passage(cid, score, ch) for cid, score, ch in fused) if p]
         if not passages and not seeds:
             warnings.append(

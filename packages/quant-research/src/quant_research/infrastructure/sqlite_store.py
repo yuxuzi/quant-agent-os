@@ -351,6 +351,15 @@ class SqliteKnowledgeStore:
         return scored[:limit]
 
     @_locked
+    def all_relations(self) -> list[Relation]:
+        """Return every stored relation, by id (for evaluation and export)."""
+        rows = self._db.execute("SELECT * FROM relations ORDER BY id")
+        return [
+            Relation.model_validate({key: row[key] for key in Relation.model_fields})
+            for row in rows
+        ]
+
+    @_locked
     def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
         """Store ``(chunk_id, vector)`` pairs for ``model_id``, replacing existing ones."""
         with self._db:
