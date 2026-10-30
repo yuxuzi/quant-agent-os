@@ -26,6 +26,8 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import SecretStr
 
+from quant_research.domain.ports import EmbeddingError
+
 InputKind = Literal["document", "query"]
 
 RETRYABLE = frozenset({429, 500, 502, 503, 504})
@@ -33,8 +35,9 @@ MAX_ATTEMPTS = 5
 CHARS_PER_TOKEN = 3  # conservative estimate for batching; providers count exactly
 
 
-class EmbeddingServiceError(RuntimeError):
-    """Raised when an embedding provider rejects a request or stays unavailable."""
+class EmbeddingServiceError(EmbeddingError):
+    """Raised when an embedding provider rejects a request, stays unavailable, or runs out of
+    time."""
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class HttpResponse:
 
 Transport = Callable[[urllib.request.Request, float], HttpResponse]
 Sleep = Callable[[float], None]
+Clock = Callable[[], float]
 
 
 def urllib_transport(request: urllib.request.Request, timeout: float) -> HttpResponse:
@@ -85,6 +89,7 @@ class _HttpEmbedder:
         timeout: float,
         transport: Transport | None,
         sleep: Sleep | None,
+        clock: Clock | None = None,
     ) -> None:
         if not api_key.get_secret_value().strip():
             raise EmbeddingServiceError(
@@ -94,13 +99,39 @@ class _HttpEmbedder:
         self._timeout = timeout
         self._transport = transport or urllib_transport
         self._sleep = sleep or time.sleep
+        self._clock = clock or time.monotonic
 
-    def embed(self, texts: Sequence[str], *, kind: InputKind = "document") -> list[list[float]]:
-        """Return one unit-length vector per text, in order."""
+    def embed(
+        self,
+        texts: Sequence[str],
+        *,
+        kind: InputKind = "document",
+        deadline: float | None = None,
+    ) -> list[list[float]]:
+        """Return one unit-length vector per text, in order.
+
+        With ``deadline`` (a `time.monotonic` instant), each request's timeout shrinks to the
+        time left and retries stop once a backoff would pass it.
+        """
         vectors: list[list[float]] = []
         for batch in self._batches(texts):
-            vectors += self._embed_batch(batch, kind)
+            vectors += self._embed_batch(batch, kind, deadline)
         return vectors
+
+    def _remaining(self, deadline: float | None) -> float:
+        if deadline is None:
+            return self._timeout
+        remaining = deadline - self._clock()
+        if remaining <= 0:
+            raise EmbeddingServiceError(f"{self.provider} did not answer within the time budget.")
+        return min(self._timeout, remaining)
+
+    def _pause(self, seconds: float, deadline: float | None) -> None:
+        if deadline is not None and self._clock() + seconds >= deadline:
+            raise EmbeddingServiceError(
+                f"{self.provider} kept failing; no time left in the budget to retry."
+            )
+        self._sleep(seconds)
 
     def _batches(self, texts: Sequence[str]) -> list[list[str]]:
         batches: list[list[str]] = []
@@ -121,7 +152,9 @@ class _HttpEmbedder:
             batches.append(current)
         return batches
 
-    def _embed_batch(self, batch: list[str], kind: InputKind) -> list[list[float]]:
+    def _embed_batch(
+        self, batch: list[str], kind: InputKind, deadline: float | None
+    ) -> list[list[float]]:
         payload = json.dumps(self._body(batch, kind)).encode("utf-8")
         headers = {
             "Authorization": f"Bearer {self._api_key.get_secret_value()}",
@@ -130,18 +163,18 @@ class _HttpEmbedder:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             request = urllib.request.Request(self.url, data=payload, headers=headers, method="POST")
             try:
-                response = self._transport(request, self._timeout)
+                response = self._transport(request, self._remaining(deadline))
             except (urllib.error.URLError, TimeoutError, OSError) as error:
                 if attempt == MAX_ATTEMPTS:
                     raise EmbeddingServiceError(
                         f"{self.provider} is unreachable after {MAX_ATTEMPTS} attempts: {error}."
                     ) from error
-                self._sleep(_backoff(attempt, None))
+                self._pause(_backoff(attempt, None), deadline)
                 continue
             if response.status == 200:
                 return self._parse(response.body, len(batch))
             if response.status in RETRYABLE and attempt < MAX_ATTEMPTS:
-                self._sleep(_backoff(attempt, response.retry_after))
+                self._pause(_backoff(attempt, response.retry_after), deadline)
                 continue
             raise EmbeddingServiceError(self._explain(response))
         raise AssertionError("unreachable")  # pragma: no cover
@@ -228,8 +261,9 @@ class VoyageEmbedder(_HttpEmbedder):
         timeout: float = 30.0,
         transport: Transport | None = None,
         sleep: Sleep | None = None,
+        clock: Clock | None = None,
     ) -> None:
-        super().__init__(api_key, timeout=timeout, transport=transport, sleep=sleep)
+        super().__init__(api_key, timeout=timeout, transport=transport, sleep=sleep, clock=clock)
         if model not in self.MODELS:
             known = ", ".join(sorted(self.MODELS))
             raise EmbeddingServiceError(f"Unknown Voyage model '{model}'. Supported: {known}.")
@@ -276,8 +310,9 @@ class OpenAIEmbedder(_HttpEmbedder):
         timeout: float = 30.0,
         transport: Transport | None = None,
         sleep: Sleep | None = None,
+        clock: Clock | None = None,
     ) -> None:
-        super().__init__(api_key, timeout=timeout, transport=transport, sleep=sleep)
+        super().__init__(api_key, timeout=timeout, transport=transport, sleep=sleep, clock=clock)
         if model not in self.MODELS:
             known = ", ".join(sorted(self.MODELS))
             raise EmbeddingServiceError(f"Unknown OpenAI model '{model}'. Supported: {known}.")

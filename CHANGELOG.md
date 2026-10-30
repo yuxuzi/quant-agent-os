@@ -6,7 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Serving and searching open the knowledge store read-only, so they never migrate or write it,
+  and a read-only mount works. Answers read one consistent corpus state. Snapshots are built
+  and published atomically. The schema migration is atomic and can be re-run.
+- Hosted query embedding has a deadline inside the tool timeout and degrades to the other
+  channels on failure. Repeated queries are cached instead of sent to the provider again.
+- MCP: `openWorldHint` is also set for `external_action` tools, and a missing `mcp` extra
+  gives the install hint instead of a traceback.
+
 ### Added
+
+- MCP server over stdio: `quant_agent_os.mcp.server` (optional `mcp` extra, built on the
+  official MCP Python SDK) forwards `tools/list` and `tools/call` to the existing adapter.
+  `quant-research serve-mcp --store PATH` serves the read-only research tools to Claude Code,
+  Claude Desktop, and other MCP clients. Tool annotations (read-only, idempotent, open-world)
+  are derived from declared permissions.
 
 - uv workspace: Core stays at the root; `packages/quant-research` and
   `packages/quant-app-factory` (skeleton) are members, and a contract test enforces the import

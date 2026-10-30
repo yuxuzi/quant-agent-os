@@ -10,16 +10,30 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from quant_agent_os.config import get_settings
+from quant_agent_os.mcp import MCPUnavailableError, run_stdio
+from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_research.application.retrieval import ResearchQuery
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
+from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.tools import research_tools
 
 app = typer.Typer(
     help="Quant Research: build and query a Graph RAG knowledge store.", no_args_is_help=True
 )
 console = Console()
+errors = Console(stderr=True, soft_wrap=True)  # never insert line breaks into messages
+
+MCP_INSTRUCTIONS = (
+    "Quant Research searches the user's own ingested research corpus (notes, papers, PDFs). "
+    "Use find_related_signals for questions about factors, signals, strategies, and methods; "
+    "cite every claim with the passage's source and location; call get_source_passage for the "
+    "full text of a passage. Results are retrieved evidence, not investment advice."
+)
 
 StoreOption = Annotated[
     Path, typer.Option("--store", "-s", help="SQLite knowledge store to create or use.")
@@ -48,16 +62,19 @@ ModelOption = Annotated[
 ]
 
 
-def _open(store: Path, embedder: EmbedderChoice | None, model: str | None) -> ResearchApp:
+def _open(
+    store: Path, embedder: EmbedderChoice | None, model: str | None, *, read_only: bool = False
+) -> ResearchApp:
+    """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
         chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
-    except EmbeddingServiceError as error:
+        return open_research(store, embedder=chosen, read_only=read_only)
+    except (EmbeddingServiceError, StoreError) as error:
         raise _fail(error) from error
-    return open_research(store, embedder=chosen)
 
 
 def _fail(error: Exception) -> typer.Exit:
-    console.print(f"[red]{error}[/red]")
+    errors.print(f"[red]{error}[/red]")
     return typer.Exit(code=1)
 
 
@@ -103,11 +120,11 @@ def search(
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the evidence packet.")] = False,
 ) -> None:
-    """Run `find_related_signals` locally and show the evidence.
+    """Run `find_related_signals` locally (read-only) and show the evidence.
 
     Use the same --embedder and --embedding-model as at ingestion to search by vector.
     """
-    research = _open(store, embedder, embedding_model)
+    research = _open(store, embedder, embedding_model, read_only=True)
     try:
         packet = research.research.find_related(ResearchQuery(query=query, k=k, hops=hops))
     except EmbeddingServiceError as error:
@@ -136,6 +153,42 @@ def search(
     for warning in packet.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
     console.print(f"Corpus snapshot {packet.corpus_snapshot}.")
+
+
+@app.command("serve-mcp")
+def serve_mcp(
+    store: StoreOption = DEFAULT_STORE,
+    embedder: EmbedderOption = None,
+    embedding_model: ModelOption = None,
+) -> None:
+    """Serve the read-only research tools to an MCP client (Claude, Cursor, ...) over stdio.
+
+    Ingest first; the store is opened read-only, so serving never changes it (a read-only mount
+    works). Permissions come from
+    QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr because
+    stdout carries the protocol.
+    """
+    research = _open(store, embedder, embedding_model, read_only=True)
+    try:
+        policy = PermissionPolicy(granted=get_settings().granted_permissions)
+        tools = research_tools(research.research)
+        for spec in tools:
+            missing = sorted(p.value for p in spec.permissions - policy.granted)
+            if missing:
+                errors.print(
+                    f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
+                    "not granted, so calls will be denied. Grant it with "
+                    "QUANT_AGENT_OS_GRANTED_PERMISSIONS, or serve without a hosted embedder."
+                )
+        run_stdio(
+            ToolExecutor(ToolRegistry(tools), policy),
+            name="quant-research",
+            instructions=MCP_INSTRUCTIONS,
+        )
+    except MCPUnavailableError as error:
+        raise _fail(error) from error
+    finally:
+        research.close()
 
 
 def main() -> None:

@@ -35,11 +35,16 @@ class HashingEmbedder:
         self.model_id = f"hashing-v1-{dimensions}" + ("-entities" if matcher else "")
 
     def embed(
-        self, texts: Sequence[str], *, kind: Literal["document", "query"] = "document"
+        self,
+        texts: Sequence[str],
+        *,
+        kind: Literal["document", "query"] = "document",
+        deadline: float | None = None,
     ) -> list[list[float]]:
         """Return one unit-length vector per text; texts without features map to zeros.
 
-        ``kind`` is accepted for the `Embedder` port and does not change the result.
+        ``kind`` and ``deadline`` are accepted for the `Embedder` port; local hashing ignores
+        them.
         """
         return [self._embed(text) for text in texts]
 
