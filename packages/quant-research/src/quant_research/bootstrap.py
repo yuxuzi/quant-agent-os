@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
+from typing import Self
 
 from quant_research.application.ingest import IngestService
 from quant_research.application.retrieval import ResearchService
@@ -26,6 +28,17 @@ class ResearchApp:
     def close(self) -> None:
         """Close the store."""
         self.store.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 def open_research(

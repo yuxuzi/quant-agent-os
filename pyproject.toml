@@ -59,6 +59,9 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["quant_agent_os", "quant_research", "quant_app_factory"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
@@ -68,6 +71,7 @@ files = ["src", "examples", "packages/quant-research/src", "packages/quant-app-f
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages/quant-research/tests", "packages/quant-app-factory/tests"]
 pythonpath = ["examples/portfolio-research"]
+filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
 addopts = "-ra --cov=quant_agent_os --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
 
 [tool.coverage.run]

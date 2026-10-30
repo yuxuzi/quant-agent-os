@@ -245,7 +245,7 @@ onto the days below, so there is still only one timeline.
 
 | ID | Task | Depends on | Acceptance (summary) |
 | --- | --- | --- | --- |
-| B-06 | Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations | B-05 | Criteria 3–4 in section 3 |
+| B-06 | Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations. Step plan: [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md) | B-05 | Criteria 3–4 in section 3 |
 | B-07 | SDK `Platform` facade (`call`, `run`, `get_run`) | B-02 | Same records as the MCP path |
 | B-08 | `RunStore` (memory, SQLite) and append-only audit events | B-02 | Criterion 6; no secrets in the audit (test) |
 | B-09 | Approval gate, `approval_required` status, subprocess runner (decision 0005) | B-08 | Approvals bound to input hashes and single use; hard kill on timeout |
