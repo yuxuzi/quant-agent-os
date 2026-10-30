@@ -11,7 +11,13 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
-dependencies = ["quant-agent-os", "pydantic>=2.7", "rich>=13.7", "typer>=0.12"]
+dependencies = [
+    "quant-agent-os",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "rich>=13.7",
+    "typer>=0.12",
+]
 
 [project.scripts]
 quant-research = "quant_research.cli:main"

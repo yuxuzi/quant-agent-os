@@ -8,8 +8,18 @@ that AI clients (Claude, Copilot, Cursor) turn into cited answers.
 ```bash
 uv run quant-research ingest path/to/corpus          # operator command; writes the store
 uv run quant-research search "What is related to short-term reversal?"
-uv run quant-research search "betting against beta" --vector   # add the mock vector channel
+uv run quant-research search "betting against beta" --embedder hashing   # offline mock vectors
+
+export VOYAGE_API_KEY=...   # or OPENAI_API_KEY with --embedder openai
+uv run quant-research ingest path/to/corpus --embedder voyage   # default model voyage-finance-2
+uv run quant-research search "betting against beta" --embedder voyage
 ```
+
+Hosted embedders send chunk text (at ingestion) and query text (at search) to the provider.
+Ingest and search with the same `--embedder` and `--embedding-model`. To compare a hosted
+model with the baseline, run
+`uv run python packages/quant-research/tests/research_eval.py --embedder voyage`. This live
+run costs a few cents.
 
 It supports Markdown and text with front matter. PDF needs the extra
 `quant-agent-os-research[pdf]`, and its locations cite the page and line range. Scanned PDFs

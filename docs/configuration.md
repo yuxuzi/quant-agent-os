@@ -24,5 +24,23 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 - **Tools and MCP servers:** register your tools explicitly; expose them over MCP through
   `quant_agent_os.mcp`.
 
+### Quant Research embeddings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `VOYAGE_API_KEY` (or `QUANT_RESEARCH_VOYAGE_API_KEY`) | unset | Voyage AI key for `--embedder voyage`; a secret. |
+| `OPENAI_API_KEY` (or `QUANT_RESEARCH_OPENAI_API_KEY`) | unset | OpenAI key for `--embedder openai`; a secret. |
+| `QUANT_RESEARCH_EMBEDDING_TIMEOUT` | `30` | Seconds per embedding request (at most 300). |
+
+Pick the model with `--embedding-model`, for example `voyage-4`, `voyage-4-large`, or
+`text-embedding-3-large`. Ingest and search must use the same embedder and model.
+
+## Supported integrations
+
+| Integration | Status |
+| --- | --- |
+| Voyage AI embeddings (HTTPS) | Supported; tested against a simulated API; live check is opt-in |
+| OpenAI embeddings (HTTPS) | Supported; tested against a simulated API; live check is opt-in |
+
 Supported integrations are listed here as they are added. Anything not listed is not claimed to
 work.

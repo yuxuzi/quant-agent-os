@@ -360,6 +360,12 @@ class SqliteKnowledgeStore:
             )
 
     @_locked
+    def has_embeddings(self, model_id: str) -> bool:
+        """Return whether any chunk has an embedding for ``model_id``."""
+        row = self._db.execute("SELECT 1 FROM embeddings WHERE model = ? LIMIT 1", (model_id,))
+        return row.fetchone() is not None
+
+    @_locked
     def chunks_without_embeddings(self, model_id: str) -> list[tuple[str, str]]:
         """Return ``(chunk_id, text)`` for chunks with no ``model_id`` embedding, by id."""
         rows = self._db.execute(

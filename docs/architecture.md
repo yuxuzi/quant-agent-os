@@ -292,11 +292,23 @@ enabled by default.
    results are capped at 10 entities with 3 links each, and the chunks of their links form the
    ranking.
 5. **Vector channel** (optional, off by default): cosine similarity between the query
-   embedding and chunk embeddings, keeping hits of at least 0.2. The bundled `HashingEmbedder`
-   is an offline mock: signed feature hashing over words, word pairs, and vocabulary entities,
-   so aliases embed close together. It showed no measured gain, so it is opt-in
-   (`vector=True`, `--vector`). A real `Embedder` and pgvector replace it behind the same
-   ports.
+   embedding and the chunk embeddings of the same model, keeping hits of at least 0.2. The
+   `Embedder` port has three adapters:
+   - `HashingEmbedder`, an offline mock (feature hashing over words, word pairs, and
+     vocabulary entities), used in tests;
+   - `VoyageEmbedder`, where `voyage-finance-2` is the default and any current Voyage model is
+     allowed;
+   - `OpenAIEmbedder`, using `text-embedding-3-small` or `-large`.
+
+   The hosted adapters call each provider's HTTPS endpoint with the standard library. They
+   batch under the documented limits, retry 429 and 5xx with backoff, honour `Retry-After`, and
+   normalise vectors to unit length. Voyage receives `input_type` `document` or `query`.
+
+   Select an embedder with `open_research(embedder=...)` or `--embedder`. The model id
+   (`voyage:voyage-finance-2:1024`) is part of the corpus snapshot. Searching with a model the
+   store has no embeddings for warns instead of silently dropping the channel. The channel
+   becomes a default only after it beats the evaluation baseline, which includes
+   `paraphrase_hit_rate`. pgvector replaces the SQLite index at scale.
 6. **Fuse:** reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id
    for determinism, capped at `k` passages.
 7. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
@@ -481,7 +493,7 @@ tests.
 
 | Tool | Product or service | Permissions | Stage |
 | --- | --- | --- | --- |
-| `find_related_signals` | Quant Research | `read_local_data` | MVP |
+| `find_related_signals` | Quant Research | `read_local_data`, plus `network` when a hosted embedder embeds the query | MVP |
 | `get_source_passage` | Quant Research | `read_local_data` | MVP |
 | `analyze_performance` | Analytics (example tools today) | `read_local_data` | MVP |
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |

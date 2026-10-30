@@ -26,7 +26,11 @@ All notable changes to this project are documented here. The format follows
   - the `examples/quant-research` demo;
   - an optional vector channel (`Embedder` and `VectorIndex` ports, an offline
     `HashingEmbedder`, exact cosine search in SQLite), off by default after a measured
-    no-gain result;
+    no-gain result; `--embedder hashing` enables the mock;
+  - hosted embedding models over HTTPS with no new dependency: `VoyageEmbedder` (default
+    `voyage-finance-2`) and `OpenAIEmbedder`, chosen with `--embedder voyage|openai` and
+    `--embedding-model`. Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` as secrets, and
+    query embedding makes `find_related_signals` declare the `network` permission;
   - PDF ingestion with page-level citations through the optional extra
     `quant-agent-os-research[pdf]`, with scanned and corrupt PDFs reported;
   - knowledge-store schema version 2 with in-place migration.

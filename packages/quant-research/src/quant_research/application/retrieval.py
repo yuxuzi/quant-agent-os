@@ -178,7 +178,7 @@ class ResearchService:
             "graph": list(
                 dict.fromkeys(link.chunk_id for entity in related for link in entity.links)
             ),
-            "vector": self._vector_ranking(request.query, request.k * 3),
+            "vector": self._vector_ranking(request.query, request.k * 3, warnings),
         }
         fused = _fuse(rankings)[: request.k]
         passages = [p for p in (self._passage(cid, score, ch) for cid, score, ch in fused) if p]
@@ -229,11 +229,18 @@ class ResearchService:
             data_versions={"corpus_snapshot": snapshot.id} if snapshot else {},
         )
 
-    def _vector_ranking(self, query: str, limit: int) -> list[str]:
+    def _vector_ranking(self, query: str, limit: int, warnings: list[str]) -> list[str]:
         if self.embedder is None or self.vectors is None:
             return []
-        (vector,) = self.embedder.embed([query])
-        hits = self.vectors.vector_search(self.embedder.model_id, vector, limit)
+        model_id = self.embedder.model_id
+        if not self.vectors.has_embeddings(model_id):
+            warnings.append(
+                f"No embeddings for {model_id} in this store; ingest with the same embedder to "
+                "use the vector channel."
+            )
+            return []
+        (vector,) = self.embedder.embed([query], kind="query")
+        hits = self.vectors.vector_search(model_id, vector, limit)
         return [hit.chunk_id for hit in hits if hit.score >= MIN_VECTOR_SCORE]
 
     def get_passage(self, chunk_id: str) -> SourcePassage:

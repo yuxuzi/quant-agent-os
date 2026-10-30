@@ -43,6 +43,7 @@ Each step ends with all four quality gates passing and a commit.
 | R8 PDF ingestion | Done. pypdf is an optional extra, with page-level locations |
 | R9 Generated PDF fixtures | Done. No binary files are committed |
 | R10 Evaluation over text and PDFs | Done. Precision is 0.7583 on the larger 9-query gold set; validity 1.0 |
+| R11 Hosted embedders (Voyage default, OpenAI) | Done. Tested offline; the live comparison is waiting for an API key |
 
 ### R1. Characterization tests (no behaviour change)
 
@@ -149,6 +150,27 @@ The measured result was equal metrics, so `vector=False` stays the default.
 - `tests/pdf_fixtures.py` writes real PDFs: a two-page paper, a scanned PDF, and a corrupt one.
 - Two gold queries cover PDF content.
 - Location validity re-extracts PDF pages.
+
+### R11. Hosted embedding models
+
+The user chose existing hosted models over building one, with Voyage AI as the default and
+OpenAI as an alternative, called over plain HTTPS with no new dependency.
+- `VoyageEmbedder` (`voyage-finance-2` by default) and `OpenAIEmbedder`
+  (`text-embedding-3-small` by default) implement `Embedder`. They were written from each
+  provider's API reference, checked 2026-10-30.
+- The `Embedder` port gains `kind` (`document` or `query`) and `requires_network`. A hosted
+  embedder makes `find_related_signals` declare `network`.
+- `quant_research.config` holds `EmbeddingSettings` (keys as `SecretStr`) and `make_embedder`,
+  which fails fast without a key. The CLI takes `--embedder` and `--embedding-model`.
+- The evaluation adds four paraphrase queries (`paraphrase_hit_rate`; baseline 0.75 without
+  vectors). The live comparison runs with `research_eval.py --embedder voyage`.
+- Tests use a simulated API: request shape, batching, ordering, normalisation, retries,
+  actionable errors that never leak the key, and end-to-end ingest and search. A loopback
+  server tests the real urllib transport, and that test found and fixed unclosed `HTTPError`
+  responses.
+
+Next: run the live comparison with a key. Enable hosted vectors by default only if they beat
+the baseline.
 
 ## Deferred (not in this plan)
 

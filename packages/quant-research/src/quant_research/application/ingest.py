@@ -149,7 +149,7 @@ class IngestService:
         pending = self.vectors.chunks_without_embeddings(model_id)
         for start in range(0, len(pending), EMBED_BATCH):
             batch = pending[start : start + EMBED_BATCH]
-            vectors = self.embedder.embed([text for _, text in batch])
+            vectors = self.embedder.embed([text for _, text in batch], kind="document")
             pairs = [
                 (chunk_id, vector) for (chunk_id, _), vector in zip(batch, vectors, strict=True)
             ]

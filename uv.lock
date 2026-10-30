@@ -753,6 +753,7 @@ version = "0.1.0"
 source = { editable = "packages/quant-research" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "quant-agent-os" },
     { name = "rich" },
     { name = "typer" },
@@ -766,6 +767,7 @@ pdf = [
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
     { name = "quant-agent-os", editable = "." },
     { name = "rich", specifier = ">=13.7" },

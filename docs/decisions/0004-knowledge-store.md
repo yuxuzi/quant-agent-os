@@ -45,6 +45,11 @@ search. `HashingEmbedder` is an offline mock embedder.
 - A test keeps it from ever lowering a metric.
 - A real embedder becomes the default only when it beats the baseline.
 
+Hosted models (added 2026-10-30): `VoyageEmbedder` (default `voyage-finance-2`) and
+`OpenAIEmbedder` implement the same port over HTTPS without new dependencies. The same rule
+applies to them. They are opt-in until the live evaluation, which includes paraphrase queries,
+shows a gain.
+
 DuckDB was evaluated for this store and not chosen. Its full-text and HNSW extensions download
 on first use, which breaks offline tests, and the workload is point lookups and traversal, not
 columnar scans. DuckDB remains the candidate for the analytics and backtest service.

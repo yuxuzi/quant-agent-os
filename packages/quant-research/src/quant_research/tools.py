@@ -1,7 +1,9 @@
 """Quant Research tools: thin `@tool` adapters over `ResearchService` (no logic here).
 
 Both tools are read-only. Ingestion is deliberately not a tool: writes to the knowledge store are
-operator commands.
+operator commands. When the service embeds queries with a hosted model, `find_related_signals`
+sends the query text to that provider and therefore also declares the ``network`` permission,
+which the default policy does not grant.
 """
 
 from __future__ import annotations
@@ -27,6 +29,9 @@ class PassageRequest(BaseModel):
 
 def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
     """Return the Quant Research tools bound to ``service``, ready to register."""
+    search_permissions = [Permission.READ_LOCAL_DATA]
+    if service.embedder is not None and service.embedder.requires_network:
+        search_permissions.append(Permission.NETWORK)
 
     @tool(
         name="find_related_signals",
@@ -35,7 +40,7 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
             "user's corpus. Returns ranked passages with source locations and knowledge-graph "
             "links, each citing the passage that supports it. Cite sources when answering."
         ),
-        permissions=[Permission.READ_LOCAL_DATA],
+        permissions=search_permissions,
         max_output_bytes=200_000,
     )
     def find_related_signals(params: ResearchQuery) -> EvidencePacket:

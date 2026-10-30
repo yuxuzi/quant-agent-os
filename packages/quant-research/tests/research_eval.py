@@ -2,6 +2,10 @@
 
 Run ``uv run python packages/quant-research/tests/research_eval.py`` to print the metrics, and
 add ``--update`` to rewrite the recorded baseline after an intended improvement.
+
+``--embedder voyage|openai [--embedding-model NAME]`` also scores a hosted embedder. That run
+is live: it sends the fixture corpus and queries to the provider, needs its API key, and costs
+a few cents. It never runs in the default test suite.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from pdf_fixtures import build_corpus
 from pypdf import PdfReader
 
 from quant_research import ResearchApp, ResearchQuery, open_research
+from quant_research.domain.ports import Embedder
 from quant_research.domain.vocabulary import EntityMatcher
 
 HERE = Path(__file__).parent
@@ -31,12 +36,17 @@ def evaluate(research: ResearchApp, corpus: Path) -> dict[str, float]:
     recall: list[float] = []
     precision: list[float] = []
     empty: list[float] = []
+    paraphrase: list[float] = []
     citations: list[bool] = []
     locations: list[bool] = []
     for item in queries:
         packet = research.research.find_related(ResearchQuery(query=item["query"]))
         if item.get("expect_empty"):
             empty.append(float(not packet.passages))
+            continue
+        if item.get("paraphrase"):
+            top = {passage.source.source_id for passage in packet.passages[:3]}
+            paraphrase.append(float(bool(top & set(item["documents"]))))
             continue
         found = {entity.id for entity in packet.related}
         recall.append(len(found & set(item["related"])) / len(item["related"]))
@@ -55,6 +65,7 @@ def evaluate(research: ResearchApp, corpus: Path) -> dict[str, float]:
         "citation_validity": _mean([float(ok) for ok in citations]),
         "location_validity": _mean([float(ok) for ok in locations]),
         "empty_query_accuracy": _mean(empty),
+        "paraphrase_hit_rate": _mean(paraphrase),
     }
 
 
@@ -81,17 +92,33 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 1.0
 
 
-def run(*, vector: bool = False) -> dict[str, float]:
+def run(*, vector: bool = False, embedder: Embedder | None = None) -> dict[str, float]:
     """Build the fixture corpus, ingest it into a fresh store, and evaluate it."""
-    with tempfile.TemporaryDirectory() as tmp, open_research(":memory:", vector=vector) as research:
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        open_research(":memory:", vector=vector, embedder=embedder) as research,
+    ):
         corpus = build_corpus(Path(tmp))
         research.ingest.ingest(corpus)
         return evaluate(research, corpus)
 
 
+def _option(name: str) -> str | None:
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
+
+
 if __name__ == "__main__":
+    from quant_research.config import make_embedder
+    from quant_research.domain.vocabulary import load_vocabulary
+
     metrics = run()
-    print(json.dumps({"default": metrics, "vector": run(vector=True)}, indent=2))
+    report = {"default": metrics, "hashing": run(vector=True)}
+    hosted = _option("--embedder")
+    if hosted in ("voyage", "openai"):
+        model = _option("--embedding-model")
+        embedder = make_embedder(hosted, load_vocabulary(), model=model)  # type: ignore[arg-type]
+        report[embedder.model_id] = run(embedder=embedder)
+    print(json.dumps(report, indent=2))
     if "--update" in sys.argv:
         BASELINE.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", "utf-8")
         print(f"Baseline written to {BASELINE}.")

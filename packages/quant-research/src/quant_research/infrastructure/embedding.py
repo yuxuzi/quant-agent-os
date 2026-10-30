@@ -13,6 +13,7 @@ import hashlib
 import itertools
 import math
 from collections.abc import Sequence
+from typing import Literal
 
 from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import EntityMatcher
@@ -24,6 +25,8 @@ BIGRAM_WEIGHT = 0.5
 class HashingEmbedder:
     """Signed feature hashing over words, word pairs, and vocabulary entities."""
 
+    requires_network = False
+
     def __init__(self, matcher: EntityMatcher | None = None, *, dimensions: int = 256) -> None:
         if dimensions < 8:
             raise ValueError("HashingEmbedder needs at least 8 dimensions.")
@@ -31,8 +34,13 @@ class HashingEmbedder:
         self._matcher = matcher
         self.model_id = f"hashing-v1-{dimensions}" + ("-entities" if matcher else "")
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """Return one unit-length vector per text; texts without features map to zeros."""
+    def embed(
+        self, texts: Sequence[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
+        """Return one unit-length vector per text; texts without features map to zeros.
+
+        ``kind`` is accepted for the `Embedder` port and does not change the result.
+        """
         return [self._embed(text) for text in texts]
 
     def _embed(self, text: str) -> list[float]:

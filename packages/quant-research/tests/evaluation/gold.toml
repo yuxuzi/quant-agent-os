@@ -45,3 +45,26 @@ documents = ["papers/low-volatility.pdf", "notes/value-and-quality.md"]
 query = "Which signals work in futures markets?"
 related = ["signal:carry", "signal:time-series-momentum"]
 documents = ["papers/low-volatility.pdf", "momentum-crashes.md"]
+
+# Paraphrases: no vocabulary term, so only meaning connects them to the answer. They are scored
+# separately (paraphrase_hit_rate@3) to show whether an embedding model adds value.
+
+[[queries]]
+query = "Do stocks that fell last month tend to bounce back?"
+paraphrase = true
+documents = ["reversal-and-microstructure.md"]
+
+[[queries]]
+query = "Why would investors who cannot use leverage overpay for risky shares?"
+paraphrase = true
+documents = ["papers/low-volatility.pdf"]
+
+[[queries]]
+query = "Which approaches profit from persistent price trends in commodities?"
+paraphrase = true
+documents = ["momentum-crashes.md", "papers/low-volatility.pdf"]
+
+[[queries]]
+query = "Does surprising company news keep moving the share price for weeks?"
+paraphrase = true
+documents = ["notes/earnings.txt"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -52,12 +52,20 @@ class SourceLoader(Protocol):
 
 
 class Embedder(Protocol):
-    """Turns texts into unit-length vectors; ``model_id`` is part of every corpus snapshot."""
+    """Turns texts into unit-length vectors; ``model_id`` is part of every corpus snapshot.
+
+    ``kind`` distinguishes stored passages from search queries, which some models embed
+    differently. ``requires_network`` is true when embedding sends text to a remote service, so
+    tools that embed queries must declare the ``network`` permission.
+    """
 
     model_id: str
     dimensions: int
+    requires_network: bool
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+    def embed(
+        self, texts: Sequence[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         """Return one unit-length vector per text, in order."""
         ...
 
@@ -74,6 +82,10 @@ class VectorIndex(Protocol):
 
     def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
         """Store ``(chunk_id, vector)`` pairs for ``model_id``."""
+        ...
+
+    def has_embeddings(self, model_id: str) -> bool:
+        """Return whether any chunk has an embedding for ``model_id``."""
         ...
 
     def chunks_without_embeddings(self, model_id: str) -> list[tuple[str, str]]:

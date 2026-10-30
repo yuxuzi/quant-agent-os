@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -10,7 +11,10 @@ from rich.console import Console
 from rich.table import Table
 
 from quant_research.application.retrieval import ResearchQuery
-from quant_research.bootstrap import DEFAULT_STORE, open_research
+from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
+from quant_research.config import make_embedder
+from quant_research.domain.vocabulary import load_vocabulary
+from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
 
 app = typer.Typer(
     help="Quant Research: build and query a Graph RAG knowledge store.", no_args_is_help=True
@@ -20,26 +24,60 @@ console = Console()
 StoreOption = Annotated[
     Path, typer.Option("--store", "-s", help="SQLite knowledge store to create or use.")
 ]
-VectorOption = Annotated[
-    bool,
-    typer.Option("--vector/--no-vector", help="Use the vector channel (offline hashing embedder)."),
+
+
+class EmbedderChoice(StrEnum):
+    """Embedders the CLI can enable for the vector channel."""
+
+    HASHING = "hashing"
+    VOYAGE = "voyage"
+    OPENAI = "openai"
+
+
+EmbedderOption = Annotated[
+    EmbedderChoice | None,
+    typer.Option(
+        "--embedder", help="Enable the vector channel: hashing (offline mock), voyage, or openai."
+    ),
 ]
+ModelOption = Annotated[
+    str | None,
+    typer.Option(
+        "--embedding-model", help="Provider model, e.g. voyage-4 or text-embedding-3-large."
+    ),
+]
+
+
+def _open(store: Path, embedder: EmbedderChoice | None, model: str | None) -> ResearchApp:
+    try:
+        chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
+    except EmbeddingServiceError as error:
+        raise _fail(error) from error
+    return open_research(store, embedder=chosen)
+
+
+def _fail(error: Exception) -> typer.Exit:
+    console.print(f"[red]{error}[/red]")
+    return typer.Exit(code=1)
 
 
 @app.command()
 def ingest(
     corpus: Annotated[Path, typer.Argument(help="A corpus directory or a single file.")],
     store: StoreOption = DEFAULT_STORE,
-    vector: VectorOption = False,
+    embedder: EmbedderOption = None,
+    embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
 ) -> None:
-    """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash."""
-    research = open_research(store, vector=vector)
+    """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash.
+
+    With a hosted --embedder, chunk text is sent to that provider to be embedded.
+    """
+    research = _open(store, embedder, embedding_model)
     try:
         result = research.ingest.ingest(corpus)
-    except FileNotFoundError as error:
-        console.print(f"[red]{error}[/red]")
-        raise typer.Exit(code=1) from error
+    except (FileNotFoundError, EmbeddingServiceError) as error:
+        raise _fail(error) from error
     finally:
         research.close()
     if as_json:
@@ -61,13 +99,19 @@ def search(
     store: StoreOption = DEFAULT_STORE,
     k: Annotated[int, typer.Option(help="Maximum passages.")] = 6,
     hops: Annotated[int, typer.Option(help="Graph expansion depth (1-2).")] = 1,
-    vector: VectorOption = False,
+    embedder: EmbedderOption = None,
+    embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the evidence packet.")] = False,
 ) -> None:
-    """Run `find_related_signals` locally and show the evidence."""
-    research = open_research(store, vector=vector)
+    """Run `find_related_signals` locally and show the evidence.
+
+    Use the same --embedder and --embedding-model as at ingestion to search by vector.
+    """
+    research = _open(store, embedder, embedding_model)
     try:
         packet = research.research.find_related(ResearchQuery(query=query, k=k, hops=hops))
+    except EmbeddingServiceError as error:
+        raise _fail(error) from error
     finally:
         research.close()
     if as_json:
