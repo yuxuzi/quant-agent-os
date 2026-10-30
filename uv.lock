@@ -6,6 +6,18 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[options]
+
+[options.exclude-newer-package]
+pypdf = "2026-10-16T00:00:00Z"
+
+[manifest]
+members = [
+    "quant-agent-os",
+    "quant-agent-os-factory",
+    "quant-agent-os-research",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -638,6 +650,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf"
+version = "6.20.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/c1/da25a099164cf4b210d63b957c902ad687139f4b8c12c20aec7953a4a266/pypdf-6.20.1.tar.gz", hash = "sha256:28f5a9d2fdc2749264612d94e6a58de54c11d730d9f0cabf8ad34117c4942b45", size = 7075352, upload-time = "2026-10-12T16:14:24.784Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/f8/4cbd09988b4b158260b7e0df38bf16f19e998bf0e257a18661a8da04280e/pypdf-6.20.1-py3-none-any.whl", hash = "sha256:aa5a55ddcffdc5e5ab291d5decb23f6383f4e56f8e3263dc39af41fff03885ad", size = 402665, upload-time = "2026-10-12T16:14:22.556Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -692,6 +713,8 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "quant-agent-os-factory" },
+    { name = "quant-agent-os-research", extra = ["pdf"] },
     { name = "ruff" },
 ]
 
@@ -708,8 +731,49 @@ dev = [
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "quant-agent-os-factory", editable = "packages/quant-app-factory" },
+    { name = "quant-agent-os-research", extras = ["pdf"], editable = "packages/quant-research" },
     { name = "ruff", specifier = ">=0.6" },
 ]
+
+[[package]]
+name = "quant-agent-os-factory"
+version = "0.1.0"
+source = { editable = "packages/quant-app-factory" }
+dependencies = [
+    { name = "quant-agent-os" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "quant-agent-os", editable = "." }]
+
+[[package]]
+name = "quant-agent-os-research"
+version = "0.1.0"
+source = { editable = "packages/quant-research" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "quant-agent-os" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+pdf = [
+    { name = "pypdf" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
+    { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
+    { name = "quant-agent-os", editable = "." },
+    { name = "rich", specifier = ">=13.7" },
+    { name = "typer", specifier = ">=0.12" },
+]
+provides-extras = ["pdf"]
 
 [[package]]
 name = "rich"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
@@ -81,12 +82,15 @@ class Orchestrator:
     def run(self, goal: str) -> Report:
         """Plan and execute ``goal``; individual tool failures become report warnings."""
         started_at = datetime.now(UTC)
+        run_id = uuid.uuid4().hex
         plan = self.plan(goal)
-        records = [self.executor.execute(step) for step in plan.steps]
+        records = [self.executor.execute(step, run_id=run_id) for step in plan.steps]
         return build_report(
             plan,
             records,
+            run_id=run_id,
             provider=self.provider.name,
+            registry_digest=self.registry.digest(),
             started_at=started_at,
             finished_at=datetime.now(UTC),
         )

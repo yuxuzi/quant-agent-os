@@ -1,24 +1,33 @@
 # quant-agent-os
 
-**QuantAgentOS** is the agent platform of the QuantFoundry ecosystem: typed tools, one bounded
-orchestrator, and evidence-linked reports for quantitative research. It is open source and you
-bring your own models and data.
+**Quant-Agent-OS** is an open-source quantitative intelligence and application-engineering
+platform. It is not a chatbot: Claude, Copilot, Cursor, and other AI clients use its typed tools,
+bounded workflows, and evidence-linked reports through MCP and a Python SDK. You bring your own
+models, data, and documents.
 
-> QuantFoundry, QuantAgentOS, and Quant AI Assistant are working names that have not been checked
-> for availability. This project is pre-alpha research software, not investment advice.
+It has two products built on one core platform:
+- **Quant Research**: a Graph RAG knowledge system. It connects factors, signals, strategies,
+  and papers, and every answer is backed by cited passages.
+- **Quant App Factory**: it turns requirements into tested, packaged Python applications. It
+  uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder
+  through a replaceable adapter.
+
+> Quant-Agent-OS is a working name that has not been checked for availability. This project is
+> pre-alpha research software, not investment advice.
 
 ## Status
 
-| Milestone | State |
+| Area | State |
 | --- | --- |
-| Q0 Architecture and boundaries | [docs/architecture.md](docs/architecture.md), [decision records](docs/decisions/) |
-| Q2 Tool contract and registry | Implemented: `quant_agent_os.tools` |
-| Q3 Bring-your-own configuration | Settings and a provider interface with a fake provider; no real provider adapter yet |
-| Q5 MCP boundary | Adapter implemented (`quant_agent_os.mcp`); server transport pending |
-| Q6 Bounded orchestrator and report | Implemented with the fake provider and an offline example |
-| Q1 analytics, Q4 research retrieval | Separate packages; not started here |
+| Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
+| Core: MCP adapter | Implemented; stdio server is next (backlog B-01) |
+| Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
+| Core: run store, approvals, SDK facade | Planned for the MVP |
+| Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation ([architecture §6–7](docs/architecture.md)) |
+| Quant App Factory | Designed ([architecture §8–9](docs/architecture.md)); package skeleton only |
+| Quant analytics | Example metrics only; separate package planned |
 
-The full roadmap is in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
+The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
 
 ## Quick start
 
@@ -27,6 +36,7 @@ The full roadmap is in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW
 ```bash
 uv sync
 uv run python examples/portfolio-research/portfolio_research.py   # offline end-to-end demo
+uv run python examples/quant-research/research_demo.py            # Graph RAG demo, offline
 uv run quant-agent-os info                                        # active settings, secrets hidden
 uv run pytest
 ```
@@ -77,7 +87,7 @@ registry = ToolRegistry([total_return])
 ## Repository layout
 
 ```text
-src/quant_agent_os/
+src/quant_agent_os/      Core platform (products will live in packages/, see decision 0003)
   tools/          contract (ToolSpec, @tool), registry, permissions
   runtime/        plan models, bounded executor, orchestrator
   providers/      ModelProvider protocol and FakeModelProvider (bring your own model)
@@ -86,8 +96,10 @@ src/quant_agent_os/
   reporting/      Report models and Markdown rendering
   mcp/            MCP tool definitions and calls over the registry
   observability/  logging with secret redaction
-apps/quant-ai-assistant/   flagship application (planned)
-examples/portfolio-research/
+packages/quant-research/   Quant Research (Graph RAG) product
+packages/quant-app-factory/  Quant App Factory product (skeleton)
+apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
+examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
 docs/   architecture, configuration, security, getting started, decisions, roadmap
 ```

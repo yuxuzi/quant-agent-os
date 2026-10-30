@@ -25,8 +25,12 @@ class ToolContractError(ValueError):
 class ToolSpec(Generic[InputT, OutputT]):
     """A registered capability: a plain, independently testable function plus its contract.
 
-    By convention, output models may expose ``warnings: list[str]`` and
-    ``evidence: list[Evidence]``; reports collect both.
+    By convention, output models may expose ``warnings: list[str]``,
+    ``evidence: list[Evidence]``, and ``data_versions: dict[str, str]`` (identifiers of the data
+    the result depends on, such as a corpus snapshot); reports collect all three.
+
+    ``deterministic`` means the same input and data versions give the same output;
+    ``idempotent`` means a call can be repeated without additional side effects.
     """
 
     name: str
@@ -38,6 +42,8 @@ class ToolSpec(Generic[InputT, OutputT]):
     permissions: frozenset[Permission] = frozenset()
     timeout_seconds: float = 10.0
     max_output_bytes: int = 100_000
+    deterministic: bool = True
+    idempotent: bool = True
 
     def __post_init__(self) -> None:
         if not _TOOL_NAME.fullmatch(self.name):
@@ -61,6 +67,8 @@ class ToolSpec(Generic[InputT, OutputT]):
             "permissions": sorted(permission.value for permission in self.permissions),
             "timeout_seconds": self.timeout_seconds,
             "max_output_bytes": self.max_output_bytes,
+            "deterministic": self.deterministic,
+            "idempotent": self.idempotent,
         }
 
 
@@ -72,6 +80,8 @@ def tool(
     permissions: Iterable[Permission] = (),
     timeout_seconds: float = 10.0,
     max_output_bytes: int = 100_000,
+    deterministic: bool = True,
+    idempotent: bool = True,
 ) -> Callable[[Callable[[InputT], OutputT]], ToolSpec[InputT, OutputT]]:
     """Turn ``def fn(params: InputModel) -> OutputModel`` into a `ToolSpec`.
 
@@ -101,6 +111,8 @@ def tool(
             permissions=frozenset(permissions),
             timeout_seconds=timeout_seconds,
             max_output_bytes=max_output_bytes,
+            deterministic=deterministic,
+            idempotent=idempotent,
         )
 
     return decorate

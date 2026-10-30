@@ -1,0 +1,219 @@
+# Quant-Agent-OS bundled vocabulary. Ids are "type:slug"; change `version` whenever
+# entities or aliases change, because the version is part of every corpus snapshot.
+version = "quant-v1"
+
+[[entities]]
+id = "factor:value"
+type = "factor"
+name = "Value factor"
+aliases = ["HML", "book-to-market", "value premium"]
+
+[[entities]]
+id = "factor:momentum"
+type = "factor"
+name = "Momentum"
+aliases = ["cross-sectional momentum", "UMD", "WML", "12-1 momentum"]
+
+[[entities]]
+id = "factor:size"
+type = "factor"
+name = "Size factor"
+aliases = ["SMB", "small-cap premium", "size premium"]
+
+[[entities]]
+id = "factor:quality"
+type = "factor"
+name = "Quality factor"
+aliases = ["QMJ", "quality minus junk"]
+
+[[entities]]
+id = "factor:low-volatility"
+type = "factor"
+name = "Low volatility"
+aliases = ["low-volatility anomaly", "betting against beta", "BAB", "low beta"]
+
+[[entities]]
+id = "factor:profitability"
+type = "factor"
+name = "Profitability"
+aliases = ["RMW", "gross profitability", "operating profitability"]
+
+[[entities]]
+id = "factor:investment"
+type = "factor"
+name = "Investment factor"
+aliases = ["CMA", "asset growth"]
+
+[[entities]]
+id = "signal:short-term-reversal"
+type = "signal"
+name = "Short-term reversal"
+aliases = ["one-month reversal", "reversal effect", "STR"]
+
+[[entities]]
+id = "signal:time-series-momentum"
+type = "signal"
+name = "Time-series momentum"
+aliases = ["TSMOM", "trend signal"]
+
+[[entities]]
+id = "signal:earnings-drift"
+type = "signal"
+name = "Post-earnings announcement drift"
+aliases = ["PEAD", "earnings drift", "earnings surprise"]
+
+[[entities]]
+id = "signal:analyst-revisions"
+type = "signal"
+name = "Analyst revisions"
+aliases = ["earnings revisions", "estimate revisions"]
+
+[[entities]]
+id = "signal:accruals"
+type = "signal"
+name = "Accruals"
+aliases = ["accrual anomaly"]
+
+[[entities]]
+id = "signal:order-flow-imbalance"
+type = "signal"
+name = "Order-flow imbalance"
+aliases = ["order imbalance", "OFI"]
+
+[[entities]]
+id = "signal:carry"
+type = "signal"
+name = "Carry"
+aliases = ["carry signal", "roll yield"]
+
+[[entities]]
+id = "signal:liquidity-provision"
+type = "signal"
+name = "Liquidity provision"
+aliases = ["liquidity provision returns"]
+
+[[entities]]
+id = "strategy:pairs-trading"
+type = "strategy"
+name = "Pairs trading"
+aliases = ["statistical arbitrage pairs"]
+
+[[entities]]
+id = "strategy:trend-following"
+type = "strategy"
+name = "Trend following"
+aliases = ["managed futures"]
+
+[[entities]]
+id = "strategy:risk-parity"
+type = "strategy"
+name = "Risk parity"
+aliases = []
+
+[[entities]]
+id = "strategy:factor-timing"
+type = "strategy"
+name = "Factor timing"
+aliases = []
+
+[[entities]]
+id = "method:fama-macbeth"
+type = "method"
+name = "Fama-MacBeth regression"
+aliases = ["Fama-MacBeth"]
+
+[[entities]]
+id = "method:portfolio-sorts"
+type = "method"
+name = "Portfolio sorts"
+aliases = ["decile sorts", "quintile sorts"]
+
+[[entities]]
+id = "method:pca"
+type = "method"
+name = "Principal component analysis"
+aliases = ["PCA"]
+
+[[entities]]
+id = "method:walk-forward"
+type = "method"
+name = "Walk-forward validation"
+aliases = ["walk-forward"]
+
+[[entities]]
+id = "method:transaction-cost-model"
+type = "method"
+name = "Transaction cost model"
+aliases = ["transaction costs", "trading costs"]
+
+[[entities]]
+id = "metric:sharpe-ratio"
+type = "metric"
+name = "Sharpe ratio"
+aliases = []
+
+[[entities]]
+id = "metric:max-drawdown"
+type = "metric"
+name = "Maximum drawdown"
+aliases = ["max drawdown"]
+
+[[entities]]
+id = "metric:turnover"
+type = "metric"
+name = "Turnover"
+aliases = []
+
+[[entities]]
+id = "metric:information-ratio"
+type = "metric"
+name = "Information ratio"
+aliases = []
+
+[[entities]]
+id = "asset_class:us-equities"
+type = "asset_class"
+name = "US equities"
+aliases = ["U.S. equities", "US stocks"]
+
+[[entities]]
+id = "asset_class:futures"
+type = "asset_class"
+name = "Futures"
+aliases = ["futures markets"]
+
+[[entities]]
+id = "asset_class:fx"
+type = "asset_class"
+name = "Currencies"
+aliases = ["FX", "foreign exchange"]
+
+[[entities]]
+id = "dataset:crsp"
+type = "dataset"
+name = "CRSP"
+aliases = []
+
+[[entities]]
+id = "dataset:compustat"
+type = "dataset"
+name = "Compustat"
+aliases = []
+
+[[entities]]
+id = "concept:market-microstructure"
+type = "concept"
+name = "Market microstructure"
+aliases = ["microstructure"]
+
+[[entities]]
+id = "concept:bid-ask-bounce"
+type = "concept"
+name = "Bid-ask bounce"
+aliases = []
+
+[[entities]]
+id = "concept:crowding"
+type = "concept"
+name = "Crowding"
+aliases = ["factor crowding", "crowded trades"]

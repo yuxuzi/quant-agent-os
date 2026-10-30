@@ -83,3 +83,13 @@ def test_policy_allowlist_blocks_unlisted_tools() -> None:
     assert policy.allows_tool("allowed")
     with pytest.raises(PermissionDeniedError, match="allowlist"):
         policy.check("other", [])
+
+
+def test_registry_digest_changes_with_tool_contracts() -> None:
+    @tool(name="sum_values", description="Sum numbers.", version="2")
+    def sum_values_v2(params: Numbers) -> Total:
+        return Total(total=sum(params.values))
+
+    assert ToolRegistry([sum_values]).digest() == ToolRegistry([sum_values]).digest()
+    assert ToolRegistry([sum_values]).digest() != ToolRegistry([sum_values_v2]).digest()
+    assert sum_values.descriptor()["deterministic"] is True

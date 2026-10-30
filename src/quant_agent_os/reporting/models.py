@@ -14,10 +14,13 @@ from quant_agent_os.runtime.plan import Plan
 class RunMetadata(BaseModel):
     """What is needed to understand and reproduce a run."""
 
+    run_id: str
     platform_version: str
     provider: str
+    registry_digest: str
     started_at: datetime
     finished_at: datetime
+    data_versions: dict[str, str] = Field(default_factory=dict)
 
 
 class Report(BaseModel):

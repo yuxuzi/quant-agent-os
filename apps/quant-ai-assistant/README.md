@@ -1,13 +1,13 @@
-# Quant AI Assistant (planned)
+# Quant AI Assistant (superseded)
 
-The flagship, user-facing application of QuantFoundry, built on QuantAgentOS. Its MVP workflow:
+This placeholder planned a chat-style flagship application. [Decision
+0003](../../docs/decisions/0003-brand-and-product-structure.md) supersedes it: Quant-Agent-OS is
+a platform that external AI clients (Claude, Copilot, Cursor) consume through MCP and the Python
+SDK, so it does not ship its own chat app.
 
-1. The user supplies permitted portfolio data, a benchmark, and research documents.
-2. The orchestrator validates the request and creates a bounded plan.
-3. Registered tools run deterministic analytics and research retrieval.
-4. Outputs and evidence are validated.
-5. The assistant presents a structured report with metrics, citations, assumptions, warnings,
-   and provenance.
+The workflow this app described is now a platform workflow that clients call: validated,
+bounded plans; deterministic analytics; research retrieval with citations; and an
+evidence-linked report. `examples/portfolio-research` demonstrates it, and the MVP in
+[docs/ENGINEERING_REVIEW_PLAN.md](../../docs/ENGINEERING_REVIEW_PLAN.md) exposes it over MCP.
 
-The application will become a uv workspace member here once milestone Q6 needs a user
-interface. Until then, `examples/portfolio-research` demonstrates the workflow end to end.
+This directory can be removed once nothing links to it.

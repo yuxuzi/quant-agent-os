@@ -1,0 +1,179 @@
+# Plan: Quant Research retrieval service
+
+Scope: backlog items B-05 and B-06 in [ENGINEERING_REVIEW_PLAN.md](../ENGINEERING_REVIEW_PLAN.md).
+The design is in [architecture.md §6–7](../architecture.md). The service is
+`quant_research.application.retrieval.ResearchService`, exposed through the
+`find_related_signals` and `get_source_passage` tools.
+
+## Starting point (commit `1f94aa5`, 2026-10-30)
+
+These pieces exist and work end to end on the fixture corpus (6 documents, 8 chunks, 32
+relations):
+- ingestion, which is idempotent and keeps a stable snapshot id;
+- the SQLite store, with FTS5 keyword search and recursive-CTE graph expansion;
+- reciprocal rank fusion;
+- evidence packets;
+- the CLI.
+
+There are no unit tests for the package yet.
+
+Probing five queries gave these findings:
+
+| # | Finding | Evidence |
+| --- | --- | --- |
+| F1 | Stopwords reach keyword search, so noise passages rank (including the injection fixture) | "What is related to short-term reversal?" returns `notes/injection.md` and `value-and-quality.md` |
+| F2 | The keyword-seeded fallback is far too broad | "market makers spread" seeds 14 entities, and a relation from the injection note leaks in |
+| F3 | Chunks are coarse, so citations are imprecise | `momentum-crashes.md` is one chunk, lines 10–20 |
+| F4 | A query with no results returns no warning | "crypto funding rates" |
+| F5 | Passages that define a seed entity rank below graph-only passages | The reversal summary (lines 12–13) ranks 4th |
+
+## Steps
+
+Each step ends with all four quality gates passing and a commit.
+
+| Step | Status |
+| --- | --- |
+| R1 Characterization tests | Done (`9f5be8f`) |
+| R2 Evaluation harness | Done (`b58acbd`). Baseline: recall 0.75, precision 0.5972 |
+| R3 Quality fixes | Done (`b58acbd`). Recall 1.0, precision 0.9167, validity 1.0 |
+| R4 Injection resistance | Done |
+| R5 Tools, MCP, reporting | Done. It found and fixed a defect: SQLite connections were bound to one thread, so every executor and MCP call failed |
+| R6 Documentation sync | Done |
+| R7 Mock vector channel | Done. Measured: no gain and no loss, so it is off by default |
+| R8 PDF ingestion | Done. pypdf is an optional extra, with page-level locations |
+| R9 Generated PDF fixtures | Done. No binary files are committed |
+| R10 Evaluation over text and PDFs | Done. Precision is 0.7583 on the larger 9-query gold set; validity 1.0 |
+| R11 Hosted embedders (Voyage default, OpenAI) | Done. Tested offline; the live comparison is waiting for an API key |
+
+### R1. Characterization tests (no behaviour change)
+
+Tests:
+- The matcher prefers the longest match, matches short capitals case-sensitively, and accepts
+  plurals and hyphens.
+- Chunk line ranges equal the source file's lines, including after front matter.
+- Each extraction cue produces its predicate, and the same sentence never yields self-relations.
+- The store:
+  - re-ingesting is idempotent and keeps the snapshot;
+  - a changed file replaces its old records;
+  - the keyword fallback works without FTS5;
+  - `expand` respects `hops` and `min_confidence`;
+  - CTE cycles terminate.
+
+Accept when the package has unit tests for every module except the CLI, and the CLI has a smoke
+test.
+
+### R2. Evaluation harness and recorded baseline
+
+Measure before improving. Add `tests/evaluation/gold.toml` (queries, expected related entities,
+and the documents expected to be cited) and an evaluation module that computes:
+- **related recall**: expected entities found among `related`;
+- **passage precision@k**: passages that come from the expected documents;
+- **citation validity**: each graph link's chunk mentions both of its entities. This must be
+  100%.
+- **location validity**: each passage's line range reproduces its text from the source file.
+  This must be 100%.
+
+The baseline is recorded in `baseline.json`. The test fails if a metric drops below the baseline,
+and the baseline is updated only on purpose.
+
+### R3. Retrieval quality fixes, each measured against R2
+
+1. Add a stopword filter and a minimum token length for the keyword channel (F1).
+2. Chunker `paragraph-v2`: one paragraph per chunk, merging only paragraphs under 200 characters
+   (F3). The chunker version is part of the snapshot, so snapshots change as intended.
+3. Add a mention channel: chunks that mention the seed entities become a third RRF ranking (F5).
+4. Tighten the fallback: seed only from the best keyword chunk, take at most 3 entities, and
+   warn (F2).
+5. Warn when the query matches no passage and no entity (F4).
+
+Accept when precision@k improves on the baseline, recall does not drop, and validity stays at
+100%. Then update the baseline.
+
+### R4. Injection resistance
+
+Tests:
+- The injection fixture is stored and returned only as `retrieved` passage text.
+- Tool descriptors and permissions are unchanged after ingesting it.
+- An orchestrated run whose tool output contains injected text sends the provider exactly one
+  planning prompt, and that prompt does not contain the text. This checks the
+  no-feedback-into-planning invariant from the research side.
+
+### R5. Tool interface, MCP, and reporting
+
+Tests and example:
+- Contract tests for the research tools: complete descriptors, `warnings`/`evidence` outputs,
+  MCP results equal to direct calls, and output within `max_output_bytes`.
+- An unknown chunk id records an `error` status with an actionable message.
+- An orchestrated research run (fake provider) produces a report whose metadata records the
+  `corpus_snapshot` data version.
+- `examples/quant-research/` ingests the fixture corpus into a temporary store and calls the
+  tools through the MCP adapter.
+
+### R6. Documentation sync
+
+- Update architecture §6–7: the predicate list, the `quant-research` CLI, and `:memory:` SQLite
+  instead of a separate in-memory store.
+- Add a note to decision 0004.
+- Mark B-05 and B-06 as done in the plan.
+- Add a changelog entry.
+
+### R7. Mock vector channel (SQLite, decision recorded 2026-10-30)
+
+SQLite stays the store; DuckDB is kept for the later analytics and backtest service.
+- `Embedder` and `VectorIndex` ports.
+- `HashingEmbedder` uses signed feature hashing over words, word pairs, and vocabulary entities.
+  It is deterministic and offline, and its `model_id` is recorded in the snapshot.
+- `SqliteKnowledgeStore` doubles as the vector index: float32 blobs, exact brute-force cosine,
+  and embeddings that cascade with their chunks.
+- Ingestion backfills missing embeddings.
+- `vector` is a fourth RRF channel with a minimum cosine of 0.2.
+
+Accept when:
+- the evaluation compares the configurations with and without vectors;
+- a test keeps the vector channel from ever lowering a metric;
+- the channel is on by default only with a measured gain.
+
+The measured result was equal metrics, so `vector=False` stays the default.
+
+### R8. PDF ingestion
+
+- Add the extra `quant-agent-os-research[pdf]` (pypdf, locked to a release at least 14 days
+  old).
+- Loaders are routed by suffix. Without the extra, PDFs are skipped with an installation hint.
+- Pages are chunked by line packing, because extraction drops blank lines. Locations read
+  "page N, lines a-b".
+- Scanned PDFs warn about OCR. Corrupt or encrypted PDFs are skipped with a reason.
+- Schema version 2 adds `chunks.page` and `embeddings`, and version-1 stores migrate in place.
+
+### R9 and R10. Generated PDFs and evaluation
+
+- `tests/pdf_fixtures.py` writes real PDFs: a two-page paper, a scanned PDF, and a corrupt one.
+- Two gold queries cover PDF content.
+- Location validity re-extracts PDF pages.
+
+### R11. Hosted embedding models
+
+The user chose existing hosted models over building one, with Voyage AI as the default and
+OpenAI as an alternative, called over plain HTTPS with no new dependency.
+- `VoyageEmbedder` (`voyage-finance-2` by default) and `OpenAIEmbedder`
+  (`text-embedding-3-small` by default) implement `Embedder`. They were written from each
+  provider's API reference, checked 2026-10-30.
+- The `Embedder` port gains `kind` (`document` or `query`) and `requires_network`. A hosted
+  embedder makes `find_related_signals` declare `network`.
+- `quant_research.config` holds `EmbeddingSettings` (keys as `SecretStr`) and `make_embedder`,
+  which fails fast without a key. The CLI takes `--embedder` and `--embedding-model`.
+- The evaluation adds four paraphrase queries (`paraphrase_hit_rate`; baseline 0.75 without
+  vectors). The live comparison runs with `research_eval.py --embedder voyage`.
+- Tests use a simulated API: request shape, batching, ordering, normalisation, retries,
+  actionable errors that never leak the key, and end-to-end ingest and search. A loopback
+  server tests the real urllib transport, and that test found and fixed unclosed `HTTPError`
+  responses.
+
+Next: run the live comparison with a key. Enable hosted vectors by default only if they beat
+the baseline.
+
+## Deferred (not in this plan)
+
+A real embedding provider and PostgreSQL with pgvector (B-14), the LLM extractor, OCR,
+server-side synthesis (`research_alpha`, B-15), and the MCP server
+transport (B-01, waiting for approval of the `mcp` dependency).
