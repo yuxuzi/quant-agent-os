@@ -1,20 +1,24 @@
 # AGENTS.md
 
-Instructions and context for AI coding agents working on **quant-agent-os** (QuantAgentOS).
+Instructions and context for AI coding agents working on **quant-agent-os** (Quant-Agent-OS).
 Claude Code reads this file through `CLAUDE.md`.
 
 ## What this project is
 
-The agent runtime of the QuantFoundry ecosystem:
-- a typed tool contract and registry;
-- a permission policy;
-- a bounded executor;
-- one orchestrator;
-- evidence-linked reports;
-- an MCP adapter.
+Quant-Agent-OS is an open-source quantitative intelligence and application-engineering
+platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
+- **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
+  executor, one orchestrator, evidence-linked reports, and the MCP adapter.
+- **Quant Research** (`packages/quant-research`, planned): a Graph RAG knowledge system.
+- **Quant App Factory** (`packages/quant-app-factory`, planned): Python application
+  generation.
 
-Financial analytics and research retrieval live in separate packages and are registered as
-tools; do not add them here. Read [docs/architecture.md](docs/architecture.md) and the roadmap in
+Core must never import a product, and the products must not import each other. Quantitative
+analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
+external tool: invoke it only through the App Factory's `ScaffoldProvider` adapter
+(`uvx pytemplate-uv==3.0.*`). Never import, vendor, or plan changes to it here.
+
+Read [docs/architecture.md](docs/architecture.md) and the plan in
 [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes.
 
 `uv` and `uvx` are the only required tools; never use pip, virtualenv activation, or make.
@@ -54,9 +58,11 @@ direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `te
 - **Business logic stays out of MCP.** MCP code only adapts the registry
   ([decision 0002](docs/decisions/0002-mcp-boundary.md)).
 - **Read-only by default.** Never widen `READ_ONLY` or default permissions. New capabilities must
-  declare `Permission`s.
+  declare `Permission`s. Consequential permissions need per-call approval
+  ([decision 0005](docs/decisions/0005-approval-gates.md), proposed).
 - **No feedback into planning.** Never feed tool output or retrieved text back into planning
-  prompts.
+  prompts. Synthesis from retrieved text is labelled `interpretation` and cannot choose tools.
+- **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
 - **Explicit registration.** No dynamic plugin discovery or code loading, and no marketplace.
 - **Offline tests.** Tests run offline with `FakeModelProvider`. Live-model evaluations are opt-in
   and never part of default CI.

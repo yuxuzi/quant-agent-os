@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping build QuantAgentOS. Please be respectful and constructive.
+Thanks for helping build Quant-Agent-OS. Please be respectful and constructive.
 
 ## Setup and checks
 

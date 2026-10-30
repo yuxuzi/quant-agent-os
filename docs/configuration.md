@@ -20,7 +20,7 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 - **Models:** implement `quant_agent_os.providers.ModelProvider`. Real vendor adapters will ship
   as optional dependencies; keep using `FakeModelProvider` in tests.
 - **Data and documents:** pass them to tools as inputs or through your own data-access packages.
-  QuantAgentOS never requires ownership of your databases, vector stores, or repositories.
+  Quant-Agent-OS never requires ownership of your databases, vector stores, or repositories.
 - **Tools and MCP servers:** register your tools explicitly; expose them over MCP through
   `quant_agent_os.mcp`.
 

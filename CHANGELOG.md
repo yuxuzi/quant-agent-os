@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Repositioned the project as Quant-Agent-OS: a platform consumed by AI clients over MCP and the
+  SDK, with two products, Quant Research (Graph RAG) and Quant App Factory. Rewrote
+  `docs/architecture.md` and `docs/ENGINEERING_REVIEW_PLAN.md` (gap analysis, MVP, 30- and 90-day
+  roadmap, backlog). Removed the uv-template planning content; `pytemplate-uv` 3.0 is used as an
+  external tool.
+- Added proposed decision records 0003 (brand and product structure), 0004 (knowledge store),
+  and 0005 (approval gates). Marked the Quant AI Assistant placeholder as superseded.
+
 ## [0.1.0] — Unreleased
 
 ### Added

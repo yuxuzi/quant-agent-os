@@ -1,71 +1,515 @@
-# Architecture
+# Quant-Agent-OS architecture
 
-QuantAgentOS is the runtime layer of QuantFoundry. It registers and orchestrates capabilities
-that live in ordinary, independently tested Python packages. It does not contain financial
-analytics or retrieval logic itself.
+This is the canonical architecture of Quant-Agent-OS. The roadmap, gap analysis, and backlog are
+in [ENGINEERING_REVIEW_PLAN.md](ENGINEERING_REVIEW_PLAN.md). Decisions are recorded in
+[decisions/](decisions/).
 
-## Component boundaries
+Every design element carries one of three labels:
+- **Confirmed** means it exists in this repository today and is tested.
+- **Proposed** means it is the agreed target design and is not built yet.
+- **Open** means it is undecided; the open question is listed in the plan.
 
-| Component | Responsibility | Depends on |
+## 1. Positioning
+
+**Quant-Agent-OS** is the brand, the product, and the platform: an open-source quantitative
+intelligence and application-engineering platform. It is **not a chatbot**. Claude, GitHub
+Copilot, Cursor, and other AI clients consume its capabilities through MCP, a REST API, and a
+Python SDK. Quant-Agent-OS supplies the tools, workflows, quantitative services, and provenance;
+the client supplies the conversation.
+
+| Kind | Name | Role | Status |
+| --- | --- | --- | --- |
+| Platform | Quant-Agent-OS Core (`quant_agent_os`) | Runtime, tool registry, executor, orchestrator, evidence, interfaces | Confirmed (partial) |
+| Product A | Quant Research (`quant_research`) | Graph RAG research and knowledge system with source provenance | Proposed |
+| Product B | Quant App Factory (`quant_app_factory`) | Requirements to tested, packaged Python applications | Proposed |
+| Domain service | Quant analytics (separate package; name open) | Deterministic performance, risk, and later backtest calculations | Proposed |
+| External tool | [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.0 | Standalone, deterministic project scaffolder | Confirmed (published) |
+
+The baseline documents call the scaffolder "template-uv" or "uv-template"; its published name is
+`pytemplate-uv`. It is not a Quant-Agent-OS product or component. Quant App Factory calls it
+through a replaceable adapter ([section 9](#9-pytemplate-uv-integration-boundary)).
+
+"QuantFoundry" (the earlier umbrella name) and "Quant AI Assistant" (the earlier flagship app)
+are retired by [decision 0003](decisions/0003-brand-and-product-structure.md). The assistant's
+portfolio-research workflow survives as a platform workflow that external clients call. All
+names remain provisional until availability checks are done.
+
+## 2. System context
+
+```text
+        Claude · Copilot · Cursor · VS Code agents · scripts · notebooks
+                                   │
+              MCP (stdio, later HTTP) · REST (later) · Python SDK · CLI
+                                   │
+ ┌─────────────────────────────────▼─────────────────────────────────────┐
+ │                      Quant-Agent-OS Core platform                     │
+ │  tool contract & registry · permission & approval policy · executor   │
+ │  orchestrator · evidence & reports · run store & audit · config       │
+ │  model-provider ports · observability                                 │
+ └───────────────▲───────────────────────────────────▲───────────────────┘
+                 │ registers tools                   │ registers tools
+     ┌───────────┴────────────┐          ┌───────────┴─────────────┐
+     │     Quant Research     │          │    Quant App Factory    │
+     │ ingestion · knowledge  │          │ AppSpec · architecture  │
+     │ graph · hybrid         │          │ scaffold · generate ·   │
+     │ retrieval · evidence   │          │ validate · package      │
+     └───────────┬────────────┘          └───────────┬─────────────┘
+                 │                                   │ ScaffoldProvider port
+     KnowledgeStore adapters               pytemplate-uv adapter (uvx, JSON)
+     (memory · SQLite · PostgreSQL)                  │
+                                          pytemplate-uv 3.0 (independent)
+
+   Quant analytics (independent package): registered as tools by its owner
+   User-owned: models and keys, documents, data, databases (bring your own)
+```
+
+Arrows into Core mean registration: products hand Core `ToolSpec`s. Core never imports a
+product.
+
+## 3. Core platform components
+
+| Component | Module | Responsibility | Status |
+| --- | --- | --- | --- |
+| Tool contract | `tools/contracts.py` | `ToolSpec`, `@tool`, descriptors | Confirmed |
+| Registry | `tools/registry.py` | Explicit, unique registration and lookup | Confirmed |
+| Permissions | `tools/permissions.py` | `Permission`, `PermissionPolicy`, allowlist, read-only default | Confirmed |
+| Plan models | `runtime/plan.py` | `Plan`, `PlanStep` | Confirmed |
+| Executor | `runtime/executor.py` | Permissions, validation, timeout, output size, `ToolCallRecord` | Confirmed |
+| Orchestrator | `runtime/orchestrator.py` | One bounded plan, validate, execute, report | Confirmed |
+| Evidence | `evidence/models.py` | `Evidence` (`retrieved` · `computed` · `interpretation`), `SourceRef` | Confirmed |
+| Reporting | `reporting/` | `Report`, `RunMetadata`, Markdown rendering | Confirmed |
+| Providers | `providers/` | `ModelProvider` protocol, `FakeModelProvider` | Confirmed; no real adapter |
+| Configuration | `config/settings.py` | `QUANT_AGENT_OS_*` settings, `SecretStr` | Confirmed |
+| Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
+| MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool` over the executor | Confirmed; no transport |
+| CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
+| Approval gate | `tools/approvals.py` | Approval requests and grants for consequential permissions | Proposed |
+| Run store and audit | `runs/` | Persisted runs, call records, approvals, audit events | Proposed |
+| MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra) | Proposed |
+| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Proposed |
+| REST API | `api/` | FastAPI over the same executor (optional `api` extra) | Proposed, deferred |
+| Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
+
+Core builds only the interfaces the first vertical slice needs. Each proposed row names the
+milestone that pulls it in (see the plan).
+
+## 4. Layering, dependency direction, and package ownership
+
+### 4.1 Layers inside each package
+
+| Layer | Contains | Must not depend on |
 | --- | --- | --- |
-| Portfolio analytics (separate package) | Deterministic metrics, usable without an LLM | Numerical libraries |
-| Quant Search (separate package) | Retrieval with source identifiers and locations | User-supplied documents and stores |
-| `quant_agent_os.tools` | Tool contract, registry, permissions | pydantic |
-| `quant_agent_os.runtime` | Plan models, bounded executor, orchestrator | tools, providers, reporting |
-| `quant_agent_os.providers` | Model-provider interface and adapters | — |
-| `quant_agent_os.evidence`, `reporting` | Evidence, provenance, structured reports | runtime data models |
-| `quant_agent_os.mcp` | MCP tool definitions and calls over the registry | runtime executor |
-| Quant AI Assistant (`apps/`) | User-facing application | quant-agent-os |
-| uv-template (`pytemplate-uv`) | Generates apps and tool packages | — |
+| Domain | Pydantic models, invariants, `Protocol` ports (for example `KnowledgeStore`) | Any framework, transport, database, or model vendor |
+| Application | Use-case services (for example `ResearchService`, `FactoryService`) | Transports and concrete adapters |
+| Infrastructure | Adapters: SQLite, PostgreSQL, model providers, subprocess, filesystem | Interfaces |
+| Interface | `@tool` wrappers, MCP server, REST routes, CLI, SDK | Infrastructure internals (wired at bootstrap) |
 
-Dependencies point downward only. Inside the package the import layering is:
+### 4.2 The service → tool → executor chain
+
+**Confirmed** today for the example analytics tools; **proposed** for products. This is how the
+baseline's rule that "MCP tools are adapters over application services" fits the existing
+contract:
+
+```text
+MCP client ─┐
+REST client ┼─▶ interface adapter ─▶ ToolExecutor ─▶ ToolSpec(@tool wrapper) ─▶ Application service
+SDK / CLI  ─┤      (no logic)        permissions·approval                         │
+Orchestrator┘                        validation·limits·record                     ▼
+                                                                       Domain models and ports
+                                                                                   │
+                                                                       Infrastructure adapters
+```
+
+- An application service is an ordinary class with typed methods. It is unit-tested without
+  the platform.
+- A `@tool` wrapper is a few lines that call one service method and map its result to an output
+  model carrying `warnings` and `evidence`.
+- Every remote or agent path (MCP, REST, orchestrator, and SDK `call`) goes through
+  `ToolExecutor`. Permissions, approvals, validation, timeouts, size limits, and records
+  therefore apply identically on every path. Contract tests assert this
+  ([decision 0002](decisions/0002-mcp-boundary.md)).
+- Trusted in-process code may import a service directly as a library. That path is outside the
+  agent boundary and produces no audit record.
+
+### 4.3 Package ownership and allowed imports
+
+| Package | Owns | May import | Distribution |
+| --- | --- | --- | --- |
+| `quant_agent_os` (repo root) | Core | pydantic, typer, rich; optional extras | `quant-agent-os` |
+| `quant_research` (`packages/quant-research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
+| `quant_app_factory` (`packages/quant-app-factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
+| Quant analytics (own repository) | Deterministic metrics | Numerical libraries only | Name open |
+| `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | `pytemplate-uv` |
+
+Rules:
+- Core imports no product.
+- The products do not import each other. If they need to collaborate, they do it through a
+  platform workflow (an orchestrated plan that uses both products' tools) or through documented
+  models in Core.
+- Nothing imports `pytemplate-uv`; it is invoked as a CLI.
+- The analytics package imports no agent or LLM library.
+- An import-linter-style test enforces these rules (backlog item B-03).
+
+Repository strategy (**proposed**, [decision 0003](decisions/0003-brand-and-product-structure.md)):
+one repository and one uv workspace. Core stays at the root, where it already works, and each
+product is a workspace member with its own `pyproject.toml`, tests, version, and changelog. This
+keeps Core and the products independently installable and testable without moving functioning
+code. Analytics and `pytemplate-uv` keep their own repositories and release cycles.
+
+Core's internal import order is **confirmed**:
 `tools` → `runtime.plan` / `runtime.executor` → `evidence` / `reporting` →
-`runtime.orchestrator` → `cli`.
+`runtime.orchestrator` → `providers`, `config`, `mcp`, `observability`, `cli`.
 
-## Request lifecycle
+## 5. Tool contract and request lifecycle
 
-1. **Plan.** The orchestrator sends the provider the goal and the descriptors of allowed tools,
-   then parses the response into a `Plan`.
-2. **Validate.** The plan is rejected before anything runs if it is malformed, exceeds
-   `max_steps`, or names a tool that is unregistered or outside the allowlist.
-3. **Execute.** For each step, `ToolExecutor`:
-   - checks permissions;
-   - validates input against the tool's input model;
-   - runs the plain function with a timeout;
-   - validates the output and enforces its size limit.
+### 5.1 Contract (confirmed)
 
-   Failures become records, not exceptions.
-4. **Report.** `build_report` collects `evidence` and `warnings` from tool outputs, turns failed
-   calls into warnings, and adds standard limitations and run metadata.
-
-Tool outputs and retrieved text are never fed back into planning. This is the first defense
-against prompt injection: data cannot change which tools run.
-
-## The tool contract
-
-A tool is a `ToolSpec` with:
+A `ToolSpec` has the following fields:
 - a snake_case name and a description;
 - a version;
 - pydantic input and output models;
 - the plain function;
-- declared `Permission`s;
+- the `Permission`s it declares;
 - `timeout_seconds` and `max_output_bytes`.
 
-The `@tool` decorator builds one from a typed function, which stays directly callable. Output
-models may expose `warnings: list[str]` and `evidence: list[Evidence]`; reports collect both.
+The `@tool` decorator builds one from a typed function, and that function stays directly
+callable. Output models expose `warnings` and `evidence`, and reports collect both.
 
-## Extension points
+### 5.2 Additive contract fields (proposed, backlog B-02)
 
-- **Models:** implement `ModelProvider` (`name`, `generate(prompt) -> str`). Ship each vendor as
-  an adapter with its own optional dependency, and keep tests on `FakeModelProvider`.
+The baseline lists what each tool must specify. The fields below cover what the current contract
+lacks. Every field has a default, so existing tools keep working.
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `deterministic: bool` | `True` | Same input and data version give the same output; reports flag non-deterministic calls |
+| `idempotent: bool` | `True` | Safe to retry; non-idempotent tools are never retried automatically |
+| `long_running: bool` | `False` | Runs as a job with status polling (deferred until a tool needs it) |
+
+Approval is **derived, not declared**. A tool needs approval when it declares a consequential
+permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
+`CallStatus` set (`ok`, `invalid_input`, `denied`, `unknown_tool`, `timeout`, `error`) plus a
+proposed `approval_required` status.
+
+### 5.3 Request lifecycle (confirmed, with proposed additions marked)
+
+1. **Plan.** The orchestrator sends the provider the goal and the descriptors of the tools it
+   allows, then parses the reply into a `Plan`.
+2. **Validate.** The plan is rejected before anything runs if it is malformed, exceeds
+   `max_steps`, or names a tool that is unregistered or outside the allowlist.
+3. **Approve** (proposed). If any step needs approval, the run stops with status
+   `awaiting_approval`. It resumes only after an operator approves the exact steps.
+4. **Execute.** For each step the executor checks permissions, validates the input, runs the
+   tool with a timeout, then validates the output and enforces its size limit. Failures become
+   records, not exceptions.
+5. **Report.** `build_report` collects evidence and warnings, turns failed calls into warnings,
+   and adds limitations and run metadata.
+6. **Persist** (proposed). The run, its records, approvals, and audit events go to the run
+   store.
+
+Tool output and retrieved text are never fed back into **planning**. A tool may give retrieved
+text to a model for synthesis (section 6.5). The synthesized text is labelled `interpretation`
+and cannot choose tools.
+
+## 6. Quant Research: Graph RAG architecture (proposed)
+
+Graph RAG is the defining capability of Quant Research: answers are assembled from explicit,
+typed relationships between quantitative concepts, plus the passages that justify each
+relationship, not from vector similarity alone.
+
+### 6.1 Pipeline
+
+```text
+ operator (CLI / SDK; never an agent tool in the MVP)
+   │  quant-agent-os research ingest ./corpus
+   ▼
+ Loaders ─▶ Chunker ─▶ Extractors ───────────────▶ Entity resolution ─▶ KnowledgeStore
+ md, txt,    passages    rule-based (vocabulary,     canonical ids,        documents, chunks,
+ PDF text,   with exact  frontmatter, citations)     alias merge           entities, mentions,
+ code,       locations   LLM extractor (later,                             relations, corpus
+ notebooks               opt-in, labelled)                                 snapshot
+                                                                               │
+ MCP / SDK tool calls ─▶ ResearchService.query ─▶ Hybrid retrieval ◀───────────┘
+                                                  keyword · graph expansion · vector (later)
+                                                        │ rank fusion
+                                                        ▼
+                                                  EvidencePacket ─▶ client LLM or report
+```
+
+### 6.2 Ingestion (operator-only)
+
+- Ingestion writes to the store. It is therefore an operator command (CLI or SDK), not an agent
+  tool, in the MVP. This keeps agents read-only.
+- Each document records a content `sha256`, a source URI, a title, authors, a date, a license
+  note, and the loader version.
+- Each chunk keeps an exact location: page and line range, section path, or file and line
+  numbers for code.
+- A **corpus snapshot** id is a hash over document hashes plus extractor versions. Every answer
+  records the snapshot it used, so results can be reproduced.
+
+### 6.3 Extraction
+
+The extractors in the first version are deterministic:
+- a curated, versioned quant vocabulary of factors, signals, metrics, methods, and asset
+  classes, with aliases (for example "HML" → `factor:value`);
+- document frontmatter and metadata;
+- citation and reference parsing;
+- explicit cue patterns (for example "X predicts Y", "X is robust to Y").
+
+Every extracted mention and relation stores the extractor name, version, confidence, and the
+chunk it came from. An LLM extractor is a later, opt-in adapter. Its relations are labelled
+`extractor = "llm:<model>"`, and an evaluation must show that it improves recall before it is
+enabled by default.
+
+### 6.4 Retrieval
+
+1. **Seed:** match entities in the query against the vocabulary and aliases, and run a keyword
+   search over chunks (SQLite FTS5 or PostgreSQL full-text search).
+2. **Expand:** traverse relations for `hops` (default 1, maximum 2) from the seed entities,
+   filtered by predicate and confidence. This uses a recursive CTE, which works on both SQLite
+   and PostgreSQL.
+3. **Vector** (later): use pgvector similarity with a bring-your-own embedding provider. Add it
+   only if the citation evaluation shows a gain.
+4. **Fuse:** combine the result lists with reciprocal rank fusion, deduplicate by chunk, and cap
+   the results at `k`.
+5. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
+   paths whose edges cite their supporting chunks, the matched entities, the snapshot id, and
+   warnings (for example "no source supports relation X directly").
+
+### 6.5 Synthesis boundary
+
+- In the MVP, **the client LLM synthesizes**. Quant Research returns evidence packets, and
+  Claude (or another client) writes the answer, so the MVP makes no server-side model calls.
+- Server-side synthesis (`research_alpha`) is a later, optional tool. It uses a `ModelProvider`,
+  needs the `network` permission when the provider is remote, and returns `interpretation`
+  evidence that cites the passages it used. Hypotheses are always `interpretation`.
+- Retrieved documents are untrusted. Fixture documents containing injected instructions must
+  not change plans, tool selection, or permissions (an evaluation suite).
+
+### 6.6 Domain model
+
+The entity types are:
+- `paper`, `author`, `concept`, `factor`, `signal`, `strategy`, `instrument`, `asset_class`,
+  `method`, `dataset`, `empirical_result`.
+
+The predicates are:
+- `authored_by`, `defines`, `uses`, `tested_on`, `reports`, `extends`, `contradicts`,
+  `related_to`, `implemented_in`.
+
+Both lists are versioned with the vocabulary.
+
+## 7. Database and knowledge-graph design (proposed)
+
+The relational schema is shared by every adapter. A dedicated graph database is evaluated only
+if traversal depth, scale, or query patterns exceed what recursive CTEs handle
+([decision 0004](decisions/0004-knowledge-store.md)).
+
+| Table | Key columns |
+| --- | --- |
+| `documents` | `id`, `sha256`, `uri`, `title`, `authors`, `published`, `license_note`, `loader_version`, `ingested_at` |
+| `chunks` | `id`, `document_id`, `ordinal`, `text`, `location`, `section`, `sha256` |
+| `entities` | `id` (`type:slug`), `type`, `name`, `aliases`, `vocabulary_version` |
+| `mentions` | `entity_id`, `chunk_id`, `span`, `extractor`, `confidence` |
+| `relations` | `id`, `subject_id`, `predicate`, `object_id`, `chunk_id`, `extractor`, `extractor_version`, `confidence` |
+| `embeddings` (later) | `chunk_id`, `model`, `dimensions`, `vector` |
+| `corpus_snapshots` | `id`, `created_at`, `document_hashes_digest`, `extractor_versions` |
+
+`KnowledgeStore` is a `Protocol` with three adapters:
+- `InMemoryKnowledgeStore`, for unit tests;
+- `SqliteKnowledgeStore`, which uses only the standard library and FTS5 and serves the MVP,
+  the demo, and offline tests;
+- `PostgresKnowledgeStore`, which uses SQLAlchemy, psycopg, and pgvector, ships as an optional
+  extra, and is planned for days 31–60.
+
+Run and audit tables are in [section 11](#11-workflow-state-audit-and-provenance).
+
+## 8. Quant App Factory architecture (proposed)
+
+The factory turns requirements into maintainable, tested Python applications. It does not
+produce loose code snippets.
+
+```text
+requirements ─▶ AppSpec (typed, editable, validated)
+                  │  drafted by a model (later), or written as TOML/JSON (MVP)
+                  ▼
+               ArchitecturePlanner (deterministic rules: app kind → pattern, profile,
+                  │                 components, layers, dependencies)
+                  ▼
+               ScaffoldProvider.plan()    read-only preview: files, dependencies
+                  │  approval (write_local_data)
+                  ▼
+               ScaffoldProvider.create()  pytemplate-uv adapter
+                  ▼
+               CodeGenerator (later)      model-written modules in designated files only,
+                  │                       approval (write_local_data)
+                  ▼
+               Validator                  uv sync · ruff · ruff format · mypy · pytest
+                  │                       subprocess with timeout and kill, approval
+                  ▼                       (execute_code)
+               FactoryReport              files, checks, versions, request, provenance
+```
+
+The pieces:
+- **`AppSpec`** holds the name, kind (`agent-tool`, `python-cli`, `fastapi-service`, and later
+  `factor-library`), purpose, inputs and outputs, required capabilities, and constraints. It is
+  the single, reviewable contract. The model never writes files directly.
+- **`ArchitecturePlanner`** is deterministic and unit-tested. It recommends a pattern and maps
+  the spec to a scaffold request.
+- **Template pack.** `agent-tool` and `mcp-server` profiles live in a pytemplate-uv template
+  pack inside `quant_app_factory`. That pack encodes the Quant-Agent-OS tool contract, so
+  `pytemplate-uv` itself stays generic.
+- **Generated apps are portable.** `python-cli` and `fastapi-service` apps have no dependency on
+  Quant-Agent-OS. `agent-tool` packages depend on `quant-agent-os` on purpose, because they are
+  tools for the platform.
+- **Iteration** (fix → re-validate) feeds diagnostics back to a model. This is outside the
+  "no feedback into planning" invariant only if the loop is bounded (at most N rounds), uses
+  structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
+  It needs a decision record before it is built (open).
+
+## 9. pytemplate-uv integration boundary
+
+**Confirmed:** `pytemplate-uv` 3.0 is published. It provides `plan`, `validate`, `create`, and
+`create-from-config` with `--json` and stable exit codes, `schema request`, and template packs
+through `--template` and `--template-ref`.
+
+**Proposed** contract inside `quant_app_factory`:
+
+```python
+class ScaffoldProvider(Protocol):
+    name: str
+
+    def plan(self, request: ScaffoldRequest) -> ScaffoldPlan: ...  # no writes
+    def create(self, request: ScaffoldRequest, approval: Approval) -> ScaffoldResult: ...
+```
+
+`PytemplateUvScaffolder` implements this protocol:
+- It writes the request as TOML and runs
+  `uvx pytemplate-uv==3.0.* {plan|create-from-config} <file> --json`.
+- It applies a timeout and maps exit codes to typed errors.
+- It parses the JSON result.
+
+Further rules:
+- The version range is pinned in one constant.
+- A contract test runs against a recorded JSON fixture offline, and a smoke test against the real
+  CLI is opt-in.
+- No Python import of `pytemplate-uv` exists, no dependency on it is declared, and nothing of its
+  implementation is copied.
+- Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
+  a second `ScaffoldProvider`.
+- `pytemplate-uv` releases and plans are its own repository's business.
+
+## 10. Interface strategy: MCP, REST, SDK, CLI
+
+| Interface | Audience | Built on | Status |
+| --- | --- | --- | --- |
+| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `mcp` adapter + official MCP Python SDK (optional extra) | Adapter confirmed; server proposed for the MVP |
+| Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor | Proposed for the MVP |
+| CLI | Operators | Typer: `info`, `serve-mcp`, `research ingest`, `factory plan/create` | Partly confirmed |
+| REST | Web apps, non-Python clients, the hosted offering | FastAPI over the executor (optional extra) | Deferred until a client needs it |
+
+The rules that apply to every interface:
+- Interfaces contain no business logic.
+- Tool names and schemas are identical across interfaces.
+- MCP and REST results equal the direct executor results (contract tests).
+- MCP stdio runs as the local user with the operator's granted permissions. HTTP transports need
+  authentication (section 12).
+
+### Candidate public tools (staged)
+
+The tool names come from the baseline document. A tool is exposed only when its service has
+tests.
+
+| Tool | Product or service | Permissions | Stage |
+| --- | --- | --- | --- |
+| `find_related_signals` | Quant Research | `read_local_data` | MVP |
+| `get_source_passage` | Quant Research | `read_local_data` | MVP |
+| `analyze_performance` | Analytics (example tools today) | `read_local_data` | MVP |
+| `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
+| `plan_app` | App Factory | `read_local_data`, `execute_code` (runs `uvx`) | Days 22–30 |
+| `create_app` | App Factory | adds `write_local_data` → approval | Days 22–30 |
+| `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
+| `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
+| `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
+| `analyze_risk` | Analytics | `read_local_data` | Days 61–90 |
+| `run_backtest` | Backtest service (new package) | `read_local_data`, `long_running` | After day 90 unless pulled forward |
+
+## 11. Workflow state, audit, and provenance
+
+**Confirmed:**
+- `ToolCallRecord` stores the tool, version, arguments, status, output or error, and duration.
+- `RunMetadata` stores the platform version, provider, and start and end times.
+- `Evidence` and `SourceRef` keep facts and interpretation apart.
+
+**Proposed** additions (additive fields):
+- `ToolCallRecord`: `call_id`, `run_id`, `started_at`, `input_sha256`, `data_versions` (for
+  example the corpus snapshot id).
+- `RunMetadata`: `run_id`, a `registry_digest` (a hash of tool names, versions, and schemas), a
+  digest of the public settings (never secrets), and package versions.
+- `RunStore` protocol with in-memory and SQLite adapters (standard library). It stores `runs`
+  (status `planned` · `awaiting_approval` · `running` · `completed` · `failed`), `tool_calls`,
+  `approvals`, and `audit_events`.
+- `audit_events` is append-only, with columns `run_id`, `actor`, `event`, `subject`, `at`, and
+  `details`. It is never written with secrets, and it is the future basis for usage metering.
+
+## 12. Security and approval model
+
+**Confirmed:**
+- Read-only by default: only `read_local_data` is granted.
+- An explicit registry and an optional allowlist.
+- Bounded plans and bounded calls.
+- No feedback into planning.
+- `SecretStr` and log redaction.
+
+See [security.md](security.md) for details.
+
+**Proposed** ([decision 0005](decisions/0005-approval-gates.md)):
+- `write_local_data`, `execute_code`, `network`, and `external_action` are **consequential**.
+  Granting such a permission in settings makes a tool eligible to run. Each call still needs an
+  **approval** that is bound to the run id, the tool name, and the input hash, and that expires
+  after use.
+- Approvals come from the operator through the CLI or SDK, or from the MCP client's own
+  confirmation step when the operator configures that. The model can never grant an approval.
+- `execute_code` tools run through a subprocess runner with a working-directory jail,
+  environment scrubbing (no secrets passed through), a timeout, and a hard kill. A thread
+  timeout is not enough here, because it cannot stop a running process.
+- Ingestion and other store writes are operator commands, not agent tools.
+- HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
+  carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
+  but multi-tenant hosting remains out of scope.
+- Still out of scope: trading, brokerage connectivity, unrestricted code execution, and
+  autonomous external actions.
+
+## 13. Deployment architecture
+
+| Mode | What runs | Status |
+| --- | --- | --- |
+| Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
+| Local MCP server | `uvx --from quant-agent-os[mcp] quant-agent-os serve-mcp` launched by Claude Desktop or Code; SQLite store in a user data directory | Proposed for the MVP |
+| Team server | Docker image, PostgreSQL + pgvector, MCP over HTTP and REST, API-key auth | Proposed, days 61–90 |
+| Hosted | Managed, multi-tenant | Out of scope; commercial option later |
+
+Not planned without a concrete need: a message broker, a distributed workflow engine,
+Kubernetes, or several model frameworks.
+
+## 14. Extension points (confirmed)
+
+- **Models:** implement `ModelProvider` (`name`, `generate(prompt) -> str`). Each vendor ships
+  as an adapter with its own optional dependency, and tests stay on `FakeModelProvider`.
 - **Tools:** register `ToolSpec`s from your own packages in an explicit `ToolRegistry`. There is
-  no plugin discovery or dynamic code loading.
-- **MCP:** a server transport only forwards `tools/list` and `tools/call` to
-  `quant_agent_os.mcp.tool_definitions` and `call_tool`.
+  no plugin discovery and no dynamic code loading.
+- **MCP:** a transport only forwards `tools/list` and `tools/call` to `tool_definitions` and
+  `call_tool`.
 
-## Not in scope for the MVP
+Proposed extension points are `KnowledgeStore`, `RunStore`, `ScaffoldProvider`, and
+`EmbeddingProvider`. Each has a Protocol, one reference adapter, and contract tests.
 
-Multi-agent orchestration, autonomous trading or external actions, unrestricted code execution,
-hosted multi-tenant infrastructure, mandatory vector databases, and broad connector coverage.
-See [decision 0001](decisions/0001-one-orchestrator-first.md) and the
-[engineering plan](ENGINEERING_REVIEW_PLAN.md).
+## 15. Not in scope
+
+The following are not in scope:
+- multi-agent orchestration without an evaluation ([decision 0001](decisions/0001-one-orchestrator-first.md));
+- autonomous trading or external actions;
+- unrestricted code execution;
+- hosted multi-tenant infrastructure;
+- a mandatory vector or graph database;
+- broad connector coverage;
+- a plugin marketplace.

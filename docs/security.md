@@ -1,6 +1,6 @@
 # Security model
 
-QuantAgentOS assumes that model output, retrieved documents, and tool output are untrusted.
+Quant-Agent-OS assumes that model output, retrieved documents, and tool output are untrusted.
 
 ## Defaults
 
@@ -18,6 +18,17 @@ QuantAgentOS assumes that model output, retrieved documents, and tool output are
   planner, so injected instructions in data cannot choose tools.
 - **Secrets.** Credentials come from the environment or `.env`, are held as `SecretStr`, are
   never displayed, and can be redacted from logs with `RedactSecretsFilter`.
+
+## Planned: approvals for consequential permissions
+
+[Decision 0005](decisions/0005-approval-gates.md) (proposed) treats `write_local_data`,
+`execute_code`, `network`, and `external_action` as consequential:
+- Granting one only makes a tool eligible to run.
+- Each call also needs a single-use approval, bound to the run id, the tool name, and the input
+  hash. Models can never create approvals.
+- `execute_code` tools will run in a subprocess runner with a scrubbed environment, a timeout,
+  and a hard kill.
+- Knowledge-store ingestion is an operator command, not an agent tool.
 
 ## Out of scope for the first release
 
