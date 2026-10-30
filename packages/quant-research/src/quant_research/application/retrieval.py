@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_research.domain.models import Chunk, Entity, EntityType, Relation
 from quant_research.domain.ports import GraphEdge, KnowledgeStore
+from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import EntityMatcher, Vocabulary
 
 RRF_K = 60
@@ -22,8 +23,9 @@ PASSAGE_PREVIEW_CHARS = 700
 SIGNAL_TYPES: tuple[EntityType, ...] = ("signal", "factor", "strategy")
 MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
+MAX_FALLBACK_SEEDS = 3
 
-Channel = Literal["keyword", "graph"]
+Channel = Literal["keyword", "mention", "graph"]
 
 
 class ResearchQuery(BaseModel):
@@ -48,7 +50,11 @@ class GraphLink(BaseModel):
 
 
 class RelatedEntity(BaseModel):
-    """An entity related to the query, with the edges that connect it."""
+    """An entity related to the query, with the edges that connect it.
+
+    ``hops == 0`` means the entity was found directly in the best keyword passage (when the
+    query names no vocabulary entity); its evidence is that passage rather than a graph edge.
+    """
 
     id: str
     name: str
@@ -56,6 +62,7 @@ class RelatedEntity(BaseModel):
     score: float
     hops: int
     links: list[GraphLink]
+    mentioned_in: list[str] = Field(default_factory=list)
 
 
 class PassageResult(BaseModel):
@@ -112,46 +119,76 @@ class ResearchService:
         warnings: list[str] = []
         if snapshot is None or snapshot.document_count == 0:
             warnings.append("The knowledge store is empty; ingest a corpus first.")
-        keyword_hits = self.store.keyword_search(request.query, request.k * 3)
+        terms = content_terms(request.query)
+        keyword_hits = self.store.keyword_search(" ".join(terms), request.k * 3) if terms else []
         seeds = list(dict.fromkeys(match.entity_id for match in self.matcher.find(request.query)))
-        if not seeds:
-            mentioned = self.store.mentioned_entities(hit.chunk_id for hit in keyword_hits[:3])
-            seeds = list(
-                dict.fromkeys(
-                    entity_id
-                    for hit in keyword_hits[:3]
-                    for entity_id in mentioned.get(hit.chunk_id, [])
-                )
-            )
+        direct: list[str] = []
+        if not seeds and keyword_hits:
+            best = keyword_hits[0].chunk_id
+            direct = self.store.mentioned_entities([best]).get(best, [])[:MAX_FALLBACK_SEEDS]
+            seeds = direct
             if seeds:
-                warnings.append("No vocabulary entity in the query; seeded from keyword matches.")
+                warnings.append(
+                    "No vocabulary entity in the query; seeded from the best keyword passage."
+                )
         edges = self.store.expand(seeds, hops=request.hops, min_confidence=request.min_confidence)
         entities = self.store.get_entities(
             {*seeds}
             | {edge.relation.subject_id for edge in edges}
             | {edge.relation.object_id for edge in edges}
         )
-        related = _rank_related(seeds, edges, entities, set(request.entity_types))
+        types: set[str] = set(request.entity_types)
+        related = [
+            RelatedEntity(
+                id=entity_id,
+                name=entities[entity_id].name,
+                type=entities[entity_id].type,
+                score=1.0,
+                hops=0,
+                links=[],
+                mentioned_in=[keyword_hits[0].chunk_id],
+            )
+            for entity_id in direct
+            if entity_id in entities and entities[entity_id].type in types
+        ]
+        related += _rank_related(seeds, edges, entities, types)
+        related = related[:MAX_RELATED]
         if seeds and not related:
             warnings.append("No related entities of the requested types were found.")
 
-        graph_ranking = list(
-            dict.fromkeys(link.chunk_id for entity in related for link in entity.links)
-        )
-        keyword_ranking = [hit.chunk_id for hit in keyword_hits]
-        fused = _fuse({"keyword": keyword_ranking, "graph": graph_ranking})[: request.k]
+        rankings: dict[Channel, list[str]] = {
+            "keyword": [hit.chunk_id for hit in keyword_hits],
+            "mention": self.store.chunks_mentioning(seeds, request.k * 3) if seeds else [],
+            "graph": list(
+                dict.fromkeys(link.chunk_id for entity in related for link in entity.links)
+            ),
+        }
+        fused = _fuse(rankings)[: request.k]
         passages = [p for p in (self._passage(cid, score, ch) for cid, score, ch in fused) if p]
+        if not passages and not seeds:
+            warnings.append(
+                "Nothing in the corpus matched the query; try the names of factors, signals, "
+                "or strategies, or ingest more documents."
+            )
 
         names = {entity_id: entity.name for entity_id, entity in entities.items()}
         sources = {passage.chunk_id: passage.source for passage in passages}
         evidence: list[Evidence] = []
         for entity in related:
+            for chunk_id in entity.mentioned_in:
+                source = self._source_for(chunk_id, sources)
+                if source is not None:
+                    evidence.append(
+                        Evidence(
+                            kind="retrieved",
+                            statement=f"The passage mentions {entity.name}.",
+                            sources=[source],
+                        )
+                    )
             for link in entity.links:
-                if link.chunk_id not in sources:
-                    chunk = self.store.get_chunk(link.chunk_id)
-                    if chunk is None:
-                        continue
-                    sources[link.chunk_id] = self._source(chunk)
+                source = self._source_for(link.chunk_id, sources)
+                if source is None:
+                    continue
                 predicate = link.predicate.replace("_", " ")
                 evidence.append(
                     Evidence(
@@ -161,7 +198,7 @@ class ResearchService:
                             f"{names.get(link.object, link.object)} "
                             f"({link.extractor} extraction, confidence {link.confidence:.2f})."
                         ),
-                        sources=[sources[link.chunk_id]],
+                        sources=[source],
                     )
                 )
         return EvidencePacket(
@@ -207,6 +244,14 @@ class ResearchService:
             score=round(score, 6),
             channels=channels,
         )
+
+    def _source_for(self, chunk_id: str, cache: dict[str, SourceRef]) -> SourceRef | None:
+        if chunk_id not in cache:
+            chunk = self.store.get_chunk(chunk_id)
+            if chunk is None:
+                return None
+            cache[chunk_id] = self._source(chunk)
+        return cache[chunk_id]
 
     def _source(self, chunk: Chunk) -> SourceRef:
         document = self.store.get_document(chunk.document_id)
@@ -260,7 +305,7 @@ def _rank_related(
             )
         )
     ranked.sort(key=lambda entity: (-entity.score, entity.id))
-    return ranked[:MAX_RELATED]
+    return ranked
 
 
 def _fuse(rankings: dict[Channel, list[str]]) -> list[tuple[str, float, list[Channel]]]:

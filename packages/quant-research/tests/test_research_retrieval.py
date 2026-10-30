@@ -71,3 +71,37 @@ def test_rank_fusion_rewards_agreement_and_breaks_ties_by_id() -> None:
 
     assert [chunk_id for chunk_id, _, _ in fused] == ["b", "a", "c"]
     assert fused[0][2] == ["keyword", "graph"]
+
+
+def test_definitions_rank_through_the_mention_channel(research: ResearchApp) -> None:
+    packet = research.research.find_related(ResearchQuery(query="short-term reversal"))
+
+    assert any("mention" in passage.channels for passage in packet.passages)
+    assert packet.passages[0].source.source_id == "reversal-and-microstructure.md"
+
+
+def test_queries_without_entities_seed_from_the_best_passage(research: ResearchApp) -> None:
+    packet = research.research.find_related(
+        ResearchQuery(query="why do market makers earn the spread")
+    )
+
+    assert 0 < len(packet.seed_entities) <= 3
+    direct = [entity for entity in packet.related if entity.hops == 0]
+    assert "signal:liquidity-provision" in {entity.id for entity in direct}
+    assert all(entity.mentioned_in for entity in direct)
+    assert any("best keyword passage" in warning for warning in packet.warnings)
+
+
+def test_unanswerable_queries_return_nothing_and_say_so(research: ResearchApp) -> None:
+    packet = research.research.find_related(ResearchQuery(query="crypto funding rates"))
+
+    assert packet.passages == [] and packet.related == []
+    assert any("Nothing in the corpus matched" in warning for warning in packet.warnings)
+
+
+def test_stopwords_do_not_pull_in_unrelated_passages(research: ResearchApp) -> None:
+    packet = research.research.find_related(
+        ResearchQuery(query="What is related to short-term reversal?")
+    )
+
+    assert "notes/injection.md" not in {p.source.source_id for p in packet.passages}

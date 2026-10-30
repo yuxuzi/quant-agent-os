@@ -15,7 +15,7 @@ from quant_research.domain.models import Chunk, Entity, Mention, Predicate, Rela
 from quant_research.domain.vocabulary import EntityMatcher, Match
 
 EXTRACTOR = "rules"
-EXTRACTOR_VERSION = "rules-v1"
+EXTRACTOR_VERSION = "rules-v2"
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -43,6 +43,12 @@ _CUES = (
         "uses",
         0.6,
         frozenset({"method", "dataset", "metric"}),
+    ),
+    _Cue(
+        re.compile(r"\b(?:using|uses?|via|relies on)\b", re.I),
+        "uses",
+        0.6,
+        frozenset({"signal", "factor"}),
     ),
     _Cue(
         re.compile(r"\b(?:on|in|across|for)\b", re.I),

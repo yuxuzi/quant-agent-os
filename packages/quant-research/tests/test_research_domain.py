@@ -2,9 +2,10 @@
 
 import pytest
 
-from quant_research.domain.chunking import MAX_CHUNK_CHARS, split_passages
+from quant_research.domain.chunking import MAX_CHUNK_CHARS, MIN_CHUNK_CHARS, split_passages
 from quant_research.domain.extraction import RuleExtractor
 from quant_research.domain.models import Chunk
+from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import (
     EntityMatcher,
     VocabularyError,
@@ -144,3 +145,26 @@ def test_mentions_point_at_the_exact_span() -> None:
     mentions, _ = EXTRACTOR.extract(chunk)
 
     assert [text[m.start : m.end] for m in mentions] == ["PEAD"]
+
+
+def test_content_terms_drop_stopwords_and_duplicates() -> None:
+    assert content_terms("What is related to the short-term Reversal, reversal?") == [
+        "related",
+        "short",
+        "term",
+        "reversal",
+    ]
+    assert content_terms("is it?") == []
+
+
+def test_short_paragraphs_merge_but_long_ones_stand_alone() -> None:
+    long = "x" * MIN_CHUNK_CHARS
+    passages = split_passages(f"Short.\n\n{long}\n\n{long}")
+
+    assert [(p.line_start, p.line_end) for p in passages] == [(1, 3), (5, 5)]
+
+
+def test_strategies_using_a_signal_get_a_uses_edge() -> None:
+    assert _relations("Trend following uses time-series momentum as its signal.") == [
+        ("strategy:trend-following", "uses", "signal:time-series-momentum")
+    ]

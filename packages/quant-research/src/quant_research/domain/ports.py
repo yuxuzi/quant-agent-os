@@ -1,4 +1,4 @@
-"""The storage port that every knowledge-store adapter implements (decision 0004)."""
+"""Ports for corpus sources and knowledge-store adapters (decision 0004)."""
 
 from __future__ import annotations
 
@@ -105,6 +105,10 @@ class KnowledgeStore(Protocol):
 
     def mentioned_entities(self, chunk_ids: Iterable[str]) -> dict[str, list[str]]:
         """Return entity ids mentioned in each chunk."""
+        ...
+
+    def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
+        """Return chunk ids that mention the most of ``entity_ids``, best first."""
         ...
 
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:

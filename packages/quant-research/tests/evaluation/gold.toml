@@ -1,0 +1,37 @@
+# Gold set for the fixture corpus. `related` lists entity ids that a correct answer surfaces;
+# `documents` lists the corpus files whose passages are relevant. `expect_empty` marks queries
+# the corpus cannot answer, which should return no passages.
+
+[[queries]]
+query = "What is related to short-term reversal?"
+related = ["signal:order-flow-imbalance", "signal:liquidity-provision", "factor:momentum"]
+documents = ["reversal-and-microstructure.md", "notes/order-flow.md", "momentum-crashes.md"]
+
+[[queries]]
+query = "what explains the value factor"
+related = ["factor:profitability"]
+documents = ["notes/value-and-quality.md"]
+
+[[queries]]
+query = "PEAD"
+related = ["signal:analyst-revisions"]
+documents = ["notes/earnings.txt"]
+
+[[queries]]
+query = "How does time-series momentum relate to other strategies?"
+related = ["factor:momentum", "strategy:trend-following"]
+documents = ["momentum-crashes.md"]
+
+[[queries]]
+query = "quality minus junk"
+related = ["factor:low-volatility"]
+documents = ["notes/value-and-quality.md"]
+
+[[queries]]
+query = "why do market makers earn the spread"
+related = ["signal:liquidity-provision"]
+documents = ["reversal-and-microstructure.md"]
+
+[[queries]]
+query = "crypto funding rates"
+expect_empty = true

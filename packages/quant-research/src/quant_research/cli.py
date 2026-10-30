@@ -71,13 +71,12 @@ def search(
     for column in ("Entity", "Type", "Score", "Strongest link"):
         table.add_column(column)
     for entity in packet.related:
-        link = entity.links[0]
-        table.add_row(
-            entity.name,
-            entity.type,
-            f"{entity.score:.2f}",
-            f"{link.subject} {link.predicate} {link.object}",
+        strongest = (
+            f"{entity.links[0].subject} {entity.links[0].predicate} {entity.links[0].object}"
+            if entity.links
+            else "mentioned in the best keyword passage"
         )
+        table.add_row(entity.name, entity.type, f"{entity.score:.2f}", strongest)
     console.print(table)
     for passage in packet.passages:
         console.print(

@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from quant_research import ResearchApp, open_research
 from quant_research.cli import app as cli
+from quant_research.domain.extraction import EXTRACTOR_VERSION
 from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
 
 
@@ -20,7 +21,7 @@ def test_ingestion_reports_counts_and_skips_unsupported_files() -> None:
     assert result.skipped == ["chart.png"]
     assert result.relations > 0
     assert result.snapshot.document_count == 6
-    assert result.snapshot.extractor_versions["extractor"] == "rules-v1"
+    assert result.snapshot.extractor_versions["extractor"] == EXTRACTOR_VERSION
 
 
 def test_reingesting_is_idempotent_and_keeps_the_snapshot(research: ResearchApp) -> None:

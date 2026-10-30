@@ -251,6 +251,16 @@ class SqliteKnowledgeStore:
             found.setdefault(row["chunk_id"], []).append(row["entity_id"])
         return found
 
+    def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
+        """Return chunk ids ranked by distinct entities mentioned, then by mention count."""
+        rows = self._db.execute(
+            "SELECT chunk_id FROM mentions WHERE entity_id IN (SELECT value FROM json_each(?)) "
+            "GROUP BY chunk_id ORDER BY COUNT(DISTINCT entity_id) DESC, COUNT(*) DESC, chunk_id "
+            "LIMIT ?",
+            (json.dumps(sorted(set(entity_ids))), limit),
+        )
+        return [row["chunk_id"] for row in rows]
+
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
         """Return chunks ranked by BM25 (FTS5), or by term overlap when FTS5 is unavailable."""
         tokens = sorted({token.lower() for token in _TOKEN.findall(query)})

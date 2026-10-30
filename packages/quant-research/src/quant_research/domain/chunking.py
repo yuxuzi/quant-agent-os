@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-CHUNKER_VERSION = "paragraph-v1"
+CHUNKER_VERSION = "paragraph-v2"
 MAX_CHUNK_CHARS = 1200
+MIN_CHUNK_CHARS = 200
 
 _HEADING = re.compile(r"^#{1,6}\s+(.*\S)\s*$")
 
@@ -22,11 +23,13 @@ class Passage:
 
 
 def split_passages(text: str, *, first_line: int = 1) -> list[Passage]:
-    """Pack consecutive paragraphs of one section into passages of at most `MAX_CHUNK_CHARS`.
+    """Return one passage per paragraph, merging short paragraphs into the next one.
 
-    ``first_line`` is the line number of ``text``'s first line in the source file, so locations
-    stay exact after front matter is removed. A paragraph longer than the limit becomes its own
-    passage; passages never cross a heading.
+    A passage shorter than `MIN_CHUNK_CHARS` absorbs the following paragraph of the same section
+    while the result stays within `MAX_CHUNK_CHARS`; longer paragraphs stand alone, so citations
+    point at a single paragraph. ``first_line`` is the line number of ``text``'s first line in
+    the source file, so locations stay exact after front matter is removed. Passages never cross
+    a heading.
     """
     passages: list[Passage] = []
     for paragraph in _paragraphs(text, first_line):
@@ -34,6 +37,7 @@ def split_passages(text: str, *, first_line: int = 1) -> list[Passage]:
         if (
             previous is not None
             and previous.section == paragraph.section
+            and len(previous.text) < MIN_CHUNK_CHARS
             and len(previous.text) + 2 + len(paragraph.text) <= MAX_CHUNK_CHARS
         ):
             passages[-1] = Passage(

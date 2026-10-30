@@ -1,0 +1,7 @@
+{
+  "citation_validity": 1.0,
+  "empty_query_accuracy": 1.0,
+  "location_validity": 1.0,
+  "passage_precision": 0.9167,
+  "related_recall": 1.0
+}
