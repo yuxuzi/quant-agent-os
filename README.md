@@ -20,7 +20,7 @@ It has two products built on one core platform:
 | Area | State |
 | --- | --- |
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
-| Core: MCP adapter | Implemented; stdio server is next (backlog B-01) |
+| Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store, approvals, SDK facade | Planned for the MVP |
 | Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation ([architecture §6–7](docs/architecture.md)) |
@@ -40,6 +40,29 @@ uv run python examples/quant-research/research_demo.py            # Graph RAG de
 uv run quant-agent-os info                                        # active settings, secrets hidden
 uv run pytest
 ```
+
+## Use it from Claude
+
+Ingest your notes and papers once, then register the read-only research server with your MCP
+client. Use absolute paths, because the client starts the server from its own directory.
+
+```bash
+uv run quant-research ingest ~/research --store ~/research/.kb.db
+claude mcp add quant-research -- \
+  uv run --directory /path/to/quant-agent-os quant-research serve-mcp --store ~/research/.kb.db
+```
+
+Claude Desktop uses the same command in `claude_desktop_config.json`:
+
+```json
+{"mcpServers": {"quant-research": {"command": "uv", "args": ["run", "--directory",
+  "/path/to/quant-agent-os", "quant-research", "serve-mcp", "--store", "/Users/you/research/.kb.db"]}}}
+```
+
+Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
+cites file, page, and line ranges. The server is read-only, writes nothing to the store, and
+sends nothing off the machine unless you choose a hosted `--embedder`. A hosted embedder also
+needs the `network` permission (see [docs/security.md](docs/security.md)).
 
 ## How it fits together
 

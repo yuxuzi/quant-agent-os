@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- MCP server over stdio: `quant_agent_os.mcp.server` (optional `mcp` extra, built on the
+  official MCP Python SDK) forwards `tools/list` and `tools/call` to the existing adapter.
+  `quant-research serve-mcp --store PATH` serves the read-only research tools to Claude Code,
+  Claude Desktop, and other MCP clients. Tool annotations (read-only, idempotent, open-world)
+  are derived from declared permissions.
+
 - uv workspace: Core stays at the root; `packages/quant-research` and
   `packages/quant-app-factory` (skeleton) are members, and a contract test enforces the import
   boundaries.

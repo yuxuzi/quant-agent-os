@@ -24,6 +24,14 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 - **Tools and MCP servers:** register your tools explicitly; expose them over MCP through
   `quant_agent_os.mcp`.
 
+### MCP server
+
+`quant-research serve-mcp --store PATH` serves the research tools over stdio. It applies
+`QUANT_AGENT_OS_GRANTED_PERMISSIONS`, which defaults to read-only. It warns on stderr when a
+tool needs a permission that is not granted, for example `network` with a hosted embedder.
+Install the transport with the `mcp` extra (`quant-agent-os[mcp]` or
+`quant-agent-os-research[mcp]`); the development environment includes it.
+
 ### Quant Research embeddings
 
 | Variable | Default | Meaning |
@@ -39,6 +47,7 @@ Pick the model with `--embedding-model`, for example `voyage-4`, `voyage-4-large
 
 | Integration | Status |
 | --- | --- |
+| MCP over stdio (Claude Code, Claude Desktop, other MCP clients) | Supported; tested with the SDK's client over a real subprocess |
 | Voyage AI embeddings (HTTPS) | Supported; tested against a simulated API; live check is opt-in |
 | OpenAI embeddings (HTTPS) | Supported; tested against a simulated API; live check is opt-in |
 

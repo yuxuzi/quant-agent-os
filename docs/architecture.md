@@ -85,7 +85,7 @@ product.
 | CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
 | Approval gate | `tools/approvals.py` | Approval requests and grants for consequential permissions | Proposed |
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, audit events | Proposed |
-| MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra) | Proposed |
+| MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra); tool annotations from declared permissions | Confirmed |
 | SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Proposed |
 | REST API | `api/` | FastAPI over the same executor (optional `api` extra) | Proposed, deferred |
 | Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
@@ -474,7 +474,7 @@ Further rules:
 
 | Interface | Audience | Built on | Status |
 | --- | --- | --- | --- |
-| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `mcp` adapter + official MCP Python SDK (optional extra) | Adapter confirmed; server proposed for the MVP |
+| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter; `quant-research serve-mcp` | Confirmed |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor | Proposed for the MVP |
 | CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
 | REST | Web apps, non-Python clients, the hosted offering | FastAPI over the executor (optional extra) | Deferred until a client needs it |
@@ -556,7 +556,7 @@ See [security.md](security.md) for details.
 | Mode | What runs | Status |
 | --- | --- | --- |
 | Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
-| Local MCP server | `uvx --from quant-agent-os[mcp] quant-agent-os serve-mcp` launched by Claude Desktop or Code; SQLite store in a user data directory | Proposed for the MVP |
+| Local MCP server | `uv run --directory <repo> quant-research serve-mcp --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `quant-research ingest` | Confirmed |
 | Team server | Docker image, PostgreSQL + pgvector, MCP over HTTP and REST, API-key auth | Proposed, days 61–90 |
 | Hosted | Managed, multi-tenant | Out of scope; commercial option later |
 

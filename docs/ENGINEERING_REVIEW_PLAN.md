@@ -171,7 +171,7 @@ onto the days below, so there is still only one timeline.
 
 ### First five tasks
 
-**B-01. MCP stdio server** (days 1–7)
+**B-01. MCP stdio server** (days 1–7). **Done** on `feat/mcp-server`: `quant_agent_os.mcp.server` plus `quant-research serve-mcp`, verified end to end over a stdio subprocess.
 - *Rationale:* this is the fastest route to a Claude demo using tools that already work.
 - *Depends on:* approval to add the official `mcp` SDK as an optional extra.
 - *Files:* `src/quant_agent_os/mcp/server.py`, `cli.py` (`serve-mcp`), `pyproject.toml` extra.

@@ -26,6 +26,9 @@ quant-research = "quant_research.cli:main"
 pdf = [
     "pypdf>=6.20,<7",
 ]
+mcp = [
+    "quant-agent-os[mcp]",
+]
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }

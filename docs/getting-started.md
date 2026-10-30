@@ -21,6 +21,16 @@ A fake provider returns a scripted plan, two deterministic tools compute metrics
 returns, and a Markdown report is printed. Edit
 `examples/portfolio-research/sample_config.toml` to try other data or tools.
 
+## Use it from Claude Code
+
+```bash
+uv run quant-research ingest packages/quant-research/tests/fixtures/corpus --store "$PWD/.kb.db"
+claude mcp add quant-research -- uv run --directory "$PWD" quant-research serve-mcp --store "$PWD/.kb.db"
+```
+
+Then ask Claude Code something like "What is related to short-term reversal in my research
+notes?". Remove the server with `claude mcp remove quant-research`.
+
 ## Use it from Python
 
 ```python

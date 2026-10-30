@@ -15,6 +15,13 @@ uv run quant-research ingest path/to/corpus --embedder voyage   # default model 
 uv run quant-research search "betting against beta" --embedder voyage
 ```
 
+Serve the tools to Claude Code (or any MCP client) over stdio:
+
+```bash
+claude mcp add quant-research -- \
+  uv run --directory /path/to/quant-agent-os quant-research serve-mcp --store /abs/path/kb.db
+```
+
 Hosted embedders send chunk text (at ingestion) and query text (at search) to the provider.
 Ingest and search with the same `--embedder` and `--embedding-model`. To compare a hosted
 model with the baseline, run
