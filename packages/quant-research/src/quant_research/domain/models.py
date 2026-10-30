@@ -47,7 +47,11 @@ class Document(BaseModel):
 
 
 class Chunk(BaseModel):
-    """A passage of a document with its exact location."""
+    """A passage of a document with its exact location.
+
+    Lines are 1-based and inclusive: file lines for text sources, lines of the extracted page
+    text for paged sources, where ``page`` is set (1-based).
+    """
 
     id: str
     document_id: str
@@ -56,12 +60,16 @@ class Chunk(BaseModel):
     line_start: int = Field(ge=1)
     line_end: int = Field(ge=1)
     section: str | None = None
+    page: int | None = Field(default=None, ge=1)
 
     @property
     def location(self) -> str:
-        """Return a human-readable location such as ``lines 3-9, § Results``."""
-        lines = f"lines {self.line_start}-{self.line_end}"
-        return f"{lines}, § {self.section}" if self.section else lines
+        """Return a human-readable location such as ``page 2, lines 3-9, § Results``."""
+        parts = [f"page {self.page}"] if self.page else []
+        parts.append(f"lines {self.line_start}-{self.line_end}")
+        if self.section:
+            parts.append(f"§ {self.section}")
+        return ", ".join(parts)
 
 
 class Entity(BaseModel):

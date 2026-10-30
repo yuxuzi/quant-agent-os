@@ -9,8 +9,11 @@ from typing import Self
 
 from quant_research.application.ingest import IngestService
 from quant_research.application.retrieval import ResearchService
-from quant_research.domain.vocabulary import Vocabulary, load_vocabulary
+from quant_research.domain.ports import Embedder
+from quant_research.domain.vocabulary import EntityMatcher, Vocabulary, load_vocabulary
+from quant_research.infrastructure.embedding import HashingEmbedder
 from quant_research.infrastructure.files import TextFileLoader
+from quant_research.infrastructure.pdf import pdf_loader
 from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
 
 DEFAULT_STORE = Path(".quant-research") / "knowledge.db"
@@ -24,6 +27,7 @@ class ResearchApp:
     vocabulary: Vocabulary
     ingest: IngestService
     research: ResearchService
+    embedder: Embedder | None
 
     def close(self) -> None:
         """Close the store."""
@@ -42,14 +46,30 @@ class ResearchApp:
 
 
 def open_research(
-    store_path: str | Path = DEFAULT_STORE, vocabulary_path: Path | None = None
+    store_path: str | Path = DEFAULT_STORE,
+    vocabulary_path: Path | None = None,
+    *,
+    vector: bool = False,
 ) -> ResearchApp:
-    """Open (or create) a SQLite store and build the services over it."""
+    """Open (or create) a SQLite store and build the services over it.
+
+    ``vector`` enables the vector channel with the offline `HashingEmbedder`; the SQLite store
+    doubles as the vector index. It is off by default because the mock embedder shows no
+    measured gain over keyword, mention, and graph retrieval (decision 0004); a real embedder
+    should beat the evaluation baseline before it becomes the default. Text and Markdown always
+    load; PDFs load when the ``pdf`` extra is installed and are otherwise skipped with an
+    installation hint.
+    """
     store = SqliteKnowledgeStore(store_path)
     vocabulary = load_vocabulary(vocabulary_path)
+    embedder = HashingEmbedder(EntityMatcher(vocabulary)) if vector else None
+    vectors = store if vector else None
     return ResearchApp(
         store=store,
         vocabulary=vocabulary,
-        ingest=IngestService(store, vocabulary, TextFileLoader()),
-        research=ResearchService(store, vocabulary),
+        ingest=IngestService(
+            store, vocabulary, [TextFileLoader(), pdf_loader()], embedder=embedder, vectors=vectors
+        ),
+        research=ResearchService(store, vocabulary, embedder=embedder, vectors=vectors),
+        embedder=embedder,
     )

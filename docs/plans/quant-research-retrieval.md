@@ -39,6 +39,10 @@ Each step ends with all four quality gates passing and a commit.
 | R4 Injection resistance | Done |
 | R5 Tools, MCP, reporting | Done. It found and fixed a defect: SQLite connections were bound to one thread, so every executor and MCP call failed |
 | R6 Documentation sync | Done |
+| R7 Mock vector channel | Done. Measured: no gain and no loss, so it is off by default |
+| R8 PDF ingestion | Done. pypdf is an optional extra, with page-level locations |
+| R9 Generated PDF fixtures | Done. No binary files are committed |
+| R10 Evaluation over text and PDFs | Done. Precision is 0.7583 on the larger 9-query gold set; validity 1.0 |
 
 ### R1. Characterization tests (no behaviour change)
 
@@ -112,8 +116,42 @@ Tests and example:
 - Mark B-05 and B-06 as done in the plan.
 - Add a changelog entry.
 
+### R7. Mock vector channel (SQLite, decision recorded 2026-10-30)
+
+SQLite stays the store; DuckDB is kept for the later analytics and backtest service.
+- `Embedder` and `VectorIndex` ports.
+- `HashingEmbedder` uses signed feature hashing over words, word pairs, and vocabulary entities.
+  It is deterministic and offline, and its `model_id` is recorded in the snapshot.
+- `SqliteKnowledgeStore` doubles as the vector index: float32 blobs, exact brute-force cosine,
+  and embeddings that cascade with their chunks.
+- Ingestion backfills missing embeddings.
+- `vector` is a fourth RRF channel with a minimum cosine of 0.2.
+
+Accept when:
+- the evaluation compares the configurations with and without vectors;
+- a test keeps the vector channel from ever lowering a metric;
+- the channel is on by default only with a measured gain.
+
+The measured result was equal metrics, so `vector=False` stays the default.
+
+### R8. PDF ingestion
+
+- Add the extra `quant-agent-os-research[pdf]` (pypdf, locked to a release at least 14 days
+  old).
+- Loaders are routed by suffix. Without the extra, PDFs are skipped with an installation hint.
+- Pages are chunked by line packing, because extraction drops blank lines. Locations read
+  "page N, lines a-b".
+- Scanned PDFs warn about OCR. Corrupt or encrypted PDFs are skipped with a reason.
+- Schema version 2 adds `chunks.page` and `embeddings`, and version-1 stores migrate in place.
+
+### R9 and R10. Generated PDFs and evaluation
+
+- `tests/pdf_fixtures.py` writes real PDFs: a two-page paper, a scanned PDF, and a corrupt one.
+- Two gold queries cover PDF content.
+- Location validity re-extracts PDF pages.
+
 ## Deferred (not in this plan)
 
-Vector retrieval and an embedding provider (B-14), the PostgreSQL adapter (B-14), the LLM
-extractor, the PDF loader, server-side synthesis (`research_alpha`, B-15), and the MCP server
+A real embedding provider and PostgreSQL with pgvector (B-14), the LLM extractor, OCR,
+server-side synthesis (`research_alpha`, B-15), and the MCP server
 transport (B-01, waiting for approval of the `mcp` dependency).

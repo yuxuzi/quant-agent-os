@@ -1,4 +1,8 @@
-"""SQLite knowledge store: standard library only, FTS5 keyword search, recursive-CTE graph.
+"""SQLite knowledge store and vector index: standard library only.
+
+Keyword search uses FTS5, graph expansion a recursive CTE, and vector search brute-force cosine
+similarity over float32 blobs. That is exact and fine for MVP-sized corpora (thousands of
+chunks); pgvector replaces it at scale behind the same `VectorIndex` port.
 
 The schema is the relational design shared with the planned PostgreSQL adapter (decision 0004).
 Use ``":memory:"`` for tests.
@@ -11,12 +15,15 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import re
 import sqlite3
 import threading
+from array import array
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Concatenate, ParamSpec, TypeVar
+from types import TracebackType
+from typing import Concatenate, ParamSpec, Self, TypeVar
 
 from quant_research.domain.models import (
     Chunk,
@@ -26,9 +33,9 @@ from quant_research.domain.models import (
     Mention,
     Relation,
 )
-from quant_research.domain.ports import GraphEdge, KeywordHit
+from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -39,7 +46,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     ordinal INTEGER NOT NULL, text TEXT NOT NULL, line_start INTEGER NOT NULL,
-    line_end INTEGER NOT NULL, section TEXT
+    line_end INTEGER NOT NULL, section TEXT, page INTEGER
 );
 CREATE TABLE IF NOT EXISTS entities (
     id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, aliases TEXT NOT NULL
@@ -57,6 +64,10 @@ CREATE TABLE IF NOT EXISTS relations (
 CREATE INDEX IF NOT EXISTS relations_subject ON relations(subject_id);
 CREATE INDEX IF NOT EXISTS relations_object ON relations(object_id);
 CREATE INDEX IF NOT EXISTS mentions_chunk ON mentions(chunk_id);
+CREATE TABLE IF NOT EXISTS embeddings (
+    chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE, model TEXT NOT NULL,
+    dimensions INTEGER NOT NULL, vector BLOB NOT NULL, PRIMARY KEY (chunk_id, model)
+);
 CREATE TABLE IF NOT EXISTS corpus_snapshots (
     seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, document_count INTEGER NOT NULL,
     vocabulary_version TEXT NOT NULL, extractor_versions TEXT NOT NULL
@@ -106,6 +117,7 @@ class SqliteKnowledgeStore:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
+        _migrate(self._db)
         self._db.executescript(_SCHEMA)
         self.has_fts = _create_fts(self._db)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -114,6 +126,17 @@ class SqliteKnowledgeStore:
     def close(self) -> None:
         """Close the database connection."""
         self._db.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
 
     @_locked
     def has_document(self, sha256: str) -> bool:
@@ -160,9 +183,19 @@ class SqliteKnowledgeStore:
                 ),
             )
             self._db.executemany(
-                "INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks (id, document_id, ordinal, text, line_start, line_end, "
+                "section, page) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
-                    (c.id, c.document_id, c.ordinal, c.text, c.line_start, c.line_end, c.section)
+                    (
+                        c.id,
+                        c.document_id,
+                        c.ordinal,
+                        c.text,
+                        c.line_start,
+                        c.line_end,
+                        c.section,
+                        c.page,
+                    )
                     for c in chunks
                 ],
             )
@@ -318,6 +351,45 @@ class SqliteKnowledgeStore:
         return scored[:limit]
 
     @_locked
+    def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
+        """Store ``(chunk_id, vector)`` pairs for ``model_id``, replacing existing ones."""
+        with self._db:
+            self._db.executemany(
+                "INSERT OR REPLACE INTO embeddings VALUES (?, ?, ?, ?)",
+                [(chunk_id, model_id, len(vector), _pack(vector)) for chunk_id, vector in vectors],
+            )
+
+    @_locked
+    def chunks_without_embeddings(self, model_id: str) -> list[tuple[str, str]]:
+        """Return ``(chunk_id, text)`` for chunks with no ``model_id`` embedding, by id."""
+        rows = self._db.execute(
+            "SELECT c.id, c.text FROM chunks AS c LEFT JOIN embeddings AS e "
+            "ON e.chunk_id = c.id AND e.model = ? WHERE e.chunk_id IS NULL ORDER BY c.id",
+            (model_id,),
+        )
+        return [(row["id"], row["text"]) for row in rows]
+
+    @_locked
+    def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
+        """Return chunks by cosine similarity to ``vector`` (exact, brute force), best first."""
+        norm = math.sqrt(sum(value * value for value in vector))
+        if not norm:
+            return []
+        hits: list[VectorHit] = []
+        rows = self._db.execute(
+            "SELECT chunk_id, vector FROM embeddings WHERE model = ? AND dimensions = ?",
+            (model_id, len(vector)),
+        )
+        for row in rows:
+            stored = _unpack(row["vector"])
+            stored_norm = math.sqrt(sum(value * value for value in stored))
+            if stored_norm:
+                dot = sum(a * b for a, b in zip(vector, stored, strict=True))
+                hits.append(VectorHit(chunk_id=row["chunk_id"], score=dot / (norm * stored_norm)))
+        hits.sort(key=lambda hit: (-hit.score, hit.chunk_id))
+        return hits[:limit]
+
+    @_locked
     def expand(
         self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
     ) -> list[GraphEdge]:
@@ -336,6 +408,26 @@ class SqliteKnowledgeStore:
             )
             for row in rows
         ]
+
+
+def _migrate(db: sqlite3.Connection) -> None:
+    """Upgrade a version-1 store in place: chunks gain ``page``; embeddings are added later."""
+    version = db.execute("PRAGMA user_version").fetchone()[0]
+    has_chunks = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chunks'"
+    ).fetchone()
+    if version == 1 and has_chunks:
+        db.execute("ALTER TABLE chunks ADD COLUMN page INTEGER")
+
+
+def _pack(vector: list[float]) -> bytes:
+    return array("f", vector).tobytes()
+
+
+def _unpack(blob: bytes) -> array[float]:
+    values = array("f")
+    values.frombytes(blob)
+    return values
 
 
 def _create_fts(db: sqlite3.Connection) -> bool:

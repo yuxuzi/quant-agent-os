@@ -19,28 +19,69 @@ from quant_research.domain.models import (
 )
 
 
+class SourceReadError(ValueError):
+    """Raised when a source cannot be read; the message says what to do about it."""
+
+
 @dataclass(frozen=True)
 class SourceFile:
-    """A loaded source: body text, metadata, and where the body starts in the original."""
+    """A loaded source: text, metadata, and where the text starts in the original.
+
+    Text sources set ``body`` and ``body_first_line``. Paged sources (PDF) set ``pages`` instead,
+    one string per page, and leave ``body`` empty.
+    """
 
     uri: str
     sha256: str
     body: str
     body_first_line: int
     metadata: dict[str, str] = field(default_factory=dict)
+    pages: tuple[str, ...] | None = None
+    loader_version: str = ""
 
 
 class SourceLoader(Protocol):
-    """Finds and reads corpus sources."""
+    """Reads one kind of corpus source, chosen by file suffix."""
 
     version: str
-
-    def discover(self, root: Path) -> tuple[list[Path], list[Path]]:
-        """Return supported and unsupported paths under ``root``, sorted."""
-        ...
+    suffixes: frozenset[str]
 
     def load(self, path: Path, root: Path) -> SourceFile:
-        """Read one source; raise `UnicodeDecodeError` for undecodable text."""
+        """Read one source; raise `SourceReadError` when it cannot be read."""
+        ...
+
+
+class Embedder(Protocol):
+    """Turns texts into unit-length vectors; ``model_id`` is part of every corpus snapshot."""
+
+    model_id: str
+    dimensions: int
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Return one unit-length vector per text, in order."""
+        ...
+
+
+class VectorHit(BaseModel):
+    """A chunk matched by vector similarity (cosine, higher is better)."""
+
+    chunk_id: str
+    score: float
+
+
+class VectorIndex(Protocol):
+    """Stores chunk embeddings per model and searches them by cosine similarity."""
+
+    def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
+        """Store ``(chunk_id, vector)`` pairs for ``model_id``."""
+        ...
+
+    def chunks_without_embeddings(self, model_id: str) -> list[tuple[str, str]]:
+        """Return ``(chunk_id, text)`` for chunks that have no ``model_id`` embedding yet."""
+        ...
+
+    def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
+        """Return the most similar chunks, best first."""
         ...
 
 

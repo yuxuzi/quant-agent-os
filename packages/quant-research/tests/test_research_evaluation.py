@@ -19,3 +19,9 @@ def test_metric_does_not_regress(metric: str) -> None:
 @pytest.mark.parametrize("metric", MUST_BE_PERFECT)
 def test_every_citation_and_location_is_valid(metric: str) -> None:
     assert METRICS[metric] == 1.0
+
+
+def test_the_vector_channel_never_makes_retrieval_worse() -> None:
+    with_vectors = run(vector=True)
+
+    assert all(with_vectors[metric] >= METRICS[metric] - 1e-9 for metric in METRICS), with_vectors

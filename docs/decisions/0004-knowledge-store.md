@@ -36,6 +36,19 @@ exists. The schema, the FTS5 fallback, and recursive-CTE expansion are implement
 `quant_research.infrastructure.sqlite_store`. The connection is shared across threads under a
 lock, because `ToolExecutor` runs tools on worker threads.
 
+### Vector channel (2026-10-30)
+
+`SqliteKnowledgeStore` also implements the `VectorIndex` port: float32 blobs and exact cosine
+search. `HashingEmbedder` is an offline mock embedder.
+- With the mock, the evaluation measured equal metrics with and without vectors. Following
+  this decision, the channel is therefore opt-in (`vector=True`).
+- A test keeps it from ever lowering a metric.
+- A real embedder becomes the default only when it beats the baseline.
+
+DuckDB was evaluated for this store and not chosen. Its full-text and HNSW extensions download
+on first use, which breaks offline tests, and the workload is point lookups and traversal, not
+columnar scans. DuckDB remains the candidate for the analytics and backtest service.
+
 ## Consequences
 
 - The MVP adds no runtime dependency.

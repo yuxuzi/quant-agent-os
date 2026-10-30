@@ -37,8 +37,13 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "quant-agent-os-factory",
-    "quant-agent-os-research",
+    "quant-agent-os-research[pdf]",
 ]
+
+[tool.uv]
+# Supply-chain cool-off: lock only releases at least two weeks old when a dependency is added
+# or upgraded. Move the date forward deliberately when upgrading.
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z" }
 
 [tool.uv.workspace]
 # Core stays at the root; each product is a member with its own version (decision 0003).

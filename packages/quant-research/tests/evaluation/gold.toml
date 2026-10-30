@@ -35,3 +35,13 @@ documents = ["reversal-and-microstructure.md"]
 [[queries]]
 query = "crypto funding rates"
 expect_empty = true
+
+[[queries]]
+query = "betting against beta"
+related = ["factor:quality", "factor:profitability"]
+documents = ["papers/low-volatility.pdf", "notes/value-and-quality.md"]
+
+[[queries]]
+query = "Which signals work in futures markets?"
+related = ["signal:carry", "signal:time-series-momentum"]
+documents = ["papers/low-volatility.pdf", "momentum-crashes.md"]

@@ -5,31 +5,36 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from quant_research.domain.ports import SourceFile
+from quant_research.domain.ports import SourceFile, SourceReadError
 
-SUPPORTED_SUFFIXES = frozenset({".md", ".markdown", ".txt"})
+VERSION = "text-v1"
 
 
 class TextFileLoader:
-    """A `SourceLoader` for UTF-8 Markdown and text files; hidden files are ignored."""
+    """A `SourceLoader` for UTF-8 Markdown and text files with optional front matter."""
 
-    version = "text-v1"
-
-    def discover(self, root: Path) -> tuple[list[Path], list[Path]]:
-        """Return supported and unsupported files under ``root`` (or ``root`` itself), sorted."""
-        found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
-        paths = [p for p in found if not p.name.startswith(".")]
-        supported = [p for p in paths if p.suffix.lower() in SUPPORTED_SUFFIXES]
-        return supported, [p for p in paths if p.suffix.lower() not in SUPPORTED_SUFFIXES]
+    version = VERSION
+    suffixes = frozenset({".md", ".markdown", ".txt"})
 
     def load(self, path: Path, root: Path) -> SourceFile:
         """Read ``path`` and split off ``---``-delimited ``key: value`` front matter."""
-        return _load(path, root)
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise SourceReadError(
+                f"{path.name} is not valid UTF-8; re-save it as UTF-8."
+            ) from error
+        return _parse(text, raw, uri_for(path, root))
 
 
-def _load(path: Path, root: Path) -> SourceFile:
-    raw = path.read_bytes()
-    text = raw.decode("utf-8")
+def uri_for(path: Path, root: Path) -> str:
+    """Return ``path`` relative to the corpus root, with forward slashes."""
+    base = root if root.is_dir() else root.parent
+    return path.relative_to(base).as_posix()
+
+
+def _parse(text: str, raw: bytes, uri: str) -> SourceFile:
     metadata: dict[str, str] = {}
     body, first_line = text, 1
     lines = text.splitlines()
@@ -44,11 +49,11 @@ def _load(path: Path, root: Path) -> SourceFile:
                 metadata[key.strip().lower()] = value.strip().strip("\"'")
         else:
             metadata = {}
-    base = root if root.is_dir() else root.parent
     return SourceFile(
-        uri=path.relative_to(base).as_posix(),
+        uri=uri,
         sha256=hashlib.sha256(raw).hexdigest(),
         body=body,
         body_first_line=first_line,
         metadata=metadata,
+        loader_version=VERSION,
     )

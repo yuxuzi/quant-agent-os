@@ -8,7 +8,12 @@ that AI clients (Claude, Copilot, Cursor) turn into cited answers.
 ```bash
 uv run quant-research ingest path/to/corpus          # operator command; writes the store
 uv run quant-research search "What is related to short-term reversal?"
+uv run quant-research search "betting against beta" --vector   # add the mock vector channel
 ```
+
+It supports Markdown and text with front matter. PDF needs the extra
+`quant-agent-os-research[pdf]`, and its locations cite the page and line range. Scanned PDFs
+are reported, because OCR is not supported.
 
 To register the read-only tools (`find_related_signals`, `get_source_passage`) in a Quant-Agent-OS
 registry:
@@ -22,4 +27,5 @@ registry = ToolRegistry(research_tools(research.research))
 ```
 
 The design is in [docs/architecture.md §6–7](../../docs/architecture.md). Storage is SQLite
-(standard library) today, with PostgreSQL planned behind the same `KnowledgeStore` port.
+(standard library) today, including an exact vector index. PostgreSQL with pgvector is
+planned behind the same `KnowledgeStore` and `VectorIndex` ports.

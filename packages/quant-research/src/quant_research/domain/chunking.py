@@ -5,9 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-CHUNKER_VERSION = "paragraph-v2"
+CHUNKER_VERSION = "paragraph-v2+page-v1"
 MAX_CHUNK_CHARS = 1200
 MIN_CHUNK_CHARS = 200
+PAGE_CHUNK_CHARS = 500
+
+_SENTENCE_END = (".", "?", "!", ":")
 
 _HEADING = re.compile(r"^#{1,6}\s+(.*\S)\s*$")
 
@@ -75,3 +78,36 @@ def _paragraphs(text: str, first_line: int) -> list[Passage]:
         lines.append(line)
     close(number)
     return paragraphs
+
+
+def split_page(text: str) -> list[Passage]:
+    """Pack the lines of one extracted PDF page into passages of about `PAGE_CHUNK_CHARS`.
+
+    Extracted PDF text rarely keeps blank lines, so paragraphs cannot be detected. A passage
+    closes at a line ending a sentence once it holds `PAGE_CHUNK_CHARS` characters, and always
+    before exceeding `MAX_CHUNK_CHARS`. Line numbers count lines of the extracted page text.
+    """
+    passages: list[Passage] = []
+    lines: list[str] = []
+    start = 1
+
+    def close(end: int) -> None:
+        if lines:
+            passages.append(Passage("\n".join(lines), start, end, None))
+            lines.clear()
+
+    number = 0
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        size = sum(len(item) + 1 for item in lines)
+        if lines and size + len(line) > MAX_CHUNK_CHARS:
+            close(number - 1)
+        if not lines:
+            start = number
+        lines.append(line)
+        if size + len(line) >= PAGE_CHUNK_CHARS and line.endswith(_SENTENCE_END):
+            close(number)
+    close(number)
+    return passages

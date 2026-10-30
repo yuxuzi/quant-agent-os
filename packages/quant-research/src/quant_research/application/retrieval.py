@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_research.domain.models import Chunk, Entity, EntityType, Relation
-from quant_research.domain.ports import GraphEdge, KnowledgeStore
+from quant_research.domain.ports import Embedder, GraphEdge, KnowledgeStore, VectorIndex
 from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import EntityMatcher, Vocabulary
 
@@ -24,8 +24,9 @@ SIGNAL_TYPES: tuple[EntityType, ...] = ("signal", "factor", "strategy")
 MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
 MAX_FALLBACK_SEEDS = 3
+MIN_VECTOR_SCORE = 0.2
 
-Channel = Literal["keyword", "mention", "graph"]
+Channel = Literal["keyword", "mention", "graph", "vector"]
 
 
 class ResearchQuery(BaseModel):
@@ -107,11 +108,26 @@ class UnknownPassageError(LookupError):
 
 
 class ResearchService:
-    """Read-only queries over a knowledge store."""
+    """Read-only queries over a knowledge store, with an optional vector channel.
 
-    def __init__(self, store: KnowledgeStore, vocabulary: Vocabulary) -> None:
+    With an embedder and a vector index, chunks whose cosine similarity to the query is at
+    least `MIN_VECTOR_SCORE` form a fourth ranking in the fusion.
+    """
+
+    def __init__(
+        self,
+        store: KnowledgeStore,
+        vocabulary: Vocabulary,
+        *,
+        embedder: Embedder | None = None,
+        vectors: VectorIndex | None = None,
+    ) -> None:
+        if (embedder is None) != (vectors is None):
+            raise ValueError("Pass both an embedder and a vector index, or neither.")
         self.store = store
         self.matcher = EntityMatcher(vocabulary)
+        self.embedder = embedder
+        self.vectors = vectors
 
     def find_related(self, request: ResearchQuery) -> EvidencePacket:
         """Return entities of ``request.entity_types`` related to the query, with evidence."""
@@ -162,6 +178,7 @@ class ResearchService:
             "graph": list(
                 dict.fromkeys(link.chunk_id for entity in related for link in entity.links)
             ),
+            "vector": self._vector_ranking(request.query, request.k * 3),
         }
         fused = _fuse(rankings)[: request.k]
         passages = [p for p in (self._passage(cid, score, ch) for cid, score, ch in fused) if p]
@@ -211,6 +228,13 @@ class ResearchService:
             evidence=evidence,
             data_versions={"corpus_snapshot": snapshot.id} if snapshot else {},
         )
+
+    def _vector_ranking(self, query: str, limit: int) -> list[str]:
+        if self.embedder is None or self.vectors is None:
+            return []
+        (vector,) = self.embedder.embed([query])
+        hits = self.vectors.vector_search(self.embedder.model_id, vector, limit)
+        return [hit.chunk_id for hit in hits if hit.score >= MIN_VECTOR_SCORE]
 
     def get_passage(self, chunk_id: str) -> SourcePassage:
         """Return the full text of one chunk; raise `UnknownPassageError` if it is unknown."""

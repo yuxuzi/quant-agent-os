@@ -20,16 +20,21 @@ console = Console()
 StoreOption = Annotated[
     Path, typer.Option("--store", "-s", help="SQLite knowledge store to create or use.")
 ]
+VectorOption = Annotated[
+    bool,
+    typer.Option("--vector/--no-vector", help="Use the vector channel (offline hashing embedder)."),
+]
 
 
 @app.command()
 def ingest(
     corpus: Annotated[Path, typer.Argument(help="A corpus directory or a single file.")],
     store: StoreOption = DEFAULT_STORE,
+    vector: VectorOption = False,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
 ) -> None:
-    """Ingest Markdown and text files; unchanged files are skipped by content hash."""
-    research = open_research(store)
+    """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash."""
+    research = open_research(store, vector=vector)
     try:
         result = research.ingest.ingest(corpus)
     except FileNotFoundError as error:
@@ -43,7 +48,7 @@ def ingest(
     console.print(
         f"Added {len(result.added)}, unchanged {len(result.unchanged)}, "
         f"skipped {len(result.skipped)}: {result.chunks} chunks, {result.mentions} mentions, "
-        f"{result.relations} relations."
+        f"{result.relations} relations, {result.embedded} embeddings."
     )
     console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {store}.")
     for warning in result.warnings:
@@ -56,10 +61,11 @@ def search(
     store: StoreOption = DEFAULT_STORE,
     k: Annotated[int, typer.Option(help="Maximum passages.")] = 6,
     hops: Annotated[int, typer.Option(help="Graph expansion depth (1-2).")] = 1,
+    vector: VectorOption = False,
     as_json: Annotated[bool, typer.Option("--json", help="Print the evidence packet.")] = False,
 ) -> None:
     """Run `find_related_signals` locally and show the evidence."""
-    research = open_research(store)
+    research = open_research(store, vector=vector)
     try:
         packet = research.research.find_related(ResearchQuery(query=query, k=k, hops=hops))
     finally:

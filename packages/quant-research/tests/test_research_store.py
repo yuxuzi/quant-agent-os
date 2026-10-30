@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from conftest import CORPUS
+from research_eval import location_matches
 from typer.testing import CliRunner
 
 from quant_research import ResearchApp, open_research
@@ -59,14 +60,13 @@ def test_missing_corpus_raises_an_actionable_error(tmp_path: Path) -> None:
         research.ingest.ingest(tmp_path / "absent")
 
 
-def test_chunk_locations_reproduce_the_source_lines(research: ResearchApp) -> None:
-    for hit in research.store.keyword_search("reversal momentum value carry PEAD", 50):
-        chunk = research.store.get_chunk(hit.chunk_id)
-        document = research.store.get_document(chunk.document_id)  # type: ignore[union-attr]
-        lines = (CORPUS / document.uri).read_text().splitlines()  # type: ignore[union-attr]
-        source = "\n".join(lines[chunk.line_start - 1 : chunk.line_end]).strip()  # type: ignore[union-attr]
+def test_chunk_locations_reproduce_the_source_lines(
+    research: ResearchApp, corpus_dir: Path
+) -> None:
+    hits = research.store.keyword_search("reversal momentum value carry PEAD beta futures", 50)
 
-        assert source == chunk.text  # type: ignore[union-attr]
+    assert hits
+    assert all(location_matches(research, hit.chunk_id, corpus_dir) for hit in hits)
 
 
 def test_front_matter_becomes_document_metadata(research: ResearchApp) -> None:

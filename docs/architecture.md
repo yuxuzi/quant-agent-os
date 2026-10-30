@@ -213,10 +213,11 @@ and cannot choose tools.
 
 ## 6. Quant Research: Graph RAG architecture
 
-**Confirmed** for keyword, mention, and graph retrieval over SQLite (`packages/quant-research`,
-step plan in [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)).
-**Proposed** for the vector channel, PostgreSQL, the LLM extractor, PDF loading, and
-server-side synthesis.
+**Confirmed** for keyword, mention, graph, and mock-vector retrieval over SQLite, and for
+Markdown, text, and PDF ingestion (`packages/quant-research`; step plan in
+[plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)). **Proposed** for a
+real embedding model, PostgreSQL with pgvector, the LLM extractor, OCR, and server-side
+synthesis.
 
 Graph RAG is the defining capability of Quant Research: answers are assembled from explicit,
 typed relationships between quantitative concepts, plus the passages that justify each
@@ -247,8 +248,13 @@ relationship, not from vector similarity alone.
   tool, in the MVP. This keeps agents read-only.
 - Each document records a content `sha256`, a source URI, a title, authors, a date, a license
   note, and the loader version.
-- Each chunk keeps an exact location: page and line range, section path, or file and line
-  numbers for code.
+- Each chunk keeps an exact location. For Markdown and text this is the file line range and
+  section, with paragraph chunks. For PDF it is the page and the line range of that page's
+  extracted text. Lines are packed into chunks of about 500 characters that close at sentence
+  ends, because extraction drops blank lines.
+- Loaders are chosen by suffix. PDF support is the optional `pdf` extra (pypdf). Without it,
+  and for scanned, encrypted, or corrupt PDFs, the file is skipped or flagged with a warning
+  that says why.
 - A **corpus snapshot** id is a hash over document hashes plus extractor versions. Every answer
   records the snapshot it used, so results can be reproduced.
 
@@ -285,8 +291,12 @@ enabled by default.
    PostgreSQL. Related entities are scored by the sum of confidence divided by hops. The
    results are capped at 10 entities with 3 links each, and the chunks of their links form the
    ranking.
-5. **Vector channel** (later): pgvector similarity with a bring-your-own embedding provider,
-   added only if the evaluation shows a gain.
+5. **Vector channel** (optional, off by default): cosine similarity between the query
+   embedding and chunk embeddings, keeping hits of at least 0.2. The bundled `HashingEmbedder`
+   is an offline mock: signed feature hashing over words, word pairs, and vocabulary entities,
+   so aliases embed close together. It showed no measured gain, so it is opt-in
+   (`vector=True`, `--vector`). A real `Embedder` and pgvector replace it behind the same
+   ports.
 6. **Fuse:** reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id
    for determinism, capped at `k` passages.
 7. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
@@ -339,27 +349,35 @@ if traversal depth, scale, or query patterns exceed what recursive CTEs handle
 
 | Table | Key columns |
 | --- | --- |
-**Confirmed** in `SqliteKnowledgeStore` (schema version 1):
+**Confirmed** in `SqliteKnowledgeStore` (schema version 2; version-1 stores migrate in
+place):
 
 | Table | Key columns |
 | --- | --- |
 | `documents` | `id` (`doc:` + hash prefix), `sha256` (unique), `uri` (unique), `title`, `authors`, `published`, `license_note`, `loader_version` |
-| `chunks` | `id` (`<document>#<ordinal>`), `document_id`, `ordinal`, `text`, `line_start`, `line_end`, `section` |
+| `chunks` | `id` (`<document>#<ordinal>`), `document_id`, `ordinal`, `text`, `line_start`, `line_end`, `section`, `page` |
 | `chunks_fts` | FTS5 index of `chunks.text` (when the SQLite build has FTS5) |
 | `entities` | `id` (`type:slug`), `type`, `name`, `aliases` |
 | `mentions` | `entity_id`, `chunk_id`, `start`, `end`, `extractor`, `confidence` |
 | `relations` | `id`, `subject_id`, `predicate`, `object_id`, `chunk_id`, `extractor`, `extractor_version`, `confidence` |
 | `corpus_snapshots` | `seq`, `id`, `document_count`, `vocabulary_version`, `extractor_versions` |
-| `embeddings` (later) | `chunk_id`, `model`, `dimensions`, `vector` |
+| `embeddings` | `chunk_id`, `model`, `dimensions`, `vector` (float32 blob); cascades with its chunk |
 
 Deleting a document cascades to its chunks, mentions, and relations. A changed file therefore
 replaces all of its records.
 
-`KnowledgeStore` and `SourceLoader` are `Protocol`s. The adapters are:
+`KnowledgeStore`, `VectorIndex`, `Embedder`, and `SourceLoader` are `Protocol`s. The adapters
+are:
 - `SqliteKnowledgeStore`. It uses only the standard library, works as a file or as
   `":memory:"` (for tests), and shares one locked connection because the executor runs tools on
   worker threads.
-- `TextFileLoader`, for Markdown and text with front matter.
+- `TextFileLoader`, for Markdown and text with front matter, and `PdfLoader`, for PDF through
+  pypdf.
+- `HashingEmbedder`, the offline mock embedder. `SqliteKnowledgeStore` also implements
+  `VectorIndex` with exact brute-force cosine, which is fine for thousands of chunks.
+- DuckDB was considered and not chosen for this store. It suits the later analytics and
+  backtest service (columnar scans over factor and price data) better than this workload of
+  point lookups and graph traversal.
 - `PostgresKnowledgeStore`, which uses SQLAlchemy, psycopg, and pgvector, ships as an optional
   extra, and is planned for days 31–60.
 

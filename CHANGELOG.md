@@ -23,7 +23,13 @@ All notable changes to this project are documented here. The format follows
   - the read-only tools `find_related_signals` and `get_source_passage`;
   - the `quant-research` CLI;
   - a retrieval-quality evaluation with a recorded baseline;
-  - the `examples/quant-research` demo.
+  - the `examples/quant-research` demo;
+  - an optional vector channel (`Embedder` and `VectorIndex` ports, an offline
+    `HashingEmbedder`, exact cosine search in SQLite), off by default after a measured
+    no-gain result;
+  - PDF ingestion with page-level citations through the optional extra
+    `quant-agent-os-research[pdf]`, with scanned and corrupt PDFs reported;
+  - knowledge-store schema version 2 with in-place migration.
 
 ### Changed
 
