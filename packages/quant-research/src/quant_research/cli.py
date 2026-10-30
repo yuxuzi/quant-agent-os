@@ -25,7 +25,7 @@ app = typer.Typer(
     help="Quant Research: build and query a Graph RAG knowledge store.", no_args_is_help=True
 )
 console = Console()
-errors = Console(stderr=True)
+errors = Console(stderr=True, soft_wrap=True)  # never insert line breaks into messages
 
 MCP_INSTRUCTIONS = (
     "Quant Research searches the user's own ingested research corpus (notes, papers, PDFs). "
