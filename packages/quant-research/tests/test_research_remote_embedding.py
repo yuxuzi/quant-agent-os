@@ -293,3 +293,63 @@ def test_the_urllib_transport_returns_statuses_and_retry_after() -> None:
 
     assert (ok.status, ok.body) == (200, b'{"ok": true}')
     assert (limited.status, limited.retry_after) == (429, 3.0)
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_query_embedding_respects_the_deadline() -> None:
+    clock = FakeClock()
+    timeouts: list[float] = []
+
+    def failing(request: urllib.request.Request, timeout: float) -> HttpResponse:
+        timeouts.append(timeout)
+        clock.now += 1.0
+        return HttpResponse(503, b"")
+
+    embedder = VoyageEmbedder(KEY, transport=failing, sleep=clock.sleep, clock=clock, timeout=30)
+
+    with pytest.raises(EmbeddingServiceError, match=r"time left in the budget|time budget"):
+        embedder.embed(["carry"], kind="query", deadline=clock.now + 4.0)
+    assert timeouts[0] == 4.0  # the request timeout shrinks to the time left
+    assert clock.now <= 104.0 + 1.0
+
+
+def test_search_degrades_to_other_channels_when_embedding_fails(corpus_dir: Path) -> None:
+    api = FakeApi()
+    with open_research(":memory:", embedder=_voyage(api)) as research:
+        research.ingest.ingest(corpus_dir)
+        api.failures = [HttpResponse(401, b"{}")]
+        packet = research.research.find_related(ResearchQuery(query="carry"))
+
+    assert packet.passages
+    assert any(w.startswith("Vector channel skipped") for w in packet.warnings)
+
+
+def test_repeated_queries_do_not_call_the_provider_again(corpus_dir: Path) -> None:
+    api = FakeApi()
+    with open_research(":memory:", embedder=_voyage(api)) as research:
+        research.ingest.ingest(corpus_dir)
+        before = len(api.requests)
+        for _ in range(3):
+            research.research.find_related(ResearchQuery(query="carry"))
+
+    assert len(api.requests) == before + 1
+
+
+def test_the_search_tool_timeout_covers_the_query_budget() -> None:
+    from quant_research.application.retrieval import QUERY_EMBEDDING_SECONDS
+    from quant_research.tools import SEARCH_TIMEOUT
+
+    with open_research(":memory:", embedder=_voyage(FakeApi())) as research:
+        search = research_tools(research.research)[0]
+
+    assert search.timeout_seconds == SEARCH_TIMEOUT > QUERY_EMBEDDING_SECONDS

@@ -110,8 +110,7 @@ class IngestService:
                 counts[2] + len(relations),
             ]
         embedded = self._embed_missing()
-        snapshot = self.snapshot()
-        self.store.record_snapshot(snapshot)
+        snapshot = self.store.publish_snapshot(self._snapshot_for)
         return IngestResult(
             added=added,
             unchanged=unchanged,
@@ -126,7 +125,9 @@ class IngestService:
 
     def snapshot(self) -> CorpusSnapshot:
         """Return the snapshot for the stored documents and the current component versions."""
-        hashes = self.store.document_hashes()
+        return self._snapshot_for(self.store.document_hashes())
+
+    def _snapshot_for(self, hashes: list[str]) -> CorpusSnapshot:
         versions = {
             "chunker": CHUNKER_VERSION,
             "extractor": self.extractor.version,

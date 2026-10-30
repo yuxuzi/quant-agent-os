@@ -51,19 +51,21 @@ def open_research(
     *,
     vector: bool = False,
     embedder: Embedder | None = None,
+    read_only: bool = False,
 ) -> ResearchApp:
     """Open (or create) a SQLite store and build the services over it.
 
     ``vector`` enables the vector channel with the offline `HashingEmbedder`; the SQLite store
     doubles as the vector index. It is off by default because the mock embedder shows no
     measured gain over keyword, mention, and graph retrieval (decision 0004); a real embedder
-    should beat the evaluation baseline before it becomes the default. Passing ``embedder``
+    should beat the evaluation baseline before it becomes the default. ``read_only`` opens an
+    existing store without creating, migrating, or writing anything. Passing ``embedder``
     (for example a `VoyageEmbedder` from `quant_research.config.make_embedder`) enables the
     vector channel with that model instead. Text and Markdown always
     load; PDFs load when the ``pdf`` extra is installed and are otherwise skipped with an
     installation hint.
     """
-    store = SqliteKnowledgeStore(store_path)
+    store = SqliteKnowledgeStore(store_path, read_only=read_only)
     vocabulary = load_vocabulary(vocabulary_path)
     if embedder is None and vector:
         embedder = HashingEmbedder(EntityMatcher(vocabulary))

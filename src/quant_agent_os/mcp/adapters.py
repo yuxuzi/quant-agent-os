@@ -17,13 +17,15 @@ from quant_agent_os.tools.permissions import Permission
 _WRITES = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.EXTERNAL_ACTION}
 )
+_OUTSIDE = frozenset({Permission.NETWORK, Permission.EXTERNAL_ACTION})
 
 
 def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     """Return MCP ``tools/list`` entries for every tool the policy allows.
 
     ``annotations`` are MCP behaviour hints derived from the declared contract: read-only unless
-    the tool may write, run code, or act externally; open-world when it uses the network.
+    the tool may write, run code, or act externally; open-world when it reaches outside the
+    machine (network access or external actions).
     """
     return [
         {
@@ -33,7 +35,7 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
             "annotations": {
                 "readOnlyHint": not (spec.permissions & _WRITES),
                 "idempotentHint": spec.idempotent,
-                "openWorldHint": Permission.NETWORK in spec.permissions,
+                "openWorldHint": bool(spec.permissions & _OUTSIDE),
             },
         }
         for spec in executor.registry.specs()

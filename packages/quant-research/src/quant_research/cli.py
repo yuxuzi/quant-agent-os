@@ -19,6 +19,7 @@ from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
+from quant_research.infrastructure.sqlite_store import StoreError
 from quant_research.tools import research_tools
 
 app = typer.Typer(
@@ -61,12 +62,15 @@ ModelOption = Annotated[
 ]
 
 
-def _open(store: Path, embedder: EmbedderChoice | None, model: str | None) -> ResearchApp:
+def _open(
+    store: Path, embedder: EmbedderChoice | None, model: str | None, *, read_only: bool = False
+) -> ResearchApp:
+    """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
         chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
-    except EmbeddingServiceError as error:
+        return open_research(store, embedder=chosen, read_only=read_only)
+    except (EmbeddingServiceError, StoreError) as error:
         raise _fail(error) from error
-    return open_research(store, embedder=chosen)
 
 
 def _fail(error: Exception) -> typer.Exit:
@@ -116,11 +120,11 @@ def search(
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the evidence packet.")] = False,
 ) -> None:
-    """Run `find_related_signals` locally and show the evidence.
+    """Run `find_related_signals` locally (read-only) and show the evidence.
 
     Use the same --embedder and --embedding-model as at ingestion to search by vector.
     """
-    research = _open(store, embedder, embedding_model)
+    research = _open(store, embedder, embedding_model, read_only=True)
     try:
         packet = research.research.find_related(ResearchQuery(query=query, k=k, hops=hops))
     except EmbeddingServiceError as error:
@@ -159,13 +163,12 @@ def serve_mcp(
 ) -> None:
     """Serve the read-only research tools to an MCP client (Claude, Cursor, ...) over stdio.
 
-    Ingest first; the server never writes to the store. Permissions come from
+    Ingest first; the store is opened read-only, so serving never changes it (a read-only mount
+    works). Permissions come from
     QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr because
     stdout carries the protocol.
     """
-    if not store.exists():
-        raise _fail(FileNotFoundError(f"No knowledge store at {store}; run quant-research ingest."))
-    research = _open(store, embedder, embedding_model)
+    research = _open(store, embedder, embedding_model, read_only=True)
     try:
         policy = PermissionPolicy(granted=get_settings().granted_permissions)
         tools = research_tools(research.research)
