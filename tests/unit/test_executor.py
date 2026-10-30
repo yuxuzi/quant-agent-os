@@ -71,3 +71,20 @@ def test_error_messages_are_actionable() -> None:
     record = EXECUTOR.execute(PlanStep(tool="broken", arguments={"value": 1}))
 
     assert record.error == "RuntimeError: boom"
+
+
+def test_records_carry_provenance_ids_and_a_stable_input_hash() -> None:
+    first = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 2}), run_id="run-1")
+    second = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 2}))
+
+    assert first.run_id == "run-1"
+    assert first.call_id != second.call_id
+    assert first.input_sha256 == second.input_sha256
+    assert first.started_at.tzinfo is not None
+
+
+def test_invalid_input_is_hashed_from_the_raw_arguments() -> None:
+    record = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": "x"}))
+
+    assert record.status == "invalid_input"
+    assert record.input_sha256 is not None

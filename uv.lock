@@ -6,6 +6,13 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "quant-agent-os",
+    "quant-agent-os-factory",
+    "quant-agent-os-research",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -692,6 +699,8 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "quant-agent-os-factory" },
+    { name = "quant-agent-os-research" },
     { name = "ruff" },
 ]
 
@@ -708,7 +717,39 @@ dev = [
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "quant-agent-os-factory", editable = "packages/quant-app-factory" },
+    { name = "quant-agent-os-research", editable = "packages/quant-research" },
     { name = "ruff", specifier = ">=0.6" },
+]
+
+[[package]]
+name = "quant-agent-os-factory"
+version = "0.1.0"
+source = { editable = "packages/quant-app-factory" }
+dependencies = [
+    { name = "quant-agent-os" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "quant-agent-os", editable = "." }]
+
+[[package]]
+name = "quant-agent-os-research"
+version = "0.1.0"
+source = { editable = "packages/quant-research" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "quant-agent-os" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "quant-agent-os", editable = "." },
+    { name = "rich", specifier = ">=13.7" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]

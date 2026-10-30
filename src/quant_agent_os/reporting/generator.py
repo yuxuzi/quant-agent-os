@@ -22,14 +22,23 @@ def build_report(
     plan: Plan,
     records: list[ToolCallRecord],
     *,
+    run_id: str,
     provider: str,
+    registry_digest: str,
     started_at: datetime,
     finished_at: datetime,
 ) -> Report:
     """Collect evidence and warnings from tool outputs; record every failed call as a warning."""
     findings: list[Evidence] = []
     warnings: list[str] = []
+    data_versions: dict[str, str] = {}
     for call in records:
+        for key, value in call.data_versions.items():
+            if data_versions.setdefault(key, value) != value:
+                warnings.append(
+                    f"{call.tool}: used {key} {value}, but an earlier call used "
+                    f"{data_versions[key]}."
+                )
         if call.status != "ok" or call.output is None:
             warnings.append(f"{call.tool}: {call.status} - {call.error}")
             continue
@@ -47,10 +56,13 @@ def build_report(
         warnings=warnings,
         limitations=list(STANDARD_LIMITATIONS),
         metadata=RunMetadata(
+            run_id=run_id,
             platform_version=__version__,
             provider=provider,
+            registry_digest=registry_digest,
             started_at=started_at,
             finished_at=finished_at,
+            data_versions=data_versions,
         ),
     )
 
@@ -86,8 +98,10 @@ def render_markdown(report: Report) -> str:
     meta = report.metadata
     lines += [
         "",
-        f"Platform {meta.platform_version}, provider `{meta.provider}`, "
+        f"Run `{meta.run_id}`: platform {meta.platform_version}, provider `{meta.provider}`, "
+        f"registry `{meta.registry_digest[:12]}`, "
         f"{meta.started_at.isoformat()} to {meta.finished_at.isoformat()}.",
-        "",
     ]
+    lines += [f"Data: {key} `{value}`." for key, value in sorted(meta.data_versions.items())]
+    lines.append("")
     return "\n".join(lines)

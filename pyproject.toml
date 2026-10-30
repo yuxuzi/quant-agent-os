@@ -1,7 +1,7 @@
 [project]
 name = "quant-agent-os"
 version = "0.1.0"
-description = "Open-source agent platform for quantitative research: typed tools, a bounded orchestrator, and evidence-linked reports"
+description = "Quant-Agent-OS core: typed tools, a bounded orchestrator, and evidence-linked reports for quantitative research and application engineering"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -36,7 +36,17 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",
+    "quant-agent-os-factory",
+    "quant-agent-os-research",
 ]
+
+[tool.uv.workspace]
+# Core stays at the root; each product is a member with its own version (decision 0003).
+members = ["packages/*"]
+
+[tool.uv.sources]
+quant-agent-os-factory = { workspace = true }
+quant-agent-os-research = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
@@ -53,12 +63,12 @@ select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "examples"]
+files = ["src", "examples", "packages/quant-research/src", "packages/quant-app-factory/src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/quant-research/tests", "packages/quant-app-factory/tests"]
 pythonpath = ["examples/portfolio-research"]
-addopts = "-ra --cov=quant_agent_os --cov-report=term-missing"
+addopts = "-ra --cov=quant_agent_os --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
 
 [tool.coverage.run]
 branch = true

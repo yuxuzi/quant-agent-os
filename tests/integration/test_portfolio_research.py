@@ -93,3 +93,12 @@ def test_max_drawdown_known_answer() -> None:
     result = max_drawdown.function(ReturnsInput(series_id="s", returns=[0.1, -0.5, 0.2]))
 
     assert result.value == pytest.approx(-0.5)
+
+
+def test_report_metadata_identifies_the_run_and_registry() -> None:
+    report = run(load_config(DEFAULT_CONFIG))
+
+    assert report.metadata.run_id
+    assert report.metadata.registry_digest == build_registry().digest()
+    assert {call.run_id for call in report.tool_calls} == {report.metadata.run_id}
+    assert f"Run `{report.metadata.run_id}`" in render_markdown(report)

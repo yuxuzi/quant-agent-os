@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.permissions import PermissionDeniedError, PermissionPolicy
@@ -17,7 +21,11 @@ CallStatus = Literal["ok", "invalid_input", "denied", "unknown_tool", "timeout",
 
 
 class ToolCallRecord(BaseModel):
-    """Provenance for one tool call; recorded whether it succeeded or not."""
+    """Provenance for one tool call; recorded whether it succeeded or not.
+
+    ``input_sha256`` hashes the validated input (or the raw arguments when validation failed),
+    so identical calls can be recognised across runs.
+    """
 
     tool: str
     tool_version: str | None
@@ -26,6 +34,11 @@ class ToolCallRecord(BaseModel):
     output: dict[str, Any] | None = None
     error: str | None = None
     duration_ms: float = 0.0
+    call_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    run_id: str | None = None
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    input_sha256: str | None = None
+    data_versions: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolExecutor:
@@ -39,9 +52,11 @@ class ToolExecutor:
         self.registry = registry
         self.policy = policy
 
-    def execute(self, step: PlanStep) -> ToolCallRecord:
+    def execute(self, step: PlanStep, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
+        started_at = datetime.now(UTC)
         started = time.perf_counter()
+        input_sha256 = canonical_sha256(step.arguments)
 
         def record(status: CallStatus, **fields: Any) -> ToolCallRecord:
             return ToolCallRecord(
@@ -50,6 +65,9 @@ class ToolExecutor:
                 arguments=step.arguments,
                 status=status,
                 duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                run_id=run_id,
+                started_at=started_at,
+                input_sha256=input_sha256,
                 **fields,
             )
 
@@ -65,6 +83,7 @@ class ToolExecutor:
             params = spec.input_model.model_validate(step.arguments)
         except ValidationError as error:
             return record("invalid_input", tool_version=spec.version, error=_brief(error))
+        input_sha256 = canonical_sha256(params.model_dump(mode="json"))
 
         pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"tool-{spec.name}")
         try:
@@ -94,7 +113,19 @@ class ToolExecutor:
                 tool_version=spec.version,
                 error=f"Output of {size} bytes exceeds the {spec.max_output_bytes}-byte limit.",
             )
-        return record("ok", tool_version=spec.version, output=payload)
+        versions = payload.get("data_versions")
+        data_versions = (
+            {str(key): str(value) for key, value in versions.items()}
+            if isinstance(versions, dict)
+            else {}
+        )
+        return record("ok", tool_version=spec.version, output=payload, data_versions=data_versions)
+
+
+def canonical_sha256(value: Any) -> str:
+    """Return the SHA-256 of ``value`` as canonical JSON (sorted keys, no whitespace)."""
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _brief(error: ValidationError) -> str:

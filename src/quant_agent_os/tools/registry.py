@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable
 from typing import Any
 
@@ -51,3 +53,16 @@ class ToolRegistry:
     def descriptors(self) -> list[dict[str, Any]]:
         """Return JSON-serializable descriptions of every tool, in name order."""
         return [spec.descriptor() for spec in self.specs()]
+
+    def digest(self) -> str:
+        """Return a SHA-256 over every tool's name, version, schemas, and permissions.
+
+        Two runs with the same digest had the same tool contracts available.
+        """
+        contracts = [
+            {key: descriptor[key] for key in ("name", "version", "input_schema", "output_schema")}
+            | {"permissions": descriptor["permissions"]}
+            for descriptor in self.descriptors()
+        ]
+        canonical = json.dumps(contracts, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
