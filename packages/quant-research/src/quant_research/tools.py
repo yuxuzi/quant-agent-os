@@ -14,11 +14,15 @@ from pydantic import BaseModel, Field
 
 from quant_agent_os.tools import Permission, ToolSpec, tool
 from quant_research.application.retrieval import (
+    QUERY_EMBEDDING_SECONDS,
     EvidencePacket,
     ResearchQuery,
     ResearchService,
     SourcePassage,
 )
+
+# Leaves room after a hosted query embedding (bounded by QUERY_EMBEDDING_SECONDS) for the reads.
+SEARCH_TIMEOUT = QUERY_EMBEDDING_SECONDS + 7.0
 
 
 class PassageRequest(BaseModel):
@@ -41,6 +45,7 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
             "links, each citing the passage that supports it. Cite sources when answering."
         ),
         permissions=search_permissions,
+        timeout_seconds=SEARCH_TIMEOUT,
         max_output_bytes=200_000,
     )
     def find_related_signals(params: ResearchQuery) -> EvidencePacket:

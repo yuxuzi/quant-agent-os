@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
@@ -21,6 +22,10 @@ from quant_research.domain.models import (
 
 class SourceReadError(ValueError):
     """Raised when a source cannot be read; the message says what to do about it."""
+
+
+class EmbeddingError(RuntimeError):
+    """Raised when an embedder cannot embed within its limits; retrieval degrades on it."""
 
 
 @dataclass(frozen=True)
@@ -64,9 +69,17 @@ class Embedder(Protocol):
     requires_network: bool
 
     def embed(
-        self, texts: Sequence[str], *, kind: Literal["document", "query"] = "document"
+        self,
+        texts: Sequence[str],
+        *,
+        kind: Literal["document", "query"] = "document",
+        deadline: float | None = None,
     ) -> list[list[float]]:
-        """Return one unit-length vector per text, in order."""
+        """Return one unit-length vector per text, in order.
+
+        ``deadline`` is a `time.monotonic` instant; remote embedders stop retrying and raise
+        `EmbeddingError` rather than run past it.
+        """
         ...
 
 
@@ -137,8 +150,16 @@ class KnowledgeStore(Protocol):
         """Insert or update canonical entities."""
         ...
 
-    def record_snapshot(self, snapshot: CorpusSnapshot) -> None:
-        """Record the current corpus snapshot."""
+    def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:
+        """Atomically build the snapshot from the stored document hashes and make it current.
+
+        Building and publishing happen in one write transaction, so concurrent ingestions
+        cannot publish a snapshot that no longer describes the store.
+        """
+        ...
+
+    def reading(self) -> AbstractContextManager[None]:
+        """Return a context in which every read sees one consistent state of the store."""
         ...
 
     def current_snapshot(self) -> CorpusSnapshot | None:

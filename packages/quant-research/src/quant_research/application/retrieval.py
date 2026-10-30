@@ -8,14 +8,22 @@ nothing here calls a model.
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
+import threading
+import time
+from collections import OrderedDict, defaultdict, deque
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_research.domain.models import Chunk, Entity, EntityType, Relation
-from quant_research.domain.ports import Embedder, GraphEdge, KnowledgeStore, VectorIndex
+from quant_research.domain.ports import (
+    Embedder,
+    EmbeddingError,
+    GraphEdge,
+    KnowledgeStore,
+    VectorIndex,
+)
 from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import EntityMatcher, Vocabulary
 
@@ -26,6 +34,9 @@ MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
 MAX_FALLBACK_SEEDS = 3
 MIN_VECTOR_SCORE = 0.2
+# Query embedding must finish well inside the search tool's timeout (tools.SEARCH_TIMEOUT).
+QUERY_EMBEDDING_SECONDS = 8.0
+QUERY_CACHE_SIZE = 256
 
 Channel = Literal["keyword", "mention", "graph", "vector"]
 ALL_CHANNELS: frozenset[Channel] = frozenset({"keyword", "mention", "graph", "vector"})
@@ -136,11 +147,24 @@ class ResearchService:
         self.embedder = embedder
         self.vectors = vectors
         self.channels = channels
+        self._query_vectors: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
+        self._cache_lock = threading.Lock()
 
     def find_related(self, request: ResearchQuery) -> EvidencePacket:
-        """Return entities of ``request.entity_types`` related to the query, with evidence."""
-        snapshot = self.store.current_snapshot()
+        """Return entities of ``request.entity_types`` related to the query, with evidence.
+
+        The query is embedded first (outside any database transaction); every read then runs in
+        one read transaction, so the packet never mixes two versions of the corpus.
+        """
         warnings: list[str] = []
+        query_vector = self._query_vector(request.query, warnings)
+        with self.store.reading():
+            return self._find_related(request, query_vector, warnings)
+
+    def _find_related(
+        self, request: ResearchQuery, query_vector: list[float] | None, warnings: list[str]
+    ) -> EvidencePacket:
+        snapshot = self.store.current_snapshot()
         if snapshot is None or snapshot.document_count == 0:
             warnings.append("The knowledge store is empty; ingest a corpus first.")
         terms = content_terms(request.query)
@@ -188,7 +212,7 @@ class ResearchService:
                     link.chunk_id for entity in related for link in [*entity.path, *entity.links]
                 )
             ),
-            "vector": self._vector_ranking(request.query, request.k * 3, warnings),
+            "vector": self._vector_ranking(query_vector, request.k * 3, warnings),
         }
         fused = _fuse({name: ids for name, ids in rankings.items() if name in self.channels})
         fused = fused[: request.k]
@@ -241,8 +265,36 @@ class ResearchService:
             data_versions={"corpus_snapshot": snapshot.id} if snapshot else {},
         )
 
-    def _vector_ranking(self, query: str, limit: int, warnings: list[str]) -> list[str]:
-        if self.embedder is None or self.vectors is None:
+    def _query_vector(self, query: str, warnings: list[str]) -> list[float] | None:
+        """Embed the query within `QUERY_EMBEDDING_SECONDS`, reusing recent identical queries.
+
+        The cache means a retried call does not pay the provider again. On failure the vector
+        channel is skipped with a warning and the other channels still answer.
+        """
+        if self.embedder is None:
+            return None
+        cache_key = (self.embedder.model_id, query)
+        with self._cache_lock:
+            if cache_key in self._query_vectors:
+                self._query_vectors.move_to_end(cache_key)
+                return self._query_vectors[cache_key]
+        try:
+            (vector,) = self.embedder.embed(
+                [query], kind="query", deadline=time.monotonic() + QUERY_EMBEDDING_SECONDS
+            )
+        except EmbeddingError as error:
+            warnings.append(f"Vector channel skipped: {error}")
+            return None
+        with self._cache_lock:
+            self._query_vectors[cache_key] = vector
+            if len(self._query_vectors) > QUERY_CACHE_SIZE:
+                self._query_vectors.popitem(last=False)
+        return vector
+
+    def _vector_ranking(
+        self, vector: list[float] | None, limit: int, warnings: list[str]
+    ) -> list[str]:
+        if self.embedder is None or self.vectors is None or vector is None:
             return []
         model_id = self.embedder.model_id
         if not self.vectors.has_embeddings(model_id):
@@ -251,12 +303,15 @@ class ResearchService:
                 "use the vector channel."
             )
             return []
-        (vector,) = self.embedder.embed([query], kind="query")
         hits = self.vectors.vector_search(model_id, vector, limit)
         return [hit.chunk_id for hit in hits if hit.score >= MIN_VECTOR_SCORE]
 
     def get_passage(self, chunk_id: str) -> SourcePassage:
         """Return the full text of one chunk; raise `UnknownPassageError` if it is unknown."""
+        with self.store.reading():
+            return self._get_passage(chunk_id)
+
+    def _get_passage(self, chunk_id: str) -> SourcePassage:
         chunk = self.store.get_chunk(chunk_id)
         if chunk is None:
             raise UnknownPassageError(f"No passage with id '{chunk_id}'.")

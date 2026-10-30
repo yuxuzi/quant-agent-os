@@ -78,7 +78,10 @@ async def serve_stdio(
 
 
 def run_stdio(executor: ToolExecutor, *, name: str, instructions: str | None = None) -> None:
-    """Blocking entry point for console commands."""
-    import anyio
+    """Blocking entry point for console commands; raises `MCPUnavailableError` without the extra."""
+    try:
+        import anyio
+    except ImportError as error:
+        raise MCPUnavailableError(f"MCP support is not installed; {INSTALL_HINT}.") from error
 
     anyio.run(lambda: serve_stdio(executor, name=name, instructions=instructions))

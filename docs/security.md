@@ -33,6 +33,16 @@ Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` (or the `QUANT_RESEARCH_`-pr
 variants) and are held as `SecretStr`. Error messages name the variable, never its value. Use
 the offline `hashing` embedder, or none, for documents that must not leave the machine.
 
+## Serving is read-only
+
+`quant-research serve-mcp` and `quant-research search` open the store with SQLite's
+`mode=ro`. They create, migrate, and write nothing, so a read-only mount works. A store at
+another schema version is refused with the command that upgrades it. Each answer reads inside
+one transaction, so it never mixes two versions of the corpus. Hosted query embedding is
+bounded to 8 seconds inside the 15-second tool timeout; past that, the vector channel is
+skipped with a warning. Repeated queries are served from a cache rather than sent to the
+provider again.
+
 ## Planned: approvals for consequential permissions
 
 [Decision 0005](decisions/0005-approval-gates.md) (proposed) treats `write_local_data`,

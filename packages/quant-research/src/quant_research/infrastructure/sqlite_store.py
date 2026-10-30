@@ -20,7 +20,8 @@ import re
 import sqlite3
 import threading
 from array import array
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Concatenate, ParamSpec, Self, TypeVar
@@ -36,6 +37,11 @@ from quant_research.domain.models import (
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 
 SCHEMA_VERSION = 2
+
+
+class StoreError(RuntimeError):
+    """Raised when a store cannot be used as requested; the message says what to do."""
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -130,12 +136,22 @@ def _locked(
 
 
 class SqliteKnowledgeStore:
-    """A `KnowledgeStore` in one SQLite file (or in memory)."""
+    """A `KnowledgeStore` in one SQLite file (or in memory).
 
-    def __init__(self, path: str | Path = ":memory:") -> None:
+    ``read_only=True`` opens an existing file with SQLite's ``mode=ro``: nothing is created,
+    migrated, or written (serving and searching use it, so a read-only mount works), and a
+    store at another schema version is refused with the command that upgrades it.
+    """
+
+    def __init__(self, path: str | Path = ":memory:", *, read_only: bool = False) -> None:
+        self.read_only = read_only
+        self._lock = threading.RLock()
+        if read_only:
+            self._db = _open_read_only(path)
+            self.has_fts = _has_table(self._db, "chunks_fts")
+            return
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.RLock()
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
@@ -143,6 +159,23 @@ class SqliteKnowledgeStore:
         self._db.executescript(_SCHEMA)
         self.has_fts = _create_fts(self._db)
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+    def _writable(self) -> None:
+        if self.read_only:
+            raise StoreError("This store is open read-only; open it for ingestion to change it.")
+
+    @contextmanager
+    def reading(self) -> Iterator[None]:
+        """Hold one read transaction so every read in the block sees the same store state."""
+        with self._lock:
+            if self._db.in_transaction:
+                yield
+                return
+            self._db.execute("BEGIN")
+            try:
+                yield
+            finally:
+                self._db.execute("COMMIT")
 
     @_locked
     def close(self) -> None:
@@ -175,6 +208,7 @@ class SqliteKnowledgeStore:
         relations: Sequence[Relation],
     ) -> None:
         """Store a document and its records atomically, replacing any document at its URI."""
+        self._writable()
         with self._db:
             stale = [
                 row["id"]
@@ -253,6 +287,7 @@ class SqliteKnowledgeStore:
     @_locked
     def upsert_entities(self, entities: Iterable[Entity]) -> None:
         """Insert or update canonical entities."""
+        self._writable()
         with self._db:
             self._db.executemany(
                 "INSERT INTO entities VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
@@ -261,22 +296,33 @@ class SqliteKnowledgeStore:
             )
 
     @_locked
-    def record_snapshot(self, snapshot: CorpusSnapshot) -> None:
-        """Append ``snapshot`` unless it is already the current one."""
-        current = self.current_snapshot()
-        if current is not None and current.id == snapshot.id:
-            return
-        with self._db:
-            self._db.execute(
-                "INSERT INTO corpus_snapshots (id, document_count, vocabulary_version, "
-                "extractor_versions) VALUES (?, ?, ?, ?)",
-                (
-                    snapshot.id,
-                    snapshot.document_count,
-                    snapshot.vocabulary_version,
-                    json.dumps(snapshot.extractor_versions, sort_keys=True),
-                ),
-            )
+    def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:
+        """Build the snapshot from the current documents and publish it in one write lock.
+
+        ``BEGIN IMMEDIATE`` takes the write lock before reading the hashes, so a concurrent
+        ingestion either commits before (and is included) or waits until after.
+        """
+        self._writable()
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            snapshot = build(self.document_hashes())
+            current = self.current_snapshot()
+            if current is None or current.id != snapshot.id:
+                self._db.execute(
+                    "INSERT INTO corpus_snapshots (id, document_count, vocabulary_version, "
+                    "extractor_versions) VALUES (?, ?, ?, ?)",
+                    (
+                        snapshot.id,
+                        snapshot.document_count,
+                        snapshot.vocabulary_version,
+                        json.dumps(snapshot.extractor_versions, sort_keys=True),
+                    ),
+                )
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+        self._db.execute("COMMIT")
+        return snapshot
 
     @_locked
     def current_snapshot(self) -> CorpusSnapshot | None:
@@ -384,6 +430,7 @@ class SqliteKnowledgeStore:
     @_locked
     def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
         """Store ``(chunk_id, vector)`` pairs for ``model_id``, replacing existing ones."""
+        self._writable()
         with self._db:
             self._db.executemany(
                 "INSERT OR REPLACE INTO embeddings VALUES (?, ?, ?, ?)",
@@ -454,13 +501,49 @@ class SqliteKnowledgeStore:
 
 
 def _migrate(db: sqlite3.Connection) -> None:
-    """Upgrade a version-1 store in place: chunks gain ``page``; embeddings are added later."""
+    """Upgrade a version-1 store in place, atomically and idempotently.
+
+    The column change and the version bump commit together, and the column is added only if it
+    is missing, so an interrupted upgrade can simply be run again.
+    """
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    has_chunks = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chunks'"
-    ).fetchone()
-    if version == 1 and has_chunks:
-        db.execute("ALTER TABLE chunks ADD COLUMN page INTEGER")
+    if version != 1 or not _has_table(db, "chunks"):
+        return
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(chunks)")}
+        if "page" not in columns:
+            db.execute("ALTER TABLE chunks ADD COLUMN page INTEGER")
+        db.execute("PRAGMA user_version = 2")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
+    db.execute("COMMIT")
+
+
+def _open_read_only(path: str | Path) -> sqlite3.Connection:
+    if str(path) == ":memory:":
+        raise StoreError("A read-only store needs a file; ingest into one first.")
+    location = Path(path)
+    if not location.is_file():
+        raise StoreError(f"No knowledge store at {location}; run quant-research ingest.")
+    db = sqlite3.connect(
+        f"{location.resolve().as_uri()}?mode=ro", uri=True, check_same_thread=False
+    )
+    db.row_factory = sqlite3.Row
+    version = db.execute("PRAGMA user_version").fetchone()[0]
+    if version != SCHEMA_VERSION:
+        db.close()
+        raise StoreError(
+            f"The store at {location} has schema version {version}, and this version reads "
+            f"{SCHEMA_VERSION}. Run quant-research ingest on it once to upgrade it."
+        )
+    return db
+
+
+def _has_table(db: sqlite3.Connection, name: str) -> bool:
+    row = db.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone()
+    return row is not None
 
 
 def _pack(vector: list[float]) -> bytes:

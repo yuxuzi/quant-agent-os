@@ -401,6 +401,14 @@ place):
 Deleting a document cascades to its chunks, mentions, and relations. A changed file therefore
 replaces all of its records.
 
+Consistency rules:
+- Ingestion builds and publishes the corpus snapshot in one `BEGIN IMMEDIATE` transaction, so
+  concurrent ingestions cannot publish a stale snapshot.
+- Search reads run in one read transaction (`KnowledgeStore.reading()`), so an answer never
+  mixes two corpus versions.
+- The version-1 to version-2 migration is atomic and can be re-run.
+- Serving opens the store read-only (`mode=ro`) and never migrates it.
+
 `KnowledgeStore`, `VectorIndex`, `Embedder`, and `SourceLoader` are `Protocol`s. The adapters
 are:
 - `SqliteKnowledgeStore`. It uses only the standard library, works as a file or as

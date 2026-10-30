@@ -1,14 +1,22 @@
 """The MCP stdio transport forwards to the adapter: same tools, same results, same errors."""
 
+import sys
 from typing import Any
 
 import anyio
+import pytest
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 from portfolio_tools import build_registry
 from pydantic import BaseModel
 
-from quant_agent_os.mcp import build_server, call_tool
+from quant_agent_os.mcp import (
+    MCPUnavailableError,
+    build_server,
+    call_tool,
+    run_stdio,
+    tool_definitions,
+)
 from quant_agent_os.runtime import PlanStep, ToolExecutor
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -89,3 +97,27 @@ def test_the_server_announces_its_name_version_and_instructions() -> None:
     name, version, instructions = options.server_name, options.server_version, options.instructions
 
     assert name == "test" and version and instructions == "Use the tools."
+
+
+def test_external_actions_are_advertised_as_open_world() -> None:
+    @tool(
+        name="send_order", description="Acts externally.", permissions=[Permission.EXTERNAL_ACTION]
+    )
+    def send_order(params: Query) -> Query:
+        return params
+
+    executor = ToolExecutor(ToolRegistry([send_order]), PermissionPolicy())
+    (definition,) = tool_definitions(executor)
+
+    assert definition["annotations"] == {
+        "readOnlyHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+
+
+def test_a_missing_extra_gives_the_install_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "anyio", None)
+
+    with pytest.raises(MCPUnavailableError, match="quant-agent-os\\[mcp\\]"):
+        run_stdio(EXECUTOR, name="test")
