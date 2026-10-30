@@ -266,9 +266,12 @@ The extractors in the first version are deterministic:
   example "HML" → `factor:value`). The longest alias wins, and short all-capital aliases match
   case-sensitively;
 - document front matter (title, authors, published, license);
-- cue phrases between two entities in the same sentence (for example "X predicts Y" or
-  "X is explained by Y"). Without a cue, the pair becomes a `related_to` edge with confidence
-  0.4, which the default `min_confidence` of 0.5 excludes;
+- cue phrases between two entities in the same sentence (`rules-v3`). For example, "X predicts
+  Y" yields `X predicts Y`. Passive and inverse forms ("Y is predicted by X", "X explains Y")
+  swap subject and object, so edges point the right way. A negation between the two ("does
+  not predict", "fails to explain") suppresses the pair entirely. Without a cue, the pair
+  becomes a `related_to` edge with confidence 0.4, which the default `min_confidence` of 0.5
+  excludes;
 - citation and reference parsing (planned).
 
 Every extracted mention and relation stores the extractor name, version, confidence, and the
@@ -286,11 +289,20 @@ enabled by default.
    is used.
 3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
    topic rank well.
-4. **Graph channel:** traverse relations for `hops` (default 1, maximum 2) from the seeds with
-   `confidence >= min_confidence`, using a recursive CTE that works on both SQLite and
-   PostgreSQL. Related entities are scored by the sum of confidence divided by hops. The
-   results are capped at 10 entities with 3 links each, and the chunks of their links form the
-   ranking.
+4. **Graph channel:**
+   - **Walk.** Traverse up to `hops` (default 1, maximum 2) from the seeds over edges with
+     `confidence >= min_confidence`. A recursive CTE computes entity distances first, then a
+     second query returns the edges. This works on SQLite and PostgreSQL.
+   - **Aggregate.** A fact stated in many chunks returns at most 3 citing edges and a
+     `support` count.
+   - **Score.** Each distinct fact contributes confidence divided by hops, times
+     `1 + log2(support)`.
+   - **Path.** Each related entity carries `path`, the shortest chain of cited edges from a
+     seed, preferring confident edges. A two-hop answer therefore shows how it connects, for
+     example `trend-following -uses-> time-series-momentum -extends-> momentum`.
+   - **Rank.** The results are capped at 10 entities. Path and link chunks form the ranking.
+   - **Benchmark.** On the mock world at 3,000 documents and 15,000 relations, two-hop
+     queries take 14 ms at p50 and 37 ms at p95 (`research_bench.py`).
 5. **Vector channel** (optional, off by default): cosine similarity between the query
    embedding and the chunk embeddings of the same model, keeping hits of at least 0.2. The
    `Embedder` port has three adapters:
@@ -352,6 +364,17 @@ snapshot.
 Tests fail on any drop below `baseline.json`, and the two validity metrics must be 1.0. The
 current gold set is small and was written alongside the code, so a held-out set is needed
 before making quality claims.
+
+`tests/graph_eval.py` scores the graph against a mock world with a known answer key
+(`tests/mock_world.py`, plan [graph-rag-mock-world.md](plans/graph-rag-mock-world.md)). It
+measures:
+- extraction precision, recall, and F1 per predicate;
+- negation false positives and direction errors;
+- related recall;
+- evidence recall and precision@3, with and without the graph channel;
+- path validity.
+
+The baseline is `graph_baseline.json`.
 
 ## 7. Database and knowledge-graph design (proposed)
 

@@ -9,10 +9,10 @@ from conftest import CORPUS
 from research_eval import location_matches
 from typer.testing import CliRunner
 
-from quant_research import ResearchApp, open_research
+from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.cli import app as cli
 from quant_research.domain.extraction import EXTRACTOR_VERSION
-from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
+from quant_research.infrastructure.sqlite_store import EDGES_PER_TRIPLE, SqliteKnowledgeStore
 
 
 def test_ingestion_reports_counts_and_skips_unsupported_files() -> None:
@@ -130,3 +130,25 @@ def test_the_store_can_be_used_from_worker_threads(research: ResearchApp) -> Non
         results = list(pool.map(lambda _: research.store.keyword_search("reversal", 3), range(8)))
 
     assert all(result == results[0] and result for result in results)
+
+
+def test_parallel_edges_are_aggregated_with_support_counts(tmp_path: Path) -> None:
+    for number in range(5):
+        (tmp_path / f"note-{number}.md").write_text(
+            f"Carry correlates with crowding.\n\nNote {number}.\n"
+        )
+    (tmp_path / "other.md").write_text("Carry is tested on FX.\n")
+    with open_research(":memory:") as research:
+        research.ingest.ingest(tmp_path)
+
+        edges = research.store.expand(["signal:carry"], hops=1, min_confidence=0.5)
+        packet = research.research.find_related(
+            ResearchQuery(query="carry", entity_types=["concept", "asset_class"])
+        )
+
+    crowding = [e for e in edges if e.relation.object_id == "concept:crowding"]
+    assert len(crowding) == EDGES_PER_TRIPLE
+    assert {edge.support for edge in crowding} == {5}
+    scores = {entity.id: entity.score for entity in packet.related}
+    # Five statements weigh more than one, but not five times as much.
+    assert scores["asset_class:fx"] < scores["concept:crowding"] < 5 * scores["asset_class:fx"]

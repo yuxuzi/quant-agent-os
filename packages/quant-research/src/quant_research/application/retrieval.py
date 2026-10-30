@@ -7,6 +7,7 @@ nothing here calls a model.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict, deque
 from typing import Literal
 
@@ -324,7 +325,13 @@ def _rank_related(
         if entity is None or entity.type not in types:
             continue
         hops = min(edge.hops for edge, _ in found)
-        score = sum(relation.confidence / edge.hops for edge, relation in found)
+        # Each distinct fact counts once, weighted by how many chunks state it (diminishing).
+        facts: dict[tuple[str, str, str], float] = {}
+        for edge, relation in found:
+            fact = (relation.subject_id, relation.predicate, relation.object_id)
+            weight = relation.confidence / edge.hops * (1 + math.log2(edge.support))
+            facts[fact] = max(facts.get(fact, 0.0), weight)
+        score = sum(facts.values())
         ranked.append(
             RelatedEntity(
                 id=entity.id,

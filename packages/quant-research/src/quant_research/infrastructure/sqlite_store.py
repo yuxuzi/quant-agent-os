@@ -74,21 +74,43 @@ CREATE TABLE IF NOT EXISTS corpus_snapshots (
 );
 """
 
-_EXPAND = """
-WITH RECURSIVE walk(entity_id, relation_id, hops) AS (
-    SELECT value, NULL, 0 FROM json_each(:seeds)
+# Expansion runs as two queries so the recursive walk is evaluated once (an inlined CTE would
+# be re-run for every relation it is joined with). First: distances of reachable entities,
+# walking entities rather than relations, so a fact stated in many chunks is one step.
+_DISTANCES = """
+WITH RECURSIVE reach(entity_id, hops) AS (
+    SELECT value, 0 FROM json_each(:seeds)
     UNION
-    SELECT CASE WHEN r.subject_id = w.entity_id THEN r.object_id ELSE r.subject_id END,
-           r.id, w.hops + 1
-    FROM walk AS w
-    JOIN relations AS r ON w.entity_id IN (r.subject_id, r.object_id)
+    SELECT r.object_id, w.hops + 1 FROM reach AS w
+    JOIN relations AS r ON r.subject_id = w.entity_id
+    WHERE w.hops < :hops AND r.confidence >= :min_confidence
+    UNION
+    SELECT r.subject_id, w.hops + 1 FROM reach AS w
+    JOIN relations AS r ON r.object_id = w.entity_id
     WHERE w.hops < :hops AND r.confidence >= :min_confidence
 )
-SELECT r.*, MIN(w.hops) AS hops
-FROM walk AS w JOIN relations AS r ON r.id = w.relation_id
-GROUP BY r.id
-ORDER BY hops, r.confidence DESC, r.id
+SELECT entity_id, MIN(hops) AS hops FROM reach GROUP BY entity_id
 """
+# Second: edges between reached entities that lie within the hop limit, keeping at most
+# :per_triple citing edges per (subject, predicate, object) together with its support count.
+_EDGES = """
+WITH distance(entity_id, hops) AS (
+    SELECT key, value FROM json_each(:distances)
+),
+edges AS (
+    SELECT r.*, MIN(s.hops, o.hops) + 1 AS hops,
+           COUNT(*) OVER triple AS support,
+           ROW_NUMBER() OVER (triple ORDER BY r.confidence DESC, r.id) AS strength
+    FROM distance AS s
+    JOIN relations AS r ON r.subject_id = s.entity_id
+    JOIN distance AS o ON o.entity_id = r.object_id
+    WHERE r.confidence >= :min_confidence AND MIN(s.hops, o.hops) < :hops
+    WINDOW triple AS (PARTITION BY r.subject_id, r.predicate, r.object_id)
+)
+SELECT * FROM edges WHERE strength <= :per_triple
+ORDER BY hops, confidence DESC, id
+"""
+EDGES_PER_TRIPLE = 3
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
@@ -412,14 +434,20 @@ class SqliteKnowledgeStore:
         seeds = sorted(set(entity_ids))
         if not seeds or hops < 1:
             return []
+        limits = {"hops": hops, "min_confidence": min_confidence}
+        distances = {
+            row["entity_id"]: row["hops"]
+            for row in self._db.execute(_DISTANCES, {"seeds": json.dumps(seeds), **limits})
+        }
         rows = self._db.execute(
-            _EXPAND,
-            {"seeds": json.dumps(seeds), "hops": hops, "min_confidence": min_confidence},
+            _EDGES,
+            {"distances": json.dumps(distances), "per_triple": EDGES_PER_TRIPLE, **limits},
         )
         return [
             GraphEdge(
                 relation=Relation.model_validate({key: row[key] for key in Relation.model_fields}),
                 hops=row["hops"],
+                support=row["support"],
             )
             for row in rows
         ]

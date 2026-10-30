@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Graph RAG answers carry `path`, the cited chain of edges from the query entity, and the
+  `quant-research search` CLI shows it with direction. Graph expansion aggregates parallel
+  edges into a `support` count.
+- A mock world with an answer key (`tests/mock_world.py`), a graph evaluation
+  (`tests/graph_eval.py`, baseline `graph_baseline.json`), and an opt-in scale benchmark
+  (`tests/research_bench.py`).
+
+### Fixed
+
+- Extraction (`rules-v3`): negated statements no longer become relations, passive voice no
+  longer reverses edges, and "X explains Y" is extracted as `Y explained_by X`.
+- Two-hop expansion no longer slows down with repeated facts: 1.1 s to 14 ms p50 at 3,000
+  documents.
+
 - MCP server over stdio: `quant_agent_os.mcp.server` (optional `mcp` extra, built on the
   official MCP Python SDK) forwards `tools/list` and `tools/call` to the existing adapter.
   `quant-research serve-mcp --store PATH` serves the read-only research tools to Claude Code,

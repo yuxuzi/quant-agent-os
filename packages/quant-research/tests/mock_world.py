@@ -513,16 +513,23 @@ def _text(line: Line) -> str:
 
 
 def write_world(destination: Path, *, copies: int = 1) -> Path:
-    """Render the world under ``destination``; ``copies > 1`` repeats it for scale tests."""
+    """Render the world under ``destination``; ``copies > 1`` repeats it for scale tests.
+
+    Each copy gets an entity-free marker line, so copies differ in content and are not skipped
+    as duplicates.
+    """
     for copy in range(copies):
         prefix = Path(f"copy-{copy:03d}") if copies > 1 else Path()
+        marker = [f"Synthetic copy {copy}."] if copies > 1 else []
         for document in DOCUMENTS:
             path = destination / prefix / document.uri
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.suffix == ".pdf":
+                pages = [[_text(line) for line in lines] for _, lines in document.parts]
+                pages[-1] += marker
                 write_pdf(
                     path,
-                    [[_text(line) for line in lines] for _, lines in document.parts],
+                    pages,
                     title=document.title,
                     author="Synthetic Author",
                 )
@@ -539,8 +546,9 @@ def write_world(destination: Path, *, copies: int = 1) -> Path:
                 for section, lines in document.parts:
                     body += ["", f"## {section}", ""]
                     body += [_text(line) for line in lines]
+                body += ["", *marker] if marker else []
                 path.write_text("\n".join(body) + "\n", "utf-8")
             else:
-                lines = [_text(line) for _, part in document.parts for line in part]
+                lines = [_text(line) for _, part in document.parts for line in part] + marker
                 path.write_text("\n\n".join(lines) + "\n", "utf-8")
     return destination

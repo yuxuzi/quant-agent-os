@@ -24,6 +24,42 @@ Code inspection found these gaps, and G2 is expected to confirm them:
 | K4 | Two-hop results do not show how they connect | `links` holds only the edges touching the entity, not the path from the seed |
 | K5 | The graph's value for retrieval is unmeasured | No evaluation without the graph channel |
 
+## Results (2026-10-30)
+
+| Metric on the mock world | Baseline (G2) | After G3–G5 |
+| --- | --- | --- |
+| Extraction precision / recall | 0.8125 / 0.9286 | 1.0 / 1.0 |
+| Negation false positives | 4 | 0 |
+| Direction errors | 2 | 0 |
+| Path validity / expected path accuracy | 0 / 0 | 1.0 / 1.0 |
+| Evidence precision@3, with graph / without | 0.875 / 0.8542 | 0.8958 / 0.8542 |
+| Related recall, evidence recall, unanswerable | 1.0 | 1.0 |
+
+Caveats:
+- I wrote the world and the rules together, so 1.0 on extraction shows that the rules handle
+  these phrasings, not that they generalise. Thirteen held-out phrasings are unit-tested, and
+  a larger held-out or real corpus is the next real check.
+- The graph channel's measured retrieval gain is small (+0.04 precision@3) on a six-document
+  world. Its main value here is the paths and typed relations in answers.
+
+Scale (G5, `research_bench.py`, this Mac, no vectors):
+
+| World size | Ingest | 1-hop p50 / p95 | 2-hop p50 / p95 |
+| --- | --- | --- | --- |
+| 300 documents, 1,500 relations | 0.4 s | 0.8 / 2.1 ms | 1.6 / 4.1 ms |
+| 3,000 documents, 15,000 relations, before the fix | 4.8 s | 9.5 / 22.4 ms | 1,073 / 3,330 ms |
+| 3,000 documents, 15,000 relations, after the fix | 4.8 s | 5.8 / 18.0 ms | 14.3 / 37.2 ms |
+
+The benchmark found that two-hop expansion grew with the number of chunks stating the same
+fact. Two changes fixed it:
+- The walk now runs over entities, with parallel edges aggregated: at most 3 citing edges per
+  fact, plus a `support` count.
+- The expansion now runs as two queries, because SQLite re-ran an inlined recursive CTE per
+  joined row.
+
+Scoring counts each fact once, weighted by `1 + log2(support)`. The hashing vector channel
+adds about 85 ms at 6,500 chunks (brute-force cosine), which is where pgvector takes over.
+
 ## Steps
 
 Each step ends with all quality gates passing and a commit.

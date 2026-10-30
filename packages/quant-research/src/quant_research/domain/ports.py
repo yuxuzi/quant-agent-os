@@ -105,10 +105,15 @@ class KeywordHit(BaseModel):
 
 
 class GraphEdge(BaseModel):
-    """A relation reached during graph expansion, ``hops`` steps from a seed entity."""
+    """A relation reached during graph expansion, ``hops`` steps from a seed entity.
+
+    ``support`` counts the chunks that state the same subject, predicate, and object; only the
+    strongest few of those parallel edges are returned.
+    """
 
     relation: Relation
     hops: int
+    support: int = 1
 
 
 class KnowledgeStore(Protocol):
