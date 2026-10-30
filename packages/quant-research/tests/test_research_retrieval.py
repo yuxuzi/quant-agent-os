@@ -3,7 +3,8 @@
 import pytest
 
 from quant_research import ResearchApp, ResearchQuery, open_research
-from quant_research.application.retrieval import UnknownPassageError, _fuse
+from quant_research.application.retrieval import UnknownPassageError, _fuse, _shortest_paths
+from quant_research.domain.models import Relation
 
 
 def _related(research: ResearchApp, query: str, **options: object) -> list[str]:
@@ -105,3 +106,39 @@ def test_stopwords_do_not_pull_in_unrelated_passages(research: ResearchApp) -> N
     )
 
     assert "notes/injection.md" not in {p.source.source_id for p in packet.passages}
+
+
+def _relation(rid: str, subject: str, obj: str, confidence: float) -> Relation:
+    return Relation(
+        id=rid,
+        subject_id=subject,
+        predicate="related_to",
+        object_id=obj,
+        chunk_id="c",
+        extractor="rules",
+        extractor_version="v",
+        confidence=confidence,
+    )
+
+
+def test_shortest_paths_prefer_confident_edges_and_ignore_direction() -> None:
+    relations = [
+        _relation("r1", "a", "b", 0.5),
+        _relation("r2", "c", "a", 0.9),  # pointing at the seed still connects it
+        _relation("r3", "b", "d", 0.6),
+        _relation("r4", "c", "d", 0.6),
+    ]
+
+    paths = _shortest_paths(["a"], relations)
+
+    assert [r.id for r in paths["d"]] == ["r2", "r4"]  # via the more confident first hop
+    assert [r.id for r in paths["b"]] == ["r1"]
+    assert "a" not in paths
+
+
+def test_related_entities_carry_paths_matching_their_hops(research: ResearchApp) -> None:
+    packet = research.research.find_related(ResearchQuery(query="PEAD", hops=2))
+
+    graph_entities = [entity for entity in packet.related if entity.hops > 0]
+    assert graph_entities
+    assert all(len(entity.path) == entity.hops for entity in graph_entities)

@@ -14,7 +14,7 @@ from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
-from quant_research.application.retrieval import ResearchQuery
+from quant_research.application.retrieval import RelatedEntity, ResearchQuery
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
@@ -131,15 +131,10 @@ def search(
         typer.echo(packet.model_dump_json(indent=2))
         return
     table = Table(title=f"Related to: {query}")
-    for column in ("Entity", "Type", "Score", "Strongest link"):
+    for column in ("Entity", "Type", "Score", "Connection"):
         table.add_column(column)
     for entity in packet.related:
-        strongest = (
-            f"{entity.links[0].subject} {entity.links[0].predicate} {entity.links[0].object}"
-            if entity.links
-            else "mentioned in the best keyword passage"
-        )
-        table.add_row(entity.name, entity.type, f"{entity.score:.2f}", strongest)
+        table.add_row(entity.name, entity.type, f"{entity.score:.2f}", _describe_path(entity))
     console.print(table)
     for passage in packet.passages:
         console.print(
@@ -186,6 +181,21 @@ def serve_mcp(
         raise _fail(error) from error
     finally:
         research.close()
+
+
+def _describe_path(entity: RelatedEntity) -> str:
+    """Render the entity's path from its seed, e.g. ``a -uses-> b <-extends- c``."""
+    if not entity.path:
+        return "mentioned in the best keyword passage"
+    nodes = [entity.id]
+    for link in reversed(entity.path):
+        nodes.append(link.subject if link.object == nodes[-1] else link.object)
+    nodes.reverse()
+    text = nodes[0]
+    for link, after in zip(entity.path, nodes[1:], strict=True):
+        arrow = f" -{link.predicate}-> " if link.object == after else f" <-{link.predicate}- "
+        text += arrow + after
+    return text
 
 
 def main() -> None:

@@ -7,7 +7,7 @@ nothing here calls a model.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -54,8 +54,10 @@ class GraphLink(BaseModel):
 class RelatedEntity(BaseModel):
     """An entity related to the query, with the edges that connect it.
 
-    ``hops == 0`` means the entity was found directly in the best keyword passage (when the
-    query names no vocabulary entity); its evidence is that passage rather than a graph edge.
+    ``path`` is the chain of cited edges from a query entity to this one (shortest, preferring
+    confident edges), so a two-hop answer shows how it connects. ``links`` are the strongest
+    edges touching the entity. ``hops == 0`` means the entity was found directly in the best
+    keyword passage (when the query names no vocabulary entity); its evidence is that passage.
     """
 
     id: str
@@ -64,6 +66,7 @@ class RelatedEntity(BaseModel):
     score: float
     hops: int
     links: list[GraphLink]
+    path: list[GraphLink] = Field(default_factory=list)
     mentioned_in: list[str] = Field(default_factory=list)
 
 
@@ -180,7 +183,9 @@ class ResearchService:
             "keyword": [hit.chunk_id for hit in keyword_hits],
             "mention": self.store.chunks_mentioning(seeds, request.k * 3) if seeds else [],
             "graph": list(
-                dict.fromkeys(link.chunk_id for entity in related for link in entity.links)
+                dict.fromkeys(
+                    link.chunk_id for entity in related for link in [*entity.path, *entity.links]
+                )
             ),
             "vector": self._vector_ranking(request.query, request.k * 3, warnings),
         }
@@ -196,6 +201,7 @@ class ResearchService:
         names = {entity_id: entity.name for entity_id, entity in entities.items()}
         sources = {passage.chunk_id: passage.source for passage in passages}
         evidence: list[Evidence] = []
+        seen: set[tuple[str, str, str, str]] = set()
         for entity in related:
             for chunk_id in entity.mentioned_in:
                 source = self._source_for(chunk_id, sources)
@@ -207,7 +213,7 @@ class ResearchService:
                             sources=[source],
                         )
                     )
-            for link in entity.links:
+            for link in _unique([*entity.path, *entity.links], seen):
                 source = self._source_for(link.chunk_id, sources)
                 if source is None:
                     continue
@@ -305,6 +311,7 @@ def _rank_related(
     types: set[str],
 ) -> list[RelatedEntity]:
     seed_set = set(seeds)
+    paths = _shortest_paths(seeds, [edge.relation for edge in edges])
     links: dict[str, list[tuple[GraphEdge, Relation]]] = defaultdict(list)
     for edge in edges:
         relation = edge.relation
@@ -326,22 +333,59 @@ def _rank_related(
                 score=round(score, 6),
                 hops=hops,
                 links=[
-                    GraphLink(
-                        subject=relation.subject_id,
-                        predicate=relation.predicate,
-                        object=relation.object_id,
-                        confidence=relation.confidence,
-                        chunk_id=relation.chunk_id,
-                        extractor=relation.extractor,
-                    )
+                    _link(relation)
                     for _, relation in sorted(
                         found, key=lambda item: (-item[1].confidence, item[1].id)
                     )[:MAX_LINKS_PER_ENTITY]
                 ],
+                path=[_link(relation) for relation in paths.get(entity_id, [])],
             )
         )
     ranked.sort(key=lambda entity: (-entity.score, entity.id))
     return ranked
+
+
+def _link(relation: Relation) -> GraphLink:
+    return GraphLink(
+        subject=relation.subject_id,
+        predicate=relation.predicate,
+        object=relation.object_id,
+        confidence=relation.confidence,
+        chunk_id=relation.chunk_id,
+        extractor=relation.extractor,
+    )
+
+
+def _shortest_paths(seeds: list[str], relations: list[Relation]) -> dict[str, list[Relation]]:
+    """Breadth-first search from all seeds over undirected edges.
+
+    Each reached entity maps to the relations leading to it from its nearest seed. Neighbours
+    are visited by descending confidence, then id, so paths are deterministic and prefer
+    confident edges among equally short ones.
+    """
+    adjacency: dict[str, list[tuple[Relation, str]]] = defaultdict(list)
+    for relation in sorted(relations, key=lambda r: (-r.confidence, r.id)):
+        adjacency[relation.subject_id].append((relation, relation.object_id))
+        adjacency[relation.object_id].append((relation, relation.subject_id))
+    paths: dict[str, list[Relation]] = {seed: [] for seed in seeds}
+    queue = deque(seeds)
+    while queue:
+        current = queue.popleft()
+        for relation, neighbour in adjacency[current]:
+            if neighbour not in paths:
+                paths[neighbour] = [*paths[current], relation]
+                queue.append(neighbour)
+    return {entity: path for entity, path in paths.items() if path}
+
+
+def _unique(links: list[GraphLink], seen: set[tuple[str, str, str, str]]) -> list[GraphLink]:
+    fresh = []
+    for link in links:
+        marker = (link.subject, link.predicate, link.object, link.chunk_id)
+        if marker not in seen:
+            seen.add(marker)
+            fresh.append(link)
+    return fresh
 
 
 def _fuse(rankings: dict[Channel, list[str]]) -> list[tuple[str, float, list[Channel]]]:
