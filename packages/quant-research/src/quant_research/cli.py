@@ -14,7 +14,7 @@ from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
-from quant_agent_os.tools import PermissionPolicy, ToolRegistry
+from quant_agent_os.tools import ToolRegistry
 from quant_research.application.retrieval import RelatedEntity, ResearchQuery
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
@@ -187,15 +187,23 @@ def serve_mcp(
                 run_store = SqliteRunStore(_runs_path(store, runs))
             except RunStoreError as error:
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
-        policy = PermissionPolicy(granted=get_settings().granted_permissions)
+        policy = get_settings().policy()
         tools = research_tools(research.research)
         for spec in tools:
             missing = sorted(p.value for p in spec.permissions - policy.granted)
+            unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions))
             if missing:
                 errors.print(
                     f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
                     "not granted, so calls will be denied. Grant it with "
                     "QUANT_AGENT_OS_GRANTED_PERMISSIONS, or serve without a hosted embedder."
+                )
+            elif unapproved:
+                errors.print(
+                    f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(unapproved)}, which "
+                    "needs an approval for every call, so MCP calls will return "
+                    "approval_required. Pre-approve it with "
+                    "QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS, or serve without a hosted embedder."
                 )
         run_stdio(
             ToolExecutor(ToolRegistry(tools), policy),

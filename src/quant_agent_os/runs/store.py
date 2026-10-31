@@ -2,6 +2,8 @@
 
 Runs and tool calls are written as they happen. Audit events are append-only: the stores offer
 no way to change or remove one, and the SQLite store's triggers reject any UPDATE or DELETE.
+Both stores are also the `ApprovalLedger` for their runs, so an approval is consumed in the same
+place its run is recorded.
 """
 
 from __future__ import annotations
@@ -9,14 +11,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Protocol, Self
 
 from quant_agent_os.runs.models import AuditEvent, RunRecord, StoredRun
+from quant_agent_os.runtime.approvals import Approval, MemoryApprovalLedger
 from quant_agent_os.runtime.executor import ToolCallRecord
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2 added approvals
 
 
 class RunStoreError(RuntimeError):
@@ -24,7 +28,15 @@ class RunStoreError(RuntimeError):
 
 
 class RunStore(Protocol):
-    """Persists runs, their tool calls, and audit events."""
+    """Persists runs, their tool calls, audit events, and approvals (an `ApprovalLedger`)."""
+
+    def grant(self, approval: Approval) -> None:
+        """Store a new, unused approval."""
+        ...
+
+    def consume(self, run_id: str, tool: str, input_sha256: str) -> Approval | None:
+        """Mark one matching unused approval as used and return it, or return None."""
+        ...
 
     def save_run(self, run: RunRecord) -> None:
         """Insert ``run``, or replace the stored run with the same id (to record its end)."""
@@ -59,6 +71,15 @@ class MemoryRunStore:
         self._calls: dict[str, list[ToolCallRecord]] = {}
         self._events: list[AuditEvent] = []
         self._lock = threading.Lock()
+        self._approvals = MemoryApprovalLedger()
+
+    def grant(self, approval: Approval) -> None:
+        """Store a new, unused approval."""
+        self._approvals.grant(approval)
+
+    def consume(self, run_id: str, tool: str, input_sha256: str) -> Approval | None:
+        """Mark one matching unused approval as used and return it."""
+        return self._approvals.consume(run_id, tool, input_sha256)
 
     def save_run(self, run: RunRecord) -> None:
         """Insert or replace ``run``."""
@@ -131,6 +152,16 @@ CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_event
 BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events
 BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END;
+CREATE TABLE IF NOT EXISTS approvals (
+    approval_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    input_sha256 TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    approved_at TEXT NOT NULL,
+    used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS approvals_call ON approvals (run_id, tool, input_sha256);
 """
 
 
@@ -149,7 +180,7 @@ class SqliteRunStore:
             self._db = sqlite3.connect(str(path), check_same_thread=False)
             self._db.row_factory = sqlite3.Row
             version = self._db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, SCHEMA_VERSION):
+            if version > SCHEMA_VERSION:
                 self._db.close()
                 raise RunStoreError(
                     f"{path} has run-store schema {version}; this version reads "
@@ -172,6 +203,53 @@ class SqliteRunStore:
                 raise RunStoreError(
                     f"Cannot write to the run store at {self.path}: {error}"
                 ) from error
+
+    def grant(self, approval: Approval) -> None:
+        """Store a new, unused approval."""
+        self._write(
+            "INSERT INTO approvals (approval_id, run_id, tool, input_sha256, approved_by, "
+            "approved_at, used_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
+            (
+                approval.approval_id,
+                approval.run_id,
+                approval.tool,
+                approval.input_sha256,
+                approval.approved_by,
+                approval.approved_at.isoformat(),
+            ),
+        )
+
+    def consume(self, run_id: str, tool: str, input_sha256: str) -> Approval | None:
+        """Mark one matching unused approval as used, atomically, and return it."""
+        used_at = datetime.now(UTC)
+        with self._lock:
+            try:
+                with self._db:
+                    row = self._db.execute(
+                        "SELECT * FROM approvals WHERE run_id = ? AND tool = ? AND "
+                        "input_sha256 = ? AND used_at IS NULL ORDER BY approved_at LIMIT 1",
+                        (run_id, tool, input_sha256),
+                    ).fetchone()
+                    if row is None:
+                        return None
+                    claimed = self._db.execute(
+                        "UPDATE approvals SET used_at = ? "
+                        "WHERE approval_id = ? AND used_at IS NULL",
+                        (used_at.isoformat(), row["approval_id"]),
+                    ).rowcount
+            except sqlite3.Error as error:
+                raise RunStoreError(f"Cannot use an approval in {self.path}: {error}") from error
+        if claimed != 1:
+            return None
+        return Approval(
+            approval_id=row["approval_id"],
+            run_id=row["run_id"],
+            tool=row["tool"],
+            input_sha256=row["input_sha256"],
+            approved_by=row["approved_by"],
+            approved_at=row["approved_at"],
+            used_at=used_at,
+        )
 
     def save_run(self, run: RunRecord) -> None:
         """Insert or replace ``run``."""

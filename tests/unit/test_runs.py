@@ -291,3 +291,22 @@ def test_platform_run_needs_a_provider_and_records_the_plan() -> None:
 
     assert stored is not None and stored.run.kind == "plan"
     assert len(stored.calls) == 1
+
+
+def test_a_version_1_run_store_is_upgraded_in_place(tmp_path: Path) -> None:
+    path = tmp_path / "runs.db"
+    SqliteRunStore(path).close()
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE approvals")
+        db.execute("PRAGMA user_version = 1")
+    db.close()
+
+    upgraded = SqliteRunStore(path)
+    upgraded.close()
+
+    with sqlite3.connect(path) as db:
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
+    db.close()
+    assert version == 2
+    assert "approvals" in tables
