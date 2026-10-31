@@ -11,10 +11,12 @@ stdout carries the protocol, so nothing else may write to it while the server ru
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os import __version__
 from quant_agent_os.mcp.adapters import call_tool, tool_definitions
+from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runtime.executor import ToolExecutor
 
 if TYPE_CHECKING:
@@ -28,9 +30,16 @@ class MCPUnavailableError(RuntimeError):
 
 
 def build_server(
-    executor: ToolExecutor, *, name: str, instructions: str | None = None
+    executor: ToolExecutor,
+    *,
+    name: str,
+    instructions: str | None = None,
+    recorder: RunRecorder | None = None,
 ) -> Server[Any, Any]:
-    """Return an MCP server whose tools are the executor's allowed tools."""
+    """Return an MCP server whose tools are the executor's allowed tools.
+
+    With a ``recorder``, every call is persisted as a one-call run.
+    """
     try:
         import anyio
         from mcp import types
@@ -54,7 +63,9 @@ def build_server(
 
     @server.call_tool(validate_input=False)  # type: ignore[untyped-decorator]
     async def handle_call(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
-        result = await anyio.to_thread.run_sync(call_tool, executor, name, arguments)
+        result = await anyio.to_thread.run_sync(
+            functools.partial(call_tool, executor, name, arguments, recorder=recorder)
+        )
         return types.CallToolResult(
             content=[
                 types.TextContent(type="text", text=item["text"]) for item in result["content"]
@@ -67,21 +78,33 @@ def build_server(
 
 
 async def serve_stdio(
-    executor: ToolExecutor, *, name: str, instructions: str | None = None
+    executor: ToolExecutor,
+    *,
+    name: str,
+    instructions: str | None = None,
+    recorder: RunRecorder | None = None,
 ) -> None:
     """Serve the executor's tools over stdin and stdout until the client disconnects."""
-    server = build_server(executor, name=name, instructions=instructions)
+    server = build_server(executor, name=name, instructions=instructions, recorder=recorder)
     from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
-def run_stdio(executor: ToolExecutor, *, name: str, instructions: str | None = None) -> None:
+def run_stdio(
+    executor: ToolExecutor,
+    *,
+    name: str,
+    instructions: str | None = None,
+    recorder: RunRecorder | None = None,
+) -> None:
     """Blocking entry point for console commands; raises `MCPUnavailableError` without the extra."""
     try:
         import anyio
     except ImportError as error:
         raise MCPUnavailableError(f"MCP support is not installed; {INSTALL_HINT}.") from error
 
-    anyio.run(lambda: serve_stdio(executor, name=name, instructions=instructions))
+    anyio.run(
+        lambda: serve_stdio(executor, name=name, instructions=instructions, recorder=recorder)
+    )

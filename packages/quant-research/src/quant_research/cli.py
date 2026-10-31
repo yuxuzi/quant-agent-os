@@ -12,6 +12,7 @@ from rich.table import Table
 
 from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
+from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_research.application.retrieval import RelatedEntity, ResearchQuery
@@ -38,6 +39,16 @@ MCP_INSTRUCTIONS = (
 StoreOption = Annotated[
     Path, typer.Option("--store", "-s", help="SQLite knowledge store to create or use.")
 ]
+
+
+RunsOption = Annotated[
+    Path | None,
+    typer.Option("--runs", help="SQLite run store (default: runs.db beside the knowledge store)."),
+]
+
+
+def _runs_path(store: Path, runs: Path | None) -> Path:
+    return runs if runs is not None else store.parent / "runs.db"
 
 
 class EmbedderChoice(StrEnum):
@@ -73,7 +84,7 @@ def _open(
         raise _fail(error) from error
 
 
-def _fail(error: Exception) -> typer.Exit:
+def _fail(error: Exception | str) -> typer.Exit:
     errors.print(f"[red]{error}[/red]")
     return typer.Exit(code=1)
 
@@ -155,16 +166,27 @@ def serve_mcp(
     store: StoreOption = DEFAULT_STORE,
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
+    runs: RunsOption = None,
+    record: Annotated[
+        bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
+    ] = True,
 ) -> None:
     """Serve the read-only research tools to an MCP client (Claude, Cursor, ...) over stdio.
 
     Ingest first; the store is opened read-only, so serving never changes it (a read-only mount
-    works). Permissions come from
-    QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr because
-    stdout carries the protocol.
+    works). Every call is recorded as a run in the run store (see `quant-research runs`); if the
+    run store cannot be opened, serving continues unrecorded with a warning. Permissions come
+    from QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr
+    because stdout carries the protocol.
     """
     research = _open(store, embedder, embedding_model, read_only=True)
+    run_store: SqliteRunStore | None = None
     try:
+        if record:
+            try:
+                run_store = SqliteRunStore(_runs_path(store, runs))
+            except RunStoreError as error:
+                errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         policy = PermissionPolicy(granted=get_settings().granted_permissions)
         tools = research_tools(research.research)
         for spec in tools:
@@ -179,11 +201,65 @@ def serve_mcp(
             ToolExecutor(ToolRegistry(tools), policy),
             name="quant-research",
             instructions=MCP_INSTRUCTIONS,
+            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
         )
     except MCPUnavailableError as error:
         raise _fail(error) from error
     finally:
+        if run_store is not None:
+            run_store.close()
         research.close()
+
+
+@app.command("runs")
+def show_runs(
+    run_id: Annotated[str | None, typer.Argument(help="A run id to show in full.")] = None,
+    store: StoreOption = DEFAULT_STORE,
+    runs: RunsOption = None,
+    limit: Annotated[int, typer.Option(help="How many recent runs to list.")] = 20,
+) -> None:
+    """List recent runs, or show one run's tool calls and audit trail."""
+    path = _runs_path(store, runs)
+    if not path.is_file():
+        console.print(f"No runs recorded at {path} yet.")
+        return
+    try:
+        run_store = SqliteRunStore(path)
+    except RunStoreError as error:
+        raise _fail(error) from error
+    try:
+        if run_id is None:
+            for run in run_store.list_runs(limit):
+                snapshot = run.data_versions.get("corpus_snapshot", "-")
+                console.print(
+                    f"{run.run_id}  {run.started_at:%Y-%m-%d %H:%M:%S}  {run.actor:<4}  "
+                    f"{run.status:<9}  {snapshot}  {run.goal}",
+                    soft_wrap=True,  # run ids must stay whole to be copied
+                )
+            return
+        stored = run_store.get_run(run_id)
+        if stored is None:
+            raise _fail(f"No run {run_id} in {path}.")
+        run = stored.run
+        console.print(
+            f"Run {run.run_id} ({run.kind}, {run.status}) by {run.actor}: {run.goal}\n"
+            f"Platform {run.platform_version}, registry {run.registry_digest[:16]}, "
+            f"data {run.data_versions or 'none'}.",
+            soft_wrap=True,
+        )
+        for call in stored.calls:
+            console.print(
+                f"  call {call.call_id}  {call.tool}  {call.status}  "
+                f"input {(call.input_sha256 or '-')[:16]}  {call.duration_ms:.1f} ms",
+                soft_wrap=True,
+            )
+        for event in stored.events:
+            console.print(
+                f"  {event.at:%H:%M:%S}  {event.event}  {event.subject}  {event.details}",
+                soft_wrap=True,
+            )
+    finally:
+        run_store.close()
 
 
 def _describe_path(entity: RelatedEntity) -> str:

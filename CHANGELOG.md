@@ -17,7 +17,6 @@ All notable changes to this project are documented here. The format follows
     "momentum" match across line breaks.
   - Stores re-process on the next ingest, because the extractor (`rules-v5`), chunker
     (`page-v2`), and PDF loader (`pdf-v2`) versions changed.
-
 - Serving and searching open the knowledge store read-only, so they never migrate or write it,
   and a read-only mount works. Answers read one consistent corpus state. Snapshots are built
   and published atomically. The schema migration is atomic and can be re-run.
@@ -28,6 +27,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Run persistence (B-08): `quant_agent_os.runs` with in-memory and SQLite run stores, a
+  `RunRecorder`, append-only audit events, and redaction of secrets.
+  - The orchestrator and the MCP adapter record runs when given a recorder.
+  - `quant-research serve-mcp` records every call to `runs.db` (`--runs`, `--no-record`).
+  - `quant-research runs` lists runs and shows one run in full.
+- SDK facade (B-07): `quant_agent_os.sdk.Platform` with `call`, `run`, `get_run`, and `runs`,
+  producing the same records as the MCP path.
+- An opt-in real-paper evaluation (`packages/quant-research/tests/real_corpus.py`) over 21
+  pinned arXiv papers, with gold questions and hand-labelled relations.
 - Graph RAG answers carry `path`, the cited chain of edges from the query entity, and the
   `quant-research search` CLI shows it with direction. Graph expansion aggregates parallel
   edges into a `support` count.

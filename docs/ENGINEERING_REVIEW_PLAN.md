@@ -246,8 +246,8 @@ onto the days below, so there is still only one timeline.
 | ID | Task | Depends on | Acceptance (summary) |
 | --- | --- | --- | --- |
 | B-06 | **Done.** Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations. Step plan: [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md) | B-05 | Criteria 3–4 in section 3 |
-| B-07 | SDK `Platform` facade (`call`, `run`, `get_run`) | B-02 | Same records as the MCP path |
-| B-08 | `RunStore` (memory, SQLite) and append-only audit events | B-02 | Criterion 6; no secrets in the audit (test) |
+| B-07 | **Done.** SDK `Platform` facade (`call`, `run`, `get_run`, `runs`) in `quant_agent_os.sdk` | B-02 | Same records as the MCP path |
+| B-08 | **Done.** `RunStore` (memory, SQLite), `RunRecorder`, append-only audit events; `serve-mcp` records every call; `quant-research runs` | B-02 | Criterion 6; no secrets in the audit (test) |
 | B-09 | Approval gate, `approval_required` status, subprocess runner (decision 0005) | B-08 | Approvals bound to input hashes and single use; hard kill on timeout |
 | B-10 | App Factory foundation: `AppSpec`, `ArchitecturePlanner`, `ScaffoldProvider`, `PytemplateUvScaffolder`, `agent-tool` pack, `plan_app`/`create_app`, CLI `factory plan/create` | B-03, B-09 | Criterion 5; recorded JSON fixture; no import of `pytemplate-uv` |
 | B-11 | MVP demo: Claude Desktop/Code configuration, walkthrough, known limitations | B-01, B-06, B-10 | Criterion 8 |

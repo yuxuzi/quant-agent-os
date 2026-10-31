@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runtime.executor import ToolExecutor
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.permissions import Permission
@@ -43,9 +44,16 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     ]
 
 
-def call_tool(executor: ToolExecutor, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    """Return an MCP ``tools/call`` result for one invocation."""
-    record = executor.execute(PlanStep(tool=name, arguments=arguments))
+def call_tool(
+    executor: ToolExecutor,
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    recorder: RunRecorder | None = None,
+) -> dict[str, Any]:
+    """Return an MCP ``tools/call`` result for one invocation, recorded as a run if asked."""
+    step = PlanStep(tool=name, arguments=arguments)
+    record = recorder.call(executor, step) if recorder else executor.execute(step)
     if record.status == "ok":
         return {
             "content": [{"type": "text", "text": json.dumps(record.output, sort_keys=True)}],
