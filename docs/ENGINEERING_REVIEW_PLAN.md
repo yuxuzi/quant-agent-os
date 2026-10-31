@@ -51,7 +51,7 @@ The earlier plan's principles carry over, with two additions (9 and 10):
 
 Baseline: `uv run pytest` gives 31 passed with 93% branch coverage; `ruff check`,
 `ruff format --check`, and strict `mypy` (26 files) are all clean. CI covers Linux, macOS, and
-Windows with Python 3.11–3.14. A release workflow uses PyPI Trusted Publishing.
+Windows with Python 3.11–3.15. A release workflow uses PyPI Trusted Publishing.
 
 ### Existing capabilities (confirmed)
 

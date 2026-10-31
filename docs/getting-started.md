@@ -8,7 +8,7 @@ cd quant-agent-os
 uv sync
 ```
 
-`uv` installs a supported Python (3.11–3.14) and every development tool. No virtualenv activation
+`uv` installs a supported Python (3.11–3.15) and every development tool. No virtualenv activation
 is needed.
 
 ## Run the offline example
