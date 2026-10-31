@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Python 3.15 is supported and tested in CI (3.11–3.15 on Linux, macOS, and Windows).
+
 ### Fixed
 
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):

@@ -11,7 +11,7 @@ uv run mypy
 uv run pytest
 ```
 
-CI runs the same commands on Windows, macOS, and Linux for Python 3.11–3.14.
+CI runs the same commands on Windows, macOS, and Linux for Python 3.11–3.15.
 
 ## Adding a tool
 
