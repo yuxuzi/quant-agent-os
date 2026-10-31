@@ -58,7 +58,7 @@ raises for a failed command.
   - It never imports `pytemplate-uv`.
 - **The `agent-tool` template pack** ships inside `quant_app_factory`. Its generated package:
   - has one example tool and a registry;
-  - has tests that run the platform's contract checks (`quant_agent_os.tools.check_tool`): a
+  - has tests that run the platform's contract checks (`quant_agent_os.testing.check_tool`): a
     complete descriptor, read-only permissions, a direct call equal to an MCP call, and
     invalid input recorded as such;
   - depends on `quant-agent-os` from its git repository, or from a local path for offline
@@ -90,6 +90,22 @@ raises for a failed command.
 - **Opt-in smoke test** (`QUANT_FACTORY_SMOKE=1`): real `uvx`, a real scaffold of each kind,
   and the generated checks.
 - **Docs:** decision 0005 accepted, the walkthrough's App Factory section, and the MVP status.
+
+## Results (2026-10-30)
+
+| Check | Result |
+| --- | --- |
+| `create_app` without an approval | `approval_required`; nothing is scaffolded or run (offline test) |
+| `create_app` after `approve` and `resume` | Scaffolds once; the approval is consumed, and a replay needs a new one |
+| Real `agent-tool` project (pytemplate-uv 3.0.x, this checkout as its source) | `uv sync`, ruff check, ruff format check, mypy, and pytest (4 tests, including `check_tool`) pass |
+| Real `python-cli` project | All five checks pass |
+| `agent-tool` with the default git source | Installs. Its tests need `quant_agent_os.testing`, which reaches the git repository when this branch merges |
+| Runner | A timeout kills a grandchild process; secrets and package-index URLs are not passed through |
+
+Deviation from the step text above:
+- **`plan_app`** is the deterministic planner only, so it stays read-only. The exact file list
+  comes from pytemplate-uv's `plan`, which runs a program, so it is an operator command
+  (`quant-factory plan`), not an agent tool.
 
 ## Out of scope
 

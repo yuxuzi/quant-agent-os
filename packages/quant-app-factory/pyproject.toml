@@ -11,7 +11,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
-dependencies = ["quant-agent-os"]
+dependencies = [
+    "quant-agent-os",
+    "pydantic>=2.7",
+    "rich>=13.7",
+    "typer>=0.12",
+]
+
+[project.scripts]
+quant-factory = "quant_app_factory.cli:main"
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }

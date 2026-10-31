@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Serving `find_related_signals` with a hosted embedder now needs `network` both granted and
+  pre-approved (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`), because each `network` call needs
+  an approval.
 - Python 3.15 is supported and tested in CI (3.11–3.15 on Linux, macOS, and Windows).
 
 ### Fixed
@@ -30,6 +33,24 @@ All notable changes to this project are documented here. The format follows
   gives the install hint instead of a traceback.
 
 ### Added
+
+- Approval gate (B-09, decision 0005 accepted).
+  - **Gate.** `write_local_data`, `execute_code`, `network`, and `external_action` calls need
+    a single-use operator approval, bound to the run, the tool, and the input hash. Without
+    one, the call records `approval_required`.
+  - **Operator path.** `Platform.approve` and `Platform.resume`.
+  - **Standing approvals.** `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`, empty by default.
+  - **Run store.** Schema 2 adds approvals and upgrades version 1 in place.
+- `quant_agent_os.runtime.runner.run_command`: run programs with an allowlisted environment
+  and a timeout that kills the process tree.
+- `quant_agent_os.testing.check_tool`: the platform's contract checks, for tool packages'
+  own tests.
+- Quant App Factory foundation (B-10):
+  - `AppSpec`, `ArchitecturePlanner`, and the `ScaffoldProvider` port;
+  - `PytemplateUvScaffolder`, which runs `uvx pytemplate-uv==3.0.*`;
+  - an `agent-tool` template pack;
+  - the `plan_app` and `create_app` tools;
+  - `quant-factory plan` and `quant-factory create`.
 
 - Run persistence (B-08): `quant_agent_os.runs` with in-memory and SQLite run stores, a
   `RunRecorder`, append-only audit events, and redaction of secrets.

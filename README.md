@@ -23,9 +23,9 @@ It has two products built on one core platform:
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
-| Core: approvals for consequential permissions | Planned ([decision 0005](docs/decisions/0005-approval-gates.md)) |
+| Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
 | Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
-| Quant App Factory | Designed ([architecture §8–9](docs/architecture.md)); package skeleton only |
+| Quant App Factory | Foundation implemented: `quant-factory plan/create`, `plan_app`/`create_app` tools, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
 | Quant analytics | Example metrics only; separate package planned |
 
 The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
@@ -70,6 +70,26 @@ cites file, page, and line ranges. The server is read-only, writes nothing to th
 sends nothing off the machine unless you choose a hosted `--embedder`. Each call is recorded
 in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
+
+## Generate an app
+
+Describe the app in a small TOML spec, preview it, then create it. Your confirmation is the
+recorded approval, and the generated project's own checks run before it is reported done.
+
+```bash
+cat > signal-tools.toml <<'TOML'
+name = "signal-tools"
+kind = "agent-tool"          # or python-cli, fastapi-service
+description = "Signal tools for Quant-Agent-OS"
+output_dir = "."
+tool_name = "count_signals"
+TOML
+uv run quant-factory plan signal-tools.toml     # profile, reasons, dependencies, exact files
+uv run quant-factory create signal-tools.toml   # asks, creates, runs uv sync/ruff/mypy/pytest
+```
+
+An `agent-tool` package comes with one typed example tool, a registry, and tests that run the
+platform's contract checks. See [docs/walkthrough.md](docs/walkthrough.md#10-generate-a-tool-package).
 
 ## How it fits together
 
@@ -129,7 +149,7 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   sdk/            Platform facade: call, run, get_run
   observability/  logging with secret redaction
 packages/quant-research/   Quant Research (Graph RAG) product
-packages/quant-app-factory/  Quant App Factory product (skeleton)
+packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
 apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
 examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/

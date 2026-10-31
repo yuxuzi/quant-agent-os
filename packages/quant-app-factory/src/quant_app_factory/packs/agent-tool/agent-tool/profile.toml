@@ -1,0 +1,17 @@
+contract = 1
+id = "agent-tool"
+name = "Quant-Agent-OS tool package"
+description = "A typed tool package for Quant-Agent-OS: one example tool, a registry, and contract tests."
+version = "1"
+kind = "library"
+status = "experimental"
+supported_python = ["3.11", "3.12", "3.13", "3.14", "3.15"]
+default_components = []
+optional_components = []
+dependencies = ["pydantic>=2.7", "quant-agent-os"]
+questions = ["description", "author", "email", "python_version", "license", "tool_name", "quant_agent_os_source"]
+lifecycle_commands = ["uv sync", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy {package} tests", "uv run pytest"]
+security_posture = "The example tool reads only its input. Declare a Permission for anything more; consequential permissions need per-call approval."
+
+[dependency_groups]
+dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]

@@ -86,12 +86,13 @@ def run_command(
     cwd: Path,
     timeout: float,
     extra_env: Mapping[str, str] | None = None,
+    tail_chars: int = OUTPUT_TAIL_CHARS,
 ) -> CommandResult:
     """Run ``command`` in ``cwd`` and return its result; failures are results, never raised.
 
     The program gets `scrubbed_environment` and no stdin. When ``timeout`` (seconds) expires,
-    its whole process tree is killed. Only the last `OUTPUT_TAIL_CHARS` characters of each
-    stream are kept.
+    its whole process tree is killed. Only the last ``tail_chars`` characters of each stream
+    are kept (raise it for programs whose whole output is needed, such as JSON results).
     """
     started = time.perf_counter()
     arguments = [str(part) for part in command]
@@ -137,8 +138,8 @@ def run_command(
     return result(
         None if timed_out else process.returncode,
         len(stdout) + len(stderr),
-        stdout=_tail(stdout),
-        stderr=_tail(stderr),
+        stdout=_tail(stdout, tail_chars),
+        stderr=_tail(stderr, tail_chars),
     )
 
 
@@ -156,5 +157,5 @@ def _kill_tree(process: subprocess.Popen[bytes]) -> None:
         os.killpg(process.pid, signal.SIGKILL)
 
 
-def _tail(output: bytes) -> str:
-    return output.decode("utf-8", errors="replace")[-OUTPUT_TAIL_CHARS:]
+def _tail(output: bytes, chars: int) -> str:
+    return output.decode("utf-8", errors="replace")[-chars:]

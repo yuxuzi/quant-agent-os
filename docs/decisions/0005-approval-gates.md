@@ -1,6 +1,6 @@
 # 0005: Consequential permissions need a per-call approval
 
-- Status: proposed
+- Status: accepted (implemented in B-09, 2026-10-30)
 - Date: 2026-10-30
 
 ## Context
@@ -30,3 +30,21 @@ subprocess.
   `plan` / `create` split.
 - Every write and every execution has an audit trail.
 - Consequential runs have one extra step. That is intended.
+
+## Implementation notes (2026-10-30)
+
+- **Where it lives.** `CONSEQUENTIAL` is in `quant_agent_os.tools.permissions`. `Approval` and
+  `ApprovalLedger` are in `quant_agent_os.runtime.approvals`. Both run stores are the ledger,
+  and an approval is consumed atomically.
+- **The operator's path.** The SDK calls `Platform.approve(run_id)`, then
+  `Platform.resume(run_id)`. `quant-factory create` asks for confirmation and records it as
+  the approval. No tool or MCP client can approve. Approval through an MCP client's
+  confirmation step is not built yet.
+- **Standing approvals.** `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` lets an operator approve a
+  consequential permission for every call, for example `network` when serving with a hosted
+  embedder. It is empty by default, and each call records the standing approval it used.
+- **The runner.** `quant_agent_os.runtime.runner.run_command` runs programs with an allowlisted
+  environment (no package-index URLs, which can carry credentials), its own process group, and
+  a timeout that kills the whole tree.
+- **Changed behaviour.** Serving `find_related_signals` with a hosted embedder needs `network`
+  both granted and pre-approved. Before this, granting it was enough.

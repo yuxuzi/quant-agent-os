@@ -1126,11 +1126,19 @@ name = "quant-agent-os-factory"
 version = "0.1.0"
 source = { editable = "packages/quant-app-factory" }
 dependencies = [
+    { name = "pydantic" },
     { name = "quant-agent-os" },
+    { name = "rich" },
+    { name = "typer" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "quant-agent-os", editable = "." }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "quant-agent-os", editable = "." },
+    { name = "rich", specifier = ">=13.7" },
+    { name = "typer", specifier = ">=0.12" },
+]
 
 [[package]]
 name = "quant-agent-os-research"

@@ -1,0 +1,27 @@
+"""Every tool honours the Quant-Agent-OS contract: direct calls, MCP calls, and permissions."""
+
+from quant_agent_os.testing import check_tool
+from quant_agent_os.tools import READ_ONLY
+
+from {{ package_name }} import registry, tools
+from {{ package_name }}.tools import {{ tool_name }}
+
+
+def test_the_example_tool_honours_the_platform_contract() -> None:
+    record = check_tool({{ tool_name }}, {"text": "momentum and reversal"})
+
+    assert record.output == {"words": 3, "warnings": []}
+
+
+def test_invalid_input_is_recorded_not_raised() -> None:
+    record = check_tool({{ tool_name }}, {"text": ""}, expect="invalid_input")
+
+    assert record.output is None
+
+
+def test_tools_are_read_only_unless_they_declare_more() -> None:
+    assert all(spec.permissions <= READ_ONLY for spec in tools())
+
+
+def test_the_registry_lists_every_tool() -> None:
+    assert [spec.name for spec in registry().specs()] == [spec.name for spec in tools()]

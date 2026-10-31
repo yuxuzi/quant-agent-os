@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "project_path": "/work/out/signal-tools",
+  "target_exists": false,
+  "package_name": "signal_tools",
+  "template": {
+    "kind": "pack",
+    "location": "/pack/agent-tool",
+    "ref": null,
+    "pack_id": "quant-agent-tool",
+    "pack_version": "1.0.0"
+  },
+  "profile": "agent-tool",
+  "profile_version": "1",
+  "components": [],
+  "requested": [],
+  "added": [],
+  "dependencies": [
+    "pydantic>=2.7",
+    "quant-agent-os"
+  ],
+  "dependency_groups": {
+    "dev": [
+      "mypy>=1.11",
+      "pytest>=8.0",
+      "ruff>=0.6"
+    ]
+  },
+  "settings": [],
+  "lifecycle_commands": [
+    "uv sync",
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy {package} tests",
+    "uv run pytest"
+  ],
+  "security_notes": [],
+  "files": [
+    ".copier-answers.yml",
+    ".gitignore",
+    ".pytemplate.toml",
+    "README.md",
+    "pyproject.toml",
+    "signal_tools/__init__.py",
+    "signal_tools/py.typed",
+    "signal_tools/tools.py",
+    "tests/__init__.py",
+    "tests/test_tools.py"
+  ]
+}

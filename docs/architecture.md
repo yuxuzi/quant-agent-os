@@ -21,7 +21,7 @@ the client supplies the conversation.
 | --- | --- | --- | --- |
 | Platform | Quant-Agent-OS Core (`quant_agent_os`) | Runtime, tool registry, executor, orchestrator, evidence, interfaces | Confirmed (partial) |
 | Product A | Quant Research (`quant_research`) | Graph RAG research and knowledge system with source provenance | Proposed |
-| Product B | Quant App Factory (`quant_app_factory`) | Requirements to tested, packaged Python applications | Proposed |
+| Product B | Quant App Factory (`quant_app_factory`) | Requirements to tested, packaged Python applications | Confirmed (foundation) |
 | Domain service | Quant analytics (separate package; name open) | Deterministic performance, risk, and later backtest calculations | Proposed |
 | External tool | [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.0 | Standalone, deterministic project scaffolder | Confirmed (published) |
 
@@ -83,8 +83,8 @@ product.
 | Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
 | MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool` over the executor | Confirmed; no transport |
 | CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
-| Approval gate | `tools/approvals.py` | Approval requests and grants for consequential permissions | Proposed |
-| Run store and audit | `runs/` | Persisted runs, call records, append-only audit events (approvals: proposed) | Confirmed |
+| Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
+| Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
 | MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra); tool annotations from declared permissions | Confirmed |
 | SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Confirmed |
 | REST API | `api/` | FastAPI over the same executor (optional `api` extra) | Proposed, deferred |
@@ -188,8 +188,8 @@ lacks. Every field has a default, so existing tools keep working.
 
 Approval is **derived, not declared**. A tool needs approval when it declares a consequential
 permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
-`CallStatus` set (`ok`, `invalid_input`, `denied`, `unknown_tool`, `timeout`, `error`) plus a
-proposed `approval_required` status.
+`CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `unknown_tool`,
+`timeout`, `error`).
 
 ### 5.3 Request lifecycle (confirmed, with proposed additions marked)
 
@@ -197,15 +197,16 @@ proposed `approval_required` status.
    allows, then parses the reply into a `Plan`.
 2. **Validate.** The plan is rejected before anything runs if it is malformed, exceeds
    `max_steps`, or names a tool that is unregistered or outside the allowlist.
-3. **Approve** (proposed). If any step needs approval, the run stops with status
-   `awaiting_approval`. It resumes only after an operator approves the exact steps.
+3. **Approve.** A step that needs approval records `approval_required` without running, and
+   the run waits in `awaiting_approval`. The operator approves the exact calls, then resumes
+   the run.
 4. **Execute.** For each step the executor checks permissions, validates the input, runs the
    tool with a timeout, then validates the output and enforces its size limit. Failures become
    records, not exceptions.
 5. **Report.** `build_report` collects evidence and warnings, turns failed calls into warnings,
    and adds limitations and run metadata.
 6. **Persist.** With a `RunRecorder`, the run, its records, and audit events go to the run
-   store as they happen, including runs whose plan is rejected. Approvals are proposed.
+   store as they happen, including runs whose plan is rejected, and so do approvals.
 
 Tool output and retrieved text are never fed back into **planning**. A tool may give retrieved
 text to a model for synthesis (section 6.5). The synthesized text is labelled `interpretation`
@@ -433,7 +434,7 @@ are:
 
 Run and audit tables are in [section 11](#11-workflow-state-audit-and-provenance).
 
-## 8. Quant App Factory architecture (proposed)
+## 8. Quant App Factory architecture (foundation confirmed)
 
 The factory turns requirements into maintainable, tested Python applications. It does not
 produce loose code snippets.
@@ -482,14 +483,15 @@ The pieces:
 `create-from-config` with `--json` and stable exit codes, `schema request`, and template packs
 through `--template` and `--template-ref`.
 
-**Proposed** contract inside `quant_app_factory`:
+**Confirmed** contract inside `quant_app_factory` (B-10):
 
 ```python
 class ScaffoldProvider(Protocol):
     name: str
 
     def plan(self, request: ScaffoldRequest) -> ScaffoldPlan: ...  # no writes
-    def create(self, request: ScaffoldRequest, approval: Approval) -> ScaffoldResult: ...
+    # Called only inside an approved create_app call.
+    def create(self, request: ScaffoldRequest) -> ScaffoldResult: ...
 ```
 
 `PytemplateUvScaffolder` implements this protocol:
@@ -535,8 +537,8 @@ tests.
 | `get_source_passage` | Quant Research | `read_local_data` | MVP |
 | `analyze_performance` | Analytics (example tools today) | `read_local_data` | MVP |
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
-| `plan_app` | App Factory | `read_local_data`, `execute_code` (runs `uvx`) | Days 22–30 |
-| `create_app` | App Factory | adds `write_local_data` → approval | Days 22–30 |
+| `plan_app` | App Factory | `read_local_data` (planner only; the file preview is the operator's `quant-factory plan`) | Done |
+| `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
 | `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
 | `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
@@ -572,7 +574,6 @@ tests.
   (`--runs`, `--no-record`). `quant-research runs [RUN_ID]` lists runs or shows one.
 
 **Proposed:**
-- an `approvals` table (decision 0005);
 - a digest of the public settings, and package versions in `RunMetadata`.
 
 ## 12. Security and approval model
@@ -586,17 +587,22 @@ tests.
 
 See [security.md](security.md) for details.
 
-**Proposed** ([decision 0005](decisions/0005-approval-gates.md)):
+**Confirmed** ([decision 0005](decisions/0005-approval-gates.md), B-09):
 - `write_local_data`, `execute_code`, `network`, and `external_action` are **consequential**.
   Granting such a permission in settings makes a tool eligible to run. Each call still needs an
-  **approval** that is bound to the run id, the tool name, and the input hash, and that expires
-  after use.
-- Approvals come from the operator through the CLI or SDK, or from the MCP client's own
-  confirmation step when the operator configures that. The model can never grant an approval.
-- `execute_code` tools run through a subprocess runner with a working-directory jail,
-  environment scrubbing (no secrets passed through), a timeout, and a hard kill. A thread
-  timeout is not enough here, because it cannot stop a running process.
+  **approval** that is bound to the run id, the tool name, and the input hash, and that is
+  consumed once.
+- Approvals come from the operator, through the SDK (`Platform.approve`, then `resume`) or a
+  CLI. The model can never grant an approval. `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` gives a
+  standing approval; it is empty by default, and each use is recorded.
+- `execute_code` tools run programs through `runtime.runner.run_command`. It uses a fixed
+  working directory, an allowlisted environment (no secrets passed through), a timeout, and a
+  hard kill of the process tree. A thread timeout is not enough here, because it cannot stop a
+  running process.
 - Ingestion and other store writes are operator commands, not agent tools.
+
+**Proposed:**
+- approvals through an MCP client's confirmation step.
 - HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
   carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
   but multi-tenant hosting remains out of scope.
