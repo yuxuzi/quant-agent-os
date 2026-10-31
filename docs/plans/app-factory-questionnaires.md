@@ -117,6 +117,8 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
 ### Q2. Guided specs and factory settings (B-24), covering points 4 and 6
 
+**Done (2026-10-31).** Results are after the step text below.
+
 - **Two read-only tools** do the guiding, so an MCP client such as Claude holds the
   conversation:
   - **`describe_template(template, profile?)`** returns the profiles, the components (with
@@ -157,6 +159,24 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
     accepts.
   - A secret-looking value in a spec or the settings file is refused.
   - Identity falls back to git config.
+- **Results:**
+  - **Tests:** 30 new tests, covering secrets, spec round trips, `describe_template`, each
+    kind of `check_spec` problem, identity, the settings file, `new` (scripted, including
+    secret settings asked as variable names), `settings`, and `serve-mcp`.
+  - **`serve-mcp`** was checked over a real stdio subprocess. It serves `describe_template`,
+    `check_spec`, and `plan_app`, and not `create_app`.
+  - **A real terminal run of `new`** wrote a ready `alpha-research` spec, and the settings file
+    refused a password while accepting `password_env`.
+- **Additions beyond the step text:**
+  - **`quant-factory serve-mcp`**, so Claude can use the guide.
+  - **`spec_toml` in `check_spec`'s output,** for the person to save.
+  - **The `settings` field.** It was moved here from Q1. `check_spec` checks it against the
+    settings the selected components declare: unknown names are problems, declared secrets
+    must be references, and unset ones are listed as `unbound_settings`.
+  - **Optional author, email, and license.** These spec fields are now optional, filled from
+    `factory.toml`, then `git config`, then the template's own default. They are applied at
+    plan time and not written into the spec.
+  - **`connection = "name"` in specs** moves to Q3, where the database component uses it.
 
 ### Q3. Database guidance (B-25), covering point 5
 

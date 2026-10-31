@@ -106,7 +106,7 @@ cost_bps = "3"                   # backtest only; alpha-research asks max_horizo
 # profile = "my-profile"
 ```
 
-## Factory settings (proposed)
+## Factory settings
 
 [Decision 0008](decisions/0008-factory-settings.md), backlog B-24. App Factory reuses these
 settings in specs and in `quant-factory new`. Secrets are stored only as environment-variable
@@ -133,8 +133,24 @@ source = "gh:firm/quant-packs"
 ref = "v1.2.0"
 ```
 
-A spec can then say `connection = "research-pg"`. Edit the file directly, or use
-`quant-factory settings set|remove`. Values that look like secrets are refused.
+Edit the file directly, or use `quant-factory settings show|set|remove`, for example
+`quant-factory settings set connections.research-pg.password_env RESEARCH_PG_PASSWORD`.
+`QUANT_FACTORY_SETTINGS` points to another file. Values that look like secrets are refused,
+and so are unknown fields.
+
+`[identity]` fills a spec's missing author, email, and license; missing ones fall back to
+`git config`, then the template's own defaults. Specs will name connections
+(`connection = "research-pg"`) once the database component lands (B-25).
+
+### Guided specs
+
+- **In the terminal:** `quant-factory new [--template T] [--profile P] [-o spec.toml]` asks
+  the template's own questions. It skips those that do not apply, and asks for secret
+  settings as environment-variable names. It writes the spec, checks it, and offers to create
+  the project.
+- **From Claude:** `quant-factory serve-mcp` serves `describe_template`, `check_spec`, and
+  `plan_app` over stdio. Claude can then guide you to a ready spec and give you its TOML.
+  You still create from the terminal, because MCP clients cannot approve `create_app` yet.
 
 A server started by Claude Desktop does not see your shell's environment, so run
 `quant-factory create` from a terminal when a connection check needs those variables.

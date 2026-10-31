@@ -85,7 +85,7 @@ in memory unless it is given a run store. What each part of a record holds:
   project. Any other program is reported and skipped.
 - **Ingestion.** Knowledge-store ingestion is an operator command, not an agent tool.
 
-## Secret references (proposed)
+## Secret references
 
 [Decisions 0007 and 0008](decisions/0008-factory-settings.md). App specs, the factory
 settings file, and generated apps hold environment-variable names, never secret values:

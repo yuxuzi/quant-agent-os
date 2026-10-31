@@ -7,16 +7,25 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.runner import CommandResult, run_command
-from quant_app_factory.domain.planner import AppPlan, ArchitecturePlanner
+from quant_app_factory.domain.planner import (
+    AppPlan,
+    ArchitecturePlanner,
+    PlanningError,
+    pack_location,
+)
 from quant_app_factory.domain.ports import (
+    ScaffoldError,
     ScaffoldPlan,
     ScaffoldProvider,
     ScaffoldRequestError,
+    SettingInfo,
+    TemplateDescription,
 )
-from quant_app_factory.domain.spec import AppKind, AppSpec
+from quant_app_factory.domain.secrets import secret_problem
+from quant_app_factory.domain.spec import AppKind, AppSpec, Identity, dump_spec
 
 Runner = Callable[..., CommandResult]  # the signature of `run_command`
 
@@ -58,6 +67,29 @@ class FactoryReport(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class SpecProblem(BaseModel):
+    """One thing to fix before a spec is ready."""
+
+    field: str
+    message: str
+
+
+class SpecCheck(BaseModel):
+    """Whether a spec is ready to create, and if not, what to fix."""
+
+    ready: bool
+    problems: list[SpecProblem] = Field(default_factory=list)
+    files: list[str] = Field(default_factory=list, description="Exact files, when ready")
+    settings: list[SettingInfo] = Field(
+        default_factory=list, description="Runtime settings the app will read"
+    )
+    unbound_settings: list[str] = Field(
+        default_factory=list,
+        description="Settings the spec leaves to the app's environment at runtime",
+    )
+    spec_toml: str | None = Field(default=None, description="The spec as a file, when valid")
+
+
 class AppFactory:
     """Turn an `AppSpec` into a scaffolded, checked project through a `ScaffoldProvider`."""
 
@@ -68,15 +100,103 @@ class AppFactory:
         planner: ArchitecturePlanner | None = None,
         runner: Runner = run_command,
         scaffolder_version: str | None = None,
+        identity: Callable[[], Identity] | None = None,
     ) -> None:
         self.scaffolder = scaffolder
         self.planner = planner or ArchitecturePlanner()
         self._runner = runner
         self._scaffolder_version = scaffolder_version or getattr(scaffolder, "version", None)
+        self._identity_source = identity
+        self._identity: Identity | None = None
 
     def plan(self, spec: AppSpec) -> AppPlan:
-        """Return the planner's decision; deterministic, no I/O."""
-        return self.planner.plan(spec)
+        """Return the planner's decision, with author, email, and license defaults filled in."""
+        return self.planner.plan(self._with_identity(spec))
+
+    def describe_template(self, template: str, profile: str | None = None) -> TemplateDescription:
+        """Describe a template; with ``profile``, only what that profile can use."""
+        description = self.scaffolder.describe(pack_location(template))
+        if profile is None:
+            return description
+        chosen = [p for p in description.profiles if p.id == profile]
+        if not chosen:
+            offered = ", ".join(p.id for p in description.profiles)
+            raise ScaffoldRequestError(f"Template has no profile {profile!r}; it offers {offered}.")
+        components = [c for c in description.components if profile in c.compatible_profiles]
+        asked = set(chosen[0].questions) | {q for c in components for q in c.questions}
+        return TemplateDescription(
+            profiles=chosen,
+            components=components,
+            questions=[q for q in description.questions if q.name in asked],
+        )
+
+    def check_spec(self, raw: dict[str, Any]) -> SpecCheck:
+        """Return whether ``raw`` is a spec ready to create, or every problem found.
+
+        pytemplate-uv is the judge of the template's own rules; this adds the spec's fields,
+        secrets given as values, unknown settings, and an existing target directory.
+        """
+        try:
+            spec = AppSpec.model_validate(raw)
+        except ValidationError as error:
+            return SpecCheck(
+                ready=False,
+                problems=[
+                    SpecProblem(
+                        field=".".join(str(part) for part in item["loc"]) or "spec",
+                        message=item["msg"],
+                    )
+                    for item in error.errors()
+                ],
+            )
+        problems: list[SpecProblem] = []
+        try:
+            _, preview = self.preview(spec)
+        except (PlanningError, ScaffoldError) as error:
+            problems.append(SpecProblem(field="template", message=str(error)))
+            return SpecCheck(ready=False, problems=problems, spec_toml=dump_spec(spec))
+        declared = {setting.name: setting for setting in preview.settings}
+        for name, value in spec.settings.items():
+            if name not in declared:
+                problems.append(
+                    SpecProblem(
+                        field=f"settings.{name}",
+                        message=f"no selected component reads {name}; it offers "
+                        f"{', '.join(sorted(declared)) or 'no settings'}",
+                    )
+                )
+            elif problem := secret_problem(name, value, declared_secret=declared[name].secret):
+                problems.append(SpecProblem(field=f"settings.{name}", message=problem))
+        if preview.target_exists:
+            problems.append(
+                SpecProblem(
+                    field="name",
+                    message=f"{preview.project_path} already exists; choose another name or "
+                    "output_dir",
+                )
+            )
+        return SpecCheck(
+            ready=not problems,
+            problems=problems,
+            files=preview.files if not problems else [],
+            settings=preview.settings,
+            unbound_settings=sorted(set(declared) - set(spec.settings)),
+            spec_toml=dump_spec(spec),
+        )
+
+    def _with_identity(self, spec: AppSpec) -> AppSpec:
+        if self._identity_source is None or (spec.author and spec.email and spec.license):
+            return spec
+        if self._identity is None:
+            self._identity = self._identity_source()
+        identity = self._identity
+        return spec.model_copy(
+            update={
+                "author": spec.author or identity.author,
+                "email": spec.email or identity.email,
+                "license": spec.license or identity.license,
+            }
+        )
 
     def preview(self, spec: AppSpec) -> tuple[AppPlan, ScaffoldPlan]:
         """Return the plan and the scaffolder's exact file list; nothing is written."""

@@ -1445,14 +1445,21 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+mcp = [
+    { name = "quant-agent-os", extra = ["mcp"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pytemplate-uv", specifier = ">=3.0,<4" },
     { name = "quant-agent-os", editable = "." },
+    { name = "quant-agent-os", extras = ["mcp"], marker = "extra == 'mcp'", editable = "." },
     { name = "rich", specifier = ">=13.7" },
     { name = "typer", specifier = ">=0.12" },
 ]
+provides-extras = ["mcp"]
 
 [[package]]
 name = "quant-agent-os-research"

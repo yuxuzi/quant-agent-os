@@ -10,15 +10,21 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import Any
 
 from pytemplate import api
 
 from quant_app_factory.domain.ports import (
+    ComponentInfo,
+    ProfileInfo,
+    QuestionInfo,
     ScaffoldPlan,
     ScaffoldRenderError,
     ScaffoldRequest,
     ScaffoldRequestError,
     ScaffoldResult,
+    SettingInfo,
+    TemplateDescription,
 )
 
 # Errors meaning the request is invalid and nothing was written (pytemplate-uv exit code 1).
@@ -84,6 +90,34 @@ class PytemplateUvScaffolder:
         except PackageNotFoundError:  # pragma: no cover - always installed with this package
             return "pytemplate-uv"
 
+    def describe(self, template: str | None) -> TemplateDescription:
+        """Describe a pack directory, or pytemplate-uv's bundled profiles when ``None``."""
+        try:
+            with api.open_catalog(template) as (catalog, _, _):
+                return TemplateDescription(
+                    profiles=[
+                        ProfileInfo(
+                            id=profile.identifier,
+                            name=profile.name,
+                            description=profile.description,
+                            default_components=list(profile.default_components),
+                            optional_components=list(profile.optional_components),
+                            questions=[q for q in profile.questions if q not in _SET_BY_FACTORY],
+                        )
+                        for profile in catalog.profiles
+                    ],
+                    components=[_component(component) for component in catalog.components],
+                    questions=[
+                        _question(name, spec)
+                        for name, spec in catalog.questions.items()
+                        if name not in _SET_BY_FACTORY
+                    ],
+                )
+        except _INVALID_REQUEST as error:
+            raise ScaffoldRequestError(
+                f"pytemplate-uv cannot read the template: {error}"
+            ) from error
+
     def plan(self, request: ScaffoldRequest) -> ScaffoldPlan:
         """Return the exact files, dependencies, and checks. Nothing is written to the target."""
         try:
@@ -110,6 +144,7 @@ class PytemplateUvScaffolder:
             files=list(planned.files),
             template=_source(planned.source),
             security_notes=list(resolution.security_notes),
+            settings=[_setting(setting) for setting in resolution.settings],
         )
 
     def create(self, request: ScaffoldRequest) -> ScaffoldResult:
@@ -128,3 +163,50 @@ class PytemplateUvScaffolder:
             components=[component.identifier for component in result.components],
             lifecycle_commands=list(result.resolution.lifecycle_commands),
         )
+
+
+# Questions App Factory answers itself: the slug, its package name, the profile, and components.
+_SET_BY_FACTORY = frozenset({"project_name", "package_name", "profile", "components"})
+
+
+def _component(component: api.Component) -> ComponentInfo:
+    return ComponentInfo(
+        id=component.identifier,
+        name=component.name,
+        description=component.description,
+        compatible_profiles=list(component.compatible_profiles),
+        requires=list(component.requires),
+        requires_any=list(component.requires_any),
+        conflicts=list(component.conflicts),
+        questions=list(component.questions),
+        settings=[_setting(setting) for setting in component.settings],
+    )
+
+
+def _setting(setting: api.Setting) -> SettingInfo:
+    return SettingInfo(
+        name=setting.name,
+        type=setting.type,
+        description=setting.description,
+        secret=setting.secret,
+        required_in_production=setting.required_in_production,
+    )
+
+
+def _question(name: str, spec: Any) -> QuestionInfo:
+    data = spec if isinstance(spec, dict) else {}
+    choices = data.get("choices") or []
+    default = data.get("default")
+    when = data.get("when")
+    return QuestionInfo(
+        name=name,
+        type=str(data.get("type", "str")),
+        help=str(data.get("help") or ""),
+        choices=[
+            str(choice) for choice in (choices.values() if isinstance(choices, dict) else choices)
+        ],
+        default=None if default is None else str(default),
+        when=None if when is None else str(when),
+        multiselect=bool(data.get("multiselect", False)),
+        secret=bool(data.get("secret", False)),
+    )

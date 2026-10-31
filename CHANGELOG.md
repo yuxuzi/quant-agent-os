@@ -34,6 +34,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Guided specs and factory settings (B-24; decisions 0007 and 0008 accepted):
+  - **Read-only tools.** `describe_template` lists a template's profiles, components,
+    questions, and runtime settings, with secret ones marked. `check_spec` reports `ready` with
+    the exact files and the spec as TOML, or every problem.
+  - **Commands.** `quant-factory new` asks a template's questions in the terminal.
+    `quant-factory serve-mcp` serves the guiding tools to Claude (not `create_app`).
+  - **Factory settings.** `quant-factory settings` edits `~/.quant-agent-os/factory.toml`:
+    identity, plus connections that hold environment-variable names, never secrets.
+  - **Specs.** `AppSpec.settings` holds runtime settings as values or `env:NAME` references.
+    Author, email, and license default from the settings file, then `git config`.
+
 - Quant baseline templates (B-23):
   - **Profiles.** App Factory's `quant-baseline` pack has `alpha-research`, `backtest`, and
     `report`, with the kinds of the same names. The projects are portable numpy projects with

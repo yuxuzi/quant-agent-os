@@ -29,6 +29,14 @@ _COMPONENTS: dict[tuple[str, str], frozenset[str]] = {
 _AUTH_MODES = frozenset({"auth-api-key", "auth-oidc"})
 
 
+def pack_location(template: str) -> str | None:
+    """Return the pack directory a template name stands for (None: the bundled profiles)."""
+    if template == "bundled":
+        return None
+    pack = BUILT_IN_PACKS.get(template)
+    return pack.as_posix() if pack else template
+
+
 class PlanningError(ValueError):
     """Raised when a spec asks for something its template cannot provide."""
 
@@ -53,13 +61,14 @@ class ArchitecturePlanner:
         user_pack = template not in BUILT_IN_PACKS and template != "bundled"
         if not user_pack:
             self._check_components(template, profile, spec.components)
-        defaults = {
+        identity = {
             "description": spec.description,
             "author": spec.author,
             "email": spec.email,
             "python_version": spec.python_version,
             "license": spec.license,
         }
+        defaults = {name: value for name, value in identity.items() if value is not None}
         data = dict(spec.answers)
         reasons = [f"Template '{template}' builds profile '{profile}'."]
         portable: bool | None = True
@@ -93,7 +102,6 @@ class ArchitecturePlanner:
             )
         if spec.components:
             reasons.append(f"Optional components requested: {', '.join(spec.components)}.")
-        pack = BUILT_IN_PACKS.get(template)
         return AppPlan(
             spec=spec,
             request=ScaffoldRequest(
@@ -103,7 +111,7 @@ class ArchitecturePlanner:
                 components=sorted(spec.components),
                 data=data,
                 defaults=defaults,
-                template=pack.as_posix() if pack else None if template == "bundled" else template,
+                template=pack_location(template),
             ),
             reasons=reasons,
             portable=portable,

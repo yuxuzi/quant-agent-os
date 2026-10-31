@@ -174,7 +174,8 @@ with (
 
 ## 10. Generate a tool package
 
-Quant App Factory creates a new, tested tool package for the platform from a small spec:
+Quant App Factory creates a new, tested project from a small spec. Let it ask the questions
+(`uv run quant-factory new`), or write the spec yourself:
 
 ```bash
 cat > ~/qr-demo/signal-tools.toml <<'TOML'

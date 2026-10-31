@@ -27,9 +27,15 @@ cost) and a `LIMITATIONS.md`. Optional components are `data-parquet` and `agent-
 ## Use
 
 ```bash
+uv run quant-factory new                # answer the template's questions; writes a ready spec
 uv run quant-factory plan app.toml      # writes nothing
 uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
+uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
+uv run quant-factory serve-mcp          # describe_template, check_spec, plan_app for Claude
 ```
+
+Secrets never go in a spec or `factory.toml`. Use `env:NAME` in a spec's `[settings]`, and
+`password_env` or `url_env` for a connection.
 
 From Python, `plan_app` is read-only: pytemplate-uv renders its file preview into a
 temporary directory. `create_app` declares `write_local_data`,

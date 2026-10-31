@@ -3,20 +3,38 @@
 from __future__ import annotations
 
 import getpass
+import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 
-from quant_agent_os.runs import SqliteRunStore
+from quant_agent_os.mcp import MCPUnavailableError, run_stdio
+from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
+from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, PermissionPolicy
+from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
 from quant_app_factory.application.factory import AppFactory, FactoryReport
 from quant_app_factory.domain.planner import PlanningError
 from quant_app_factory.domain.ports import ScaffoldError
-from quant_app_factory.domain.spec import AppSpec, SpecError, load_spec
+from quant_app_factory.domain.spec import (
+    BUILT_IN_TEMPLATES,
+    RESERVED_ANSWERS,
+    AppSpec,
+    SpecError,
+    load_spec,
+)
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
+from quant_app_factory.infrastructure.settings_file import (
+    SettingsError,
+    git_identity,
+    load_settings,
+    remove_value,
+    save_settings,
+    set_value,
+    settings_path,
+)
 from quant_app_factory.tools import CREATE_PERMISSIONS, factory_tools
 
 app = typer.Typer(
@@ -37,7 +55,13 @@ def _fail(error: Exception | str) -> typer.Exit:
 
 
 def _factory() -> AppFactory:
-    return AppFactory(PytemplateUvScaffolder())
+    try:
+        settings = load_settings()
+    except SettingsError as error:
+        raise _fail(error) from error
+    return AppFactory(
+        PytemplateUvScaffolder(), identity=lambda: settings.identity.merged(git_identity())
+    )
 
 
 def _load(path: Path) -> AppSpec:
@@ -140,6 +164,231 @@ def _print_report(report: FactoryReport, run_id: str, runs: Path) -> None:
     if report.checks_passed is None:
         console.print("Checks skipped.")
     console.print(f"Run {run_id} recorded in {runs}.", soft_wrap=True)
+
+
+IDENTITY_QUESTIONS = frozenset({"description", "author", "email", "python_version", "license"})
+_COMPONENT_CONDITION = re.compile(r"^\{\{\s*'([\w-]+)'\s+(not\s+)?in\s+components\s*\}\}$")
+
+
+def _applies(when: str | None, components: set[str]) -> bool:
+    """Evaluate a simple ``'x' in components`` condition; ask anything subtler."""
+    if when is None:
+        return True
+    match = _COMPONENT_CONDITION.match(when.strip())
+    if match is None:
+        return True
+    present = match.group(1) in components
+    return not present if match.group(2) else present
+
+
+def _choose(label: str, options: list[str], default: str) -> str:
+    while True:
+        value = str(typer.prompt(label, default=default)).strip()
+        if value in options:
+            return value
+        errors.print(f"Choose one of: {', '.join(options)}.")
+
+
+@app.command()
+def new(
+    template: Annotated[
+        str | None, typer.Option(help="quant-baseline, agent-tool, bundled, or a pack path.")
+    ] = None,
+    profile: Annotated[str | None, typer.Option(help="The profile to build.")] = None,
+    out: Annotated[Path | None, typer.Option("--out", "-o", help="Spec file to write.")] = None,
+) -> None:
+    """Answer questions until the spec is ready, write it, and offer to create the project.
+
+    The questions come from the template itself; pytemplate-uv checks the result. Secrets are
+    asked for as environment-variable names, never values.
+    """
+    factory = _factory()
+    template = template or str(
+        typer.prompt(
+            "Template (quant-baseline, agent-tool, bundled, or a pack path)",
+            default="quant-baseline",
+        )
+    )
+    if template not in BUILT_IN_TEMPLATES:
+        template = Path(template).expanduser().resolve().as_posix()
+    try:
+        catalog = factory.describe_template(template)
+    except ScaffoldError as error:
+        raise _fail(error) from error
+    for item in catalog.profiles:
+        console.print(f"  [bold]{item.id}[/bold]: {item.description}", soft_wrap=True)
+    profiles = [item.id for item in catalog.profiles]
+    profile = profile if profile in profiles else _choose("Profile", profiles, profiles[0])
+    described = factory.describe_template(template, profile)
+    chosen_profile = described.profiles[0]
+    name = str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
+    description = str(typer.prompt("One-line description"))
+    output_dir = Path(str(typer.prompt("Parent directory", default="."))).expanduser().resolve()
+    optional = {c.id: c for c in described.components if c.id in chosen_profile.optional_components}
+    for component in optional.values():
+        console.print(f"  [bold]{component.id}[/bold]: {component.description}", soft_wrap=True)
+    picked = str(typer.prompt("Optional components (comma-separated, blank for none)", default=""))
+    components = [c.strip() for c in picked.split(",") if c.strip()]
+    unknown = sorted(set(components) - set(optional))
+    if unknown:
+        raise _fail(f"Unknown components: {', '.join(unknown)}.")
+    selected = {*chosen_profile.default_components, *components}
+    spec: dict[str, Any] = {
+        "name": name,
+        "template": template,
+        "profile": profile,
+        "description": description,
+        "output_dir": output_dir.as_posix(),
+        "components": components,
+    }
+    answers: dict[str, str] = {}
+    for question in described.questions:
+        if question.name in IDENTITY_QUESTIONS or not _applies(question.when, selected):
+            continue
+        default = question.default if question.default and "{{" not in question.default else ""
+        hint = f" [{'/'.join(question.choices)}]" if question.choices else ""
+        value = str(
+            typer.prompt(f"{question.name}: {question.help}{hint}", default=default)
+        ).strip()
+        if question.choices and value and value not in question.choices:
+            raise _fail(f"{question.name} must be one of {', '.join(question.choices)}.")
+        if not value or value == default:
+            continue
+        if question.name in RESERVED_ANSWERS:
+            spec[question.name] = value
+        else:
+            answers[question.name] = value
+    settings: dict[str, str] = {}
+    for component in described.components:
+        if component.id not in selected:
+            continue
+        for setting in component.settings:
+            if setting.secret:
+                variable = str(
+                    typer.prompt(
+                        f"{setting.name} is secret. Environment variable that will hold it "
+                        "(blank: decide later)",
+                        default="",
+                    )
+                ).strip()
+                if variable:
+                    settings[setting.name] = f"env:{variable}"
+            else:
+                value = str(
+                    typer.prompt(
+                        f"{setting.name}: {setting.description} (blank: later)", default=""
+                    )
+                ).strip()
+                if value:
+                    settings[setting.name] = value
+    spec["answers"] = answers
+    spec["settings"] = settings
+    check = factory.check_spec(spec)
+    if check.spec_toml is None:
+        for problem in check.problems:
+            errors.print(f"[red]{problem.field}: {problem.message}[/red]")
+        raise typer.Exit(code=1)
+    target = out or Path(f"{name}.toml")
+    if target.exists() and not typer.confirm(f"{target} exists. Replace it?", default=False):
+        raise typer.Exit(code=1)
+    target.write_text(check.spec_toml, "utf-8")
+    console.print(f"Wrote {target}.")
+    if not check.ready:
+        for problem in check.problems:
+            errors.print(f"[yellow]{problem.field}: {problem.message}[/yellow]")
+        errors.print(f"Edit {target}, then run `quant-factory plan {target}`.")
+        raise typer.Exit(code=1)
+    console.print(f"Ready: {len(check.files)} files.")
+    if check.unbound_settings:
+        console.print(
+            "Set at runtime in the app's environment: " + ", ".join(check.unbound_settings),
+            soft_wrap=True,
+        )
+    if typer.confirm(
+        "Create it now? It writes files, runs uv, and downloads packages", default=False
+    ):
+        create(target, yes=True, checks=True, runs=DEFAULT_RUNS)
+
+
+settings_app = typer.Typer(help="Show or change factory.toml (identity, connections, templates).")
+app.add_typer(settings_app, name="settings")
+
+
+@settings_app.command("show")
+def settings_show() -> None:
+    """Print the settings file. It holds no secrets, only environment-variable names."""
+    path = settings_path()
+    if not path.is_file():
+        console.print(f"No settings at {path} yet.")
+        return
+    console.print(f"# {path}", soft_wrap=True)
+    console.print(path.read_text("utf-8"), soft_wrap=True, markup=False)
+
+
+@settings_app.command("set")
+def settings_set(
+    key: Annotated[str, typer.Argument(help="identity.FIELD or connections.NAME.FIELD")],
+    value: Annotated[str, typer.Argument(help="The value; never a secret.")],
+) -> None:
+    """Set one field, such as `connections.research-pg.password_env RESEARCH_PG_PASSWORD`."""
+    try:
+        save_settings(set_value(load_settings(), key, value))
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f"Set {key}.")
+
+
+@settings_app.command("remove")
+def settings_remove(
+    key: Annotated[str, typer.Argument(help="A field, or a whole connection or template.")],
+) -> None:
+    """Remove a field, a connection, or a template."""
+    try:
+        save_settings(remove_value(load_settings(), key))
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f"Removed {key}.")
+
+
+MCP_INSTRUCTIONS = (
+    "Quant App Factory guides a user to a ready app spec. Call describe_template to learn what "
+    "a template asks, ask the user, and call check_spec until it is ready. Then give the user "
+    "spec_toml to save and ask them to run `quant-factory create FILE`, which asks for their "
+    "approval. Never put a secret in a spec: use env:NAME references."
+)
+
+
+@app.command("serve-mcp")
+def serve_mcp(
+    runs: Annotated[Path, typer.Option("--runs", help="SQLite run store.")] = DEFAULT_RUNS,
+    record: Annotated[
+        bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
+    ] = True,
+) -> None:
+    """Serve the read-only guiding tools (describe_template, check_spec, plan_app) over stdio.
+
+    create_app is not served: MCP clients cannot approve it yet, so people create from the
+    terminal. Messages go to stderr because stdout carries the protocol.
+    """
+    tools = [spec for spec in factory_tools(_factory()) if spec.name != "create_app"]
+    run_store: SqliteRunStore | None = None
+    try:
+        if record:
+            try:
+                run_store = SqliteRunStore(runs)
+            except RunStoreError as error:
+                errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
+        run_stdio(
+            ToolExecutor(ToolRegistry(tools), PermissionPolicy()),
+            name="quant-factory",
+            instructions=MCP_INSTRUCTIONS,
+            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
+        )
+    except MCPUnavailableError as error:
+        raise _fail(error) from error
+    finally:
+        if run_store is not None:
+            run_store.close()
 
 
 def main() -> None:

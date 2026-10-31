@@ -7,7 +7,17 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+from quant_app_factory.domain import toml_text
+from quant_app_factory.domain.secrets import ENV_NAME, secret_problem
 
 AppKind = Literal[
     "agent-tool", "python-cli", "fastapi-service", "alpha-research", "backtest", "report"
@@ -45,6 +55,24 @@ RESERVED_ANSWERS = frozenset(
 _ANSWER_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
+class Identity(BaseModel):
+    """Defaults for a generated project's author, email, and license."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: str | None = None
+    email: str | None = None
+    license: str | None = None
+
+    def merged(self, fallback: Identity) -> Identity:
+        """Return this identity, with missing fields taken from ``fallback``."""
+        return Identity(
+            author=self.author or fallback.author,
+            email=self.email or fallback.email,
+            license=self.license or fallback.license,
+        )
+
+
 class SpecError(ValueError):
     """Raised when a spec file is missing, unreadable, or invalid."""
 
@@ -68,13 +96,17 @@ class AppSpec(BaseModel):
     )
     profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]*$")
     answers: dict[str, str] = Field(default_factory=dict, description="Other template answers")
+    settings: dict[str, str] = Field(
+        default_factory=dict,
+        description="Runtime settings (environment variables the app reads): a value or env:NAME",
+    )
     description: str = Field(min_length=1, max_length=200)
     output_dir: str = Field(description="Existing parent directory (absolute)")
-    author: str = "Your Name"
-    email: str = "your@email.com"
+    author: str | None = Field(default=None, description="Default: factory settings, git")
+    email: str | None = Field(default=None, description="Default: factory settings, git")
     python_version: PythonVersion = "3.11"
-    license: str = Field(
-        default="MIT", pattern=r"^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$"
+    license: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$"
     )
     components: list[str] = Field(default_factory=list, description="Optional components")
     tool_name: str | None = Field(
@@ -114,11 +146,27 @@ class AppSpec(BaseModel):
                 raise ValueError(f"set {name!r} as a spec field, not in answers")
             if not _ONE_LINE.match(value) or not value.strip():
                 raise ValueError(f"answer {name!r} must be one line, without quotes or backslashes")
+            if problem := secret_problem(name, value):
+                raise ValueError(problem)
         return answers
+
+    @field_validator("settings")
+    @classmethod
+    def _settings_without_secrets(cls, settings: dict[str, str]) -> dict[str, str]:
+        for name, value in settings.items():
+            if not ENV_NAME.match(name):
+                raise ValueError(f"setting {name!r} must be an environment-variable name")
+            if not _ONE_LINE.match(value):
+                raise ValueError(f"setting {name!r} must be one line, without quotes")
+            if problem := secret_problem(name, value):
+                raise ValueError(problem)
+        return settings
 
     @field_validator("description", "author", "email", "quant_agent_os_source")
     @classmethod
-    def _one_line(cls, value: str) -> str:
+    def _one_line(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         if not _ONE_LINE.match(value) or not value.strip():
             raise ValueError("use non-empty text on one line without double quotes or backslashes")
         return value
@@ -180,3 +228,15 @@ def load_spec(path: Path) -> AppSpec:
         return AppSpec.model_validate(data)
     except ValidationError as error:
         raise SpecError(f"{path} is not a valid app spec: {error}") from error
+
+
+def dump_spec(spec: AppSpec) -> str:
+    """Return ``spec`` as a TOML spec file; fields left at their defaults are omitted."""
+    data = spec.model_dump(exclude_defaults=True)
+    answers = data.pop("answers", None) or {}
+    settings = data.pop("settings", None) or {}
+    order = [name for name in AppSpec.model_fields if name in data]
+    lines = toml_text.table(None, {name: data[name] for name in order})
+    lines += toml_text.table("answers", answers)
+    lines += toml_text.table("settings", settings)
+    return "\n".join(lines).rstrip() + "\n"
