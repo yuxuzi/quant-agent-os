@@ -139,8 +139,22 @@ Edit the file directly, or use `quant-factory settings show|set|remove`, for exa
 and so are unknown fields.
 
 `[identity]` fills a spec's missing author, email, and license; missing ones fall back to
-`git config`, then the template's own defaults. Specs will name connections
-(`connection = "research-pg"`) once the database component lands (B-25).
+`git config`, then the template's own defaults.
+
+### Databases
+
+The `data-database` component of `alpha-research` and `backtest` loads prices with one
+read-only query from PostgreSQL, SQLite, or DuckDB.
+- **Naming a connection.** `connection = "research-pg"` in a spec adds the component and fills
+  its answers from `factory.toml`, and the spec's own answers win.
+  `quant-factory new` offers saved connections, and offers to save a new one.
+- **What the generated app reads.** It reads its credentials only from `DATABASE_URL` (a full
+  URL, which wins) or `DATABASE_PASSWORD`, listed in its `.env.example`. Its
+  `--check-connection` flag connects, then exits.
+- **The factory's check.** `quant-factory create --check-connection` runs that check after the
+  project's own checks. It passes only the variables the spec's settings reference, such as
+  `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`, and redacts their values from the
+  output.
 
 ### Guided specs
 

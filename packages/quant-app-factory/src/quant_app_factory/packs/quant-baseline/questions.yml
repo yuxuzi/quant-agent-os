@@ -112,6 +112,85 @@ quant_agent_os_source:
     Use a git+https URL or a path written with forward slashes.
     {% endif %}
 
+db_kind:
+  type: str
+  help: Database kind
+  default: sqlite
+  choices:
+    - postgres
+    - sqlite
+    - duckdb
+  when: "{{ 'data-database' in components }}"
+
+db_host:
+  type: str
+  help: Database host (postgres)
+  default: localhost
+  when: "{{ 'data-database' in components and db_kind == 'postgres' }}"
+  validator: >-
+    {% if not (db_host | regex_search('^[A-Za-z0-9.-]+$')) %}
+    Use a host name or address.
+    {% endif %}
+
+db_port:
+  type: str
+  help: Database port (postgres)
+  default: "5432"
+  when: "{{ 'data-database' in components and db_kind == 'postgres' }}"
+  validator: >-
+    {% if not (db_port | regex_search('^[0-9]{1,5}$')) %}
+    Use a port number.
+    {% endif %}
+
+db_name:
+  type: str
+  help: Database name (postgres), or the database file path (sqlite, duckdb)
+  default: prices.db
+  when: "{{ 'data-database' in components }}"
+  validator: >-
+    {% if '"' in db_name or '\\' in db_name or not db_name.strip() %}
+    Use a name or a path written with forward slashes.
+    {% endif %}
+
+db_user:
+  type: str
+  help: Database user (postgres)
+  default: research
+  when: "{{ 'data-database' in components and db_kind == 'postgres' }}"
+  validator: >-
+    {% if not (db_user | regex_search('^[A-Za-z0-9_.-]+$')) %}
+    Use a user name of letters, digits, dots, dashes, or underscores.
+    {% endif %}
+
+db_schema:
+  type: str
+  help: Schema to search first (blank for the default)
+  default: ""
+  when: "{{ 'data-database' in components and db_kind == 'postgres' }}"
+  validator: >-
+    {% if db_schema and not (db_schema | regex_search('^[A-Za-z_][A-Za-z0-9_]*$')) %}
+    Use a schema name of letters, digits, and underscores.
+    {% endif %}
+
+db_query:
+  type: str
+  help: Query returning one row per price, with columns date, asset, price
+  default: SELECT date, asset, price FROM prices ORDER BY date, asset
+  when: "{{ 'data-database' in components }}"
+  validator: >-
+    {% if '"' in db_query or '\\' in db_query or '\n' in db_query or not (db_query | regex_search('^\\s*(?i:select|with)\\b')) %}
+    Use one line starting with SELECT or WITH, without double quotes or backslashes.
+    {% endif %}
+
+db_read_only:
+  type: str
+  help: Open the database read-only
+  default: "yes"
+  choices:
+    - "yes"
+    - "no"
+  when: "{{ 'data-database' in components }}"
+
 # Set by pytemplate from the profile defaults plus requested components (passed as data).
 components:
   type: str
@@ -120,6 +199,7 @@ components:
   choices:
     - agent-tools
     - data-csv
+    - data-database
     - data-parquet
     - metrics
   default: []

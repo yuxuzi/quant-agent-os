@@ -1,0 +1,106 @@
+"""Load prices from a database with one read-only query.
+
+Credentials never live in the project: the URL comes from ``DATABASE_URL`` when it is set,
+otherwise from the settings in ``config.py`` plus ``DATABASE_PASSWORD``. Read-only access is
+enforced by each database: SQLite runs query-only, DuckDB opens the file read-only, and
+PostgreSQL uses read-only transactions.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+from collections.abc import Iterable, Mapping
+from typing import Any
+
+import numpy as np
+from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy.engine import URL, make_url
+
+from . import config
+from .data import DataError, Panel
+
+URL_VARIABLE = "DATABASE_URL"
+PASSWORD_VARIABLE = "DATABASE_PASSWORD"
+_DRIVERS = {"postgres": "postgresql+psycopg", "sqlite": "sqlite", "duckdb": "duckdb"}
+
+
+def database_url(environ: Mapping[str, str] = os.environ) -> URL:
+    """Return the connection URL: ``DATABASE_URL``, or one built from ``config.py``."""
+    if environ.get(URL_VARIABLE):
+        return make_url(environ[URL_VARIABLE])
+    if config.DB_KIND == "postgres":
+        return URL.create(
+            _DRIVERS["postgres"],
+            username=config.DB_USER or None,
+            password=environ.get(PASSWORD_VARIABLE) or None,
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+        )
+    return URL.create(_DRIVERS[config.DB_KIND], database=config.DB_NAME)
+
+
+def connect(url: URL | None = None, *, read_only: bool = config.DB_READ_ONLY) -> Engine:
+    """Return an engine for ``url`` (default: `database_url`), read-only unless told otherwise."""
+    url = url or database_url()
+    options: dict[str, Any] = {}
+    if read_only and url.get_backend_name() == "duckdb":
+        options["connect_args"] = {"read_only": True}
+    engine = create_engine(url, **options)
+    if read_only and url.get_backend_name() == "sqlite":
+        event.listen(engine, "connect", _sqlite_query_only)
+    if read_only and url.get_backend_name() == "postgresql":
+        engine = engine.execution_options(postgresql_readonly=True)
+    if url.get_backend_name() == "postgresql" and config.DB_SCHEMA:
+        event.listen(engine, "connect", _search_path)
+    return engine
+
+
+def load_database(engine: Engine | None = None, query: str = config.PRICE_QUERY) -> Panel:
+    """Run ``query`` (columns date, asset, price; one row per price) and return a panel."""
+    engine = engine or connect()
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(text(query)).all()
+    finally:
+        engine.dispose()
+    return to_panel((str(date), str(asset), price) for date, asset, price in rows)
+
+
+def to_panel(rows: Iterable[tuple[str, str, Any]]) -> Panel:
+    """Pivot ``(date, asset, price)`` rows into a panel; missing prices become NaN."""
+    table: dict[tuple[str, str], float] = {}
+    for date, asset, price in rows:
+        table[(date, asset)] = math.nan if price is None else float(price)
+    if not table:
+        raise DataError("The query returned no prices.")
+    dates = sorted({date for date, _ in table})
+    assets = sorted({asset for _, asset in table})
+    prices = np.full((len(dates), len(assets)), np.nan)
+    row = {date: index for index, date in enumerate(dates)}
+    column = {asset: index for index, asset in enumerate(assets)}
+    for (date, asset), price in table.items():
+        prices[row[date], column[asset]] = price
+    return Panel(dates=dates, assets=assets, prices=prices)
+
+
+def check_connection(engine: Engine | None = None) -> str:
+    """Connect, run ``SELECT 1``, and describe the connection without its password."""
+    engine = engine or connect()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    finally:
+        engine.dispose()
+    return f"Connected to {engine.url.render_as_string(hide_password=True)}"
+
+
+def _sqlite_query_only(connection: Any, _record: Any) -> None:
+    connection.execute("PRAGMA query_only = ON")
+
+
+def _search_path(connection: Any, _record: Any) -> None:
+    cursor = connection.cursor()
+    cursor.execute(f"SET search_path TO {config.DB_SCHEMA}, public")  # validated identifier
+    cursor.close()

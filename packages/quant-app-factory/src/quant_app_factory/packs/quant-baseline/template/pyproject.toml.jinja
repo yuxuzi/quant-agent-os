@@ -11,6 +11,15 @@ dependencies = [
 {%- if 'data-parquet' in components %}
     "pyarrow>=15",
 {%- endif %}
+{%- if 'data-database' in components %}
+    "sqlalchemy>=2.0",
+{%- if db_kind == 'postgres' %}
+    "psycopg[binary]>=3.1",
+{%- elif db_kind == 'duckdb' %}
+    "duckdb>=1.0",
+    "duckdb-engine>=0.13",
+{%- endif %}
+{%- endif %}
 {%- if 'agent-tools' in components %}
     "pydantic>=2.7",
     "quant-agent-os",

@@ -100,6 +100,11 @@ class AppSpec(BaseModel):
         default_factory=dict,
         description="Runtime settings (environment variables the app reads): a value or env:NAME",
     )
+    connection: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="A connection saved in factory.toml; adds the data-database component",
+    )
     description: str = Field(min_length=1, max_length=200)
     output_dir: str = Field(description="Existing parent directory (absolute)")
     author: str | None = Field(default=None, description="Default: factory settings, git")

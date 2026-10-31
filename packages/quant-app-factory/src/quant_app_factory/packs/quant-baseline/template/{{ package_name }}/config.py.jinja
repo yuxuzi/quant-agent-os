@@ -4,3 +4,18 @@ PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency
 COST_BPS: float = {{ cost_bps }}  # cost per unit of one-way turnover, in basis points
 MAX_HORIZON: int = {{ max_horizon }}  # longest forward horizon for IC decay, in bars
 TRADE_LAG: int = 1  # bars between a signal's close and the trade (0 trades on that close)
+{%- if 'data-database' in components %}
+
+# Database connection, without secrets: DATABASE_URL or DATABASE_PASSWORD come from the
+# environment at runtime (see .env.example).
+# Kind: postgres, sqlite, or duckdb. Name: the database, or the file path for sqlite and duckdb.
+# Schema: searched first when set (postgres). Values you supplied may exceed the line limit.
+DB_KIND: str = "{{ db_kind }}"
+DB_HOST: str = "{{ db_host }}"  # noqa: E501
+DB_PORT: int = {{ db_port }}
+DB_NAME: str = "{{ db_name }}"  # noqa: E501
+DB_USER: str = "{{ db_user }}"
+DB_SCHEMA: str = "{{ db_schema }}"
+DB_READ_ONLY: bool = {{ "True" if db_read_only == "yes" else "False" }}
+PRICE_QUERY: str = "{{ db_query }}"  # noqa: E501
+{%- endif %}

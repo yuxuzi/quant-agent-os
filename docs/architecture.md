@@ -478,7 +478,7 @@ The pieces:
   structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
   It needs a decision record before it is built (open).
 
-### 8.1 Guided generation and quant templates (confirmed: templates, user packs, guided specs, factory settings; proposed: database guidance, template forks)
+### 8.1 Guided generation and quant templates (confirmed: templates, user packs, guided specs, factory settings, database guidance; proposed: template forks)
 
 These pieces are proposed in decisions 0007–0009, with the step plan in
 [plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) and the backlog in

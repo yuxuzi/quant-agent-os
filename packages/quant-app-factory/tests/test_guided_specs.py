@@ -103,6 +103,7 @@ def test_describing_a_profile_lists_only_what_it_can_use() -> None:
     assert {c.id for c in described.components} == {
         "agent-tools",
         "data-csv",
+        "data-database",
         "data-parquet",
         "metrics",
     }

@@ -180,6 +180,8 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
 ### Q3. Database guidance (B-25), covering point 5
 
+**Done (2026-10-31).** Results are after the step text below.
+
 - **The `data-database` component** in `quant-baseline`:
   - questions: `db_kind` (`postgres`, `sqlite`, or `duckdb`) and `db_read_only` (default
     `true`), both guarded by `when` on the component;
@@ -207,6 +209,36 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - The branch is tested.
   - A scan test finds no secret values in the generated files.
   - In the smoke test, `check-connection` succeeds against a SQLite or DuckDB file.
+
+- **Results:**
+  - **Tests:** 18 new offline tests, covering saved connections, unknown connections, the
+    component's reach (not `report`), a scan proving no secret reaches the generated files, the
+    connection check receiving only `DATABASE_PASSWORD` with its value redacted, the condition
+    evaluator, and `new` with a saved connection and with a new SQLite database it saves.
+  - **Variants:** SQLite, PostgreSQL (with a schema), and DuckDB (with agent-tools) each pass
+    `uv sync`, ruff, mypy, and pytest. The DuckDB variant also proves a read-only DuckDB file.
+  - **Smoke test:** a database backtest on a SQLite file passes its checks, then the real
+    `--check-connection`.
+  - **By hand:** `--database` loaded 300 bars of 10 assets from SQLite and ran the backtest.
+    Against an absent PostgreSQL server, `--check-connection` failed cleanly with exit 1.
+- **Bugs found:**
+  - **Database files in `report` projects.** A component's files are excluded only where a
+    profile offers the component, and `report` does not offer it at all. The files now have
+    names that render empty unless the component is selected.
+  - **Long user values.** A long database path or query broke the generated project's line
+    limit. Those config lines now carry `# noqa: E501`.
+- **Deviations:**
+  - **Fixed variable names.** The generated app always reads `DATABASE_URL` (full URL, wins)
+    and `DATABASE_PASSWORD`. A spec's `[settings]` binding, such as
+    `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`, tells the factory where the secret lives
+    on the operator's machine. It is used only to pass that one value to the approved
+    connection check.
+  - **No `settings.py` or pydantic-settings.** `database.py` reads the environment directly,
+    which saves a dependency.
+  - **The command is `--check-connection`**, as a flag rather than a subcommand.
+  - **Read-only enforcement** depends on the database: SQLite runs query-only, DuckDB opens
+    files read-only, and PostgreSQL uses read-only transactions. Tests prove the first two
+    offline.
 
 ### Q4. Template forks, git packs, and the walkthrough (B-26), covering point 2
 

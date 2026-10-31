@@ -13,13 +13,14 @@ import tempfile
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from quant_agent_os.runtime.runner import CommandResult, run_command
 from quant_app_factory.domain import toml_text
-from quant_app_factory.domain.secrets import ENV_NAME, secret_problem
+from quant_app_factory.domain.connections import Connection
+from quant_app_factory.domain.secrets import secret_problem
 from quant_app_factory.domain.spec import Identity
 
 DEFAULT_SETTINGS = Path.home() / ".quant-agent-os" / "factory.toml"
@@ -31,27 +32,6 @@ class SettingsError(ValueError):
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-
-class Connection(_Strict):
-    """A database connection, described without secrets."""
-
-    kind: Literal["postgres", "sqlite", "duckdb", "snowflake"]
-    host: str | None = None
-    port: int | None = Field(default=None, ge=1, le=65535)
-    database: str | None = None
-    user: str | None = None
-    db_schema: str | None = Field(default=None, alias="schema")
-    read_only: bool = True
-    url_env: str | None = Field(default=None, description="Variable holding the full URL")
-    password_env: str | None = Field(default=None, description="Variable holding the password")
-
-    @field_validator("url_env", "password_env")
-    @classmethod
-    def _variable_name(cls, name: str | None) -> str | None:
-        if name is not None and not ENV_NAME.match(name):
-            raise ValueError("must be an environment-variable name, such as RESEARCH_PG_PASSWORD")
-        return name
 
 
 class RegisteredTemplate(_Strict):

@@ -96,6 +96,11 @@ settings file, and generated apps hold environment-variable names, never secret 
 - **Programs.** A program, such as a generated app's `check-connection`, receives only the
   named variable, through `run_command`'s `extra_env`, during the operator's approved create.
 
+Generated database apps hold no credentials. They read `DATABASE_URL` or `DATABASE_PASSWORD`
+from their environment and open connections read-only by default: SQLite query-only, DuckDB
+read-only files, and PostgreSQL read-only transactions. A scan test checks that no secret
+reaches the generated files.
+
 ## Out of scope for the first release
 
 - autonomous trading or brokerage connectivity;

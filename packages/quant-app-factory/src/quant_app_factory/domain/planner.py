@@ -15,7 +15,7 @@ QUANT_BASELINE_PACK = PACKS / "quant-baseline"
 BUILT_IN_PACKS = {"agent-tool": AGENT_TOOL_PACK, "quant-baseline": QUANT_BASELINE_PACK}
 
 # Optional components each built-in profile accepts. User packs are checked by pytemplate-uv.
-_QUANT_DATA = frozenset({"data-parquet", "agent-tools"})
+_QUANT_DATA = frozenset({"data-parquet", "data-database", "agent-tools"})
 _COMPONENTS: dict[tuple[str, str], frozenset[str]] = {
     ("agent-tool", "agent-tool"): frozenset(),
     ("bundled", "python"): frozenset({"container"}),

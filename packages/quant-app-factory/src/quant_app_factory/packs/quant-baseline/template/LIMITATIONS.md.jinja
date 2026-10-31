@@ -8,6 +8,10 @@ not handle:
 - **Point-in-time data.** Prices and any fundamentals must be as known at each date, without
   later revisions.
 - **Corporate actions.** Use prices adjusted for splits and dividends, or adjust them first.
+{%- if 'data-database' in components %}
+- **Your query.** The database loader trusts the query in `config.py` to return one adjusted
+  price per date and asset, as known on that date.
+{%- endif %}
 {%- if profile == 'backtest' %}
 - **Execution.** Costs are linear in turnover. There is no market impact, borrow cost,
   short-sale constraint, or capacity limit, and the simulation places no orders.

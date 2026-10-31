@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import argparse
+{%- if 'data-database' in components %}
+import sys
+{%- endif %}
 from collections.abc import Sequence
 from pathlib import Path
+{%- if 'data-database' in components %}
+
+from sqlalchemy.exc import SQLAlchemyError
+{%- endif %}
 {%- if profile == 'alpha-research' %}
 
 from . import synthetic
 from .data import Panel, load_prices
+{%- if 'data-database' in components %}
+from .database import check_connection, load_database
+{%- endif %}
 from .results import save_results
 from .study import run_study
 {%- elif profile == 'backtest' %}
@@ -16,6 +26,9 @@ from .study import run_study
 from . import synthetic
 from .backtest import run
 from .data import Panel, load_prices
+{%- if 'data-database' in components %}
+from .database import check_connection, load_database
+{%- endif %}
 from .results import save_results
 {%- else %}
 
@@ -36,6 +49,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--prices", type=Path, help="A wide price file (date, then assets).")
     source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
+{%- if 'data-database' in components %}
+    source.add_argument("--database", action="store_true", help="Query the configured database.")
+    source.add_argument(
+        "--check-connection", action="store_true", help="Connect to the database, then exit."
+    )
+{%- endif %}
     parser.add_argument("--signal", default="momentum", help="momentum or reversal.")
     parser.add_argument("--lookback", type=int, default=20, help="Signal lookback in bars.")
 {%- if profile == 'backtest' %}
@@ -44,7 +63,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 {%- endif %}
     parser.add_argument("--out", type=Path, default=Path("results/results.json"))
     args = parser.parse_args(argv)
+{%- if 'data-database' in components %}
+    if args.check_connection:
+        try:
+            print(check_connection())
+        except SQLAlchemyError as error:
+            cause = getattr(error, "orig", None) or error
+            print(f"Cannot connect: {type(error).__name__}: {cause}", file=sys.stderr)
+            return 1
+        return 0
+    panel = _demo_panel() if args.demo else load_database() if args.database else _prices(args)
+{%- else %}
     panel = _demo_panel() if args.demo else load_prices(args.prices)
+{%- endif %}
 {%- if profile == 'alpha-research' %}
     results = run_study(panel, args.signal, args.lookback)
 {%- else %}
@@ -60,6 +91,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 {%- endif %}
     print(f"Wrote {args.out}")
     return 0
+{%- if 'data-database' in components %}
+
+
+def _prices(args: argparse.Namespace) -> Panel:
+    path: Path = args.prices
+    return load_prices(path)
+{%- endif %}
 {%- if profile != 'report' %}
 
 

@@ -29,6 +29,25 @@ uv run {{ project_name }} --prices prices.csv --signal momentum --lookback 20
 
 Price files are wide: a `date` column, then one column of prices per asset. Dates must sort in
 ascending order{% if 'data-parquet' in components %}; `.parquet` files work too{% endif %}.
+{%- if 'data-database' in components %}
+
+### Database
+
+`--database` runs the query in `{{ package_name }}/config.py` against the {{ db_kind }} database
+configured there{% if db_read_only == 'yes' %}, read-only{% endif %}. The query must return
+`date`, `asset`, and `price` columns. Credentials come from the environment, never from the
+project (see `.env.example`):
+{%- if db_kind == 'postgres' %}
+`DATABASE_PASSWORD` for user `{{ db_user }}`, or a full `DATABASE_URL`.
+{%- else %}
+an optional `DATABASE_URL` replaces the file path `{{ db_name }}`.
+{%- endif %}
+
+```bash
+uv run {{ project_name }} --check-connection   # connect, then exit
+uv run {{ project_name }} --database
+```
+{%- endif %}
 {%- endif %}
 
 ## Check

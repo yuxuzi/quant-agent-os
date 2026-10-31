@@ -22,7 +22,9 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 
 Every quant baseline project shares one `metrics` module, with documented conventions and
 known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
-cost) and a `LIMITATIONS.md`. Optional components are `data-parquet` and `agent-tools`.
+cost) and a `LIMITATIONS.md`. Optional components are `data-parquet`, `data-database`
+(PostgreSQL, SQLite, or DuckDB, read-only, with `--check-connection`), and `agent-tools`. A
+spec can name a connection saved in `factory.toml` (`connection = "research-pg"`).
 
 ## Use
 

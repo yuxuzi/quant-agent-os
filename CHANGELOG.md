@@ -34,6 +34,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Database guidance (B-25):
+  - **The `data-database` component** of `alpha-research` and `backtest` loads prices with
+    one read-only query from PostgreSQL, SQLite, or DuckDB.
+  - **The generated app** reads credentials only from `DATABASE_URL` or `DATABASE_PASSWORD`,
+    ships a `.env.example`, and has a `--check-connection` flag.
+  - **Saved connections.** Specs can name a connection saved in `factory.toml`.
+    `quant-factory new` offers saved connections and saves new ones.
+  - **The factory's check.** `quant-factory create --check-connection` passes only the
+    referenced variables and redacts them from the output.
+
 - Guided specs and factory settings (B-24; decisions 0007 and 0008 accepted):
   - **Read-only tools.** `describe_template` lists a template's profiles, components,
     questions, and runtime settings, with secret ones marked. `check_spec` reports `ready` with

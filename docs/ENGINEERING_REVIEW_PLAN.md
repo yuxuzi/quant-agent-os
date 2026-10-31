@@ -274,7 +274,7 @@ onto the days below, so there is still only one timeline.
 | B-22 | 0.2 release, security review, name availability checks | all | Release gates in section 9 |
 | B-23 | **Done.** Quant baseline templates (`quant-baseline`: `alpha-research`, `backtest`, `report`; required `metrics` component; bias tests; `LIMITATIONS.md`) and user packs (`AppSpec.template`, `profile`, `answers`, `settings`). Step plan: [plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) (Q1) | B-10 | Each profile passes its checks, including bias tests (smoke); a local user pack renders; existing specs unchanged |
 | B-24 | **Done.** Guided specs and factory settings (decisions 0007, 0008): read-only `describe_template` and `check_spec` (pytemplate-uv is the judge); `quant-factory new` writes a spec file; `~/.quant-agent-os/factory.toml` (identity, connections with environment-variable names, templates) (Q2) | B-23 | `check_spec` reports each problem kind; secret-looking values refused; identity falls back to git config |
-| B-25 | Database guidance: `data-database` component, saved connections, generated `settings.py`, `.env.example`, and `check-connection`; `create --check-connection` (Q3) | B-24 | Scan test finds no secret values in generated files; `check-connection` passes against SQLite or DuckDB (smoke) |
+| B-25 | **Done.** Database guidance: `data-database` component, saved connections, generated `settings.py`, `.env.example`, and `check-connection`; `create --check-connection` (Q3) | B-24 | Scan test finds no secret values in generated files; `check-connection` passes against SQLite or DuckDB (smoke) |
 | B-26 | `quant-factory template fork`, `check`, and `add` (git packs pinned and cached); walkthrough (Q4) | B-23, B-24 | A forked pack checks and passes its smoke checks; a git pack plans offline; walkthrough reproduced |
 
 `run_backtest` is planned for after day 90 as its own package with explicit cost, slippage,
@@ -375,8 +375,8 @@ Success metrics (to be confirmed after the first baseline):
   locally (B-23).
 - **O-8:** How is iteration in App Factory (B-20) reconciled with the no-feedback invariant?
   This needs its own decision record.
-- **O-9:** Which databases does `data-database` support first (B-25)? The proposal is
-  PostgreSQL, SQLite, and DuckDB, with Snowflake later.
+- **O-9:** *Resolved by B-25:* `data-database` supports PostgreSQL, SQLite, and DuckDB.
+  Snowflake waits for demand.
 - **O-10:** Does `data-parquet` bring `pyarrow` by default, or is it opt-in for size (B-23)?
 - **O-11:** When `factory.toml` moves to Core, and whether a keychain backend is added, are
   decided by the second product that needs the settings.

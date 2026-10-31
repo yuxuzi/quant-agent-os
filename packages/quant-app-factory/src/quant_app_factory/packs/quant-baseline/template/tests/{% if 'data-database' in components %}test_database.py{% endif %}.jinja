@@ -1,0 +1,89 @@
+"""Database loading, offline: a SQLite file stands in for the configured database."""
+
+import sqlite3
+from pathlib import Path
+
+import numpy as np
+import pytest
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
+
+from {{ package_name }}.data import DataError
+from {{ package_name }}.database import (
+    check_connection,
+    connect,
+    database_url,
+    load_database,
+)
+
+
+def _sqlite(tmp_path: Path) -> str:
+    path = tmp_path / "prices.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE prices (date TEXT, asset TEXT, price REAL)")
+        db.executemany(
+            "INSERT INTO prices VALUES (?, ?, ?)",
+            [
+                ("2024-01-02", "AAA", 10.0),
+                ("2024-01-02", "BBB", 20.0),
+                ("2024-01-03", "AAA", 11.0),
+                ("2024-01-04", "AAA", 12.0),
+                ("2024-01-04", "BBB", 22.0),
+            ],
+        )
+    return f"sqlite:///{path.as_posix()}"
+
+
+def test_prices_load_as_a_panel_with_missing_prices_as_nan(tmp_path: Path) -> None:
+    engine = connect(make_url(_sqlite(tmp_path)))
+
+    panel = load_database(engine, "SELECT date, asset, price FROM prices")
+
+    assert panel.dates == ["2024-01-02", "2024-01-03", "2024-01-04"]
+    assert panel.assets == ["AAA", "BBB"]
+    assert np.isnan(panel.prices[1, 1])
+
+
+def test_the_connection_is_read_only_by_default(tmp_path: Path) -> None:
+    engine = connect(make_url(_sqlite(tmp_path)))
+
+    with pytest.raises(OperationalError), engine.connect() as connection:
+        connection.execute(text("DELETE FROM prices"))
+    engine.dispose()
+
+
+def test_an_empty_result_explains_itself(tmp_path: Path) -> None:
+    engine = connect(make_url(_sqlite(tmp_path)))
+
+    with pytest.raises(DataError, match="no prices"):
+        load_database(engine, "SELECT date, asset, price FROM prices WHERE 1 = 0")
+
+
+def test_database_url_wins_and_passwords_are_never_shown(tmp_path: Path) -> None:
+    url = database_url({"DATABASE_URL": "postgresql+psycopg://alice:hunter2@db/research"})
+
+    assert url.password == "hunter2"
+    assert "hunter2" not in url.render_as_string(hide_password=True)
+
+
+def test_check_connection_reports_success(tmp_path: Path) -> None:
+    message = check_connection(connect(make_url(_sqlite(tmp_path))))
+
+    assert message.startswith("Connected to sqlite")
+{%- if db_kind == 'duckdb' %}
+
+
+def test_a_duckdb_file_opens_read_only(tmp_path: Path) -> None:
+    import duckdb
+
+    path = tmp_path / "prices.duckdb"
+    with duckdb.connect(str(path)) as db:
+        db.execute("CREATE TABLE prices (date VARCHAR, asset VARCHAR, price DOUBLE)")
+        db.execute("INSERT INTO prices VALUES ('2024-01-02', 'AAA', 10), ('2024-01-03', 'AAA', 11)")
+    engine = connect(make_url(f"duckdb:///{path.as_posix()}"))
+
+    panel = load_database(engine, "SELECT date, asset, price FROM prices ORDER BY date")
+
+    assert panel.prices.shape == (2, 1)
+{%- endif %}

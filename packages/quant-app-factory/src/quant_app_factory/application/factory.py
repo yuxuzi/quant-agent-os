@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import shlex
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.runner import CommandResult, run_command
+from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection, apply_connection
 from quant_app_factory.domain.planner import (
     AppPlan,
     ArchitecturePlanner,
@@ -24,7 +26,7 @@ from quant_app_factory.domain.ports import (
     SettingInfo,
     TemplateDescription,
 )
-from quant_app_factory.domain.secrets import secret_problem
+from quant_app_factory.domain.secrets import is_reference, secret_problem
 from quant_app_factory.domain.spec import AppKind, AppSpec, Identity, dump_spec
 
 Runner = Callable[..., CommandResult]  # the signature of `run_command`
@@ -101,6 +103,8 @@ class AppFactory:
         runner: Runner = run_command,
         scaffolder_version: str | None = None,
         identity: Callable[[], Identity] | None = None,
+        connections: Callable[[], Mapping[str, Connection]] | None = None,
+        environ: Mapping[str, str] = os.environ,
     ) -> None:
         self.scaffolder = scaffolder
         self.planner = planner or ArchitecturePlanner()
@@ -108,10 +112,26 @@ class AppFactory:
         self._scaffolder_version = scaffolder_version or getattr(scaffolder, "version", None)
         self._identity_source = identity
         self._identity: Identity | None = None
+        self._connections = connections
+        self._environ = environ
 
     def plan(self, spec: AppSpec) -> AppPlan:
-        """Return the planner's decision, with author, email, and license defaults filled in."""
-        return self.planner.plan(self._with_identity(spec))
+        """Return the planner's decision for ``spec`` completed with identity and connection."""
+        return self.planner.plan(self.complete(spec))
+
+    def complete(self, spec: AppSpec) -> AppSpec:
+        """Fill identity defaults and apply the spec's saved connection, if it names one."""
+        spec = self._with_identity(spec)
+        if spec.connection is None:
+            return spec
+        saved = dict(self._connections()) if self._connections else {}
+        if spec.connection not in saved:
+            known = ", ".join(sorted(saved)) or "none saved"
+            raise PlanningError(
+                f"No connection {spec.connection!r} in factory.toml ({known}); add it with "
+                f"`quant-factory settings set connections.{spec.connection}.kind ...`."
+            )
+        return apply_connection(spec, saved[spec.connection])
 
     def describe_template(self, template: str, profile: str | None = None) -> TemplateDescription:
         """Describe a template; with ``profile``, only what that profile can use."""
@@ -151,12 +171,12 @@ class AppFactory:
             )
         problems: list[SpecProblem] = []
         try:
-            _, preview = self.preview(spec)
+            plan, preview = self.preview(spec)
         except (PlanningError, ScaffoldError) as error:
             problems.append(SpecProblem(field="template", message=str(error)))
             return SpecCheck(ready=False, problems=problems, spec_toml=dump_spec(spec))
         declared = {setting.name: setting for setting in preview.settings}
-        for name, value in spec.settings.items():
+        for name, value in plan.spec.settings.items():
             if name not in declared:
                 problems.append(
                     SpecProblem(
@@ -180,8 +200,38 @@ class AppFactory:
             problems=problems,
             files=preview.files if not problems else [],
             settings=preview.settings,
-            unbound_settings=sorted(set(declared) - set(spec.settings)),
+            unbound_settings=sorted(set(declared) - set(plan.spec.settings)),
             spec_toml=dump_spec(spec),
+        )
+
+    def _check_connection(self, project: Path, spec: AppSpec) -> tuple[CheckResult, list[str]]:
+        """Run ``uv run <app> --check-connection`` with only the referenced variables."""
+        extra: dict[str, str] = {}
+        notes: list[str] = []
+        for name, value in spec.settings.items():
+            if not is_reference(value):
+                extra[name] = value
+                continue
+            variable = value.removeprefix("env:")
+            if variable in self._environ:
+                extra[name] = self._environ[variable]
+            else:
+                notes.append(f"{variable} is not set, so {name} was not passed to the check.")
+        command = ["uv", "run", spec.name, "--check-connection"]
+        result = self._runner(command, cwd=project, timeout=CHECK_TIMEOUT_SECONDS, extra_env=extra)
+        output = (result.stdout_tail + result.stderr_tail).strip()
+        for secret in {value for value in extra.values() if value}:
+            output = output.replace(secret, "[REDACTED]")
+        return (
+            CheckResult(
+                command=" ".join(command),
+                ok=result.ok,
+                exit_code=result.exit_code,
+                timed_out=result.timed_out,
+                duration_ms=result.duration_ms,
+                output_tail=output[-CHECK_OUTPUT_CHARS:],
+            ),
+            notes,
         )
 
     def _with_identity(self, spec: AppSpec) -> AppSpec:
@@ -203,8 +253,14 @@ class AppFactory:
         plan = self.plan(spec)
         return plan, self.scaffolder.plan(plan.request)
 
-    def create(self, spec: AppSpec, *, run_checks: bool = True) -> FactoryReport:
-        """Create the project and, unless ``run_checks`` is false, run its lifecycle commands."""
+    def create(
+        self, spec: AppSpec, *, run_checks: bool = True, check_connection: bool = False
+    ) -> FactoryReport:
+        """Create the project and, unless ``run_checks`` is false, run its lifecycle commands.
+
+        ``check_connection`` also runs the app's ``--check-connection`` once its checks pass,
+        passing only the variables the spec's settings reference.
+        """
         plan, preview = self.preview(spec)
         if preview.target_exists:
             raise ScaffoldRequestError(
@@ -217,6 +273,18 @@ class AppFactory:
             checks, warnings = self.check(
                 Path(result.project_path), result.lifecycle_commands, preview.package_name
             )
+        completed = plan.spec
+        if check_connection:
+            if DATABASE_COMPONENT not in result.components:
+                warnings.append("No database component, so there is no connection to check.")
+            elif checks and not all(check.ok for check in checks):
+                warnings.append("The project's checks failed, so the connection was not checked.")
+            else:
+                connection_check, notes = self._check_connection(
+                    Path(result.project_path), completed
+                )
+                checks.append(connection_check)
+                warnings += notes
         return FactoryReport(
             name=spec.name,
             kind=spec.kind,
@@ -231,7 +299,7 @@ class AppFactory:
             template=preview.template,
             reasons=plan.reasons,
             checks=checks,
-            checks_passed=all(check.ok for check in checks) if run_checks else None,
+            checks_passed=all(check.ok for check in checks) if checks else None,
             warnings=warnings,
         )
 

@@ -16,6 +16,7 @@ from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
 from quant_app_factory.application.factory import AppFactory, FactoryReport
+from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection
 from quant_app_factory.domain.planner import PlanningError
 from quant_app_factory.domain.ports import ScaffoldError
 from quant_app_factory.domain.spec import (
@@ -60,7 +61,9 @@ def _factory() -> AppFactory:
     except SettingsError as error:
         raise _fail(error) from error
     return AppFactory(
-        PytemplateUvScaffolder(), identity=lambda: settings.identity.merged(git_identity())
+        PytemplateUvScaffolder(),
+        identity=lambda: settings.identity.merged(git_identity()),
+        connections=lambda: settings.connections,
     )
 
 
@@ -114,10 +117,19 @@ def create(
     runs: Annotated[Path, typer.Option("--runs", help="SQLite run store for the audit.")] = (
         DEFAULT_RUNS
     ),
+    check_connection: Annotated[
+        bool,
+        typer.Option(
+            "--check-connection",
+            help="After the checks, connect to the database with the variables the spec names.",
+        ),
+    ] = False,
 ) -> None:
     """Preview, ask for approval, then create the project and run its checks.
 
     Your confirmation is the approval: it is recorded for this exact spec and used once.
+    With --check-connection, the app's own connection check runs too, receiving only the
+    environment variables the spec's settings reference.
     """
     factory = _factory()
     app_spec = _load(spec)
@@ -128,6 +140,8 @@ def create(
         if checks
         else "Create this project? It writes files"
     )
+    if check_connection:
+        prompt += ", then connects to the database"
     if not yes and not typer.confirm(prompt, default=False):
         raise typer.Exit(code=1)
     policy = PermissionPolicy(
@@ -137,7 +151,10 @@ def create(
         factory_tools(factory), policy=policy, run_store=SqliteRunStore(runs), actor="cli"
     ) as platform:
         waiting = platform.call(
-            "create_app", spec=app_spec.model_dump(mode="json"), run_checks=checks
+            "create_app",
+            spec=app_spec.model_dump(mode="json"),
+            run_checks=checks,
+            check_connection=check_connection,
         )
         run_id = waiting.run_id or ""
         if waiting.status != "approval_required":
@@ -167,18 +184,35 @@ def _print_report(report: FactoryReport, run_id: str, runs: Path) -> None:
 
 
 IDENTITY_QUESTIONS = frozenset({"description", "author", "email", "python_version", "license"})
-_COMPONENT_CONDITION = re.compile(r"^\{\{\s*'([\w-]+)'\s+(not\s+)?in\s+components\s*\}\}$")
+_EXPRESSION = re.compile(r"^\{\{\s*(.*?)\s*\}\}$")
+_IN_COMPONENTS = re.compile(r"^'([\w-]+)'\s+(not\s+)?in\s+components$")
+_COMPARISON = re.compile(r"^(\w+)\s*(==|!=)\s*'([^']*)'$")
 
 
-def _applies(when: str | None, components: set[str]) -> bool:
-    """Evaluate a simple ``'x' in components`` condition; ask anything subtler."""
+def _applies(when: str | None, components: set[str], answers: dict[str, str]) -> bool:
+    """Evaluate simple conditions joined by ``and``: ``'x' in components`` and ``name == 'v'``.
+
+    Anything subtler counts as true, so the question is asked and `check_spec` decides.
+    """
     if when is None:
         return True
-    match = _COMPONENT_CONDITION.match(when.strip())
-    if match is None:
+    expression = _EXPRESSION.match(when.strip())
+    if expression is None:
         return True
-    present = match.group(1) in components
-    return not present if match.group(2) else present
+    for clause in expression.group(1).split(" and "):
+        clause = clause.strip()
+        if member := _IN_COMPONENTS.match(clause):
+            if (member.group(1) in components) == bool(member.group(2)):
+                return False
+        elif compared := _COMPARISON.match(clause):
+            name, operator, expected = compared.groups()
+            if name not in answers:
+                return True
+            if (answers[name] == expected) != (operator == "=="):
+                return False
+        else:
+            return True
+    return True
 
 
 def _choose(label: str, options: list[str], default: str) -> str:
@@ -242,8 +276,24 @@ def new(
         "components": components,
     }
     answers: dict[str, str] = {}
+    effective: dict[str, str] = {}
+    connection_name = ""
+    saved = load_settings().connections
+    if DATABASE_COMPONENT in selected and saved:
+        console.print("Saved connections: " + ", ".join(sorted(saved)), soft_wrap=True)
+        connection_name = str(
+            typer.prompt("Use a saved connection (name, or blank for a new one)", default="")
+        ).strip()
+        if connection_name and connection_name not in saved:
+            raise _fail(f"No saved connection {connection_name!r}.")
+        if connection_name:
+            spec["connection"] = connection_name
     for question in described.questions:
-        if question.name in IDENTITY_QUESTIONS or not _applies(question.when, selected):
+        if question.name in IDENTITY_QUESTIONS:
+            continue
+        if connection_name and question.name.startswith("db_") and question.name != "db_query":
+            continue
+        if not _applies(question.when, selected, effective):
             continue
         default = question.default if question.default and "{{" not in question.default else ""
         hint = f" [{'/'.join(question.choices)}]" if question.choices else ""
@@ -252,6 +302,7 @@ def new(
         ).strip()
         if question.choices and value and value not in question.choices:
             raise _fail(f"{question.name} must be one of {', '.join(question.choices)}.")
+        effective[question.name] = value or default
         if not value or value == default:
             continue
         if question.name in RESERVED_ANSWERS:
@@ -262,6 +313,8 @@ def new(
     for component in described.components:
         if component.id not in selected:
             continue
+        if connection_name and component.id == DATABASE_COMPONENT:
+            continue  # the saved connection names its variables
         for setting in component.settings:
             if setting.secret:
                 variable = str(
@@ -283,6 +336,8 @@ def new(
                     settings[setting.name] = value
     spec["answers"] = answers
     spec["settings"] = settings
+    if DATABASE_COMPONENT in selected and not connection_name:
+        _offer_to_save_connection(effective, settings)
     check = factory.check_spec(spec)
     if check.spec_toml is None:
         for problem in check.problems:
@@ -307,7 +362,43 @@ def new(
     if typer.confirm(
         "Create it now? It writes files, runs uv, and downloads packages", default=False
     ):
-        create(target, yes=True, checks=True, runs=DEFAULT_RUNS)
+        create(target, yes=True, checks=True, runs=DEFAULT_RUNS, check_connection=False)
+
+
+def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str]) -> None:
+    """Offer to save the database answers as a named connection in factory.toml."""
+    name = str(
+        typer.prompt("Save this connection in factory.toml as (blank: don't save)", default="")
+    ).strip()
+    if not name:
+        return
+    fields: dict[str, Any] = {"kind": answers.get("db_kind", "sqlite")}
+    if fields["kind"] == "postgres":
+        port = answers.get("db_port", "")
+        fields |= {
+            "host": answers.get("db_host") or None,
+            "port": int(port) if port.isdigit() else None,
+            "user": answers.get("db_user") or None,
+            "schema": answers.get("db_schema") or None,
+        }
+    fields |= {
+        "database": answers.get("db_name") or None,
+        "read_only": answers.get("db_read_only", "yes") == "yes",
+        "url_env": settings.get("DATABASE_URL", "").removeprefix("env:") or None,
+        "password_env": settings.get("DATABASE_PASSWORD", "").removeprefix("env:") or None,
+    }
+    try:
+        current = load_settings()
+        connection = Connection.model_validate(
+            {key: value for key, value in fields.items() if value is not None}
+        )
+        save_settings(
+            current.model_copy(update={"connections": {**current.connections, name: connection}})
+        )
+    except (SettingsError, ValueError) as error:
+        errors.print(f"[yellow]Not saved: {error}[/yellow]")
+        return
+    console.print(f"Saved connection {name!r} in {settings_path()}.", soft_wrap=True)
 
 
 settings_app = typer.Typer(help="Show or change factory.toml (identity, connections, templates).")

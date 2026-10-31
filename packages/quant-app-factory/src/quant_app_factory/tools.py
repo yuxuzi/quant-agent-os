@@ -73,6 +73,9 @@ class CreateAppInput(BaseModel):
 
     spec: AppSpec
     run_checks: bool = True
+    check_connection: bool = Field(
+        default=False, description="Also run the app's --check-connection after its checks"
+    )
 
 
 def guide_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
@@ -151,6 +154,8 @@ def factory_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
         idempotent=False,
     )
     def create_app(params: CreateAppInput) -> FactoryReport:
-        return factory.create(params.spec, run_checks=params.run_checks)
+        return factory.create(
+            params.spec, run_checks=params.run_checks, check_connection=params.check_connection
+        )
 
     return [*guide_tools(factory), plan_app, create_app]
