@@ -62,13 +62,23 @@ def extraction_metrics(relations: list[tuple[str, str, str]]) -> dict[str, Any]:
 
 
 def _path_ids(entity: Any, seeds: set[str]) -> tuple[str, ...] | None:
-    """Return the entity ids along ``entity.path`` from its seed, or None without a path."""
+    """Return the entity ids along ``entity.path`` from its seed.
+
+    Returns None when there is no path, or when a link does not touch the entity reached so
+    far (a broken path must never count as valid).
+    """
     path = getattr(entity, "path", None)
     if not path:
         return None
-    ids = [path[0].subject if path[0].subject in seeds else path[0].object]
+    first = path[0]
+    ids = [first.subject if first.subject in seeds else first.object]
     for link in path:
-        ids.append(link.object if link.subject == ids[-1] else link.subject)
+        if ids[-1] == link.subject:
+            ids.append(link.object)
+        elif ids[-1] == link.object:
+            ids.append(link.subject)
+        else:
+            return None
     return tuple(ids)
 
 

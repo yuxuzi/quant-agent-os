@@ -33,6 +33,9 @@ class IngestResult(BaseModel):
     """What one ingestion run changed."""
 
     added: list[str] = Field(default_factory=list)
+    reprocessed: list[str] = Field(
+        default_factory=list, description="Unchanged files re-read because the pipeline changed"
+    )
     unchanged: list[str] = Field(default_factory=list)
     skipped: list[str] = Field(default_factory=list)
     chunks: int = 0
@@ -79,6 +82,7 @@ class IngestService:
         files = [path for path in found if not path.name.startswith(".")]
         supported = ", ".join(sorted(self.loaders))
         added: list[str] = []
+        reprocessed: list[str] = []
         unchanged: list[str] = []
         skipped: list[str] = []
         warnings: list[str] = []
@@ -95,10 +99,13 @@ class IngestService:
                 skipped.append(path.name)
                 warnings.append(str(error))
                 continue
-            if self.store.has_document(source.sha256):
+            pipeline = self._pipeline(source)
+            if self.store.has_document(source.sha256, pipeline):
                 unchanged.append(source.uri)
                 continue
-            document, chunks, mentions, relations = self._build(source)
+            if self.store.has_document(source.sha256):
+                reprocessed.append(source.uri)
+            document, chunks, mentions, relations = self._build(source, pipeline)
             if not chunks:
                 hint = " Scanned PDFs need OCR, which is not supported." if source.pages else ""
                 warnings.append(f"{source.uri}: no text to index.{hint}")
@@ -113,6 +120,7 @@ class IngestService:
         snapshot = self.store.publish_snapshot(self._snapshot_for)
         return IngestResult(
             added=added,
+            reprocessed=reprocessed,
             unchanged=unchanged,
             skipped=skipped,
             chunks=counts[0],
@@ -157,8 +165,19 @@ class IngestService:
             self.vectors.upsert_embeddings(model_id, pairs)
         return len(pending)
 
+    def _pipeline(self, source: SourceFile) -> str:
+        """Identify everything that shapes a document's records; a change forces re-processing."""
+        return "+".join(
+            [
+                source.loader_version,
+                CHUNKER_VERSION,
+                self.extractor.version,
+                self.vocabulary.version,
+            ]
+        )
+
     def _build(
-        self, source: SourceFile
+        self, source: SourceFile, pipeline: str
     ) -> tuple[Document, list[Chunk], list[Mention], list[Relation]]:
         document_id = "doc:" + source.sha256[:16]
         first_text = source.body if source.pages is None else next(iter(source.pages), "")
@@ -173,6 +192,7 @@ class IngestService:
             published=source.metadata.get("published"),
             license_note=source.metadata.get("license"),
             loader_version=source.loader_version,
+            pipeline=pipeline,
         )
         located: list[tuple[int | None, Passage]]
         if source.pages is None:

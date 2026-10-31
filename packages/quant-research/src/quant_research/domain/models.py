@@ -44,6 +44,9 @@ class Document(BaseModel):
     published: str | None = None
     license_note: str | None = None
     loader_version: str
+    pipeline: str = Field(
+        default="", description="Loader, chunker, extractor, and vocabulary versions used"
+    )
 
 
 class Chunk(BaseModel):

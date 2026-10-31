@@ -27,8 +27,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- Extraction (`rules-v3`): negated statements no longer become relations, passive voice no
-  longer reverses edges, and "X explains Y" is extracted as `Y explained_by X`.
+- Extraction (`rules-v4`): negated statements no longer become relations, passive voice no
+  longer reverses edges, and "X explains Y" is extracted as `Y explained_by X`. Negation counts
+  only right before the relation cue, so "X, which is not small, predicts Y" and "not only"
+  keep their relation.
+- Ingestion re-processes unchanged files when the pipeline (loader, chunker, extractor, or
+  vocabulary version) changes, reported as `reprocessed`. This is schema version 3 and is
+  migrated in place.
+- Graph paths: equally short paths are chosen by total confidence, independent of seed order.
+  Excluding the `vector` channel skips query embedding. `GraphEdge` requires
+  `support >= 1`.
 - Two-hop expansion no longer slows down with repeated facts: 1.1 s to 14 ms p50 at 3,000
   documents.
 

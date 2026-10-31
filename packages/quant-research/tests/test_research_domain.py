@@ -213,3 +213,23 @@ def test_passive_and_inverse_cues_point_edges_the_right_way(
 )
 def test_negated_pairs_produce_no_edge(text: str) -> None:
     assert _relations(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Momentum, which is not a risk factor, predicts carry.",
+            ("factor:momentum", "predicts", "signal:carry"),
+        ),
+        ("Momentum not only predicts carry.", ("factor:momentum", "predicts", "signal:carry")),
+        (
+            "Momentum not just correlates with carry.",
+            ("factor:momentum", "correlates_with", "signal:carry"),
+        ),
+    ],
+)
+def test_negations_away_from_the_cue_do_not_suppress_the_relation(
+    text: str, expected: tuple[str, str, str]
+) -> None:
+    assert _relations(text) == [expected]

@@ -3,9 +3,11 @@
 Relations come only from two entities in the same sentence, judged by the text between them:
 - A cue phrase sets the predicate. Passive and inverse cues ("is predicted by", "explains")
   swap subject and object, so the edge points the right way.
-- A negation between the two ("does not predict", "fails to explain") suppresses the pair
-  entirely: no typed edge and no ``related_to`` edge. An explicit "contradicts" without
-  negation is still a relation.
+- A negation in the few words right before the cue ("does not predict", "fails to explain",
+  "isn't correlated") suppresses the pair entirely, with no typed edge and no ``related_to``
+  edge. A negation elsewhere, as in "X, which is not small, predicts Y", does not, and neither
+  does "not only". Without any cue, a negation anywhere between the two entities suppresses
+  the ``related_to`` edge ("X is unrelated to Y"). An explicit "contradicts" is a relation.
 - Otherwise the pair becomes a low-confidence ``related_to`` edge.
 
 Every relation keeps the chunk that supports it, so each edge can be cited.
@@ -21,7 +23,7 @@ from quant_research.domain.models import Chunk, Entity, Mention, Predicate, Rela
 from quant_research.domain.vocabulary import EntityMatcher, Match
 
 EXTRACTOR = "rules"
-EXTRACTOR_VERSION = "rules-v3"
+EXTRACTOR_VERSION = "rules-v4"
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -38,6 +40,8 @@ class _Cue:
 _NEGATION = re.compile(
     r"\b(?:not|never|no|neither|nor|cannot|fails? to|failed to|unrelated to)\b|n't\b", re.I
 )
+_AFFIRMATIVE = re.compile(r"\bnot\s+(?:only|just|merely)\b", re.I)
+NEGATION_WINDOW_WORDS = 3  # words before the cue that can negate it
 # Ordered: passive and inverse forms come before the active cues they contain.
 _CUES = (
     _Cue(
@@ -141,22 +145,25 @@ class RuleExtractor:
         self, between: str, first: Match, second: Match
     ) -> tuple[str, Predicate, str, float] | None:
         """Return ``(subject, predicate, object, confidence)``, or None for a negated pair."""
-        if _NEGATION.search(between):
-            return None
         for cue in _CUES:
-            if (judged := self._apply(cue, between, first, second)) is not None:
-                return judged
+            subject, target = (second, first) if cue.swap else (first, second)
+            if (
+                cue.object_types is not None
+                and self._types.get(target.entity_id) not in cue.object_types
+            ):
+                continue
+            found = cue.pattern.search(between)
+            if found is None:
+                continue
+            words_before_cue = " ".join(between[: found.start()].split()[-NEGATION_WINDOW_WORDS:])
+            if _negated(words_before_cue):
+                return None
+            return subject.entity_id, cue.predicate, target.entity_id, cue.confidence
+        if _negated(between):
+            return None
         return first.entity_id, "related_to", second.entity_id, _COOCCURRENCE
 
-    def _apply(
-        self, cue: _Cue, between: str, first: Match, second: Match
-    ) -> tuple[str, Predicate, str, float] | None:
-        subject, target = (second, first) if cue.swap else (first, second)
-        if (
-            cue.object_types is not None
-            and self._types.get(target.entity_id) not in cue.object_types
-        ):
-            return None
-        if not cue.pattern.search(between):
-            return None
-        return subject.entity_id, cue.predicate, target.entity_id, cue.confidence
+
+def _negated(text: str) -> bool:
+    """Return whether ``text`` negates, ignoring affirmative "not only" and "not just"."""
+    return _NEGATION.search(_AFFIRMATIVE.sub(" ", text)) is not None

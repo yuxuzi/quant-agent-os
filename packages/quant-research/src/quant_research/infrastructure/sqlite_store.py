@@ -36,7 +36,13 @@ from quant_research.domain.models import (
 )
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+# Additive column changes per schema version: applied in order, each only if missing.
+_MIGRATIONS: dict[int, list[tuple[str, str, str]]] = {
+    1: [("chunks", "page", "INTEGER")],
+    2: [("documents", "pipeline", "TEXT NOT NULL DEFAULT ''")],
+}
 
 
 class StoreError(RuntimeError):
@@ -47,7 +53,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, uri TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL, authors TEXT NOT NULL, published TEXT, license_note TEXT,
-    loader_version TEXT NOT NULL
+    loader_version TEXT NOT NULL, pipeline TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -194,10 +200,15 @@ class SqliteKnowledgeStore:
         self.close()
 
     @_locked
-    def has_document(self, sha256: str) -> bool:
-        """Return whether a document with this content hash is stored."""
-        row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = ?", (sha256,)).fetchone()
-        return row is not None
+    def has_document(self, sha256: str, pipeline: str | None = None) -> bool:
+        """Return whether this content is stored (and, with ``pipeline``, by that pipeline)."""
+        if pipeline is None:
+            row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = ?", (sha256,))
+        else:
+            row = self._db.execute(
+                "SELECT 1 FROM documents WHERE sha256 = ? AND pipeline = ?", (sha256, pipeline)
+            )
+        return row.fetchone() is not None
 
     @_locked
     def replace_document(
@@ -226,7 +237,8 @@ class SqliteKnowledgeStore:
                     )
                 self._db.execute("DELETE FROM documents WHERE id = ?", (document_id,))
             self._db.execute(
-                "INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO documents (id, sha256, uri, title, authors, published, "
+                "license_note, loader_version, pipeline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     document.id,
                     document.sha256,
@@ -236,6 +248,7 @@ class SqliteKnowledgeStore:
                     document.published,
                     document.license_note,
                     document.loader_version,
+                    document.pipeline,
                 ),
             )
             self._db.executemany(
@@ -501,20 +514,25 @@ class SqliteKnowledgeStore:
 
 
 def _migrate(db: sqlite3.Connection) -> None:
-    """Upgrade a version-1 store in place, atomically and idempotently.
+    """Upgrade an older store to `SCHEMA_VERSION` in place, atomically and idempotently.
 
-    The column change and the version bump commit together, and the column is added only if it
-    is missing, so an interrupted upgrade can simply be run again.
+    All column changes and the version bump commit together, and each column is added only if
+    it is missing, so an interrupted upgrade can simply be run again. Documents upgraded from
+    version 2 have no recorded pipeline, so the next ingestion processes them again.
     """
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version != 1 or not _has_table(db, "chunks"):
+    if not 0 < version < SCHEMA_VERSION:
         return
     db.execute("BEGIN IMMEDIATE")
     try:
-        columns = {row[1] for row in db.execute("PRAGMA table_info(chunks)")}
-        if "page" not in columns:
-            db.execute("ALTER TABLE chunks ADD COLUMN page INTEGER")
-        db.execute("PRAGMA user_version = 2")
+        for step in range(version, SCHEMA_VERSION):
+            for table, column, declaration in _MIGRATIONS[step]:
+                if not _has_table(db, table):
+                    continue
+                columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if column not in columns:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+        db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     except BaseException:
         db.execute("ROLLBACK")
         raise

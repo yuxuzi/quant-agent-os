@@ -1,6 +1,7 @@
 """Unit tests for ingestion and the SQLite knowledge store."""
 
 import shutil
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -152,3 +153,38 @@ def test_parallel_edges_are_aggregated_with_support_counts(tmp_path: Path) -> No
     scores = {entity.id: entity.score for entity in packet.related}
     # Five statements weigh more than one, but not five times as much.
     assert scores["asset_class:fx"] < scores["concept:crowding"] < 5 * scores["asset_class:fx"]
+
+
+def test_a_pipeline_change_reprocesses_unchanged_files(tmp_path: Path) -> None:
+    (tmp_path / "note.md").write_text("Carry correlates with crowding.\n")
+    with open_research(tmp_path / "kb.db") as research:
+        first = research.ingest.ingest(tmp_path)
+        research.ingest.extractor.version = "rules-next"  # as after an extractor upgrade
+
+        second = research.ingest.ingest(tmp_path)
+        third = research.ingest.ingest(tmp_path)
+
+    assert first.added == ["note.md"]
+    assert second.reprocessed == ["note.md"] and second.added == ["note.md"]
+    assert second.snapshot.id != first.snapshot.id
+    assert third.unchanged == ["note.md"] and third.added == []
+
+
+def test_version_two_stores_upgrade_and_reprocess(tmp_path: Path) -> None:
+    (tmp_path / "corpus").mkdir()
+    (tmp_path / "corpus" / "note.md").write_text("Carry correlates with crowding.\n")
+    path = tmp_path / "kb.db"
+    with open_research(path) as research:
+        research.ingest.ingest(tmp_path / "corpus")
+    db = sqlite3.connect(path)
+    db.execute("ALTER TABLE documents DROP COLUMN pipeline")
+    db.execute("PRAGMA user_version = 2")
+    db.commit()
+    db.close()
+
+    with open_research(path) as research:
+        result = research.ingest.ingest(tmp_path / "corpus")
+        version = research.store._db.execute("PRAGMA user_version").fetchone()[0]
+
+    assert version == 3
+    assert result.reprocessed == ["note.md"]

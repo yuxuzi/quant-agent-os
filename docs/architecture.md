@@ -266,12 +266,14 @@ The extractors in the first version are deterministic:
   example "HML" → `factor:value`). The longest alias wins, and short all-capital aliases match
   case-sensitively;
 - document front matter (title, authors, published, license);
-- cue phrases between two entities in the same sentence (`rules-v3`). For example, "X predicts
+- cue phrases between two entities in the same sentence (`rules-v4`). For example, "X predicts
   Y" yields `X predicts Y`. Passive and inverse forms ("Y is predicted by X", "X explains Y")
-  swap subject and object, so edges point the right way. A negation between the two ("does
-  not predict", "fails to explain") suppresses the pair entirely. Without a cue, the pair
-  becomes a `related_to` edge with confidence 0.4, which the default `min_confidence` of 0.5
-  excludes;
+  swap subject and object, so edges point the right way. A negation in the three words right
+  before the cue ("does not predict", "fails to explain") suppresses the pair entirely. A
+  negation elsewhere ("X, which is not small, predicts Y") and "not only" do not. Without a
+  cue, the pair becomes a `related_to` edge with confidence 0.4, which the default
+  `min_confidence` of 0.5 excludes, unless a negation such as "unrelated to" sits between
+  the entities;
 - citation and reference parsing (planned).
 
 Every extracted mention and relation stores the extractor name, version, confidence, and the
@@ -298,7 +300,9 @@ enabled by default.
    - **Score.** Each distinct fact contributes confidence divided by hops, times
      `1 + log2(support)`.
    - **Path.** Each related entity carries `path`, the shortest chain of cited edges from a
-     seed, preferring confident edges. A two-hop answer therefore shows how it connects, for
+     seed. Among equally short paths, from any seed, the highest total confidence wins,
+     independent of traversal order. Every path edge is cited in the evidence, even when its
+     chunk is not among the top `k` passages. A two-hop answer therefore shows how it connects, for
      example `trend-following -uses-> time-series-momentum -extends-> momentum`.
    - **Rank.** The results are capped at 10 entities. Path and link chunks form the ranking.
    - **Benchmark.** On the mock world at 3,000 documents and 15,000 relations, two-hop
@@ -406,7 +410,10 @@ Consistency rules:
   concurrent ingestions cannot publish a stale snapshot.
 - Search reads run in one read transaction (`KnowledgeStore.reading()`), so an answer never
   mixes two corpus versions.
-- The version-1 to version-2 migration is atomic and can be re-run.
+- Migrations (schema version 3) are atomic and can be re-run.
+- Each document records its `pipeline`, the loader, chunker, extractor, and vocabulary
+  versions. Ingestion re-processes unchanged files whose pipeline differs, so upgrading the
+  rules never leaves stale relations behind.
 - Serving opens the store read-only (`mode=ro`) and never migrates it.
 
 `KnowledgeStore`, `VectorIndex`, `Embedder`, and `SourceLoader` are `Protocol`s. The adapters

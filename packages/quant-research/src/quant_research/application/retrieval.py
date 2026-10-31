@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import threading
 import time
-from collections import OrderedDict, defaultdict, deque
+from collections import OrderedDict, defaultdict
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -157,7 +157,9 @@ class ResearchService:
         one read transaction, so the packet never mixes two versions of the corpus.
         """
         warnings: list[str] = []
-        query_vector = self._query_vector(request.query, warnings)
+        query_vector = (
+            self._query_vector(request.query, warnings) if "vector" in self.channels else None
+        )
         with self.store.reading():
             return self._find_related(request, query_vector, warnings)
 
@@ -419,25 +421,36 @@ def _link(relation: Relation) -> GraphLink:
 
 
 def _shortest_paths(seeds: list[str], relations: list[Relation]) -> dict[str, list[Relation]]:
-    """Breadth-first search from all seeds over undirected edges.
+    """Layered breadth-first search from all seeds over undirected edges.
 
-    Each reached entity maps to the relations leading to it from its nearest seed. Neighbours
-    are visited by descending confidence, then id, so paths are deterministic and prefer
-    confident edges among equally short ones.
+    Each reached entity maps to the relations leading to it from a nearest seed. Among equally
+    short paths, from any seed or branch, the one with the highest total confidence wins, then
+    the lexicographically smallest relation ids, so the result does not depend on seed or
+    traversal order.
     """
     adjacency: dict[str, list[tuple[Relation, str]]] = defaultdict(list)
-    for relation in sorted(relations, key=lambda r: (-r.confidence, r.id)):
+    for relation in relations:
         adjacency[relation.subject_id].append((relation, relation.object_id))
         adjacency[relation.object_id].append((relation, relation.subject_id))
     paths: dict[str, list[Relation]] = {seed: [] for seed in seeds}
-    queue = deque(seeds)
-    while queue:
-        current = queue.popleft()
-        for relation, neighbour in adjacency[current]:
-            if neighbour not in paths:
-                paths[neighbour] = [*paths[current], relation]
-                queue.append(neighbour)
+    frontier = sorted(set(seeds))
+    while frontier:
+        layer: dict[str, list[Relation]] = {}
+        for current in frontier:
+            for relation, neighbour in adjacency[current]:
+                if neighbour in paths:
+                    continue
+                candidate = [*paths[current], relation]
+                best = layer.get(neighbour)
+                if best is None or _path_key(candidate) < _path_key(best):
+                    layer[neighbour] = candidate
+        paths.update(layer)
+        frontier = sorted(layer)
     return {entity: path for entity, path in paths.items() if path}
+
+
+def _path_key(path: list[Relation]) -> tuple[float, list[str]]:
+    return -sum(relation.confidence for relation in path), [relation.id for relation in path]
 
 
 def _unique(links: list[GraphLink], seen: set[tuple[str, str, str, str]]) -> list[GraphLink]:

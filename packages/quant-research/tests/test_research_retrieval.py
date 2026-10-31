@@ -1,10 +1,20 @@
 """Unit tests for hybrid retrieval and evidence packets."""
 
+from pathlib import Path
+
 import pytest
+from pydantic import ValidationError
 
 from quant_research import ResearchApp, ResearchQuery, open_research
-from quant_research.application.retrieval import UnknownPassageError, _fuse, _shortest_paths
+from quant_research.application.retrieval import (
+    ALL_CHANNELS,
+    ResearchService,
+    UnknownPassageError,
+    _fuse,
+    _shortest_paths,
+)
 from quant_research.domain.models import Relation
+from quant_research.domain.ports import GraphEdge
 
 
 def _related(research: ResearchApp, query: str, **options: object) -> list[str]:
@@ -142,3 +152,67 @@ def test_related_entities_carry_paths_matching_their_hops(research: ResearchApp)
     graph_entities = [entity for entity in packet.related if entity.hops > 0]
     assert graph_entities
     assert all(len(entity.path) == entity.hops for entity in graph_entities)
+
+
+def test_equally_short_paths_prefer_confidence_regardless_of_seed_order() -> None:
+    relations = [
+        _relation("r1", "a", "d", 0.4),  # seed a reaches d weakly
+        _relation("r2", "b", "d", 0.9),  # seed b reaches d strongly
+    ]
+
+    for seeds in (["a", "b"], ["b", "a"]):
+        assert [r.id for r in _shortest_paths(seeds, relations)["d"]] == ["r2"]
+
+
+def test_equally_short_two_hop_paths_prefer_the_stronger_branch() -> None:
+    relations = [
+        _relation("a1", "s", "m1", 0.9),
+        _relation("a2", "m1", "t", 0.4),  # total 1.3
+        _relation("b1", "s", "m2", 0.6),
+        _relation("b2", "m2", "t", 0.9),  # total 1.5
+    ]
+
+    assert [r.id for r in _shortest_paths(["s"], relations)["t"]] == ["b1", "b2"]
+
+
+def test_every_path_edge_is_cited_even_with_one_passage(research: ResearchApp) -> None:
+    packet = research.research.find_related(ResearchQuery(query="PEAD", hops=2, k=1))
+
+    assert len(packet.passages) == 1
+    cited = {item.statement for item in packet.evidence if item.sources}
+    for entity in packet.related:
+        for link in entity.path:
+            assert any(link.predicate.replace("_", " ") in statement for statement in cited)
+    assert all(item.sources for item in packet.evidence)
+
+
+def test_excluding_the_vector_channel_skips_query_embedding(corpus_dir: Path) -> None:
+    class ExplodingEmbedder:
+        model_id = "boom"
+        dimensions = 8
+        requires_network = True
+
+        def embed(self, texts: object, **options: object) -> list[list[float]]:
+            raise AssertionError("must not embed when the vector channel is off")
+
+    with open_research(":memory:") as research:
+        research.ingest.ingest(corpus_dir)
+        service = ResearchService(
+            research.store,
+            research.vocabulary,
+            embedder=ExplodingEmbedder(),  # type: ignore[arg-type]
+            vectors=research.store,
+            channels=ALL_CHANNELS - {"vector"},
+        )
+        packet = service.find_related(ResearchQuery(query="carry"))
+
+    assert packet.passages
+
+
+def test_graph_edges_require_positive_support_and_hops() -> None:
+    relation = _relation("r", "a", "b", 0.5)
+
+    with pytest.raises(ValidationError):
+        GraphEdge(relation=relation, hops=1, support=0)
+    with pytest.raises(ValidationError):
+        GraphEdge(relation=relation, hops=0)
