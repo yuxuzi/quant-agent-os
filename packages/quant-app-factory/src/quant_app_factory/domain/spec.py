@@ -45,6 +45,14 @@ class AppSpec(BaseModel):
         description="agent-tool only: a git+https URL or a local path to quant-agent-os",
     )
 
+    @field_validator("quant_agent_os_source", mode="before")
+    @classmethod
+    def _forward_slashes(cls, value: object) -> object:
+        """Write a local Windows path with forward slashes, as TOML templates need."""
+        if isinstance(value, str) and not value.startswith("git+"):
+            return value.replace("\\", "/")
+        return value
+
     @field_validator("description", "author", "email", "quant_agent_os_source")
     @classmethod
     def _one_line(cls, value: str) -> str:

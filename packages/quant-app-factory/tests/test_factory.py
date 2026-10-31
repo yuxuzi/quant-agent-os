@@ -131,6 +131,12 @@ def test_invalid_specs_are_rejected(tmp_path: Path, changes: dict[str, Any]) -> 
         _spec(tmp_path, **changes)
 
 
+def test_a_windows_source_path_is_written_with_forward_slashes(tmp_path: Path) -> None:
+    spec = _spec(tmp_path, quant_agent_os_source="C:\\work\\quant-agent-os")
+
+    assert spec.quant_agent_os_source == "C:/work/quant-agent-os"
+
+
 def test_an_unreadable_spec_file_names_the_file(tmp_path: Path) -> None:
     with pytest.raises(SpecError, match=r"app\.toml"):
         load_spec(tmp_path / "app.toml")
