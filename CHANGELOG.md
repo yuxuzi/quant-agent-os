@@ -34,6 +34,9 @@ All notable changes to this project are documented here. The format follows
   - `quant-research runs` lists runs and shows one run in full.
 - SDK facade (B-07): `quant_agent_os.sdk.Platform` with `call`, `run`, `get_run`, and `runs`,
   producing the same records as the MCP path.
+- A walkthrough (`docs/walkthrough.md`) from a clean checkout to cited answers in Claude Code
+  and Claude Desktop, with recorded runs and known limitations, plus an SDK example
+  (`examples/quant-research/sdk_demo.py`).
 - An opt-in real-paper evaluation (`packages/quant-research/tests/real_corpus.py`) over 21
   pinned arXiv papers, with gold questions and hand-labelled relations.
 - Graph RAG answers carry `path`, the cited chain of edges from the query entity, and the

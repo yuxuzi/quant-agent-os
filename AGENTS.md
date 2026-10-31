@@ -34,8 +34,9 @@ Read [docs/architecture.md](docs/architecture.md) and the plan in
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
-| Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py` |
+| Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Research evaluation | `uv run python packages/quant-research/tests/research_eval.py` (add `--update` to rebaseline) |
+| Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python packages/quant-research/tests/real_corpus.py fetch`, then `... real_corpus.py eval` |
 
 Before reporting work as done, run the test, lint, format, and type-check commands and report
 the real results.
@@ -45,10 +46,12 @@ the real results.
 `src/quant_agent_os/`, importing downward only:
 1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions.
 2. `runtime/plan.py`, `runtime/executor.py`: plan models and bounded execution.
-3. `evidence/`, `reporting/`: evidence, report models, rendering.
-4. `runtime/orchestrator.py`: planning, validation, execution, report. Not re-exported from
-   `runtime/__init__` to avoid an import cycle.
-5. `providers/`, `config/`, `mcp/`, `observability/`, `cli.py`.
+3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
+   `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from
+   `observability/logging.py`.
+4. `runtime/orchestrator.py`: planning, validation, execution, report, and optional
+   recording. Not re-exported from `runtime/__init__` to avoid an import cycle.
+5. `providers/`, `config/`, `mcp/`, `sdk/`, `observability/`, `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a
 direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `tests/evaluation`

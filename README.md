@@ -22,8 +22,9 @@ It has two products built on one core platform:
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
-| Core: run store, approvals, SDK facade | Planned for the MVP |
-| Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation ([architecture §6–7](docs/architecture.md)) |
+| Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
+| Core: approvals for consequential permissions | Planned ([decision 0005](docs/decisions/0005-approval-gates.md)) |
+| Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
 | Quant App Factory | Designed ([architecture §8–9](docs/architecture.md)); package skeleton only |
 | Quant analytics | Example metrics only; separate package planned |
 
@@ -34,16 +35,19 @@ The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](
 [uv](https://docs.astral.sh/uv/) is the only prerequisite.
 
 ```bash
-uv sync
+uv sync --locked
 uv run python examples/portfolio-research/portfolio_research.py   # offline end-to-end demo
 uv run python examples/quant-research/research_demo.py            # Graph RAG demo, offline
+uv run python examples/quant-research/sdk_demo.py                 # SDK call and its recorded run
 uv run quant-agent-os info                                        # active settings, secrets hidden
 uv run pytest
 ```
 
 ## Use it from Claude
 
-Ingest your notes and papers once, then register the read-only research server with your MCP
+The [walkthrough](docs/walkthrough.md) goes from a clean checkout to cited answers in Claude
+Code or Claude Desktop, with the recorded runs and known limitations. In short: ingest your
+notes and papers once, then register the read-only research server with your MCP
 client. Use absolute paths, because the client starts the server from its own directory.
 
 ```bash
@@ -52,16 +56,19 @@ claude mcp add quant-research -- \
   uv run --directory /path/to/quant-agent-os quant-research serve-mcp --store ~/research/.kb.db
 ```
 
-Claude Desktop uses the same command in `claude_desktop_config.json`:
+Claude Desktop uses the same command in `claude_desktop_config.json`. Give the full path to
+`uv` (`which uv`), because Desktop does not read your shell's `PATH`:
 
 ```json
-{"mcpServers": {"quant-research": {"command": "uv", "args": ["run", "--directory",
-  "/path/to/quant-agent-os", "quant-research", "serve-mcp", "--store", "/Users/you/research/.kb.db"]}}}
+{"mcpServers": {"quant-research": {"command": "/Users/you/.local/bin/uv", "args": ["run",
+  "--directory", "/path/to/quant-agent-os", "quant-research", "serve-mcp", "--store",
+  "/Users/you/research/.kb.db"]}}}
 ```
 
 Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
 cites file, page, and line ranges. The server is read-only, writes nothing to the store, and
-sends nothing off the machine unless you choose a hosted `--embedder`. A hosted embedder also
+sends nothing off the machine unless you choose a hosted `--embedder`. Each call is recorded
+in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
 
 ## How it fits together
@@ -118,6 +125,8 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   evidence/       Evidence and SourceRef (facts vs interpretation)
   reporting/      Report models and Markdown rendering
   mcp/            MCP tool definitions and calls over the registry
+  runs/           run store (memory, SQLite), recorder, append-only audit, redaction
+  sdk/            Platform facade: call, run, get_run
   observability/  logging with secret redaction
 packages/quant-research/   Quant Research (Graph RAG) product
 packages/quant-app-factory/  Quant App Factory product (skeleton)
@@ -129,6 +138,7 @@ docs/   architecture, configuration, security, getting started, decisions, roadm
 
 ## Documentation
 
+- [Walkthrough: cited answers in Claude](docs/walkthrough.md)
 - [Getting started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
