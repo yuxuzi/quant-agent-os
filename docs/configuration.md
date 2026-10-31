@@ -65,14 +65,15 @@ work.
 ### Quant App Factory
 
 `quant-factory plan SPEC.toml` previews a project: the profile, the reasons, the dependencies,
-and the exact files, through `uvx pytemplate-uv==3.0.* plan`. It writes nothing.
+and the exact files. pytemplate-uv renders the preview into a temporary directory, never the
+target.
 
 `quant-factory create SPEC.toml` shows the same preview and asks you to confirm. Your
 confirmation is the approval for that exact spec. It then creates the project and runs the
 project's checks (`uv sync`, ruff, mypy, pytest).
 
 Runs and approvals are recorded in `~/.quant-agent-os/factory-runs.db` (`--runs PATH`). It
-needs `uv` and network access for pytemplate-uv and the project's dependencies.
+needs `uv`, and network access only for the generated project's `uv sync`.
 
 An app spec is TOML:
 

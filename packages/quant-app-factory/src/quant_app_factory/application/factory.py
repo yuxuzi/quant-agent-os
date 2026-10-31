@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quant_agent_os.runtime.runner import run_command
+from quant_agent_os.runtime.runner import CommandResult, run_command
 from quant_app_factory.domain.planner import AppPlan, ArchitecturePlanner
 from quant_app_factory.domain.ports import (
     ScaffoldPlan,
@@ -16,7 +17,8 @@ from quant_app_factory.domain.ports import (
     ScaffoldRequestError,
 )
 from quant_app_factory.domain.spec import AppKind, AppSpec
-from quant_app_factory.infrastructure.pytemplate_uv import Runner
+
+Runner = Callable[..., CommandResult]  # the signature of `run_command`
 
 SYNC_TIMEOUT_SECONDS = 600.0  # `uv sync` may download Python and every dependency
 CHECK_TIMEOUT_SECONDS = 300.0

@@ -19,8 +19,11 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 
 Core must never import a product, and the products must not import each other. Quantitative
 analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
-external tool: invoke it only through the App Factory's `ScaffoldProvider` adapter
-(`uvx pytemplate-uv==3.0.*`). Never import, vendor, or plan changes to it here.
+third-party library of App Factory ([decision 0006](docs/decisions/0006-pytemplate-uv-as-a-library.md)):
+- Import only its public `pytemplate.api`, and only in
+  `quant_app_factory/infrastructure/pytemplate_uv.py`, behind the `ScaffoldProvider` port.
+- Core and Quant Research never import it.
+- Never vendor it, and never plan changes to it here.
 
 Read [docs/architecture.md](docs/architecture.md) and the plan in
 [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes.

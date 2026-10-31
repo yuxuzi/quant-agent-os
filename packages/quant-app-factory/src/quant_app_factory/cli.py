@@ -37,8 +37,7 @@ def _fail(error: Exception | str) -> typer.Exit:
 
 
 def _factory() -> AppFactory:
-    scaffolder = PytemplateUvScaffolder()
-    return AppFactory(scaffolder)
+    return AppFactory(PytemplateUvScaffolder())
 
 
 def _load(path: Path) -> AppSpec:
@@ -99,9 +98,12 @@ def create(
     app_spec = _load(spec)
     if _preview(factory, app_spec):
         raise typer.Exit(code=1)
-    if not yes and not typer.confirm(
-        "Create this project? It writes files, runs uv, and downloads packages", default=False
-    ):
+    prompt = (
+        "Create this project? It writes files, runs uv, and downloads packages"
+        if checks
+        else "Create this project? It writes files"
+    )
+    if not yes and not typer.confirm(prompt, default=False):
         raise typer.Exit(code=1)
     policy = PermissionPolicy(
         granted=READ_ONLY | CREATE_PERMISSIONS, tool_allowlist=frozenset({"create_app"})

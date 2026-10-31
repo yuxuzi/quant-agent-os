@@ -26,10 +26,13 @@ flagship chat-style application, "Quant AI Assistant", and split research retrie
   unchanged. `packages/quant-research` and `packages/quant-app-factory` become workspace
   members when their first code lands. Each member has its own `pyproject.toml`, tests,
   version, and changelog section.
-- Dependencies point one way. Core imports no product, products do not import each other, and
-  nothing imports `pytemplate-uv`. A test enforces this.
-- `pytemplate-uv` is consumed only as a pinned CLI through a `ScaffoldProvider` adapter. This
-  repository holds no plans for it ([AD-8](../ENGINEERING_REVIEW_PLAN.md#architecture-decisions)).
+- Dependencies point one way. Core imports no product, and products do not import each other.
+  A test enforces this.
+- `pytemplate-uv` is used only through a `ScaffoldProvider` adapter, and this repository holds
+  no plans for it ([AD-8](../ENGINEERING_REVIEW_PLAN.md#architecture-decisions)).
+  - *Superseded in part by [decision 0006](0006-pytemplate-uv-as-a-library.md):* App Factory
+    now imports `pytemplate.api` as a library, in that adapter only, instead of running the
+    pinned CLI.
 
 ## Consequences
 

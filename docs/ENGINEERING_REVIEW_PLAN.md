@@ -7,8 +7,9 @@
 > **History.** This file used to be the QuantFoundry / uv-template engineering review. On
 > 2026-10-30 it was rewritten around the Quant-Agent-OS product baseline. The earlier version,
 > including the uv-template generator review and its phases, is preserved in git history (commit
-> `797dac3`). `pytemplate-uv` 3.0 is published and is consumed here as an external tool. Its
-> roadmap lives only in its own repository.
+> `797dac3`). `pytemplate-uv` 3.0 is published and is used here as a third-party library
+> ([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)). Its roadmap lives only in its
+> own repository.
 
 ## 1. Direction
 
@@ -147,7 +148,7 @@ platform's contract tests.
 
 **Status (2026-10-30).**
 - **Met:** criteria 2, 3, 4, 5, 6, 7, and 8.
-  - Criterion 5 is shown offline with recorded pytemplate-uv output, and live by the opt-in
+  - Criterion 5 is shown offline by rendering real projects in-process, and live by the opt-in
     smoke test: real `agent-tool` and `python-cli` projects pass their own checks.
 - **Criterion 1:** met through `quant-research serve-mcp`, run from a checkout. The `uvx` form
   waits for publishing, which needs a decision on names.
@@ -256,7 +257,7 @@ onto the days below, so there is still only one timeline.
 | B-07 | **Done.** SDK `Platform` facade (`call`, `run`, `get_run`, `runs`) in `quant_agent_os.sdk` | B-02 | Same records as the MCP path |
 | B-08 | **Done.** `RunStore` (memory, SQLite), `RunRecorder`, append-only audit events; `serve-mcp` records every call; `quant-research runs` | B-02 | Criterion 6; no secrets in the audit (test) |
 | B-09 | **Done.** Approval gate, `approval_required` status, standing approvals, subprocess runner (decision 0005 accepted). Plan: [plans/approvals-and-app-factory.md](plans/approvals-and-app-factory.md) | B-08 | Approvals bound to input hashes and single use; hard kill on timeout |
-| B-10 | **Done.** App Factory foundation: `AppSpec`, `ArchitecturePlanner`, `ScaffoldProvider`, `PytemplateUvScaffolder`, `agent-tool` pack, `plan_app`/`create_app`, `quant_agent_os.testing.check_tool`, CLI `quant-factory plan/create` | B-03, B-09 | Criterion 5; recorded JSON fixture; no import of `pytemplate-uv` |
+| B-10 | **Done.** App Factory foundation: `AppSpec`, `ArchitecturePlanner`, `ScaffoldProvider`, `PytemplateUvScaffolder`, `agent-tool` pack, `plan_app`/`create_app`, `quant_agent_os.testing.check_tool`, CLI `quant-factory plan/create` | B-03, B-09 | Criterion 5; pytemplate-uv imported only through `pytemplate.api` in the adapter (decision 0006) |
 | B-11 | **Done for Quant Research** ([walkthrough.md](walkthrough.md), verified from a clean clone with `uv sync --locked`). The App Factory part waits for B-10 | B-01, B-06, B-10 | Criterion 8 |
 | B-12 | First real `ModelProvider` adapter (optional extra) and opt-in live evaluations | provider choice | Offline tests unchanged; secrets never logged |
 | B-13 | Analytics package: move the example metrics; add Sharpe, volatility, beta, and tracking error with conventions and known-answer tests | — | Imports no LLM library; `analyze_performance` registered |
@@ -313,7 +314,7 @@ Products follow the same contract tests. Each user-visible change gets a CHANGEL
 | AD-5 | All names are provisional until availability and trademark checks | Decision |
 | AD-6 | Superseded by AD-10 | Superseded |
 | AD-7 | (pytemplate-uv render engine; now owned by that project) | Moved |
-| AD-8 | `pytemplate-uv` is independent; Quant-Agent-OS invokes it only as a pinned CLI with JSON in and out, and owns its own template pack | Decision |
+| AD-8 | `pytemplate-uv` is independent. App Factory uses it as a library through `pytemplate.api`, in one adapter, and owns its own template pack (revised by decision 0006; first a pinned CLI) | Decision |
 | AD-9 | Quant-Agent-OS is the brand and platform; two products; one repository as a uv workspace with Core at the root ([0003](decisions/0003-brand-and-product-structure.md)) | Proposed |
 | AD-10 | A relational knowledge graph behind `KnowledgeStore`; SQLite for the MVP, PostgreSQL next, a graph database only on evidence ([0004](decisions/0004-knowledge-store.md)) | Proposed |
 | AD-11 | Per-call approvals for consequential permissions; subprocess runner for `execute_code` ([0005](decisions/0005-approval-gates.md)) | Proposed |
@@ -356,8 +357,8 @@ Success metrics (to be confirmed after the first baseline):
 - **O-3:** What is the final name of the analytics package (derived from `pyfolio-reloaded`)?
 - **O-4:** Where is the license boundary for commercial features: MIT everywhere plus services,
   or a separately licensed enterprise package?
-- **O-5:** Should a pinned, allowlisted command (`uvx pytemplate-uv==3.0.*`) get a narrower
-  permission than `execute_code`, so that read-only `plan_app` needs no approval?
+- **O-5:** *Resolved by decision 0006:* `plan_app` renders in-process into a temporary
+  directory, so it stays read-only without a narrower permission.
 - **O-6:** What are the distribution names for the products (`quant-agent-os-research`,
   `quant-agent-os-factory`)?
 - **O-7:** Does `pytemplate-uv` render packs from a subdirectory of a git repository, or must

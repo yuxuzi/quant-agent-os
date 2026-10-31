@@ -1,17 +1,18 @@
 """Quant App Factory offline (B-10): planner, pytemplate-uv adapter, checks, tools, and CLI.
 
-pytemplate-uv is replaced by its recorded JSON output (fixtures/pytemplate-uv-3.0), returned by
-a fake subprocess runner, so these tests need no network and never write a real project.
+Projects are really rendered by the pytemplate-uv library into ``tmp_path``, which needs no
+network. Only the generated project's lifecycle commands (`uv sync`, ruff, mypy, pytest) are
+replaced by a fake runner; the opt-in smoke test runs them for real.
 """
 
 from __future__ import annotations
 
-import json
 import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
+from pytemplate import api
 from typer.testing import CliRunner
 
 from quant_agent_os.runs import SqliteRunStore
@@ -19,30 +20,29 @@ from quant_agent_os.runtime.runner import CommandResult
 from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import READ_ONLY, PermissionPolicy
 from quant_app_factory import (
-    PYTEMPLATE_UV,
     AppFactory,
     AppSpec,
     ArchitecturePlanner,
     PlanningError,
     PytemplateUvScaffolder,
-    ScaffoldError,
     ScaffoldRenderError,
+    ScaffoldRequest,
     ScaffoldRequestError,
-    ScaffoldUnavailableError,
     SpecError,
     factory_tools,
     load_spec,
 )
 from quant_app_factory import cli as factory_cli
 from quant_app_factory.domain.planner import AGENT_TOOL_PACK
-from quant_app_factory.infrastructure.pytemplate_uv import render_request
 from quant_app_factory.tools import CREATE_PERMISSIONS
 
-FIXTURES = Path(__file__).parent / "fixtures" / "pytemplate-uv-3.0"
-
-
-def _fixture(name: str) -> str:
-    return (FIXTURES / name).read_text("utf-8")
+LIFECYCLE = [
+    "uv sync",
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy signal_tools tests",
+    "uv run pytest",
+]
 
 
 def _spec(tmp_path: Path, **changes: Any) -> AppSpec:
@@ -56,37 +56,17 @@ def _spec(tmp_path: Path, **changes: Any) -> AppSpec:
     return AppSpec.model_validate(fields | changes)
 
 
-class FakeRunner:
-    """Answers pytemplate-uv commands with recorded JSON and lifecycle commands with exit codes."""
+class FakeChecks:
+    """Stands in for `run_command` on lifecycle commands; ``failing`` commands exit 1."""
 
-    def __init__(
-        self,
-        responses: dict[str, tuple[int | None, str]] | None = None,
-        failing: frozenset[str] = frozenset(),
-    ) -> None:
-        self.responses = responses or {
-            "plan": (0, _fixture("agent-tool-plan.json")),
-            "create-from-config": (0, _fixture("agent-tool-create.json")),
-        }
+    def __init__(self, failing: frozenset[str] = frozenset()) -> None:
         self.failing = failing
-        self.calls: list[list[str]] = []
-        self.requests: list[dict[str, Any]] = []
+        self.calls: list[str] = []
 
     def __call__(self, argv: list[str], *, cwd: Path, timeout: float, **_: Any) -> CommandResult:
-        self.calls.append(list(argv))
-        if argv[:2] == ["uvx", PYTEMPLATE_UV]:
-            self.requests.append(tomllib.loads(Path(argv[3]).read_text("utf-8")))
-            exit_code, stdout = self.responses[argv[2]]
-            return CommandResult(
-                command=argv,
-                cwd=str(cwd),
-                exit_code=exit_code,
-                duration_ms=1,
-                output_bytes=0,
-                stdout_tail=stdout,
-                stderr_tail="" if exit_code is not None else "not found",
-            )
-        failed = " ".join(argv) in self.failing
+        command = " ".join(argv)
+        self.calls.append(command)
+        failed = command in self.failing
         return CommandResult(
             command=argv,
             cwd=str(cwd),
@@ -97,8 +77,8 @@ class FakeRunner:
         )
 
 
-def _factory(runner: FakeRunner) -> AppFactory:
-    return AppFactory(PytemplateUvScaffolder(runner=runner), runner=runner)
+def _factory(checks: FakeChecks | None = None) -> AppFactory:
+    return AppFactory(PytemplateUvScaffolder(), runner=checks or FakeChecks())
 
 
 # Spec and planner
@@ -184,86 +164,84 @@ def test_the_planner_explains_impossible_requests(
         ArchitecturePlanner().plan(spec)
 
 
-# pytemplate-uv adapter
+# pytemplate-uv adapter (real, in-process rendering)
 
 
-def test_the_request_file_follows_pytemplate_uvs_request_schema(tmp_path: Path) -> None:
-    request = ArchitecturePlanner().plan(_spec(tmp_path)).request
+def test_plan_lists_the_exact_files_and_writes_nothing(tmp_path: Path) -> None:
+    _, preview = _factory().preview(_spec(tmp_path))
 
-    parsed = tomllib.loads(render_request(request))
-
-    assert parsed == {
-        "project_name": "signal-tools",
-        "profile": "agent-tool",
-        "output_dir": Path(request.output_dir).as_posix(),
-        "components": [],
-        "no_input": True,
-        "template": request.template,
-        "data": request.data,
-    }
-
-
-def test_plan_runs_the_pinned_cli_and_parses_its_json(tmp_path: Path) -> None:
-    runner = FakeRunner()
-
-    _, preview = _factory(runner).preview(_spec(tmp_path))
-
-    command = runner.calls[0]
-    assert command[:3] == ["uvx", "pytemplate-uv==3.0.*", "plan"] and command[-1] == "--json"
-    assert runner.requests[0]["profile"] == "agent-tool"
     assert preview.package_name == "signal_tools"
-    assert "signal_tools/tools.py" in preview.files
-    assert "tests/test_tools.py" in preview.files
+    assert {"signal_tools/tools.py", "tests/test_tools.py", "pyproject.toml"} <= set(preview.files)
     assert preview.template["pack_id"] == "quant-agent-tool"
+    assert preview.lifecycle_commands[-1] == "uv run pytest"
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize(
-    ("exit_code", "stdout", "error"),
-    [
-        (1, _fixture("error-exists.json"), ScaffoldRequestError),
-        (
-            2,
-            '{"ok": false, "exit_code": 2, "error": {"message": "disk full"}}',
-            ScaffoldRenderError,
-        ),
-        (None, "", ScaffoldUnavailableError),
-        (0, "not json", ScaffoldError),
-    ],
+    ("kind", "components", "expected"),
+    [("python-cli", [], ["cli"]), ("fastapi-service", ["database"], ["api", "database"])],
 )
-def test_pytemplate_uv_failures_become_typed_errors(
-    tmp_path: Path, exit_code: int | None, stdout: str, error: type[Exception]
+def test_bundled_profiles_plan_with_their_components(
+    tmp_path: Path, kind: str, components: list[str], expected: list[str]
 ) -> None:
-    runner = FakeRunner({"plan": (exit_code, stdout)})
+    spec = _spec(tmp_path, kind=kind, components=components, tool_name=None)
 
-    with pytest.raises(error):
-        _factory(runner).preview(_spec(tmp_path))
+    _, preview = _factory().preview(spec)
+
+    assert sorted(preview.components) == expected
+    assert preview.template["kind"] == "bundled"
+
+
+def test_invalid_requests_become_request_errors(tmp_path: Path) -> None:
+    request = ScaffoldRequest(project_name="x", profile="no-such-profile", output_dir=str(tmp_path))
+
+    with pytest.raises(ScaffoldRequestError, match="rejected"):
+        PytemplateUvScaffolder().plan(request)
+
+
+def test_render_failures_become_render_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(request: api.RenderRequest) -> api.RenderResult:
+        raise api.RenderError("disk full")
+
+    monkeypatch.setattr(api, "render", fail)
+    request = ArchitecturePlanner().plan(_spec(tmp_path)).request
+
+    with pytest.raises(ScaffoldRenderError, match="disk full"):
+        PytemplateUvScaffolder().create(request)
 
 
 # Create and check
 
 
-def test_create_scaffolds_then_runs_every_check_with_the_package_name(tmp_path: Path) -> None:
-    runner = FakeRunner()
+def test_create_renders_the_project_then_runs_every_check(tmp_path: Path) -> None:
+    checks = FakeChecks()
 
-    report = _factory(runner).create(_spec(tmp_path))
+    report = _factory(checks).create(_spec(tmp_path, quant_agent_os_source=str(tmp_path)))
 
-    lifecycle = [" ".join(call) for call in runner.calls[2:]]
-    assert lifecycle == [
-        "uv sync",
-        "uv run ruff check .",
-        "uv run ruff format --check .",
-        "uv run mypy signal_tools tests",
-        "uv run pytest",
-    ]
+    project = Path(report.project_path)
+    pyproject = tomllib.loads((project / "pyproject.toml").read_text())
+    assert checks.calls == LIFECYCLE
     assert report.checks_passed is True
-    assert report.scaffolder == PYTEMPLATE_UV
-    assert report.project_path.endswith("signal-tools")
+    assert report.scaffolder.startswith("pytemplate-uv==3.")
+    assert "def count_signals" in (project / "signal_tools" / "tools.py").read_text()
+    source = pyproject["tool"]["uv"]["sources"]["quant-agent-os"]
+    assert source["path"] == tmp_path.resolve().as_posix()
+
+
+def test_the_default_source_is_the_git_repository(tmp_path: Path) -> None:
+    report = _factory().create(_spec(tmp_path), run_checks=False)
+
+    pyproject = tomllib.loads((Path(report.project_path) / "pyproject.toml").read_text())
+    assert pyproject["tool"]["uv"]["sources"]["quant-agent-os"] == {
+        "git": "https://github.com/yuxuzi/quant-agent-os"
+    }
+    assert report.checks_passed is None
 
 
 def test_a_failed_install_stops_the_checks(tmp_path: Path) -> None:
-    runner = FakeRunner(failing=frozenset({"uv sync"}))
-
-    report = _factory(runner).create(_spec(tmp_path))
+    report = _factory(FakeChecks(failing=frozenset({"uv sync"}))).create(_spec(tmp_path))
 
     assert [check.command for check in report.checks] == ["uv sync"]
     assert report.checks_passed is False
@@ -271,43 +249,41 @@ def test_a_failed_install_stops_the_checks(tmp_path: Path) -> None:
 
 
 def test_only_uv_lifecycle_commands_run(tmp_path: Path) -> None:
-    factory = _factory(FakeRunner())
-
-    checks, warnings = factory.check(tmp_path, ["uv run pytest", "rm -rf /"], "pkg")
+    checks, warnings = _factory().check(tmp_path, ["uv run pytest", "rm -rf /"], "pkg")
 
     assert [check.command for check in checks] == ["uv run pytest"]
     assert "Skipped 'rm -rf /'" in warnings[0]
 
 
 def test_an_existing_target_is_refused_before_anything_is_written(tmp_path: Path) -> None:
-    plan = json.loads(_fixture("agent-tool-plan.json")) | {"target_exists": True}
-    runner = FakeRunner({"plan": (0, json.dumps(plan))})
+    (tmp_path / "signal-tools").mkdir()
+    checks = FakeChecks()
 
     with pytest.raises(ScaffoldRequestError, match="already exists"):
-        _factory(runner).create(_spec(tmp_path))
-    assert len(runner.calls) == 1
+        _factory(checks).create(_spec(tmp_path))
+    assert list((tmp_path / "signal-tools").iterdir()) == []
+    assert checks.calls == []
 
 
 # Tools and approvals (MVP criterion 5)
 
 
-def test_plan_app_is_read_only_and_hands_over_the_input_to_approve(tmp_path: Path) -> None:
-    runner = FakeRunner()
-    with Platform(factory_tools(_factory(runner))) as platform:
+def test_plan_app_is_read_only_and_previews_the_files(tmp_path: Path) -> None:
+    with Platform(factory_tools(_factory())) as platform:
         record = platform.call("plan_app", spec=_spec(tmp_path).model_dump(mode="json"))
 
     assert record.status == "ok" and record.output is not None
+    assert "signal_tools/tools.py" in record.output["preview"]["files"]
     assert record.output["create_app_input"]["spec"]["name"] == "signal-tools"
-    assert runner.calls == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_create_app_waits_for_an_approval_then_creates_once(tmp_path: Path) -> None:
-    runner = FakeRunner()
     policy = PermissionPolicy(granted=READ_ONLY | CREATE_PERMISSIONS)
-    with Platform(factory_tools(_factory(runner)), policy=policy) as platform:
+    with Platform(factory_tools(_factory()), policy=policy) as platform:
         waiting = platform.call("create_app", spec=_spec(tmp_path).model_dump(mode="json"))
         assert waiting.status == "approval_required"
-        assert runner.calls == []
+        assert list(tmp_path.iterdir()) == []
 
         platform.approve(waiting.run_id or "", approved_by="op")
         (created,) = platform.resume(waiting.run_id or "")
@@ -315,45 +291,50 @@ def test_create_app_waits_for_an_approval_then_creates_once(tmp_path: Path) -> N
 
     assert created.status == "ok" and created.output is not None
     assert created.output["checks_passed"] is True
+    assert (tmp_path / "signal-tools" / "pyproject.toml").is_file()
     assert created.approval is not None and not created.approval.startswith("standing")
     assert stored is not None and stored.run.status == "completed"
 
 
 def test_create_app_is_denied_unless_its_permissions_are_granted(tmp_path: Path) -> None:
-    with Platform(factory_tools(_factory(FakeRunner()))) as platform:
+    with Platform(factory_tools(_factory())) as platform:
         record = platform.call("create_app", spec=_spec(tmp_path).model_dump(mode="json"))
 
     assert record.status == "denied"
+    assert list(tmp_path.iterdir()) == []
 
 
 # CLI
 
 
 @pytest.fixture
-def fake_cli(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
-    runner = FakeRunner()
-    monkeypatch.setattr(factory_cli, "_factory", lambda: _factory(runner))
-    return runner
+def fake_checks(monkeypatch: pytest.MonkeyPatch) -> FakeChecks:
+    checks = FakeChecks()
+    monkeypatch.setattr(factory_cli, "_factory", lambda: _factory(checks))
+    return checks
 
 
 def _spec_file(tmp_path: Path) -> Path:
     spec_file = tmp_path / "app.toml"
     spec_file.write_text(
         'name = "signal-tools"\nkind = "agent-tool"\ndescription = "Signal tools"\n'
-        'tool_name = "count_signals"\n'
+        'tool_name = "count_signals"\noutput_dir = "out"\n'
     )
+    (tmp_path / "out").mkdir()
     return spec_file
 
 
-def test_cli_plan_lists_the_files(tmp_path: Path, fake_cli: FakeRunner) -> None:
+def test_cli_plan_lists_the_files_and_writes_nothing(
+    tmp_path: Path, fake_checks: FakeChecks
+) -> None:
     result = CliRunner().invoke(factory_cli.app, ["plan", str(_spec_file(tmp_path))])
 
     assert result.exit_code == 0, result.output
     assert "signal_tools/tools.py" in result.output
-    assert len(fake_cli.calls) == 1
+    assert list((tmp_path / "out").iterdir()) == []
 
 
-def test_cli_create_records_the_operator_approval(tmp_path: Path, fake_cli: FakeRunner) -> None:
+def test_cli_create_records_the_operator_approval(tmp_path: Path, fake_checks: FakeChecks) -> None:
     runs = tmp_path / "runs.db"
 
     result = CliRunner().invoke(
@@ -362,6 +343,7 @@ def test_cli_create_records_the_operator_approval(tmp_path: Path, fake_cli: Fake
 
     assert result.exit_code == 0, result.output
     assert "ok uv run pytest" in " ".join(result.output.split())
+    assert (tmp_path / "out" / "signal-tools" / "pyproject.toml").is_file()
     with SqliteRunStore(runs) as store:
         (run,) = store.list_runs()
         stored = store.get_run(run.run_id)
@@ -370,7 +352,9 @@ def test_cli_create_records_the_operator_approval(tmp_path: Path, fake_cli: Fake
     assert granted and granted[0].details["approved_by"].startswith("cli:")
 
 
-def test_cli_create_stops_when_the_operator_declines(tmp_path: Path, fake_cli: FakeRunner) -> None:
+def test_cli_create_stops_when_the_operator_declines(
+    tmp_path: Path, fake_checks: FakeChecks
+) -> None:
     result = CliRunner().invoke(
         factory_cli.app,
         ["create", str(_spec_file(tmp_path)), "--runs", str(tmp_path / "r.db")],
@@ -378,4 +362,5 @@ def test_cli_create_stops_when_the_operator_declines(tmp_path: Path, fake_cli: F
     )
 
     assert result.exit_code == 1
-    assert [call[2] for call in fake_cli.calls] == ["plan"]
+    assert list((tmp_path / "out").iterdir()) == []
+    assert fake_checks.calls == []

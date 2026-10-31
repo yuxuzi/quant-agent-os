@@ -1,7 +1,7 @@
-"""Opt-in smoke test: real pytemplate-uv, real projects, and their real checks.
+"""Opt-in smoke test: real projects and their real checks (uv sync, ruff, mypy, pytest).
 
-Set QUANT_FACTORY_SMOKE=1 to run it. It needs uv and network access (to fetch pytemplate-uv
-and each project's dependencies) and takes a few minutes. agent-tool projects install this
+Set QUANT_FACTORY_SMOKE=1 to run it. It needs uv and network access (for each generated
+project's `uv sync`) and takes a minute or two. agent-tool projects install this
 checkout of quant-agent-os, so the test exercises the code under review.
 """
 

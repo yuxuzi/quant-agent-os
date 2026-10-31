@@ -51,11 +51,11 @@ raises for a failed command.
 
 ### A4. `PytemplateUvScaffolder` and the `agent-tool` pack
 
-- **Adapter.** It writes the request as TOML and runs
-  `uvx pytemplate-uv==3.0.* {plan|create-from-config} <file> --json` through the runner.
-  - Exit code 1 maps to a request error and exit code 2 to a render error.
-  - It parses the JSON result.
-  - It never imports `pytemplate-uv`.
+- **Adapter.** It calls the pytemplate-uv library's `pytemplate.api.plan` and `api.render`
+  in-process, and maps request errors and render errors to typed errors
+  ([decision 0006](../decisions/0006-pytemplate-uv-as-a-library.md)).
+  - The first version ran `uvx pytemplate-uv==3.0.* ... --json` through the runner. Decision
+    0006 replaced it.
 - **The `agent-tool` template pack** ships inside `quant_app_factory`. Its generated package:
   - has one example tool and a registry;
   - has tests that run the platform's contract checks (`quant_agent_os.testing.check_tool`): a
@@ -83,11 +83,11 @@ raises for a failed command.
 ### A6. Tests and docs
 
 - **Offline tests:**
-  - recorded pytemplate-uv JSON fixtures, through a fake runner;
+  - real in-process rendering into temporary directories, with the `uv` checks faked;
   - the approval lifecycle;
   - a real subprocess-runner test (timeout kill, scrubbed environment);
   - the planner rules.
-- **Opt-in smoke test** (`QUANT_FACTORY_SMOKE=1`): real `uvx`, a real scaffold of each kind,
+- **Opt-in smoke test** (`QUANT_FACTORY_SMOKE=1`): a real scaffold of each kind,
   and the generated checks.
 - **Docs:** decision 0005 accepted, the walkthrough's App Factory section, and the MVP status.
 
@@ -102,10 +102,10 @@ raises for a failed command.
 | `agent-tool` with the default git source | Installs. Its tests need `quant_agent_os.testing`, which reaches the git repository when this branch merges |
 | Runner | A timeout kills a grandchild process; secrets and package-index URLs are not passed through |
 
-Deviation from the step text above:
-- **`plan_app`** is the deterministic planner only, so it stays read-only. The exact file list
-  comes from pytemplate-uv's `plan`, which runs a program, so it is an operator command
-  (`quant-factory plan`), not an agent tool.
+Changes after the first version:
+- **Library instead of CLI.** Following decision 0006, pytemplate-uv is imported as a library
+  rather than run as a CLI. `plan_app` therefore returns the exact file preview and stays
+  read-only.
 
 ## Out of scope
 

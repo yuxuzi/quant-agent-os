@@ -1,137 +1,114 @@
-"""`PytemplateUvScaffolder`: the `ScaffoldProvider` backed by the published pytemplate-uv CLI.
+"""`PytemplateUvScaffolder`: the `ScaffoldProvider` backed by the pytemplate-uv library.
 
-pytemplate-uv is an external tool: it is run as `uvx pytemplate-uv==3.0.* ... --json` through
-the platform's subprocess runner, never imported, and never vendored. The integration relies
-only on its documented contract: the render-request schema, JSON output (unknown fields are
-ignored), and stable exit codes (0 success, 1 invalid request and nothing written, 2 a valid
-request that failed while rendering or writing).
+pytemplate-uv is a third-party dependency (``pytemplate-uv>=3.0,<4``). This module is the only
+place that imports it, and it uses only its supported interface, ``pytemplate.api``. Rendering
+runs in-process with Copier's ``unsafe=False`` and needs no network for the bundled profiles or
+this package's local template pack.
 """
 
 from __future__ import annotations
 
-import json
-import tempfile
-from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
 
-from quant_agent_os.runtime.runner import CommandResult, run_command
+from pytemplate import api
+
 from quant_app_factory.domain.ports import (
-    ScaffoldError,
     ScaffoldPlan,
     ScaffoldRenderError,
     ScaffoldRequest,
     ScaffoldRequestError,
     ScaffoldResult,
-    ScaffoldUnavailableError,
 )
 
-PYTEMPLATE_UV = "pytemplate-uv==3.0.*"  # the one place the supported range is pinned
-TIMEOUT_SECONDS = 300.0  # the first run downloads pytemplate-uv
-JSON_CHARS = 2_000_000
+# Errors meaning the request is invalid and nothing was written (pytemplate-uv exit code 1).
+_INVALID_REQUEST = (
+    api.RequestError,
+    api.ConfigurationError,
+    api.ManifestError,
+    api.ProfileNotFoundError,
+    api.ComponentNotFoundError,
+    api.ComponentCompatibilityError,
+)
 
-Runner = Callable[..., CommandResult]
+
+def _render_request(request: ScaffoldRequest) -> api.RenderRequest:
+    """Return the pytemplate-uv request for ``request``."""
+    return api.RenderRequest(
+        profile_id=request.profile,
+        project_name=request.project_name,
+        output_dir=Path(request.output_dir),
+        components=tuple(sorted(request.components)),
+        no_input=True,
+        data=dict(request.data),
+        template=request.template,
+    )
 
 
-def render_request(request: ScaffoldRequest) -> str:
-    """Return ``request`` as a pytemplate-uv TOML render request (schema request-v1)."""
-    lines = [
-        f"project_name = {json.dumps(request.project_name)}",
-        f"profile = {json.dumps(request.profile)}",
-        f"output_dir = {json.dumps(Path(request.output_dir).as_posix())}",
-        f"components = {json.dumps(sorted(request.components))}",
-        "no_input = true",
-    ]
-    if request.template is not None:
-        lines.append(f"template = {json.dumps(request.template)}")
-    lines.append("")
-    lines.append("[data]")
-    lines += [f"{key} = {json.dumps(value)}" for key, value in sorted(request.data.items())]
-    return "\n".join(lines) + "\n"
+def _source(source: api.TemplateSource) -> dict[str, str | None]:
+    return {
+        "kind": source.kind,
+        "location": source.location,
+        "ref": source.ref,
+        "pack_id": source.pack_id,
+        "pack_version": source.pack_version,
+    }
 
 
 class PytemplateUvScaffolder:
-    """Plan and create projects with pytemplate-uv 3.0."""
+    """Plan and create projects with pytemplate-uv 3."""
 
     name = "pytemplate-uv"
 
-    def __init__(
-        self, *, runner: Runner = run_command, uvx: str = "uvx", timeout: float = TIMEOUT_SECONDS
-    ) -> None:
-        self._runner = runner
-        self._uvx = uvx
-        self._timeout = timeout
-
     @property
     def version(self) -> str:
-        """The pinned pytemplate-uv requirement."""
-        return PYTEMPLATE_UV
+        """The installed pytemplate-uv, as ``pytemplate-uv==<version>``."""
+        try:
+            return f"pytemplate-uv=={version('pytemplate-uv')}"
+        except PackageNotFoundError:  # pragma: no cover - always installed with this package
+            return "pytemplate-uv"
 
     def plan(self, request: ScaffoldRequest) -> ScaffoldPlan:
-        """Return the exact files, dependencies, and checks; write nothing."""
-        payload = self._run("plan", request)
+        """Return the exact files, dependencies, and checks. Nothing is written to the target."""
+        try:
+            planned = api.plan(_render_request(request))
+        except _INVALID_REQUEST as error:
+            raise ScaffoldRequestError(f"pytemplate-uv rejected the request: {error}") from error
+        except api.RenderError as error:
+            raise ScaffoldRenderError(
+                f"pytemplate-uv could not plan the project: {error}"
+            ) from error
+        resolution = planned.resolution
         return ScaffoldPlan(
-            project_path=payload["project_path"],
-            target_exists=bool(payload.get("target_exists", False)),
-            package_name=payload["package_name"],
-            profile=payload["profile"],
-            profile_version=str(payload["profile_version"]),
-            components=_ids(payload.get("components", [])),
-            dependencies=list(payload.get("dependencies", [])),
-            dependency_groups=dict(payload.get("dependency_groups", {})),
-            lifecycle_commands=list(payload.get("lifecycle_commands", [])),
-            files=list(payload.get("files", [])),
-            template=dict(payload.get("template") or {}),
-            security_notes=list(payload.get("security_notes", [])),
+            project_path=str(planned.project_path),
+            target_exists=planned.target_exists,
+            package_name=planned.package_name,
+            profile=resolution.profile.identifier,
+            profile_version=resolution.profile.version,
+            components=list(resolution.component_ids),
+            dependencies=list(resolution.dependencies),
+            dependency_groups={
+                group: list(specs) for group, specs in resolution.dependency_groups.items()
+            },
+            lifecycle_commands=list(resolution.lifecycle_commands),
+            files=list(planned.files),
+            template=_source(planned.source),
+            security_notes=list(resolution.security_notes),
         )
 
     def create(self, request: ScaffoldRequest) -> ScaffoldResult:
-        """Create the project and return where it is and how to check it."""
-        payload = self._run("create-from-config", request)
-        return ScaffoldResult(
-            project_path=payload["project_path"],
-            manifest_path=payload.get("manifest_path"),
-            profile=payload["profile"],
-            profile_version=str(payload["profile_version"]),
-            components=_ids(payload.get("components", [])),
-            lifecycle_commands=list(payload.get("lifecycle_commands", [])),
-        )
-
-    def _run(self, command: str, request: ScaffoldRequest) -> dict[str, Any]:
-        with tempfile.TemporaryDirectory(prefix="quant-factory-") as workdir:
-            request_file = Path(workdir) / "request.toml"
-            request_file.write_text(render_request(request), "utf-8")
-            result = self._runner(
-                [self._uvx, PYTEMPLATE_UV, command, str(request_file), "--json"],
-                cwd=Path(workdir),
-                timeout=self._timeout,
-                tail_chars=JSON_CHARS,
-            )
-        if result.timed_out:
-            raise ScaffoldError(f"pytemplate-uv did not finish within {self._timeout:.0f} s.")
-        if result.exit_code is None:
-            raise ScaffoldUnavailableError(
-                f"Cannot run {self._uvx}: {result.stderr_tail.strip()} "
-                "Install uv (https://docs.astral.sh/uv/), which provides uvx."
-            )
+        """Render and publish the project; pytemplate-uv publishes it only if rendering succeeds."""
         try:
-            payload = json.loads(result.stdout_tail)
-        except json.JSONDecodeError as error:
-            detail = (result.stderr_tail or result.stdout_tail).strip()[-500:]
-            raise ScaffoldError(
-                f"pytemplate-uv {command} exited {result.exit_code} without JSON output: {detail}"
-            ) from error
-        if not isinstance(payload, dict):
-            raise ScaffoldError(f"pytemplate-uv {command} returned unexpected JSON.")
-        if payload.get("ok") is True and result.exit_code == 0:
-            return payload
-        message = str((payload.get("error") or {}).get("message", "unknown error"))
-        if result.exit_code == 1:
-            raise ScaffoldRequestError(f"pytemplate-uv rejected the request: {message}")
-        if result.exit_code == 2:
-            raise ScaffoldRenderError(f"pytemplate-uv failed while rendering: {message}")
-        raise ScaffoldError(f"pytemplate-uv {command} failed (exit {result.exit_code}): {message}")
-
-
-def _ids(components: list[Any]) -> list[str]:
-    return [item["id"] if isinstance(item, dict) else str(item) for item in components]
+            result = api.render(_render_request(request))
+        except _INVALID_REQUEST as error:
+            raise ScaffoldRequestError(f"pytemplate-uv rejected the request: {error}") from error
+        except api.RenderError as error:
+            raise ScaffoldRenderError(f"pytemplate-uv failed while rendering: {error}") from error
+        return ScaffoldResult(
+            project_path=str(result.project_path),
+            manifest_path=str(result.manifest_path) if result.manifest_path else None,
+            profile=result.profile.identifier,
+            profile_version=result.profile.version,
+            components=[component.identifier for component in result.components],
+            lifecycle_commands=list(result.resolution.lifecycle_commands),
+        )

@@ -11,16 +11,12 @@ class ScaffoldError(RuntimeError):
     """Raised when the scaffolder fails; the message is safe to show the operator."""
 
 
-class ScaffoldUnavailableError(ScaffoldError):
-    """The scaffolder program cannot be started (for example, `uvx` is not installed)."""
-
-
 class ScaffoldRequestError(ScaffoldError):
-    """The request was invalid; nothing was written (pytemplate-uv exit code 1)."""
+    """The request was invalid; nothing was written."""
 
 
 class ScaffoldRenderError(ScaffoldError):
-    """A valid request failed while rendering or writing (pytemplate-uv exit code 2)."""
+    """A valid request failed while rendering or writing."""
 
 
 class ScaffoldRequest(BaseModel):

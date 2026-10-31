@@ -1,8 +1,8 @@
 """Quant App Factory: generate tested, packaged Python applications with Quant-Agent-OS.
 
 An `AppSpec` goes through the deterministic `ArchitecturePlanner` to a `ScaffoldProvider`
-(pytemplate-uv by default, run as an external tool), and the generated project's own checks run
-through the platform's subprocess runner. `create_app` needs an operator approval per call.
+(the pytemplate-uv library by default), and the generated project's own checks run through the
+platform's subprocess runner. `create_app` needs an operator approval per call.
 """
 
 from importlib.metadata import PackageNotFoundError, version
@@ -17,10 +17,9 @@ from quant_app_factory.domain.ports import (
     ScaffoldRequest,
     ScaffoldRequestError,
     ScaffoldResult,
-    ScaffoldUnavailableError,
 )
 from quant_app_factory.domain.spec import AppSpec, SpecError, load_spec
-from quant_app_factory.infrastructure.pytemplate_uv import PYTEMPLATE_UV, PytemplateUvScaffolder
+from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
 from quant_app_factory.tools import factory_tools
 
 try:
@@ -29,7 +28,6 @@ except PackageNotFoundError:  # pragma: no cover - source checkout without insta
     __version__ = "0.0.0"
 
 __all__ = [
-    "PYTEMPLATE_UV",
     "AppFactory",
     "AppPlan",
     "AppSpec",
@@ -45,7 +43,6 @@ __all__ = [
     "ScaffoldRequest",
     "ScaffoldRequestError",
     "ScaffoldResult",
-    "ScaffoldUnavailableError",
     "SpecError",
     "factory_tools",
     "load_spec",

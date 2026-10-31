@@ -1,8 +1,0 @@
-{
-  "ok": false,
-  "exit_code": 1,
-  "error": {
-    "type": "RequestError",
-    "message": "Output already exists: /work/out/signal-tools. Re-run with --force only if overwriting is intended."
-  }
-}

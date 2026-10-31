@@ -47,9 +47,10 @@ All notable changes to this project are documented here. The format follows
   own tests.
 - Quant App Factory foundation (B-10):
   - `AppSpec`, `ArchitecturePlanner`, and the `ScaffoldProvider` port;
-  - `PytemplateUvScaffolder`, which runs `uvx pytemplate-uv==3.0.*`;
+  - `PytemplateUvScaffolder`, which uses the pytemplate-uv library (`pytemplate.api`,
+    `pytemplate-uv>=3.0,<4`; decision 0006);
   - an `agent-tool` template pack;
-  - the `plan_app` and `create_app` tools;
+  - the `plan_app` tool (read-only, with the exact file preview) and the `create_app` tool;
   - `quant-factory plan` and `quant-factory create`.
 
 - Run persistence (B-08): `quant_agent_os.runs` with in-memory and SQLite run stores, a

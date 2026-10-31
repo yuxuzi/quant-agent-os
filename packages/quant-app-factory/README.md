@@ -2,9 +2,8 @@
 
 **Quant App Factory** is the application-engineering product of Quant-Agent-OS. It turns a
 typed application spec into a scaffolded, checked, packaged Python project. It uses
-[`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.0 as an external tool, run as
-`uvx pytemplate-uv==3.0.*` behind the replaceable `ScaffoldProvider` port. It never imports
-pytemplate-uv.
+[`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3 as a library (`pytemplate.api`),
+behind the replaceable `ScaffoldProvider` port. Only one adapter module imports it.
 
 ```text
 AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ operator approval
@@ -24,7 +23,8 @@ uv run quant-factory plan app.toml      # writes nothing
 uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
 ```
 
-From Python, `plan_app` is read-only. `create_app` declares `write_local_data`,
+From Python, `plan_app` is read-only: pytemplate-uv renders its file preview into a
+temporary directory. `create_app` declares `write_local_data`,
 `execute_code`, and `network`, so each call waits for an operator approval:
 
 ```python

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from quant_agent_os.tools import Permission, ToolSpec, tool
 from quant_app_factory.application.factory import AppFactory, FactoryReport
 from quant_app_factory.domain.planner import AppPlan
+from quant_app_factory.domain.ports import ScaffoldPlan
 from quant_app_factory.domain.spec import AppSpec
 
 CREATE_PERMISSIONS = frozenset(
@@ -23,9 +24,10 @@ class PlanAppInput(BaseModel):
 
 
 class PlanAppOutput(BaseModel):
-    """The plan, and the exact `create_app` input an operator would approve."""
+    """The plan, the exact files it would write, and the `create_app` input to approve."""
 
     plan: AppPlan
+    preview: ScaffoldPlan
     create_app_input: dict[str, Any]
     next_step: str
     warnings: list[str] = Field(default_factory=list)
@@ -44,14 +46,18 @@ def factory_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
     @tool(
         name="plan_app",
         description=(
-            "Plan a Python application from an app spec: the scaffold profile, components, "
-            "template answers, and the reasons. Writes nothing and runs nothing."
+            "Plan a Python application from an app spec: the profile, components, reasons, "
+            "dependencies, checks, and the exact files. Writes nothing to the target and runs "
+            "no programs."
         ),
     )
     def plan_app(params: PlanAppInput) -> PlanAppOutput:
-        plan = factory.plan(params.spec)
+        plan, preview = factory.preview(params.spec)
+        warnings = [f"{preview.project_path} already exists."] if preview.target_exists else []
         return PlanAppOutput(
             plan=plan,
+            preview=preview,
+            warnings=warnings,
             create_app_input={"spec": params.spec.model_dump(mode="json"), "run_checks": True},
             next_step=(
                 "Call create_app with create_app_input. It writes files, runs commands, and "

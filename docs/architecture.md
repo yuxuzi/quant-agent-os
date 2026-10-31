@@ -26,8 +26,9 @@ the client supplies the conversation.
 | External tool | [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.0 | Standalone, deterministic project scaffolder | Confirmed (published) |
 
 The baseline documents call the scaffolder "template-uv" or "uv-template"; its published name is
-`pytemplate-uv`. It is not a Quant-Agent-OS product or component. Quant App Factory calls it
-through a replaceable adapter ([section 9](#9-pytemplate-uv-integration-boundary)).
+`pytemplate-uv`. It is not a Quant-Agent-OS product or component. Quant App Factory uses it as a
+library through a replaceable adapter ([section 9](#9-pytemplate-uv-integration-boundary),
+[decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)).
 
 "QuantFoundry" (the earlier umbrella name) and "Quant AI Assistant" (the earlier flagship app)
 are retired by [decision 0003](decisions/0003-brand-and-product-structure.md). The assistant's
@@ -55,7 +56,7 @@ names remain provisional until availability checks are done.
      │ retrieval · evidence   │          │ validate · package      │
      └───────────┬────────────┘          └───────────┬─────────────┘
                  │                                   │ ScaffoldProvider port
-     KnowledgeStore adapters               pytemplate-uv adapter (uvx, JSON)
+     KnowledgeStore adapters               pytemplate-uv adapter (pytemplate.api)
      (memory · SQLite · PostgreSQL)                  │
                                           pytemplate-uv 3.0 (independent)
 
@@ -494,20 +495,21 @@ class ScaffoldProvider(Protocol):
     def create(self, request: ScaffoldRequest) -> ScaffoldResult: ...
 ```
 
-`PytemplateUvScaffolder` implements this protocol:
-- It writes the request as TOML and runs
-  `uvx pytemplate-uv==3.0.* {plan|create-from-config} <file> --json`.
-- It applies a timeout and maps exit codes to typed errors.
-- It parses the JSON result.
+`PytemplateUvScaffolder` implements this protocol with the library
+([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)):
+- It builds a `pytemplate.api.RenderRequest` and calls `api.plan`, which renders into a
+  temporary directory and never the target, or `api.render`, which publishes only on success.
+- It maps pytemplate-uv's request errors to `ScaffoldRequestError` (nothing was written) and
+  any other `RenderError` to `ScaffoldRenderError`.
 
 Further rules:
-- The version range is pinned in one constant.
-- A contract test runs against a recorded JSON fixture offline, and a smoke test against the real
-  CLI is opt-in.
-- No Python import of `pytemplate-uv` exists, no dependency on it is declared, and nothing of its
-  implementation is copied.
+- The dependency is `pytemplate-uv>=3.0,<4`, in one `pyproject.toml`.
+- Only the adapter imports pytemplate-uv, and only `pytemplate.api`; tests enforce this.
+- Offline tests render real projects into temporary directories. A smoke test that also runs
+  the generated project's `uv` checks is opt-in.
+- Nothing of its implementation is copied.
 - Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
-  a second `ScaffoldProvider`.
+  a second `ScaffoldProvider`. Core and Quant Research never import pytemplate-uv.
 - `pytemplate-uv` releases and plans are its own repository's business.
 
 ## 10. Interface strategy: MCP, REST, SDK, CLI
@@ -537,7 +539,7 @@ tests.
 | `get_source_passage` | Quant Research | `read_local_data` | MVP |
 | `analyze_performance` | Analytics (example tools today) | `read_local_data` | MVP |
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
-| `plan_app` | App Factory | `read_local_data` (planner only; the file preview is the operator's `quant-factory plan`) | Done |
+| `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
 | `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
