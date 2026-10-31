@@ -1,0 +1,43 @@
+{%- set model = tool_name | replace('_', ' ') | title | replace(' ', '') -%}
+"""Tools for Quant-Agent-OS. Each tool is a typed function; the platform runs it under its contract.
+
+Replace the example with your own tools. A tool that needs more than its input must declare the
+`Permission` it needs; consequential ones (writing files, running code, network access) also
+need an operator approval for each call.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
+
+
+class {{ model }}Input(BaseModel):
+    """What the tool takes."""
+
+    text: str = Field(min_length=1, description="The text to analyse.")
+
+
+class {{ model }}Output(BaseModel):
+    """What the tool returns."""
+
+    words: int = Field(ge=0, description="Number of whitespace-separated words.")
+    warnings: list[str] = Field(default_factory=list)
+
+
+@tool(name="{{ tool_name }}", description="Count the words in a text (an example tool).")
+def {{ tool_name }}(params: {{ model }}Input) -> {{ model }}Output:
+    """Count the words in ``params.text``."""
+    return {{ model }}Output(words=len(params.text.split()))
+
+
+def tools() -> list[ToolSpec[Any, Any]]:
+    """Return every tool this package provides."""
+    return [{{ tool_name }}]
+
+
+def registry() -> ToolRegistry:
+    """Return a registry with every tool, ready for a `Platform` or an MCP server."""
+    return ToolRegistry(tools())

@@ -172,6 +172,33 @@ with (
     run = platform.get_run(record.run_id)
 ```
 
+## 10. Generate a tool package
+
+Quant App Factory creates a new, tested tool package for the platform from a small spec:
+
+```bash
+cat > ~/qr-demo/signal-tools.toml <<'TOML'
+name = "signal-tools"
+kind = "agent-tool"
+description = "Signal tools for Quant-Agent-OS"
+output_dir = "."
+tool_name = "count_signals"
+quant_agent_os_source = "/path/to/quant-agent-os"   # this checkout; omit to use the git repository
+TOML
+uv run quant-factory plan ~/qr-demo/signal-tools.toml
+uv run quant-factory create ~/qr-demo/signal-tools.toml
+```
+
+What the two commands do:
+- **`plan`** lists the profile, the reasons, the dependencies, and every file it would write.
+- **`create`** asks first:
+  - your yes is recorded as a single-use approval for that exact spec;
+  - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
+  - its tests include `check_tool`, the platform's contract checks.
+
+`kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
+profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
+
 ## Known limitations
 
 From the real-paper evaluation (21 arXiv papers, 28 gold questions):
@@ -199,4 +226,7 @@ From the real-paper evaluation (21 arXiv papers, 28 gold questions):
   writes the answer. Check its citations against the passages it quotes.
 - **Not published.** Packages are not on PyPI, and names are provisional. Run from a checkout
   as shown here.
+- **App Factory scope.** The factory scaffolds and checks, but it does not write your code yet.
+  Specs are written by hand, because model drafting (B-16) and code generation (B-20) are
+  planned. Approvals come from the SDK or the factory CLI, not from an MCP client.
 - **Not investment advice.** This is pre-alpha research software.

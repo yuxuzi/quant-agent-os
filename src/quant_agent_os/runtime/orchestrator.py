@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from quant_agent_os.providers.base import ModelProvider
 from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.reporting.models import Report
-from quant_agent_os.runs.recorder import RunRecorder
+from quant_agent_os.runs.recorder import RunRecorder, outcome
 from quant_agent_os.runtime.executor import ToolExecutor
 from quant_agent_os.runtime.plan import Plan
 from quant_agent_os.tools.permissions import PermissionPolicy
@@ -121,9 +121,5 @@ class Orchestrator:
             finished_at=datetime.now(UTC),
         )
         if recorder and run:
-            recorder.finish(
-                run,
-                "completed" if report.succeeded else "failed",
-                data_versions=report.metadata.data_versions,
-            )
+            recorder.finish(run, outcome(records), data_versions=report.metadata.data_versions)
         return report

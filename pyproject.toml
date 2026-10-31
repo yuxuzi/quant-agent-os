@@ -50,8 +50,9 @@ dev = [
 [tool.uv]
 # Supply-chain cool-off: dependencies added by this project (and their new transitive
 # dependencies) lock only releases at least two weeks old. Move the date forward deliberately
-# when upgrading.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z" }
+# when upgrading. pytemplate-uv is exempt: it is first-party (same author), and the App Factory
+# needs its 3.0 API.
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z" }
 
 [tool.uv.workspace]
 # Core stays at the root; each product is a member with its own version (decision 0003).

@@ -1,0 +1,5 @@
+contract = 1
+id = "quant-agent-tool"
+name = "Quant-Agent-OS tool packs"
+description = "Packages of typed tools for the Quant-Agent-OS platform, with contract tests."
+version = "1.0.0"

@@ -10,6 +10,7 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 | `QUANT_AGENT_OS_API_KEY` | unset | Provider credential; stored as a secret and never shown. |
 | `QUANT_AGENT_OS_MAX_PLAN_STEPS` | `8` | Upper bound on plan length (1–50). |
 | `QUANT_AGENT_OS_GRANTED_PERMISSIONS` | `["read_local_data"]` | JSON list of granted tool permissions. |
+| `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `[]` | JSON list of consequential permissions approved for every call (a standing approval). Leave it empty unless one permission must run unattended, such as `network` for a hosted embedder. |
 | `QUANT_AGENT_OS_LOG_LEVEL` | `INFO` | Logging level. |
 
 `uv run quant-agent-os info` shows the active values. Secrets are reported only as `set` or
@@ -27,8 +28,10 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 ### MCP server
 
 `quant-research serve-mcp --store PATH` serves the research tools over stdio. It applies
-`QUANT_AGENT_OS_GRANTED_PERMISSIONS`, which defaults to read-only. It warns on stderr when a
-tool needs a permission that is not granted, for example `network` with a hosted embedder.
+`QUANT_AGENT_OS_GRANTED_PERMISSIONS` (read-only by default) and
+`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It warns on stderr when a tool needs a permission that
+is not granted, or one that needs approval for every call. For example, a hosted embedder needs
+`network` both granted and pre-approved, because MCP clients cannot approve calls.
 Install the transport with the `mcp` extra (`quant-agent-os[mcp]` or
 `quant-agent-os-research[mcp]`); the development environment includes it.
 
@@ -58,3 +61,29 @@ Pick the model with `--embedding-model`, for example `voyage-4`, `voyage-4-large
 
 Supported integrations are listed here as they are added. Anything not listed is not claimed to
 work.
+
+### Quant App Factory
+
+`quant-factory plan SPEC.toml` previews a project: the profile, the reasons, the dependencies,
+and the exact files. pytemplate-uv renders the preview into a temporary directory, never the
+target.
+
+`quant-factory create SPEC.toml` shows the same preview and asks you to confirm. Your
+confirmation is the approval for that exact spec. It then creates the project and runs the
+project's checks (`uv sync`, ruff, mypy, pytest).
+
+Runs and approvals are recorded in `~/.quant-agent-os/factory-runs.db` (`--runs PATH`). It
+needs `uv`, and network access only for the generated project's `uv sync`.
+
+An app spec is TOML:
+
+```toml
+name = "signal-tools"            # project slug
+kind = "agent-tool"              # agent-tool, python-cli, or fastapi-service
+description = "Signal tools for Quant-Agent-OS"
+output_dir = "projects"          # existing parent directory, relative to this file
+tool_name = "count_signals"      # agent-tool only
+# quant_agent_os_source = "../quant-agent-os"   # agent-tool only; default: the git repository
+# components = ["database"]      # python-cli: container; fastapi-service: database, worker,
+#                                #   auth with auth-api-key or auth-oidc, container
+```

@@ -1,0 +1,3 @@
+# Entry point for pytemplate-uv; see questions.yml. Templates never declare tasks or migrations.
+_subdirectory: "{{ profile }}/template"
+--- !include questions.yml

@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from quant_agent_os.tools.permissions import READ_ONLY, Permission
+from quant_agent_os.tools.permissions import READ_ONLY, Permission, PermissionPolicy
 
 
 class Settings(BaseSettings):
@@ -27,7 +27,14 @@ class Settings(BaseSettings):
 
     max_plan_steps: int = Field(default=8, ge=1, le=50)
     granted_permissions: frozenset[Permission] = READ_ONLY
+    preapproved_permissions: frozenset[Permission] = frozenset()
     log_level: str = "INFO"
+
+    def policy(self) -> PermissionPolicy:
+        """Return the permission policy these settings configure."""
+        return PermissionPolicy(
+            granted=self.granted_permissions, preapproved=self.preapproved_permissions
+        )
 
     def public_summary(self) -> dict[str, str]:
         """Return settings that are safe to display; secrets are reported only as set/unset."""
@@ -37,6 +44,10 @@ class Settings(BaseSettings):
             "api_key": "set" if self.api_key else "unset",
             "max_plan_steps": str(self.max_plan_steps),
             "granted_permissions": ", ".join(sorted(p.value for p in self.granted_permissions)),
+            "preapproved_permissions": ", ".join(
+                sorted(p.value for p in self.preapproved_permissions)
+            )
+            or "(none)",
             "log_level": self.log_level,
         }
 

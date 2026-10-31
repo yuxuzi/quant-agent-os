@@ -11,6 +11,7 @@ from quant_agent_os.reporting.models import Report
 from quant_agent_os.runs.models import RunRecord, StoredRun
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runs.store import MemoryRunStore, RunStore
+from quant_agent_os.runtime.approvals import Approval
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.runtime.orchestrator import Orchestrator
 from quant_agent_os.runtime.plan import PlanStep
@@ -48,8 +49,8 @@ class Platform:
     ) -> None:
         self.registry = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.policy = policy or PermissionPolicy()
-        self.executor = ToolExecutor(self.registry, self.policy)
         self.run_store = run_store or MemoryRunStore()
+        self.executor = ToolExecutor(self.registry, self.policy, approvals=self.run_store)
         self.recorder = RunRecorder(self.run_store, actor=actor)
         self.provider = provider
         self.max_steps = max_steps
@@ -79,6 +80,19 @@ class Platform:
             recorder=self.recorder,
         )
         return orchestrator.run(goal)
+
+    def approve(self, run_id: str, *, approved_by: str = "operator") -> list[Approval]:
+        """Approve, once, each call ``run_id`` is waiting on (an operator action).
+
+        A consequential call returns ``approval_required`` and leaves its run
+        ``awaiting_approval``; approve it, then `resume` the run. Never call this on a model's
+        behalf: approvals are how the operator says yes.
+        """
+        return self.recorder.approve(run_id, approved_by=approved_by)
+
+    def resume(self, run_id: str) -> list[ToolCallRecord]:
+        """Run the approved calls ``run_id`` was waiting on, in the same run."""
+        return self.recorder.resume(self.executor, run_id)
 
     def get_run(self, run_id: str) -> StoredRun | None:
         """Return a persisted run with its tool calls and audit events."""

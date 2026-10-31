@@ -26,8 +26,9 @@ sends data to that provider:
 - **Ingestion** sends every chunk of the corpus. This is an operator command, and the CLI help
   says so.
 - **Search** sends the query text. `find_related_signals` then declares the `network`
-  permission, so agents and MCP clients can use it only when the operator grants `network`
-  (`QUANT_AGENT_OS_GRANTED_PERMISSIONS`). The default policy refuses it.
+  permission. It runs only when the operator grants `network`
+  (`QUANT_AGENT_OS_GRANTED_PERMISSIONS`) and either approves each call or pre-approves
+  `network` (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). The default policy refuses it.
 
 Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` (or the `QUANT_RESEARCH_`-prefixed
 variants) and are held as `SecretStr`. Error messages name the variable, never its value. Use
@@ -58,16 +59,31 @@ in memory unless it is given a run store. What each part of a record holds:
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
 
-## Planned: approvals for consequential permissions
+## Approvals for consequential permissions
 
-[Decision 0005](decisions/0005-approval-gates.md) (proposed) treats `write_local_data`,
-`execute_code`, `network`, and `external_action` as consequential:
-- Granting one only makes a tool eligible to run.
-- Each call also needs a single-use approval, bound to the run id, the tool name, and the input
-  hash. Models can never create approvals.
-- `execute_code` tools will run in a subprocess runner with a scrubbed environment, a timeout,
-  and a hard kill.
-- Knowledge-store ingestion is an operator command, not an agent tool.
+[Decision 0005](decisions/0005-approval-gates.md) treats `write_local_data`, `execute_code`,
+`network`, and `external_action` as consequential:
+- **Granting is only eligibility.** Granting one of these permissions makes a tool eligible to
+  run, nothing more.
+- **Each call needs an approval.** The approval is single-use and bound to the run id, the tool
+  name, and the input hash.
+  - Without one, the call records `approval_required`, runs nothing, and the run waits in
+    `awaiting_approval`.
+  - The operator approves through the SDK (`Platform.approve`, then `Platform.resume`) or by
+    confirming `quant-factory create`.
+  - Models and MCP clients can never create approvals.
+- **Standing approvals.** An operator can pre-approve a permission for every call with
+  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
+  it records `standing:<permission>`.
+- **Running programs.** Programs run through `run_command`:
+  - a fixed working directory and no stdin;
+  - an allowlisted environment: `PATH`, home, temp, locale, uv caches, and certificates. API
+    keys, `QUANT_AGENT_OS_*` settings, and package-index URLs (which can embed credentials)
+    never pass through;
+  - a timeout that kills the whole process tree.
+- **App Factory checks.** The App Factory runs only `uv` lifecycle commands in a generated
+  project. Any other program is reported and skipped.
+- **Ingestion.** Knowledge-store ingestion is an operator command, not an agent tool.
 
 ## Out of scope for the first release
 

@@ -1,0 +1,100 @@
+# Questions for the agent-tool profile. Add questions rather than renaming or removing them, so
+# `pytemplate update` can replay recorded answers.
+_min_copier_version: "9.4"
+_templates_suffix: .jinja
+
+profile:
+  type: str
+  help: Project profile
+  choices:
+    - agent-tool
+
+project_name:
+  type: str
+  help: Lowercase project slug
+  validator: >-
+    {% if not (project_name | regex_search('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')) %}
+    Use a lowercase slug beginning with a letter.
+    {% endif %}
+
+package_name:
+  type: str
+  help: Importable Python package name
+  default: "{{ project_name | lower | replace('-', '_') }}"
+  validator: >-
+    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Use a lowercase Python identifier.
+    {% endif %}
+
+description:
+  type: str
+  help: One-line project description
+  default: Tools for Quant-Agent-OS
+  validator: >-
+    {% if '"' in description or '\\' in description or '\n' in description or not description.strip() %}
+    Use non-empty text on one line without double quotes or backslashes.
+    {% endif %}
+
+author:
+  type: str
+  help: Author name
+  default: Your Name
+  validator: >-
+    {% if '"' in author or '\\' in author or '\n' in author or not author.strip() %}
+    Use non-empty text on one line without double quotes or backslashes.
+    {% endif %}
+
+email:
+  type: str
+  help: Author email
+  default: your@email.com
+  validator: >-
+    {% if '"' in email or '\\' in email or '\n' in email or not email.strip() %}
+    Use non-empty text on one line without double quotes or backslashes.
+    {% endif %}
+
+python_version:
+  type: str
+  help: Minimum supported Python version
+  default: "3.11"
+  choices:
+    - "3.11"
+    - "3.12"
+    - "3.13"
+    - "3.14"
+    - "3.15"
+
+license:
+  type: str
+  help: SPDX license expression, for example MIT or Apache-2.0
+  default: MIT
+  validator: >-
+    {% if not (license | regex_search('^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$')) %}
+    Use an SPDX license expression such as MIT or Apache-2.0.
+    {% endif %}
+
+tool_name:
+  type: str
+  help: Name of the first tool (a Python identifier)
+  default: "{{ package_name }}"
+  validator: >-
+    {% if not (tool_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Use a lowercase Python identifier.
+    {% endif %}
+
+quant_agent_os_source:
+  type: str
+  help: Where to install quant-agent-os from, a git URL (git+https://...) or a local path
+  default: git+https://github.com/yuxuzi/quant-agent-os
+  validator: >-
+    {% if '"' in quant_agent_os_source or '\\' in quant_agent_os_source or '\n' in quant_agent_os_source or not quant_agent_os_source.strip() %}
+    Use a git+https URL or a path written with forward slashes.
+    {% endif %}
+
+# Set by pytemplate from the profile (always passed as data, never prompted).
+components:
+  type: str
+  help: Components to include
+  multiselect: true
+  choices: []
+  default: []
