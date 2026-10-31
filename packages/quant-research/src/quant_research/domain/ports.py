@@ -115,6 +115,7 @@ class KeywordHit(BaseModel):
 
     chunk_id: str
     score: float
+    matched: list[str] = Field(default_factory=list, description="Query terms the chunk contains")
 
 
 class GraphEdge(BaseModel):
@@ -195,7 +196,11 @@ class KnowledgeStore(Protocol):
         ...
 
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
-        """Return the best keyword matches for ``query``."""
+        """Return the best keyword matches for ``query``, each with the terms it matched."""
+        ...
+
+    def term_frequencies(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]:
+        """Return the number of chunks and, for each term, how many chunks contain it."""
         ...
 
     def expand(

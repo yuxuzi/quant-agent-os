@@ -43,6 +43,21 @@ bounded to 8 seconds inside the 15-second tool timeout; past that, the vector ch
 skipped with a warning. Repeated queries are served from a cache rather than sent to the
 provider again.
 
+## Run records
+
+`serve-mcp` records every call as a run in `runs.db` beside the knowledge store. Pass
+`--runs PATH` to put it elsewhere, or `--no-record` to keep none. The SDK `Platform` keeps runs
+in memory unless it is given a run store. What each part of a record holds:
+- **Calls.** A call record holds the tool's arguments and output, which for research tools
+  includes retrieved passages. Treat `runs.db` as being as sensitive as the corpus.
+- **Redaction.** Before anything is stored, `SecretStr` values and values under keys that
+  name a secret (`api_key`, `token`, `password`, ...) are replaced with `[REDACTED]`.
+- **Audit events.** These hold only ids, hashes, and statuses, and the database rejects any
+  update or deletion of them.
+- **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
+  warning, and a failed write is logged. Losing an answer the tool already produced would not
+  make the record more complete.
+
 ## Planned: approvals for consequential permissions
 
 [Decision 0005](decisions/0005-approval-gates.md) (proposed) treats `write_local_data`,

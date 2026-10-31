@@ -126,6 +126,13 @@ EDGES_PER_TRIPLE = 3
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
+
+def _matched(tokens: Iterable[str], text: str) -> list[str]:
+    """Return the ``tokens`` that occur in ``text`` as whole words, case-insensitively."""
+    words = {word.lower() for word in _TOKEN.findall(text)}
+    return [token for token in tokens if token in words]
+
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -417,19 +424,47 @@ class SqliteKnowledgeStore:
         if self.has_fts:
             match = " OR ".join(f'"{token}"' for token in tokens)
             rows = self._db.execute(
-                "SELECT chunk_id, -bm25(chunks_fts) AS score FROM chunks_fts "
-                "WHERE chunks_fts MATCH ? ORDER BY score DESC, chunk_id LIMIT ?",
+                "SELECT f.chunk_id, -bm25(chunks_fts) AS score, c.text FROM chunks_fts f "
+                "JOIN chunks c ON c.id = f.chunk_id "
+                "WHERE chunks_fts MATCH ? ORDER BY score DESC, f.chunk_id LIMIT ?",
                 (match, limit),
             )
-            return [KeywordHit(chunk_id=row["chunk_id"], score=row["score"]) for row in rows]
+            return [
+                KeywordHit(
+                    chunk_id=row["chunk_id"],
+                    score=row["score"],
+                    matched=_matched(tokens, row["text"]),
+                )
+                for row in rows
+            ]
         scored = []
         for row in self._db.execute("SELECT id, text FROM chunks"):
             words = [word.lower() for word in _TOKEN.findall(row["text"])]
             score = sum(words.count(token) for token in tokens) / (1 + len(words)) ** 0.5
             if score > 0:
-                scored.append(KeywordHit(chunk_id=row["id"], score=score))
+                matched = [token for token in tokens if token in words]
+                scored.append(KeywordHit(chunk_id=row["id"], score=score, matched=matched))
         scored.sort(key=lambda hit: (-hit.score, hit.chunk_id))
         return scored[:limit]
+
+    @_locked
+    def term_frequencies(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]:
+        """Return the chunk count and, per term, the number of chunks containing it."""
+        tokens = sorted({token.lower() for term in terms for token in _TOKEN.findall(term)})
+        total = self._db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        if self.has_fts:
+            frequencies = {
+                token: self._db.execute(
+                    "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH ?", (f'"{token}"',)
+                ).fetchone()[0]
+                for token in tokens
+            }
+            return total, frequencies
+        frequencies = dict.fromkeys(tokens, 0)
+        for row in self._db.execute("SELECT text FROM chunks"):
+            for token in set(_matched(tokens, row["text"])):
+                frequencies[token] += 1
+        return total, frequencies
 
     @_locked
     def all_relations(self) -> list[Relation]:

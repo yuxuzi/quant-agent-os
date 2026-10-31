@@ -10,6 +10,7 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from typer.testing import CliRunner
 
+from quant_agent_os.runs import SqliteRunStore
 from quant_research.cli import app as cli
 
 
@@ -67,3 +68,45 @@ def test_serve_mcp_refuses_a_missing_store(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "run quant-research ingest" in " ".join(result.output.split())
+
+
+def test_every_mcp_call_is_recorded_as_a_run(corpus_dir: Path, tmp_path: Path) -> None:
+    store = tmp_path / "kb.db"
+    runner = CliRunner()
+    assert runner.invoke(cli, ["ingest", str(corpus_dir), "--store", str(store)]).exit_code == 0
+
+    async def check(session: ClientSession, initialised: Any) -> Any:
+        await session.call_tool("find_related_signals", {"query": "short-term reversal"})
+        await session.call_tool("get_source_passage", {"chunk_id": "missing"})
+
+    _run(_server(store), check)
+    with SqliteRunStore(tmp_path / "runs.db") as runs:
+        recorded = runs.list_runs()
+        searched = runs.get_run(recorded[-1].run_id)
+    listing = runner.invoke(cli, ["runs", "--store", str(store)])
+    shown = runner.invoke(cli, ["runs", recorded[-1].run_id, "--store", str(store)])
+
+    assert [(run.goal, run.status, run.actor) for run in recorded] == [
+        ("get_source_passage", "failed", "mcp"),
+        ("find_related_signals", "completed", "mcp"),
+    ]
+    assert searched is not None
+    assert searched.run.data_versions["corpus_snapshot"].startswith("snap:")
+    assert searched.calls[0].input_sha256
+    assert listing.exit_code == 0 and "find_related_signals" in listing.output
+    assert shown.exit_code == 0 and "tool.called" in shown.output
+
+
+def test_serving_without_recording_writes_no_run_store(corpus_dir: Path, tmp_path: Path) -> None:
+    store = tmp_path / "kb.db"
+    assert (
+        CliRunner().invoke(cli, ["ingest", str(corpus_dir), "--store", str(store)]).exit_code == 0
+    )
+
+    async def check(session: ClientSession, initialised: Any) -> Any:
+        await session.call_tool("find_related_signals", {"query": "momentum"})
+
+    _run(_server(store, "--no-record"), check)
+
+    assert not (tmp_path / "runs.db").exists()
+    assert "No runs recorded" in CliRunner().invoke(cli, ["runs", "--store", str(store)]).output

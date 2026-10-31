@@ -84,9 +84,9 @@ product.
 | MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool` over the executor | Confirmed; no transport |
 | CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
 | Approval gate | `tools/approvals.py` | Approval requests and grants for consequential permissions | Proposed |
-| Run store and audit | `runs/` | Persisted runs, call records, approvals, audit events | Proposed |
+| Run store and audit | `runs/` | Persisted runs, call records, append-only audit events (approvals: proposed) | Confirmed |
 | MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra); tool annotations from declared permissions | Confirmed |
-| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Proposed |
+| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Confirmed |
 | REST API | `api/` | FastAPI over the same executor (optional `api` extra) | Proposed, deferred |
 | Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
 
@@ -204,8 +204,8 @@ proposed `approval_required` status.
    records, not exceptions.
 5. **Report.** `build_report` collects evidence and warnings, turns failed calls into warnings,
    and adds limitations and run metadata.
-6. **Persist** (proposed). The run, its records, approvals, and audit events go to the run
-   store.
+6. **Persist.** With a `RunRecorder`, the run, its records, and audit events go to the run
+   store as they happen, including runs whose plan is rejected. Approvals are proposed.
 
 Tool output and retrieved text are never fed back into **planning**. A tool may give retrieved
 text to a model for synthesis (section 6.5). The synthesized text is labelled `interpretation`
@@ -513,7 +513,7 @@ Further rules:
 | Interface | Audience | Built on | Status |
 | --- | --- | --- | --- |
 | MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter; `quant-research serve-mcp` | Confirmed |
-| Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor | Proposed for the MVP |
+| Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
 | CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
 | REST | Web apps, non-Python clients, the hosted offering | FastAPI over the executor (optional extra) | Deferred until a client needs it |
 
@@ -550,16 +550,30 @@ tests.
 - `RunMetadata` stores the platform version, provider, and start and end times.
 - `Evidence` and `SourceRef` keep facts and interpretation apart.
 
-**Proposed** additions (additive fields):
-- `ToolCallRecord`: `call_id`, `run_id`, `started_at`, `input_sha256`, `data_versions` (for
-  example the corpus snapshot id).
-- `RunMetadata`: `run_id`, a `registry_digest` (a hash of tool names, versions, and schemas), a
-  digest of the public settings (never secrets), and package versions.
-- `RunStore` protocol with in-memory and SQLite adapters (standard library). It stores `runs`
-  (status `planned` · `awaiting_approval` · `running` · `completed` · `failed`), `tool_calls`,
-  `approvals`, and `audit_events`.
-- `audit_events` is append-only, with columns `run_id`, `actor`, `event`, `subject`, `at`, and
-  `details`. It is never written with secrets, and it is the future basis for usage metering.
+**Confirmed** (B-02, B-07, B-08):
+- `ToolCallRecord` also stores `call_id`, `run_id`, `started_at`, `input_sha256`, and
+  `data_versions` (for example the corpus snapshot id).
+- `RunMetadata` stores the `run_id`, the `registry_digest` (a hash of tool names, versions,
+  and schemas), and the merged data versions.
+- `quant_agent_os.runs` has a `RunStore` protocol with in-memory and SQLite adapters
+  (standard library), and a `RunRecorder`.
+  - **Tables:** `runs` (kind `call` or `plan`; status `running`, `completed`, or `failed`,
+    with `planned` and `awaiting_approval` reserved for approvals), `tool_calls`, and
+    `audit_events`.
+  - **Every call is a run.** Each MCP or SDK call is a one-call run, and each orchestrated
+    plan is a run.
+  - **Redaction.** Arguments and outputs pass through `redact` before storage: `SecretStr`
+    values, and values under keys such as `api_key` or `token`.
+  - **Failures.** A store failure is logged and never fails the call.
+- `audit_events` is append-only (SQLite triggers reject UPDATE and DELETE), with columns
+  `run_id`, `actor`, `event`, `subject`, `at`, and `details`. The details hold ids, hashes,
+  and statuses, never inputs or secrets. This table is the future basis for usage metering.
+- `quant-research serve-mcp` records to `runs.db` beside the knowledge store by default
+  (`--runs`, `--no-record`). `quant-research runs [RUN_ID]` lists runs or shows one.
+
+**Proposed:**
+- an `approvals` table (decision 0005);
+- a digest of the public settings, and package versions in `RunMetadata`.
 
 ## 12. Security and approval model
 
@@ -610,7 +624,7 @@ Kubernetes, or several model frameworks.
 - **MCP:** a transport only forwards `tools/list` and `tools/call` to `tool_definitions` and
   `call_tool`.
 
-Proposed extension points are `KnowledgeStore`, `RunStore`, `ScaffoldProvider`, and
+Extension points are `KnowledgeStore` and `RunStore` (confirmed), and `ScaffoldProvider` and
 `EmbeddingProvider`. Each has a Protocol, one reference adapter, and contract tests.
 
 ## 15. Not in scope

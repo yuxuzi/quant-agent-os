@@ -32,6 +32,11 @@ tool needs a permission that is not granted, for example `network` with a hosted
 Install the transport with the `mcp` extra (`quant-agent-os[mcp]` or
 `quant-agent-os-research[mcp]`); the development environment includes it.
 
+Every call is recorded as a run in `runs.db` beside the store. Change the file with
+`--runs PATH`, or turn recording off with `--no-record`. List recent runs with
+`quant-research runs --store PATH`, and show one run's calls and audit trail with
+`quant-research runs RUN_ID --store PATH`.
+
 ### Quant Research embeddings
 
 | Variable | Default | Meaning |

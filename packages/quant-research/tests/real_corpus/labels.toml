@@ -1,0 +1,460 @@
+# Hand judgements of typed relations extracted from the real corpus. Each row is one fact
+# (paper, subject, predicate, object), judged against the sentence that states it in that
+# paper: correct = true when the paper asserts the relation in that direction.
+# Labelled on 2026-10-30: every fact from rules-v4 and rules-v5 on this corpus.
+
+[[relations]]
+paper = "1403.8125v4"
+subject = "factor:momentum"
+predicate = "predicts"
+object = "metric:max-drawdown"
+correct = false
+note = "reversed: maximum drawdown predicts momentum"
+
+[[relations]]
+paper = "1403.8125v4"
+subject = "factor:momentum"
+predicate = "uses"
+object = "metric:max-drawdown"
+correct = true
+note = "momentum strategies built on maximum drawdown"
+
+[[relations]]
+paper = "1403.8125v4"
+subject = "metric:max-drawdown"
+predicate = "predicts"
+object = "factor:momentum"
+correct = true
+note = "drawdown measures improve predictability of momentum"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "factor:profitability"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "'profitability' here means profit, not the factor"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "factor:value"
+predicate = "correlates_with"
+object = "factor:momentum"
+correct = true
+note = "known anti-correlation between value and momentum"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "metric:sharpe-ratio"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = false
+note = "a metric is not tested on an asset class"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "metric:sharpe-ratio"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "figure caption, metric as subject"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "signal:carry"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = true
+note = "FX carry studied on G20 currencies"
+
+[[relations]]
+paper = "1409.7720v3"
+subject = "strategy:trend-following"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "trend following on diversified futures"
+
+[[relations]]
+paper = "1702.07374v1"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = false
+note = "reference-list entry, not a finding of the paper"
+
+[[relations]]
+paper = "1702.07374v1"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = true
+note = "momentum effects found in currencies"
+
+[[relations]]
+paper = "1702.07374v1"
+subject = "signal:time-series-momentum"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "TSMOM studies focus on futures"
+
+[[relations]]
+paper = "1702.07374v1"
+subject = "strategy:risk-parity"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = false
+note = "reference-list entry"
+
+[[relations]]
+paper = "1702.07374v1"
+subject = "strategy:trend-following"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "trend following documented for futures"
+
+[[relations]]
+paper = "1904.04912v3"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "reference-list entry"
+
+[[relations]]
+paper = "1904.04912v3"
+subject = "metric:sharpe-ratio"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "exhibit captions run together"
+
+[[relations]]
+paper = "1904.04912v3"
+subject = "metric:turnover"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "exhibit captions run together"
+
+[[relations]]
+paper = "1904.04912v3"
+subject = "signal:time-series-momentum"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "TSMOM evaluated across futures contracts"
+
+[[relations]]
+paper = "1904.04912v3"
+subject = "strategy:trend-following"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "reference-list entry"
+
+[[relations]]
+paper = "2003.08302v2"
+subject = "factor:low-volatility"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "low-beta anomaly documented in futures"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:investment"
+predicate = "correlates_with"
+object = "factor:size"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:investment"
+predicate = "correlates_with"
+object = "factor:value"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:profitability"
+predicate = "correlates_with"
+object = "factor:size"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:profitability"
+predicate = "correlates_with"
+object = "factor:value"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:size"
+predicate = "correlates_with"
+object = "factor:value"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2006.02467v1"
+subject = "factor:value"
+predicate = "correlates_with"
+object = "factor:size"
+correct = false
+note = "correlation-matrix table, not an assertion"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "asset_class:futures"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "asset class as subject"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "asset_class:futures"
+predicate = "uses"
+object = "signal:time-series-momentum"
+correct = false
+note = "asset class as subject"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "asset_class:fx"
+predicate = "uses"
+object = "signal:time-series-momentum"
+correct = false
+note = "asset class as subject"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "factor:momentum"
+predicate = "correlates_with"
+object = "factor:low-volatility"
+correct = false
+note = "correlation is with the market, not between the two"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = false
+note = "reference-list entry"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "metric:sharpe-ratio"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "metric as subject"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "signal:time-series-momentum"
+predicate = "correlates_with"
+object = "factor:momentum"
+correct = false
+note = "reference-list entry"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "signal:time-series-momentum"
+predicate = "uses"
+object = "metric:sharpe-ratio"
+correct = false
+note = "'using' belongs to another clause"
+
+[[relations]]
+paper = "2106.08420v4"
+subject = "strategy:trend-following"
+predicate = "uses"
+object = "factor:momentum"
+correct = true
+note = "trend-following strategies built from momentum measures"
+
+[[relations]]
+paper = "2302.11729v2"
+subject = "dataset:compustat"
+predicate = "tested_on"
+object = "dataset:crsp"
+correct = false
+note = "two data sources listed together"
+
+[[relations]]
+paper = "2308.11294v1"
+subject = "asset_class:futures"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = false
+note = "asset class as subject"
+
+[[relations]]
+paper = "2308.11294v1"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:futures"
+correct = true
+note = "network momentum backtested on futures"
+
+[[relations]]
+paper = "2308.11294v1"
+subject = "factor:momentum"
+predicate = "tested_on"
+object = "asset_class:fx"
+correct = true
+note = "momentum premium confirmed in currencies"
+
+[[relations]]
+paper = "2308.11294v1"
+subject = "method:transaction-cost-model"
+predicate = "uses"
+object = "metric:sharpe-ratio"
+correct = false
+note = "'with' belongs to another clause"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "asset_class:us-equities"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "asset class as subject"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "dataset:crsp"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "dataset as subject"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "factor:low-volatility"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "table header"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "method:portfolio-sorts"
+predicate = "tested_on"
+object = "asset_class:us-equities"
+correct = true
+note = "sorts on the universe of US stocks"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "method:portfolio-sorts"
+predicate = "tested_on"
+object = "dataset:crsp"
+correct = true
+note = "sorts on the universe of CRSP stocks"
+
+[[relations]]
+paper = "2409.00416v1"
+subject = "method:portfolio-sorts"
+predicate = "uses"
+object = "method:transaction-cost-model"
+correct = false
+note = "'with' belongs to another clause"
+
+[[relations]]
+paper = "2503.23501v2"
+subject = "factor:profitability"
+predicate = "correlates_with"
+object = "factor:size"
+correct = false
+note = "table, not an assertion"
+
+[[relations]]
+paper = "2503.23501v2"
+subject = "factor:size"
+predicate = "correlates_with"
+object = "factor:profitability"
+correct = false
+note = "table, not an assertion"
+
+[[relations]]
+paper = "2505.16336v1"
+subject = "factor:profitability"
+predicate = "predicts"
+object = "factor:value"
+correct = false
+note = "both are predictors of returns"
+
+[[relations]]
+paper = "2506.00206v1"
+subject = "factor:profitability"
+predicate = "uses"
+object = "factor:value"
+correct = false
+note = "run-on sentence across citations"
+
+[[relations]]
+paper = "2506.00206v1"
+subject = "factor:profitability"
+predicate = "uses"
+object = "method:portfolio-sorts"
+correct = false
+note = "run-on sentence across citations"
+
+[[relations]]
+paper = "2506.00206v1"
+subject = "factor:value"
+predicate = "explained_by"
+object = "factor:profitability"
+correct = false
+note = "'book-to-market' is a parenthetical gloss of accruals"
+
+[[relations]]
+paper = "2506.00206v1"
+subject = "factor:value"
+predicate = "uses"
+object = "method:portfolio-sorts"
+correct = false
+note = "run-on sentence across citations"
+
+[[relations]]
+paper = "2506.00206v1"
+subject = "signal:accruals"
+predicate = "explained_by"
+object = "factor:profitability"
+correct = true
+note = "cash-based profitability subsumes accruals"
+
+[[relations]]
+paper = "2512.00280v2"
+subject = "metric:turnover"
+predicate = "predicts"
+object = "signal:earnings-drift"
+correct = false
+note = "summary-statistics table"
+
+[[relations]]
+paper = "2512.00280v2"
+subject = "signal:earnings-drift"
+predicate = "predicts"
+object = "dataset:crsp"
+correct = false
+note = "'forecast' is an analyst forecast; dataset as object"
+
+[[relations]]
+paper = "2512.00280v2"
+subject = "signal:earnings-drift"
+predicate = "uses"
+object = "dataset:crsp"
+correct = true
+note = "earnings-surprise study uses CRSP returns"

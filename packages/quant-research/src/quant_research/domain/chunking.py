@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-CHUNKER_VERSION = "paragraph-v2+page-v1"
+CHUNKER_VERSION = "paragraph-v2+page-v2"
 MAX_CHUNK_CHARS = 1200
 MIN_CHUNK_CHARS = 200
 PAGE_CHUNK_CHARS = 500
@@ -13,6 +14,25 @@ PAGE_CHUNK_CHARS = 500
 _SENTENCE_END = (".", "?", "!", ":")
 
 _HEADING = re.compile(r"^#{1,6}\s+(.*\S)\s*$")
+# A PDF line that opens the reference list ("References", "7 References", "Bibliography") or
+# an appendix after it. Only whole short lines count, never a sentence that mentions them.
+_REFERENCES_LINE = re.compile(
+    r"^(?:\d+(?:\.\d+)*\.?\s+)?(?:references|bibliography|works cited|literature cited)$", re.I
+)
+_APPENDIX_LINE = re.compile(
+    r"^(?:[A-Z]\.?\s+)?(?:appendix|appendices|online appendix)\b.{0,60}$", re.I
+)
+REFERENCES = "References"
+APPENDIX = "Appendix"
+_REFERENCE_TITLES = frozenset({"references", "bibliography", "works cited", "literature cited"})
+
+
+def is_reference_list(section: str | None) -> bool:
+    """Return whether ``section`` is a document's reference list, which states no findings."""
+    if section is None:
+        return False
+    title = re.sub(r"^[\d.\s]+", "", section).strip().lower()
+    return title in _REFERENCE_TITLES
 
 
 @dataclass(frozen=True)
@@ -80,6 +100,20 @@ def _paragraphs(text: str, first_line: int) -> list[Passage]:
     return paragraphs
 
 
+def split_pages(pages: Sequence[str]) -> list[tuple[int, Passage]]:
+    """Return ``(page number, passage)`` for every page of a PDF, in order.
+
+    The section carries across pages: passages after a "References" line belong to the
+    `REFERENCES` section until an appendix heading starts the `APPENDIX` section.
+    """
+    located: list[tuple[int, Passage]] = []
+    section: str | None = None
+    for number, page in enumerate(pages, start=1):
+        passages, section = _split_page(page, section)
+        located += [(number, passage) for passage in passages]
+    return located
+
+
 def split_page(text: str) -> list[Passage]:
     """Pack the lines of one extracted PDF page into passages of about `PAGE_CHUNK_CHARS`.
 
@@ -87,13 +121,17 @@ def split_page(text: str) -> list[Passage]:
     closes at a line ending a sentence once it holds `PAGE_CHUNK_CHARS` characters, and always
     before exceeding `MAX_CHUNK_CHARS`. Line numbers count lines of the extracted page text.
     """
+    return _split_page(text, None)[0]
+
+
+def _split_page(text: str, section: str | None) -> tuple[list[Passage], str | None]:
     passages: list[Passage] = []
     lines: list[str] = []
     start = 1
 
     def close(end: int) -> None:
         if lines:
-            passages.append(Passage("\n".join(lines), start, end, None))
+            passages.append(Passage("\n".join(lines), start, end, section))
             lines.clear()
 
     number = 0
@@ -101,6 +139,16 @@ def split_page(text: str) -> list[Passage]:
         line = raw.strip()
         if not line:
             continue
+        opens = (
+            REFERENCES
+            if _REFERENCES_LINE.match(line)
+            else APPENDIX
+            if section == REFERENCES and _APPENDIX_LINE.match(line)
+            else None
+        )
+        if opens is not None:
+            close(number - 1)
+            section = opens
         size = sum(len(item) + 1 for item in lines)
         if lines and size + len(line) > MAX_CHUNK_CHARS:
             close(number - 1)
@@ -110,4 +158,4 @@ def split_page(text: str) -> list[Passage]:
         if size + len(line) >= PAGE_CHUNK_CHARS and line.endswith(_SENTENCE_END):
             close(number)
     close(number)
-    return passages
+    return passages, section
