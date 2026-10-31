@@ -1,289 +1,214 @@
-# Plan: questionnaire-driven App Factory, quant baseline templates, configuration hub
+# Plan: quant templates and a guided App Factory (simplified)
 
-Scope: turn App Factory from "write an `AppSpec` by hand" into a guided product. A user
-chooses a template: a built-in quant baseline, pytemplate-uv's bundled profiles, or their own
-pack. A questionnaire then refines a draft until there is enough information to generate the
-app. Settings used often, such as database connections, live in a configuration hub, and
-secrets are kept only as references.
+Scope: what users asked for, with as little new machinery as possible.
+1. Bring your own templates.
+2. Make templates, from a quant baseline.
+3. Quant baseline templates for alpha research, backtests, and reports.
+4. Be guided until there is enough information to build.
+5. Be guided through setting up a database.
+6. Keep frequent settings somewhere.
+
+The design follows three rules:
+- **The spec file is the draft.** A guided session produces an ordinary `AppSpec` TOML file,
+  which is reviewable, reusable, and diffable. Nothing else is stored.
+- **pytemplate-uv is the judge.** Whether a spec is complete and valid is decided by
+  `pytemplate.api.plan`, not by our own reading of Copier's rules.
+- **Templates come first.** They are the part only Quant-Agent-OS has, and they already work
+  with today's `quant-factory create`.
 
 Decisions:
-- [0007 questionnaire and drafts](../decisions/0007-questionnaire-and-drafts.md);
-- [0008 configuration hub](../decisions/0008-configuration-hub.md);
+- [0007 guided specs](../decisions/0007-guided-specs.md);
+- [0008 factory settings](../decisions/0008-factory-settings.md);
 - [0009 quant baseline templates](../decisions/0009-quant-baseline-templates.md).
 
-Backlog: B-23 to B-29 in [ENGINEERING_REVIEW_PLAN.md](../ENGINEERING_REVIEW_PLAN.md#remaining-backlog).
+Backlog: B-23 to B-26 in [ENGINEERING_REVIEW_PLAN.md](../ENGINEERING_REVIEW_PLAN.md#remaining-backlog).
 
 ## Starting point (`e0cbc71`, 2026-10-31)
 
 - **App Factory today.** It has:
   - an `AppSpec` (`kind`: `agent-tool`, `python-cli`, or `fastapi-service`);
   - the deterministic `ArchitecturePlanner`;
-  - the `ScaffoldProvider` port and `PytemplateUvScaffolder`, the only importer of
-    `pytemplate.api`;
-  - `AppFactory.preview`, `create`, and `check`;
-  - the `plan_app` (read-only) and `create_app` (one approval per call) tools;
+  - `PytemplateUvScaffolder`, the only importer of `pytemplate.api`;
+  - `plan_app` (read-only, with the exact file preview);
+  - `create_app` (one approval per call);
   - `quant-factory plan` and `quant-factory create`;
   - the `agent-tool` template pack.
-- **What pytemplate-uv 3.0 already gives us,** through `pytemplate.api`:
-  - **User packs:** a local directory, or a git source with a ref.
-  - **`open_catalog(template, ref)`** returns:
-    - the profiles, with default and optional components;
-    - the components, with `requires`, `requires_any`, `conflicts`, and runtime `settings`;
-    - the parsed Copier `questions`: type, choices, default, `when`, validator, and `secret`.
-  - **Runtime settings.** `Component.settings` declares the environment settings an app reads
-    at runtime (name, type, description, `required_in_production`, `secret`), for example
-    `DATABASE_URL`. These are never stored values.
-- **What it does not give us:** its skill guides the creation of *projects*, not of templates.
-  Generic template authoring belongs on pytemplate-uv's own roadmap and is not planned here.
-  [Q6](#q6-quant-template-authoring-b-28) records what this repository would use if it ships.
-
-Two kinds of input follow from this, and the design keeps them apart:
-
-| Input | Comes from | Used at | Stored in the hub? |
-| --- | --- | --- | --- |
-| Template answers (description, `db_kind`, frequency, ...) | the pack's Copier questions | render time | Reusable defaults only, such as identity or the default frequency |
-| Runtime settings (`DATABASE_URL`, `VENDOR_API_KEY`, ...) | the selected components' `settings` | run time, by the generated app | Yes, as connection profiles, with secrets as references only |
+- **What `pytemplate.api.open_catalog` exposes for a pack:**
+  - profiles, with default and optional components;
+  - components, with `requires`, `conflicts`, and runtime `settings`. Each setting has a
+    name, a type, a description, and a `secret` flag, for example `DATABASE_URL`;
+  - the parsed Copier questions: type, help, choices, default, `when`, and validator.
+- **The gap:** pytemplate-uv's skill guides the creation of projects, not of templates.
+  Generic template authoring is pytemplate-uv's own roadmap.
 
 ## Steps
 
-Each step ends with every quality gate passing (pytest, ruff, ruff format, mypy) and a commit.
-Tests run offline, and anything that installs or connects is in an opt-in smoke test.
+Each step ends with every quality gate passing and a commit. Tests run offline, and anything
+that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
-### Q1. Template catalog and user packs (B-23)
+### Q1. Quant baseline templates and user packs (B-23), covering points 1 and 3
 
-- **`TemplateCatalog`** (App Factory, application layer) lists every profile it can build
-  from:
-  - the built-in packs in `quant_app_factory/packs/` (`agent-tool`, and `quant-baseline`
-    from Q4);
-  - pytemplate-uv's bundled profiles (`python`, `fastapi`);
-  - the user packs registered in the hub (Q2).
-- **Each entry** gives the catalog name, source, ref, profile ids, components, and
-  descriptions. It is read through `open_catalog`, and only by the scaffolder adapter.
-- **`quant-factory template add <dir | gh:org/repo> [--ref TAG] [--name NAME]`** is an
-  operator command:
-  - it validates the pack with `open_catalog`;
-  - it copies a git pack, pinned to its ref, into `~/.quant-agent-os/packs/<name>/<ref>/`;
-  - it registers the pack in the hub.
-  - Because later plans render from that cache, they need no network access, so the agent
-    tools stay read-only.
-- **Other commands:** `quant-factory template list` and
-  `quant-factory template show NAME [PROFILE]`.
-- **`AppSpec` generalises:**
-  - `template` (a catalog name; the default comes from `kind`);
+- **`AppSpec` gains** these fields, and `kind` stays as a shortcut, so existing specs keep
+  working:
+  - `template`: a built-in pack name, `bundled`, or a path to a local pack directory;
   - `profile`;
-  - `components`;
-  - `answers`, which are template answers;
-  - `settings`, which are runtime settings as values or references.
-  - `kind` stays as a shortcut for the built-in profiles, so every existing spec keeps
-    working.
-- **Files:**
-  - `domain/spec.py`, `domain/planner.py`, and `application/catalog.py` (new);
-  - `infrastructure/pytemplate_uv.py`, for catalog reads;
-  - `cli.py`.
+  - `answers`: template answers, passed to pytemplate-uv as data;
+  - `settings`: runtime settings, each a value or an `env:NAME` reference (Q2).
+- **A new built-in pack, `quant-baseline`**, ships in `quant_app_factory/packs/`. Its
+  profiles are portable and do not depend on Quant-Agent-OS:
+  - **`alpha-research`:**
+    - a data loader;
+    - signal functions on a price panel;
+    - evaluation: IC, rank IC, quantile spreads, turnover, and decay;
+    - a `run-study` CLI that writes results.
+  - **`backtest`:**
+    - signals become target weights, and trades are lagged one bar by default;
+    - a daily vectorised backtest with costs in basis points;
+    - walk-forward splits;
+    - a `run-backtest` CLI;
+    - no orders and no broker code.
+  - **`report`:** turns `run-study` or `run-backtest` results into Markdown. It keeps
+    computed figures apart from interpretation, and states each metric's convention and the
+    data period.
+- **The pack's components:**
+  - **`metrics`** is required by all three profiles. It is the one place the metric code
+    lives (return, volatility, Sharpe, max drawdown, turnover, IC), with documented
+    conventions and known-answer tests.
+  - **`data-csv`** is the default data source, and **`data-parquet`** is optional.
+  - **`agent-tools`** is optional. It adds typed `@tool` wrappers, `check_tool` tests, and a
+    deliberate dependency on `quant-agent-os`.
+- **Bias tests in every generated project:**
+  - shifting a signal forward must change the result, which catches look-ahead;
+  - a known path must give its known drawdown and Sharpe;
+  - zero costs and positive costs must order returns correctly.
+  - A `LIMITATIONS.md` names what the template does not handle: survivorship, point-in-time
+    fundamentals, corporate actions, and borrow.
+- **User packs:** `template = "/path/to/pack"` renders any local pytemplate-uv pack.
+  Registering git packs is part of Q4.
 - **Accept:**
-  - A local pack and a git pack (a local bare repository in tests) register, then plan
-    offline from the cache.
-  - Unknown templates, profiles, or components fail with the available names.
-  - Every existing factory test passes unchanged.
+  - Offline tests render each profile, and check its file list and answers.
+  - The smoke test builds each profile with its defaults, and each passes `uv sync`, ruff,
+    mypy, and pytest, including the bias tests.
+  - A local user pack renders.
+  - The existing specs and tests are unchanged.
 
-### Q2. Configuration hub in Core (B-24)
+### Q2. Guided specs and factory settings (B-24), covering points 4 and 6
 
-- **Module:** `quant_agent_os.config.hub`. Core, Quant Research, and App Factory all read it.
-  Only operators, or approved calls, write it.
-- **Layers:** `~/.quant-agent-os/hub.toml` (user), then `./.quant-agent-os/hub.toml`
-  (project), then explicit overrides. A later layer wins key by key. A team-server backend
-  comes later (B-18, B-19).
-- **Typed sections** (pydantic):
-  - `identity`: author, email, license, Python version;
-  - `connections.<name>`: `kind` (`postgres`, `sqlite`, `duckdb`, or `snowflake`), host,
-    port, database, user, schema, `read_only` (default `true`), and `password_ref` or
-    `url_ref`;
-  - `data_sources.<name>`: `kind` (`files` or `vendor`), a path or bucket, and a
-    `credentials_ref`;
-  - `templates.<name>`: source, ref, and cache path (written by Q1);
-  - `defaults`: components, data frequency, and calendar.
-- **Secret references:** `env:NAME`, or `keyring:service/name` later.
-  - The hub refuses to save anything that looks like a secret: any value under a secret-named
-    key, or any field declared secret, that is not a reference. It reuses the `redact` key
-    patterns from `runs/redaction.py`.
-  - `resolve(ref)` runs only inside the process that needs the value, and returns a
-    `SecretStr`.
-- **Operator CLI:** `quant-agent-os hub list|show|set|remove|check`. `show` prints references
-  and never resolves them. `check` reports which references resolve in this environment, as
-  yes or no.
-- **Agent tools:** a read-only `list_hub_entries` returns names, kinds, and non-secret fields.
-  Writes from agents go through approved calls (Q3).
-- **Files:** `src/quant_agent_os/config/hub.py` (new), `config/__init__.py`, and `cli.py`.
+- **Two read-only tools** do the guiding, so an MCP client such as Claude holds the
+  conversation:
+  - **`describe_template(template, profile?)`** returns the profiles, the components (with
+    `requires` and `conflicts`), each question (help, type, choices, default, and its `when`
+    condition as text), and each component's runtime settings, with `secret` marked.
+  - **`check_spec(spec)`** returns `ready` or the problems:
+    - missing required fields;
+    - invalid answers;
+    - a secret given as a value instead of an `env:` reference;
+    - pytemplate-uv's own errors, from `api.plan`;
+    - when ready, the exact files.
+  - The client asks the person, and fills the spec until `check_spec` is ready.
+- **`quant-factory new [--template T] [--profile P] [-o spec.toml]`** runs the same loop in
+  the terminal:
+  - it asks for the profile, then the components, then the questions, then the settings;
+  - it skips a question whose simple `when` is false, but `check_spec` is still the final
+    word;
+  - it writes the spec file, then offers to run `quant-factory create`.
+- **Creation in this phase.** The person converses in Claude and confirms in the terminal.
+  `create_app` needs an approval, and MCP clients cannot approve yet (decision 0005).
+  - Claude produces or checks the spec.
+  - The person runs one command: `quant-factory create spec.toml`.
+  - An MCP approval path is open question O-13.
+- **The factory settings file** is `~/.quant-agent-os/factory.toml`, and only App Factory
+  reads it (decision 0008):
+  - **`[identity]`:** author, email, and license. Missing values fall back to `git config`.
+  - **`[connections.<name>]`:** a database's kind, host, port, database, user, schema,
+    `read_only`, and `url_env` or `password_env`. These hold environment-variable names,
+    never values.
+  - **`[templates.<name>]`:** registered user packs (Q4).
+  - Specs can say `connection = "research-pg"` instead of repeating the details.
+  - Values that look like secrets are refused.
+  - It is written by `quant-factory settings set|remove`, or by editing the file by hand.
 - **Accept:**
-  - A secret-looking value is refused, by a test for each secret-named key.
-  - The project layer overrides the user layer.
-  - `show` and the tool output never contain resolved values.
-  - A missing file reads as empty.
-  - A file is written atomically, with mode 0600 on POSIX.
+  - `check_spec` reports each kind of problem, tested on the `agent-tool`, `fastapi`, and
+    `quant-baseline` profiles.
+  - `quant-factory new` is tested with scripted input, and writes a spec that `create`
+    accepts.
+  - A secret-looking value in a spec or the settings file is refused.
+  - Identity falls back to git config.
 
-### Q3. Questionnaire and drafts (B-25)
+### Q3. Database guidance (B-25), covering point 5
 
-- **`Questionnaire`** (App Factory, domain layer) is deterministic: no model and no network.
-  Given a catalog profile and a draft, it returns the next questions in order:
-  1. **The profile and its components**, with each component's `requires`, `requires_any`,
-     and `conflicts` checked and explained.
-  2. **The template questions** from the pack's Copier `questions`:
-     - only those the profile lists, and only those whose `when` is true;
-     - defaults are rendered, and validators run, with Jinja (already installed through
-       copier);
-     - questions already answered from the hub (identity, defaults) are prefilled and
-       marked so.
-  3. **The runtime settings** the selected components declare:
-     - each setting is bound to a value, to a reference (`env:NAME`), or to a hub connection
-       field;
-     - a setting declared `secret` accepts only a reference.
-- **`AppDraft`:**
-  - its fields are id, catalog name, profile, answers, settings bindings, history, and
-    status;
-  - status is `collecting`, then `complete`, then `created`;
-  - `complete` means every required question is answered and valid, and both the planner and
-    `api.plan` accept the result;
-  - `to_spec()` returns an `AppSpec`.
-- **Storage:** a `drafts` table in the factory's SQLite store (`factory-runs.db`). Drafts are
-  platform bookkeeping, like run records (decision 0007).
-- **Tools:**
-  - `start_app_draft(template, profile?, use_hub=true)`: read-only toward the user's files;
-  - `answer_app_draft(draft_id, answers)`: validates the answers and returns the next
-    questions, or `complete` with the planned files;
-  - `get_app_draft(draft_id)`;
-  - `plan_app(draft_id | spec)`;
-  - `create_app` still needs an approval per call;
-  - `save_to_hub(draft_id, what)` needs `write_local_data`, so it needs an approval.
-- **CLI:** `quant-factory new [--template NAME] [--profile ID]` runs the same questionnaire
-  in the terminal. When the draft is complete, it goes on to plan, confirm, and create.
-- **Clients:** an MCP client such as Claude drives the conversation, asking the human each
-  question. The questionnaire never sees model output except as answers, which are validated
-  like any other input. B-16 (model-drafted specs) later fills drafts through
-  `answer_app_draft`, and a person still confirms.
-- **Files:** `domain/questionnaire.py`, `domain/draft.py`, `infrastructure/draft_store.py`,
-  `tools.py`, and `cli.py`.
-- **Accept:**
-  - `when` branches, defaults, and validators are tested on the `agent-tool` pack and on the
-    bundled `fastapi` profile with `database` and `auth`.
-  - `complete` is reached only when `api.plan` accepts the draft.
-  - A secret entered as a value is refused.
-  - Drafts survive a restart.
-  - The CLI questionnaire is tested with scripted input.
-
-### Q4. `quant-baseline` pack: alpha research, backtest, report (B-26)
-
-The pack lives at `quant_app_factory/packs/quant-baseline` and has three profiles. All of them
-are portable and do not depend on Quant-Agent-OS (decision 0009).
-- **`alpha-research`:**
-  - a data port with a loader;
-  - signal and factor definitions (typed functions on a panel of prices and fundamentals);
-  - evaluation: IC, rank IC, quantile spreads, turnover, and decay;
-  - a `run-study` CLI that writes results (Parquet or JSON, plus a summary).
-- **`backtest`:**
-  - a strategy spec that turns signals into target weights;
-  - a vectorised daily backtester with costs and slippage, and walk-forward splits;
-  - metrics: return, volatility, Sharpe, max drawdown, turnover, and hit rate, with their
-    conventions documented (annualisation, risk-free rate, compounding);
-  - no live trading, orders, or broker code.
-- **`report`:**
-  - reads research or backtest results;
-  - renders Markdown or HTML;
-  - keeps computed facts apart from interpretation, and states each metric's convention and
-    the data period.
-
-Components shared by the profiles:
-- `data-csv` (the default) and `data-parquet` (with `pyarrow`);
-- `data-database` (Q5);
-- `agent-tools`: a `tools.py` with typed `@tool` wrappers, `check_tool` tests, and a
-  dependency on `quant-agent-os`;
-- `container`.
-
-Each profile's questions:
-- **Universe, frequency, and calendar.** The default is daily.
-- **The benchmark** (`backtest`).
-- **The cost model, in basis points** (`backtest`).
-- **The evaluation horizon** (`alpha-research`).
-
-Shared rules:
-- **Known answers:** every metric has known-answer tests on synthetic data, for example a
-  constant return gives a known Sharpe, and a known drawdown path gives its drawdown.
-- **Defaults pass:** each profile, with its default components, passes its own lifecycle
-  commands.
-
-Accept:
-- The smoke test (`QUANT_FACTORY_SMOKE=1`) builds each profile, and each passes `uv sync`,
-  ruff, mypy, and pytest.
-- Offline tests render each profile and check the file lists and answers.
-
-### Q5. Database guidance (B-27)
-
-- **The `data-database` component** declares:
-  - settings: `DATABASE_URL` (secret) and `DATABASE_SCHEMA`;
-  - questions: `db_kind`, `db_read_only`, and `db_table_prefix`, each guarded by `when`.
-- **The questionnaire branch** asks, in order:
-  1. Which database kind?
-  2. Use an existing hub connection, or create one?
-  3. For a new one: host, port, database, and user.
-  4. The password or URL, as a reference such as `env:RESEARCH_PG_PASSWORD`.
-  5. The schema.
-  6. Read-only access? (Default: yes.)
-  7. Remember this connection? This uses `save_to_hub`, which needs an approval.
+- **The `data-database` component** in `quant-baseline`:
+  - questions: `db_kind` (`postgres`, `sqlite`, or `duckdb`) and `db_read_only` (default
+    `true`), both guarded by `when` on the component;
+  - settings: `DATABASE_URL`, which is secret, so it takes a reference.
+- **Guidance:**
+  - `quant-factory new` asks for the database kind, then whether to use a saved connection
+    or create one;
+  - for a new one it asks for the host, database, user, and schema, then the environment
+    variable that holds the password or URL;
+  - it offers to save the connection to `factory.toml`.
+  - The questions are the same through `describe_template`.
 - **The generated app gets:**
-  - a `settings.py` (pydantic-settings) that reads the environment;
-  - a `.env.example` that lists the variable names, never values;
-  - a repository adapter behind the data port, using SQLAlchemy, with the driver chosen by
-    `db_kind`;
+  - a `settings.py` (pydantic-settings) that reads `DATABASE_URL`;
+  - a `.env.example` that names the variable and holds no value;
+  - a read-only SQLAlchemy loader, with the driver chosen by `db_kind`;
   - a `check-connection` command.
-- **No database drivers in quant-agent-os.** The optional post-create
-  `uv run <app> check-connection` needs `execute_code` and `network`, so it needs an approval.
-  - `run_command` receives only the referenced variables, resolved from the operator's
-    environment through `extra_env`.
-  - The resolved values never appear in the report, the run store, or logs.
+- **The optional connection check.** `quant-factory create --check-connection` runs
+  `uv run <app> check-connection` after the other checks, and passes only the referenced
+  variable through `run_command`'s `extra_env`.
+  - It is part of the operator's approved create, and is shown in the confirmation.
+  - The resolved value never appears in the report, the run store, or logs.
+- **Claude Desktop.** A server Desktop starts does not see the shell's environment. Running
+  `create` in the terminal avoids the problem. The docs say so.
 - **Accept:**
-  - The questionnaire branch is covered by tests.
-  - The generated files contain no secret values, scanned by a test.
+  - The branch is tested.
+  - A scan test finds no secret values in the generated files.
   - In the smoke test, `check-connection` succeeds against a SQLite or DuckDB file.
 
-### Q6. Quant template authoring (B-28)
+### Q4. Template forks, git packs, and the walkthrough (B-26), covering point 2
 
-`quant-factory template new` is a questionnaire that writes a user pack. Its steps:
-1. Fork a `quant-baseline` profile, or start from an empty profile.
-2. Name the pack and the profile.
-3. Choose which components to keep, add, or drop.
-4. Add questions: name, type, help, choices, default, and `when`.
-5. Declare runtime settings, with `secret` marking those that take references.
-6. Choose starter files.
+- **`quant-factory template fork <pack>/<profile> <dest> [--name ID]`** copies a built-in
+  profile, its questions, and the components it uses into a new user pack. It renames the
+  pack and the profile ids, then validates the result with `open_catalog` and `api.plan`.
+  - The user edits the pack: by hand, or with Claude Code, through the pack layout and
+    `template check`.
+  - That is how templates are made by conversation, with no new engine.
+- **`quant-factory template check <dir>`** validates a pack and plans its profiles with
+  default answers.
+- **`quant-factory template add <dir | gh:org/repo> --ref TAG --name NAME`** registers a pack
+  in `factory.toml`. A git pack is cloned once at that ref into
+  `~/.quant-agent-os/packs/NAME/TAG/`, so later plans are offline and the tools stay
+  read-only.
+- **Handoff:** if pytemplate-uv ships generic pack authoring, `fork` hands the generic layout
+  to it (open question O-12).
+- **Walkthrough section:**
+  1. Save an identity and a connection.
+  2. Run `quant-factory new` for `alpha-research` with `data-database`, then `create`.
+  3. Run `backtest`, then `report`, on its output.
+  4. Fork `backtest` and add one question.
+- **Accept:**
+  - A forked pack checks, renders, and passes its smoke checks.
+  - A git pack (a local bare repository in tests) registers and plans offline.
+  - The walkthrough is reproduced from a clean checkout.
 
-After that:
-- **Validation:** `open_catalog` checks the result, then `api.plan` with default answers.
-- **Registration:** the pack is registered in the hub.
-- **Tool form:** `create_template` writes files, so it needs `write_local_data` and an
-  approval.
+## Gate
 
-Handoff (an external expectation, not a task here): if pytemplate-uv ships generic pack
-authoring, for example `api.new_pack(...)` or `pytemplate pack new --json`, Q6 hands it the
-generic manifest and layout. Q6 keeps the quant-specific forks, the questions, and the hub
-registration.
+After Q1 and Q2, put the walkthrough in front of two or three design partners before starting
+Q3 and Q4. Their use decides whether database guidance and forking come next, or Quant
+Research's gaps do (a semantic embedder, typed relations).
 
-Accept: a forked pack validates, registers, and generates an app that passes its checks
-(smoke test).
+Measure:
+- **Generated apps:** the share that pass their checks, by profile and component mix.
+- **Guidance:** the number of `check_spec` rounds to reach ready.
+- **Bias tests:** whether every template's bias tests pass.
 
-### Q7. Walkthrough (B-29)
+## Deliberately not built
 
-Add a walkthrough section, reproduced from a clean checkout. It goes through:
-1. Save an identity and a connection in the hub (CLI).
-2. `quant-factory new --template quant-baseline --profile alpha-research`, answering with
-   `data-database` and the saved connection.
-3. Create the app; its checks pass.
-4. Do the same for `backtest` and `report`.
-5. Fork `backtest` into a user pack with an extra question.
-
-## Out of scope
-
-- Model-drafted answers, which is B-16 and uses the same `answer_app_draft` path.
-- Code generation beyond templates (B-20).
-- A keychain backend for secret references; `env:` comes first.
-- A team-hub backend (B-18, B-19).
-- Approvals through an MCP client's confirmation step.
-- Trading, orders, and broker connectivity.
-- Any change to pytemplate-uv.
+- **A draft store or next-question engine.** The spec file and `check_spec` replace them.
+- **A hub in Core.** `factory.toml` moves to Core only when a second product needs it.
+- **Keychain secret backends.** `env:` comes first.
+- **Approvals through MCP clients** (O-13).
+- **Model-drafted specs** (B-16). These later fill the same spec file, which `check_spec`
+  checks and a person confirms.
+- **Code generation** (B-20), trading, orders, and broker connectivity.
+- **Any change to pytemplate-uv.**

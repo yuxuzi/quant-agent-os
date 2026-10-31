@@ -87,16 +87,14 @@ in memory unless it is given a run store. What each part of a record holds:
 
 ## Secret references (proposed)
 
-[Decision 0008](decisions/0008-configuration-hub.md). The planned configuration hub,
-questionnaire drafts, and generated apps hold secrets only as references: `env:NAME`, or
-`keyring:service/name` later.
-- **Refused values.** A value that looks like a secret, under a secret-named key or in a field
-  declared secret, is refused rather than stored.
-- **Resolution.** A reference resolves only in the process that needs it, as `SecretStr`. It
-  never resolves in tool output, run records, audit events, logs, or generated files; a scan
-  test checks generated files.
+[Decisions 0007 and 0008](decisions/0008-factory-settings.md). App specs, the factory
+settings file, and generated apps hold environment-variable names, never secret values:
+- **Refused values.** A value that looks like a secret, under a secret-named key or in a
+  setting declared secret, is refused.
+- **Generated files.** They name variables (`.env.example`, `settings.py`) and hold no values;
+  a scan test checks this.
 - **Programs.** A program, such as a generated app's `check-connection`, receives only the
-  referenced variables, through `run_command`'s `extra_env`, in an approved call.
+  named variable, through `run_command`'s `extra_env`, during the operator's approved create.
 
 ## Out of scope for the first release
 

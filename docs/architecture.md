@@ -478,53 +478,51 @@ The pieces:
   structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
   It needs a decision record before it is built (open).
 
-### 8.1 Guided generation: catalog, questionnaire, and hub (proposed)
+### 8.1 Guided generation and quant templates (proposed)
 
 These pieces are proposed in decisions 0007–0009, with the step plan in
 [plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) and the backlog in
-B-23–B-29.
+B-23–B-26.
 
 ```text
-TemplateCatalog ── built-in packs (agent-tool, quant-baseline: alpha-research · backtest · report)
-   │               pytemplate-uv bundled profiles (python, fastapi)
-   │               user packs (local dir or pinned git ref, cached; registered in the hub)
+templates: built-in (agent-tool, quant-baseline) · bundled (python, fastapi) · user pack (path)
+   │
    ▼
-Questionnaire (deterministic) ◀── configuration hub (identity, connections, data sources,
-   │  next questions: profile → components            templates, defaults; secrets as refs)
-   │  → pack's Copier questions (when, defaults, validators)
-   │  → components' runtime settings (secret → reference only)
+describe_template ──▶ person, via Claude or `quant-factory new` ──▶ spec.toml (the draft)
+   ▲                                                                   │
+   └──────────── check_spec: problems, or ready + exact files ◀────────┘
+                  (pytemplate.api.plan is the judge)
+   │ ready
    ▼
-AppDraft (collecting → complete → created; stored like run records)
-   │  complete = planner and pytemplate.api.plan accept it
-   ▼
-AppSpec ─▶ ArchitecturePlanner ─▶ plan_app ─▶ approval ─▶ create_app ─▶ checks ─▶ FactoryReport
+quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (+ check-connection) ─▶ report
+                ▲
+       factory.toml: identity, connections (environment-variable names), registered packs
 ```
 
+- **No draft state.** The spec file is the draft. `check_spec` decides readiness through
+  pytemplate-uv, so Copier's rules are never re-implemented. Model-drafted specs (B-16) fill
+  the same file.
 - **Two kinds of input stay apart.**
-  - **Template answers** come from the pack's questions and are used when the project renders.
-  - **Runtime settings** come from the `settings` that components declare, for example
-    `DATABASE_URL`, and are read by the generated app from its environment.
-  - The hub stores reusable runtime settings, as connections and data sources, and never a
-    secret value.
-- **Clients drive the conversation.** An MCP client asks the person each question, or
-  `quant-factory new` asks in the terminal. Answers are validated input. Model-drafted answers
-  (B-16) use the same path, and a person confirms them.
-- **Database guidance** is the `data-database` component's question branch:
-  1. the database kind, then a hub connection or a new one;
-  2. host, database, and user, then the password as `env:NAME`;
-  3. the schema, then read-only access.
-
-  It generates a `settings.py`, a `.env.example`, and a `check-connection` command. That
-  command runs only as an approved post-create check, and receives only the referenced
-  variables.
-- **Quant baseline templates** (decision 0009) are portable. An optional `agent-tools`
-  component registers the app's functions as platform tools. Every metric has documented
-  conventions and known-answer tests, and no template contains trading or broker code.
-- **Template authoring:**
-  - `quant-factory template new` forks a baseline profile into a user pack, then validates it
-    and registers it.
-  - Generic pack authoring is pytemplate-uv's own roadmap. App Factory hands the generic layout
-    to it if it ships.
+  - Template answers come from the pack's questions and are used when the project renders.
+  - Runtime settings come from the `settings` components declare (for example
+    `DATABASE_URL`) and are read by the generated app. Secret ones accept only `env:NAME`.
+- **Creation in this phase.** Claude can describe, guide, and check. The person confirms
+  creation with `quant-factory create`, because MCP clients cannot approve yet (O-13).
+- **Database guidance** is the `data-database` component:
+  - it asks for the database kind, a saved or new connection, and the environment variable
+    that holds the password or URL;
+  - it generates `settings.py`, `.env.example`, and `check-connection`;
+  - `create --check-connection` passes only that variable to the check.
+- **Quant templates** (decision 0009) are portable:
+  - one required `metrics` component holds all the metric code;
+  - every project carries bias tests (forward-shifted signals, lagged trades, cost ordering)
+    and a `LIMITATIONS.md`;
+  - there is no trading code.
+- **Making templates:**
+  - `quant-factory template fork` copies a baseline profile into a user pack, which people
+    edit by hand or with Claude Code;
+  - `template check` validates it;
+  - generic authoring is pytemplate-uv's own roadmap.
 
 ## 9. pytemplate-uv integration boundary
 
@@ -559,10 +557,10 @@ Further rules:
 - Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
   a second `ScaffoldProvider`. Core and Quant Research never import pytemplate-uv.
 - `pytemplate-uv` releases and plans are its own repository's business.
-- **User packs** (proposed, B-23). They are registered by the operator
-  (`quant-factory template add`) and validated with `open_catalog`. A git pack is pinned to a
-  ref and cached under `~/.quant-agent-os/packs/`, so plans read the cache and need no network
-  access.
+- **User packs** (proposed).
+  - B-23: a spec names a local pack directory.
+  - B-26: `quant-factory template add` registers a git pack pinned to a ref and caches it under
+    `~/.quant-agent-os/packs/`, so plans read the cache and need no network access.
 
 ## 10. Interface strategy: MCP, REST, SDK, CLI
 
@@ -593,10 +591,7 @@ tests.
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
 | `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
-| `start_app_draft`, `answer_app_draft`, `get_app_draft` | App Factory | `read_local_data` (drafts are platform bookkeeping) | Days 31–45 (B-25) |
-| `save_to_hub` | App Factory | `write_local_data` → approval per call | Days 31–45 (B-25) |
-| `list_hub_entries` | Core | `read_local_data`; names, kinds, and non-secret fields only | Days 31–45 (B-24) |
-| `create_template` | App Factory | `write_local_data` → approval per call | Days 46–60 (B-28) |
+| `describe_template`, `check_spec` | App Factory | `read_local_data` (`check_spec` renders only into a temporary directory) | Days 31–45 (B-24) |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
 | `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
 | `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
@@ -661,11 +656,11 @@ See [security.md](security.md) for details.
 
 **Proposed:**
 - approvals through an MCP client's confirmation step.
-- **Secret references** (decision 0008). Hub entries, draft answers, and generated files hold
-  `env:NAME` (or `keyring:...` later), never secret values.
-  - Saving a value that looks like a secret is refused.
-  - A reference resolves only in the process that needs it, as `SecretStr`, and is passed to a
-    program only through `run_command`'s `extra_env`, for exactly the referenced names.
+- **Secret references** (decisions 0007 and 0008). Specs, `factory.toml`, and generated files
+  hold environment-variable names (`env:NAME`, `password_env`), never secret values.
+  - A value that looks like a secret is refused.
+  - A name resolves only in the process that needs it, and is passed to a program only through
+    `run_command`'s `extra_env`, for exactly that name.
 - HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
   carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
   but multi-tenant hosting remains out of scope.

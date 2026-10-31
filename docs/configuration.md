@@ -88,15 +88,15 @@ tool_name = "count_signals"      # agent-tool only
 #                                #   auth with auth-api-key or auth-oidc, container
 ```
 
-## Configuration hub (proposed)
+## Factory settings (proposed)
 
-[Decision 0008](decisions/0008-configuration-hub.md), backlog B-24. The hub stores settings
-you reuse across apps and products, so questionnaires can offer them. Secrets are stored only
-as references:
+[Decision 0008](decisions/0008-factory-settings.md), backlog B-24. App Factory reuses these
+settings in specs and in `quant-factory new`. Secrets are stored only as environment-variable
+names:
 
 ```toml
-# ~/.quant-agent-os/hub.toml (user); ./.quant-agent-os/hub.toml overrides it key by key
-[identity]
+# ~/.quant-agent-os/factory.toml
+[identity]                 # falls back to git config
 author = "Your Name"
 email = "you@example.com"
 
@@ -108,15 +108,15 @@ database = "research"
 user = "analyst"
 schema = "prices"
 read_only = true
-password_ref = "env:RESEARCH_PG_PASSWORD"   # a reference, never the password
+password_env = "RESEARCH_PG_PASSWORD"   # the variable's name, never the password
 
-[templates.firm-backtest]
+[templates.firm-backtest]  # added by `quant-factory template add`
 source = "gh:firm/quant-packs"
 ref = "v1.2.0"
 ```
 
-How it works:
-- **The CLI:** `quant-agent-os hub list|show|set|remove|check`. `show` prints references, and
-  `check` reports whether each one resolves here.
-- **Refusals:** the hub refuses a value that looks like a secret.
-- **Writes:** agent tools can list entries but need an approval to write one.
+A spec can then say `connection = "research-pg"`. Edit the file directly, or use
+`quant-factory settings set|remove`. Values that look like secrets are refused.
+
+A server started by Claude Desktop does not see your shell's environment, so run
+`quant-factory create` from a terminal when a connection check needs those variables.
