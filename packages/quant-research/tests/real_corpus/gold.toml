@@ -1,0 +1,146 @@
+# Gold questions for the real-paper corpus, written from each paper's abstract. `documents`
+# lists the papers (arXiv ids from papers.toml) that answer the question; a hit is any of them
+# in the top passages.
+# - kind = "topic": phrased with the papers' own terms.
+# - kind = "paraphrase": phrased without them, so keyword overlap alone should not suffice.
+# - kind = "unanswerable": nothing in the corpus answers it; the right answer is no passages.
+
+[[questions]]
+kind = "topic"
+query = "time series momentum in the Chinese stock market"
+documents = ["1702.07374v1"]
+
+[[questions]]
+kind = "topic"
+query = "deep learning trading rules for time series momentum"
+documents = ["1904.04912v3", "2106.08420v4"]
+
+[[questions]]
+kind = "topic"
+query = "momentum spillover across asset classes"
+documents = ["2308.11294v1"]
+
+[[questions]]
+kind = "topic"
+query = "betting against bad beta"
+documents = ["2409.00416v1"]
+
+[[questions]]
+kind = "topic"
+query = "what explains the low-volatility anomaly"
+documents = ["2003.08302v2", "1409.7720v3"]
+
+[[questions]]
+kind = "topic"
+query = "post-earnings announcement drift with machine learning"
+documents = ["2009.03094v1"]
+
+[[questions]]
+kind = "topic"
+query = "retail investor horizon and earnings announcements"
+documents = ["2512.00280v2"]
+
+[[questions]]
+kind = "topic"
+query = "price impact of order flow imbalance"
+documents = ["1011.6402v3", "2112.02947v1"]
+
+[[questions]]
+kind = "topic"
+query = "Bayesian hierarchical approach to factor investing"
+documents = ["1902.01015v3"]
+
+[[questions]]
+kind = "topic"
+query = "intangible investment and stock returns"
+documents = ["2505.16336v1"]
+
+[[questions]]
+kind = "topic"
+query = "value-to-price ratio from residual income valuation"
+documents = ["2506.00206v1"]
+
+[[questions]]
+kind = "topic"
+query = "do short-term reversal traders prey on CTAs"
+documents = ["2202.01423v1"]
+
+[[questions]]
+kind = "topic"
+query = "Fama-French three-factor regression with sample innovations"
+documents = ["2006.02467v1"]
+
+[[questions]]
+kind = "topic"
+query = "risk premia and negative skewness"
+documents = ["1409.7720v3"]
+
+[[questions]]
+kind = "topic"
+query = "factor exposure heterogeneity in green and brown stocks"
+documents = ["2302.11729v2"]
+
+[[questions]]
+kind = "topic"
+query = "maximum drawdown and recovery as momentum selection rules"
+documents = ["1403.8125v4"]
+
+[[questions]]
+kind = "topic"
+query = "size premium and rule of law"
+documents = ["2609.26212v1"]
+
+[[questions]]
+kind = "topic"
+query = "higher-order factors via forward selection Fama-MacBeth"
+documents = ["2503.23501v2"]
+
+[[questions]]
+kind = "topic"
+query = "RevIN normalization for cross-sectional return prediction"
+documents = ["2609.07122v2"]
+
+[[questions]]
+kind = "paraphrase"
+query = "Can neural networks learn position sizing for trend strategies?"
+documents = ["1904.04912v3", "2106.08420v4"]
+
+[[questions]]
+kind = "paraphrase"
+query = "Do small companies earn more where legal institutions are stronger?"
+documents = ["2609.26212v1"]
+
+[[questions]]
+kind = "paraphrase"
+query = "How do supply and demand at the best quotes move prices over seconds?"
+documents = ["1011.6402v3", "2112.02947v1"]
+
+[[questions]]
+kind = "paraphrase"
+query = "Do companies with low greenhouse gas emissions have different style tilts?"
+documents = ["2302.11729v2"]
+
+[[questions]]
+kind = "paraphrase"
+query = "Which strategies earn returns without crash risk?"
+documents = ["1409.7720v3"]
+
+[[questions]]
+kind = "paraphrase"
+query = "Do artificial market simulations show two trader types helping each other?"
+documents = ["2202.01423v1"]
+
+[[questions]]
+kind = "unanswerable"
+query = "default probability implied by sovereign credit default swaps"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "central bank digital currency and bank deposits"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "protein folding prediction accuracy"
+documents = []

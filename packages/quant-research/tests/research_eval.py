@@ -10,6 +10,7 @@ a few cents. It never runs in the default test suite.
 
 from __future__ import annotations
 
+import functools
 import json
 import sys
 import tempfile
@@ -17,11 +18,11 @@ import tomllib
 from pathlib import Path
 
 from pdf_fixtures import build_corpus
-from pypdf import PdfReader
 
 from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.domain.ports import Embedder
 from quant_research.domain.vocabulary import EntityMatcher
+from quant_research.infrastructure.pdf import extract_pages
 
 HERE = Path(__file__).parent
 GOLD = HERE / "evaluation" / "gold.toml"
@@ -83,9 +84,14 @@ def location_matches(research: ResearchApp, chunk_id: str, corpus: Path) -> bool
     if chunk.page is None:
         lines = path.read_text("utf-8").splitlines()
         return "\n".join(lines[chunk.line_start - 1 : chunk.line_end]).strip() == chunk.text
-    page_text = PdfReader(path).pages[chunk.page - 1].extract_text() or ""
+    page_text = _pages(path)[chunk.page - 1]
     lines = page_text.splitlines()[chunk.line_start - 1 : chunk.line_end]
     return [line.strip() for line in lines if line.strip()] == chunk.text.splitlines()
+
+
+@functools.cache
+def _pages(path: Path) -> tuple[str, ...]:
+    return extract_pages(path)
 
 
 def _mean(values: list[float]) -> float:

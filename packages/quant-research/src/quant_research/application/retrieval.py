@@ -21,6 +21,7 @@ from quant_research.domain.ports import (
     Embedder,
     EmbeddingError,
     GraphEdge,
+    KeywordHit,
     KnowledgeStore,
     VectorIndex,
 )
@@ -34,6 +35,11 @@ MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
 MAX_FALLBACK_SEEDS = 3
 MIN_VECTOR_SCORE = 0.2
+# A query that names no vocabulary entity counts a keyword passage as evidence only when the
+# passage holds at least this share of the query's term weight (IDF-weighted, so rare words
+# count most). It is what lets "protein folding prediction accuracy" return nothing from a
+# finance corpus instead of passages that merely say "prediction accuracy".
+MIN_QUERY_COVERAGE = 0.5
 # Query embedding must finish well inside the search tool's timeout (tools.SEARCH_TIMEOUT).
 QUERY_EMBEDDING_SECONDS = 8.0
 QUERY_CACHE_SIZE = 256
@@ -172,6 +178,14 @@ class ResearchService:
         terms = content_terms(request.query)
         keyword_hits = self.store.keyword_search(" ".join(terms), request.k * 3) if terms else []
         seeds = list(dict.fromkeys(match.entity_id for match in self.matcher.find(request.query)))
+        if not seeds and keyword_hits:
+            covering = _covering(keyword_hits, terms, *self.store.term_frequencies(terms))
+            if len(covering) < len(keyword_hits):
+                warnings.append(
+                    f"Dropped {len(keyword_hits) - len(covering)} keyword passages that match "
+                    "too little of the query to count as evidence."
+                )
+            keyword_hits = covering
         direct: list[str] = []
         if not seeds and keyword_hits:
             best = keyword_hits[0].chunk_id
@@ -407,6 +421,25 @@ def _rank_related(
         )
     ranked.sort(key=lambda entity: (-entity.score, entity.id))
     return ranked
+
+
+def _covering(
+    hits: list[KeywordHit], terms: list[str], chunks: int, frequencies: dict[str, int]
+) -> list[KeywordHit]:
+    """Return the hits holding at least `MIN_QUERY_COVERAGE` of the query's IDF weight.
+
+    A term absent from the corpus gets the highest weight, so a query about something the
+    corpus never mentions cannot be satisfied by its common words alone.
+    """
+    weights = {term: math.log((chunks + 1) / (frequencies.get(term, 0) + 0.5)) for term in terms}
+    total = sum(weights.values())
+    if total <= 0:
+        return hits
+    return [
+        hit
+        for hit in hits
+        if sum(weights.get(term, 0.0) for term in hit.matched) / total >= MIN_QUERY_COVERAGE
+    ]
 
 
 def _link(relation: Relation) -> GraphLink:

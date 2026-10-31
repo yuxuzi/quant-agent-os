@@ -1,0 +1,110 @@
+# Real-paper evaluation corpus: 21 arXiv papers on factors, momentum, anomalies, earnings
+# drift, and order flow. The PDFs are not committed and never redistributed: `real_corpus.py
+# fetch` downloads each pinned version from arXiv into a local cache and checks its sha256.
+# arXiv's default licence allows arXiv to distribute a paper, not us, so a pin plus a hash is
+# what this repository records.
+
+[[papers]]
+id = "1011.6402v3"
+title = "The Price Impact of Order Book Events"
+sha256 = "40d1d5f0baf7944a1b9f4c12d3644038e657acf4a3dfb500b2057c2269edd25f"
+
+[[papers]]
+id = "1403.8125v4"
+title = "Maximum drawdown, recovery, and momentum"
+sha256 = "f0a88aff472423c7b6947f0889ec3a2846771137a7de74216dcfa04a40ae71e8"
+
+[[papers]]
+id = "1409.7720v3"
+title = "Risk Premia: Asymmetric Tail Risks and Excess Returns"
+sha256 = "918c3249ded16b7e272278eac27680c75257d1ee9eb0f93fd482dbe4ad01b24d"
+
+[[papers]]
+id = "1702.07374v1"
+title = "Time series momentum and contrarian effects in the Chinese stock market"
+sha256 = "6fe8d5145669fddef4cb32b17d7d9c7a3cce4c449212f0b63550d99f7ffd906a"
+
+[[papers]]
+id = "1902.01015v3"
+title = "Factor Investing: A Bayesian Hierarchical Approach"
+sha256 = "f26ea97c9822226d18e18c89d68ab3b47225574242695224b971a01769d32775"
+
+[[papers]]
+id = "1904.04912v3"
+title = "Enhancing Time Series Momentum Strategies Using Deep Neural Networks"
+sha256 = "116ee831386fd64f2205f4a10909ba981977f333154727b9ab3d05cf067021e3"
+
+[[papers]]
+id = "2003.08302v2"
+title = "The Low-volatility Anomaly and the Adaptive Multi-Factor Model"
+sha256 = "5fd7db69c1dabe06b5f1f7880fc1f2b4815e8f1985753100d99d859060174f86"
+
+[[papers]]
+id = "2006.02467v1"
+title = "A New Look to Three-Factor Fama-French Regression Model using Sample Innovations"
+sha256 = "ee22f53382c15e67b8859aeee30bcaec7ef96d72fa19ce1f5c42f06d85a08520"
+
+[[papers]]
+id = "2009.03094v1"
+title = "Capturing dynamics of post-earnings-announcement drift using genetic algorithm-optimised supervised learning"
+sha256 = "8b454aa302960aa2c1c3d4d5554892cbfcf9e33774a0fa83c4c8264c1e670896"
+
+[[papers]]
+id = "2106.08420v4"
+title = "Trend-Following Strategies via Dynamic Momentum Learning"
+sha256 = "635da97a5626d14f9cfa2185b634dce74d27be5040cd7ab73fb326eab095409d"
+
+[[papers]]
+id = "2112.02947v1"
+title = "The Price Impact of Generalized Order Flow Imbalance"
+sha256 = "344534056ec87659e6b0ca494532d62cfb3d54e695bdbe19750e7b2f3ff59f96"
+
+[[papers]]
+id = "2202.01423v1"
+title = "Do new investment strategies take existing strategies' returns -- An investigation into agent-based models"
+sha256 = "271f841ab468def498a79bff2f6b6e5e007ec0240f8ae2045b5785dc1a64076f"
+
+[[papers]]
+id = "2302.11729v2"
+title = "Factor Exposure Heterogeneity in Green and Brown Stocks"
+sha256 = "ed51e3b82bb3df0f608ea6b4fbb527122f0948af84e509c7f4916a5cb78baaf0"
+
+[[papers]]
+id = "2308.11294v1"
+title = "Network Momentum across Asset Classes"
+sha256 = "a375a7370900dc485ce4793aa68ef6f4c34f2f7d2fb44658a1b28d7edba2e245"
+
+[[papers]]
+id = "2409.00416v1"
+title = "Betting Against (Bad) Beta"
+sha256 = "db951e4aca7e2bb8c6680cf1c4e036d6d97f1f1e13bb2ea6893cb15bf216dd73"
+
+[[papers]]
+id = "2503.23501v2"
+title = "Higher-Order Asset Pricing Factors via Forward Selection Fama-MacBeth Regression"
+sha256 = "abec2535fafd712d5d2e0ffeb4850368ab433132825267b519d2246970736cb6"
+
+[[papers]]
+id = "2505.16336v1"
+title = "The Role of Intangible Investment in Predicting Stock Returns: Six Decades of Evidence"
+sha256 = "652eeb213946617a17efd6b74e57338a7a5c9f4582d46f199d59739502483a82"
+
+[[papers]]
+id = "2506.00206v1"
+title = "Residual Income Valuation and Stock Returns: Evidence from a Value-to-Price Investment Strategy"
+sha256 = "95be87eafea1f1a1d5976b01f18eb0a506315b1b314166ecdd4f5221267f3beb"
+
+[[papers]]
+id = "2512.00280v2"
+title = "Retail Investor Horizon and Earnings Announcements"
+sha256 = "43a5fa9bfee0f76eb47b5576c4baf1f457f07d2e5b1fa2e90f34fb27cecc64b4"
+
+[[papers]]
+id = "2609.07122v2"
+title = "Centering Drives Normalization Gains: Price-Offset Nuisances in Cross-Sectional Return Prediction"
+sha256 = "c4440bd63c4f13008ce388b3a0ed289dfd71ee7750e377d3300f7dbf0314ac3b"
+
+[[papers]]
+id = "2609.26212v1"
+title = "Trust, Rule of Law, and the Size Premium: Evidence from a Meta-Analysis"
+sha256 = "494dc191fef79cb969395c244e5c1200339980da181db1ed5a145712e84b3039"

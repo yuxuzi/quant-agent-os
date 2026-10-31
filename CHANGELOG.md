@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
+  - Searches for things the corpus never mentions now return no passages instead of
+    passages that share a few common words.
+  - Typed relations are no longer read from tables, reference lists, run-on sentences, or
+    entity types a predicate cannot join. Labelled precision rose from 0.30 to 0.75.
+  - PDF text has ligatures expanded and line-break hyphenation undone, so terms such as
+    "momentum" match across line breaks.
+  - Stores re-process on the next ingest, because the extractor (`rules-v5`), chunker
+    (`page-v2`), and PDF loader (`pdf-v2`) versions changed.
+
 - Serving and searching open the knowledge store read-only, so they never migrate or write it,
   and a read-only mount works. Answers read one consistent corpus state. Snapshots are built
   and published atomically. The schema migration is atomic and can be re-run.

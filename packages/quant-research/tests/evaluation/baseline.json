@@ -2,7 +2,7 @@
   "citation_validity": 1.0,
   "empty_query_accuracy": 1.0,
   "location_validity": 1.0,
-  "paraphrase_hit_rate": 0.75,
-  "passage_precision": 0.7583,
+  "paraphrase_hit_rate": 0.0,
+  "passage_precision": 0.7708,
   "related_recall": 1.0
 }

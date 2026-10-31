@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from quant_research.domain.chunking import CHUNKER_VERSION, Passage, split_page, split_passages
+from quant_research.domain.chunking import CHUNKER_VERSION, Passage, split_pages, split_passages
 from quant_research.domain.extraction import RuleExtractor
 from quant_research.domain.models import Chunk, CorpusSnapshot, Document, Mention, Relation
 from quant_research.domain.ports import (
@@ -201,11 +201,7 @@ class IngestService:
                 for passage in split_passages(source.body, first_line=source.body_first_line)
             ]
         else:
-            located = [
-                (number, passage)
-                for number, page in enumerate(source.pages, start=1)
-                for passage in split_page(page)
-            ]
+            located = [(number, passage) for number, passage in split_pages(source.pages)]
         chunks = [
             Chunk(
                 id=f"{document_id}#{ordinal}",

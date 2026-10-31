@@ -1,0 +1,9 @@
+{
+  "abstention_accuracy": 1.0,
+  "citation_validity": 1.0,
+  "labelled_precision": 0.75,
+  "location_validity": 1.0,
+  "paraphrase_hit_rate": 0.8333,
+  "topic_hit_rate": 1.0,
+  "topic_mrr": 0.8991
+}

@@ -10,6 +10,15 @@ Relations come only from two entities in the same sentence, judged by the text b
   the ``related_to`` edge ("X is unrelated to Y"). An explicit "contradicts" is a relation.
 - Otherwise the pair becomes a low-confidence ``related_to`` edge.
 
+Real papers add three guards, each found by the real-corpus evaluation:
+- Only prose yields relations. Table rows, sentences that are mostly numbers, run-on
+  sentences, and reference lists still yield mentions but no edges.
+- A typed predicate needs entity types it can hold (`SIGNATURES`): a dataset does not use a
+  method, and an asset class is not tested on another. A pair that fails falls back to
+  ``related_to``; it never retries a shorter cue, which could reverse the edge.
+- Mentions far apart in a sentence are not related: at most `MAX_TYPED_GAP_WORDS` words
+  between them for a typed edge, and `MAX_RELATED_GAP_WORDS` for ``related_to``.
+
 Every relation keeps the chunk that supports it, so each edge can be cited.
 """
 
@@ -19,11 +28,12 @@ import hashlib
 import re
 from dataclasses import dataclass
 
+from quant_research.domain.chunking import is_reference_list
 from quant_research.domain.models import Chunk, Entity, Mention, Predicate, Relation
 from quant_research.domain.vocabulary import EntityMatcher, Match
 
 EXTRACTOR = "rules"
-EXTRACTOR_VERSION = "rules-v4"
+EXTRACTOR_VERSION = "rules-v5"
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -81,6 +91,26 @@ _CUES = (
 )
 _COOCCURRENCE = 0.4
 
+_FINDINGS = frozenset({"factor", "signal", "strategy", "metric"})
+_STUDIED = frozenset({"factor", "signal", "strategy", "method"})
+# Entity types each typed predicate can join, as (subject types, object types).
+SIGNATURES: dict[Predicate, tuple[frozenset[str], frozenset[str]]] = {
+    "explained_by": (_FINDINGS, _FINDINGS | {"concept"}),
+    "contradicts": (_FINDINGS | {"method", "concept"}, _FINDINGS | {"method", "concept"}),
+    "predicts": (_FINDINGS | {"concept"}, frozenset({"factor", "signal", "metric", "concept"})),
+    "correlates_with": (_FINDINGS | {"concept"}, _FINDINGS | {"concept"}),
+    "extends": (_STUDIED | {"concept"}, _STUDIED | {"concept"}),
+    "uses": (_STUDIED, frozenset({"factor", "signal", "method", "dataset", "metric"})),
+    "tested_on": (_STUDIED, frozenset({"asset_class", "dataset"})),
+}
+MAX_TYPED_GAP_WORDS = 15
+MAX_RELATED_GAP_WORDS = 25
+MAX_SENTENCE_WORDS = 80
+MAX_NUMERIC_SHARE = 0.2  # sentences with more numeric tokens (and at least 3) are table rows
+MIN_TABLE_NUMBERS = 3
+_TOKENS = re.compile(r"\S+")
+_NUMERIC = re.compile(r"\d")
+
 
 class RuleExtractor:
     """Extract mentions and relations with a vocabulary and fixed cue phrases."""
@@ -97,7 +127,8 @@ class RuleExtractor:
         mentions: list[Mention] = []
         relations: dict[str, Relation] = {}
         offset = 0
-        for sentence in _SENTENCE_END.split(chunk.text):
+        states_findings = not is_reference_list(chunk.section)
+        for sentence in split_sentences(chunk.text):
             offset = chunk.text.index(sentence, offset)
             matches = self._matcher.find(sentence)
             mentions += [
@@ -111,8 +142,9 @@ class RuleExtractor:
                 )
                 for match in matches
             ]
-            for relation in self._relations(chunk.id, sentence, matches):
-                relations.setdefault(relation.id, relation)
+            if states_findings and is_prose(sentence):
+                for relation in self._relations(chunk.id, sentence, matches):
+                    relations.setdefault(relation.id, relation)
             offset += len(sentence)
         return mentions, list(relations.values())
 
@@ -144,8 +176,11 @@ class RuleExtractor:
     def _classify(
         self, between: str, first: Match, second: Match
     ) -> tuple[str, Predicate, str, float] | None:
-        """Return ``(subject, predicate, object, confidence)``, or None for a negated pair."""
-        for cue in _CUES:
+        """Return ``(subject, predicate, object, confidence)``, or None for no relation."""
+        gap = len(between.split())
+        if gap > MAX_RELATED_GAP_WORDS:
+            return None
+        for cue in _CUES if gap <= MAX_TYPED_GAP_WORDS else ():
             subject, target = (second, first) if cue.swap else (first, second)
             if (
                 cue.object_types is not None
@@ -158,10 +193,30 @@ class RuleExtractor:
             words_before_cue = " ".join(between[: found.start()].split()[-NEGATION_WINDOW_WORDS:])
             if _negated(words_before_cue):
                 return None
+            subjects, objects = SIGNATURES[cue.predicate]
+            if (
+                self._types.get(subject.entity_id) not in subjects
+                or self._types.get(target.entity_id) not in objects
+            ):
+                break  # never retry a shorter cue: "forecast by" must not become "forecast"
             return subject.entity_id, cue.predicate, target.entity_id, cue.confidence
         if _negated(between):
             return None
         return first.entity_id, "related_to", second.entity_id, _COOCCURRENCE
+
+
+def is_prose(sentence: str) -> bool:
+    """Return whether ``sentence`` reads as prose rather than a table row or a run-on fragment."""
+    tokens = _TOKENS.findall(sentence)
+    if not tokens or len(tokens) > MAX_SENTENCE_WORDS:
+        return False
+    numeric = sum(1 for token in tokens if _NUMERIC.search(token))
+    return numeric < MIN_TABLE_NUMBERS or numeric / len(tokens) <= MAX_NUMERIC_SHARE
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split ``text`` into the sentences that relations are extracted from."""
+    return _SENTENCE_END.split(text)
 
 
 def _negated(text: str) -> bool:
