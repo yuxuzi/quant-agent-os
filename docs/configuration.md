@@ -87,3 +87,36 @@ tool_name = "count_signals"      # agent-tool only
 # components = ["database"]      # python-cli: container; fastapi-service: database, worker,
 #                                #   auth with auth-api-key or auth-oidc, container
 ```
+
+## Configuration hub (proposed)
+
+[Decision 0008](decisions/0008-configuration-hub.md), backlog B-24. The hub stores settings
+you reuse across apps and products, so questionnaires can offer them. Secrets are stored only
+as references:
+
+```toml
+# ~/.quant-agent-os/hub.toml (user); ./.quant-agent-os/hub.toml overrides it key by key
+[identity]
+author = "Your Name"
+email = "you@example.com"
+
+[connections.research-pg]
+kind = "postgres"
+host = "db.internal"
+port = 5432
+database = "research"
+user = "analyst"
+schema = "prices"
+read_only = true
+password_ref = "env:RESEARCH_PG_PASSWORD"   # a reference, never the password
+
+[templates.firm-backtest]
+source = "gh:firm/quant-packs"
+ref = "v1.2.0"
+```
+
+How it works:
+- **The CLI:** `quant-agent-os hub list|show|set|remove|check`. `show` prints references, and
+  `check` reports whether each one resolves here.
+- **Refusals:** the hub refuses a value that looks like a secret.
+- **Writes:** agent tools can list entries but need an approval to write one.

@@ -172,7 +172,9 @@ onto the days below, so there is still only one timeline.
 | Days 8–14 | Quant Research slice: domain models, SQLite store, ingest CLI, fixture corpus | B-05 | Q4 (part) |
 | Days 15–21 | Retrieval tools, citation and injection evaluations, SDK facade, run store | B-06–B-08 | Q4, Q6 |
 | Days 22–30 | Approval gate, subprocess runner, App Factory foundation, demo and docs | B-09–B-11 | Q7 |
-| Days 31–60 | Depth: real model adapter, analytics package, PostgreSQL + pgvector, `research_alpha`, AppSpec drafting, `generate_strategy`, `generate_report` over MCP | B-12–B-17 | Q1, Q3 |
+| Days 31–45 | Guided App Factory: template catalog and user packs, configuration hub, questionnaire and drafts | B-23–B-25 | — |
+| Days 31–60 | Depth: real model adapter, analytics package, PostgreSQL + pgvector, `research_alpha`, `generate_strategy`, `generate_report` over MCP; AppSpec drafting (B-16) after B-25 | B-12–B-17 | Q1, Q3 |
+| Days 46–60 | Quant baseline templates (alpha research, backtest, report), database guidance, quant template authoring, walkthrough | B-26–B-29 | — |
 | Days 61–90 | Hardening and release: REST + API-key auth, Docker team server, `generate_factor_code` with a bounded iteration loop, `analyze_risk`, security review, end-to-end tests, 0.2 release, name checks | B-18–B-22 | — |
 
 ## 5. Backlog (prioritized)
@@ -270,9 +272,18 @@ onto the days below, so there is still only one timeline.
 | B-20 | `generate_factor_code` and the bounded fix-and-validate loop (decision record first) | B-09, B-10, B-12 | At most N rounds; structured diagnostics; approval for each write |
 | B-21 | `analyze_risk` (exposures, volatility contributions) in analytics | B-13 | Known-answer tests |
 | B-22 | 0.2 release, security review, name availability checks | all | Release gates in section 9 |
+| B-23 | Template catalog and user packs: built-in, bundled, and registered packs; git packs pinned and cached; generalised `AppSpec` (`template`, `profile`, `answers`, `settings`). Step plan: [plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) (Q1) | B-10 | A registered local or git pack plans offline from its cache; existing specs unchanged |
+| B-24 | Configuration hub in Core (decision 0008): layered TOML; `identity`, `connections`, `data_sources`, `templates`, `defaults`; secrets as references; `quant-agent-os hub` CLI; read-only `list_hub_entries` (Q2) | B-08 | Secret-looking values refused (test); project overrides user; nothing ever shows resolved values |
+| B-25 | Questionnaire and drafts (decision 0007): next questions from the pack's Copier questions and the components' settings; `AppDraft` store; `start_app_draft`, `answer_app_draft`, `get_app_draft`, `save_to_hub` (approval); `quant-factory new` (Q3) | B-23, B-24 | `complete` only when the planner and `api.plan` accept the draft; `when` branches tested; secrets accepted only as references |
+| B-26 | `quant-baseline` pack (decision 0009): `alpha-research`, `backtest`, `report`; components `data-csv`, `data-parquet`, `data-database`, `agent-tools`, `container` (Q4) | B-10 | Each profile passes its own `uv sync`, ruff, mypy, and pytest (smoke test); known-answer tests for every metric |
+| B-27 | Database guidance: the `data-database` questionnaire branch, hub connections, generated `settings.py`/`.env.example`, and an approved `check-connection` (Q5) | B-24–B-26 | No secret values in generated files (scan test); `check-connection` passes against SQLite or DuckDB in the smoke test |
+| B-28 | Quant template authoring: `quant-factory template new` forks a baseline profile into a validated, registered user pack; `create_template` (approval); handoff to pytemplate-uv's generic authoring if it ships (Q6) | B-23, B-26 | A forked pack validates, registers, and generates an app that passes its checks |
+| B-29 | Walkthrough: hub, then questionnaire, then alpha research, backtest, and report apps, then a forked pack (Q7) | B-23–B-28 | Reproduced from a clean checkout |
 
 `run_backtest` is planned for after day 90 as its own package with explicit cost, slippage,
 calendar, and no-look-ahead tests. Pull it forward only when design-partner demand shows a need.
+It is a different thing from the `backtest` template (B-26). That template generates a backtest
+project the user owns. `run_backtest` would be a platform tool.
 
 ## 6. Commercial path (proposed, to be validated)
 
@@ -287,7 +298,8 @@ built before day 90. The architecture only keeps the right seams open:
 | Open-source Core + products (MIT) | Adoption, credibility, contributors | This plan |
 | Team or enterprise server: SSO/OIDC, RBAC, audit retention and export, approval workflows, PostgreSQL deployment support | Firms need governance before agents touch research and code | B-08, B-09, B-18, B-19 |
 | Curated knowledge packs: quant factor and signal graphs with metadata, links, and licensed summaries | Time saved on literature review | B-05, B-14; licensing review |
-| Premium App Factory packs (factor libraries, data-pipeline services, research APIs) | Faster production-quality builds | B-10 |
+| Quant baseline templates (open) and premium App Factory packs (factor libraries, data-pipeline services, research APIs, firm-specific forks) | Faster production-quality builds; guided setup through questionnaires | B-10, B-23, B-26, B-28 |
+| Team configuration hub: shared connections, packs, and defaults, with access control and change audit | Consistent setup across a team without sharing secrets | B-24, B-18, B-19 |
 | Hosted Quant-Agent-OS (later) | No operations burden | Multi-tenant work, currently out of scope |
 | Support, design partnerships, custom integrations | Early revenue and product feedback | MVP demo (B-11) |
 
@@ -361,8 +373,16 @@ Success metrics (to be confirmed after the first baseline):
   directory, so it stays read-only without a narrower permission.
 - **O-6:** What are the distribution names for the products (`quant-agent-os-research`,
   `quant-agent-os-factory`)?
-- **O-7:** Does `pytemplate-uv` render packs from a subdirectory of a git repository, or must
-  the pack ship as package data and be passed as a local path? This decides how the
-  `agent-tool` pack is versioned.
+- **O-7:** *Resolved by B-10:* packs ship as package data inside `quant_app_factory/packs/`
+  and are passed to pytemplate-uv as local paths. User git packs are pinned and cached
+  locally (B-23).
 - **O-8:** How is iteration in App Factory (B-20) reconciled with the no-feedback invariant?
   This needs its own decision record.
+- **O-9:** Which keychain backend backs `keyring:` secret references (B-24), and does it stay
+  an optional extra?
+- **O-10:** Which databases does `data-database` support first (B-27)? The proposal is
+  PostgreSQL, SQLite, and DuckDB, with Snowflake later.
+- **O-11:** Does `data-parquet` bring `pyarrow` by default, or is it opt-in for size (B-26)?
+- **O-12:** Does pytemplate-uv's roadmap include generic pack authoring (an API or a
+  `--json` command) that B-28 can delegate to? It is tracked in pytemplate-uv's repository,
+  not here.

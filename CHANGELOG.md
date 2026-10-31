@@ -34,6 +34,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Planned the guided App Factory (`docs/plans/app-factory-questionnaires.md`, backlog
+  B-23–B-29, proposed decisions 0007–0009):
+  - a template catalog with user packs;
+  - a questionnaire over each pack's own questions, with drafts;
+  - a configuration hub in Core, with secrets as references only;
+  - database setup guidance;
+  - quant baseline templates (`alpha-research`, `backtest`, `report`);
+  - quant template authoring.
+
 - Approval gate (B-09, decision 0005 accepted).
   - **Gate.** `write_local_data`, `execute_code`, `network`, and `external_action` calls need
     a single-use operator approval, bound to the run, the tool, and the input hash. Without

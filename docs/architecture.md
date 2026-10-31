@@ -478,6 +478,54 @@ The pieces:
   structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
   It needs a decision record before it is built (open).
 
+### 8.1 Guided generation: catalog, questionnaire, and hub (proposed)
+
+These pieces are proposed in decisions 0007–0009, with the step plan in
+[plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) and the backlog in
+B-23–B-29.
+
+```text
+TemplateCatalog ── built-in packs (agent-tool, quant-baseline: alpha-research · backtest · report)
+   │               pytemplate-uv bundled profiles (python, fastapi)
+   │               user packs (local dir or pinned git ref, cached; registered in the hub)
+   ▼
+Questionnaire (deterministic) ◀── configuration hub (identity, connections, data sources,
+   │  next questions: profile → components            templates, defaults; secrets as refs)
+   │  → pack's Copier questions (when, defaults, validators)
+   │  → components' runtime settings (secret → reference only)
+   ▼
+AppDraft (collecting → complete → created; stored like run records)
+   │  complete = planner and pytemplate.api.plan accept it
+   ▼
+AppSpec ─▶ ArchitecturePlanner ─▶ plan_app ─▶ approval ─▶ create_app ─▶ checks ─▶ FactoryReport
+```
+
+- **Two kinds of input stay apart.**
+  - **Template answers** come from the pack's questions and are used when the project renders.
+  - **Runtime settings** come from the `settings` that components declare, for example
+    `DATABASE_URL`, and are read by the generated app from its environment.
+  - The hub stores reusable runtime settings, as connections and data sources, and never a
+    secret value.
+- **Clients drive the conversation.** An MCP client asks the person each question, or
+  `quant-factory new` asks in the terminal. Answers are validated input. Model-drafted answers
+  (B-16) use the same path, and a person confirms them.
+- **Database guidance** is the `data-database` component's question branch:
+  1. the database kind, then a hub connection or a new one;
+  2. host, database, and user, then the password as `env:NAME`;
+  3. the schema, then read-only access.
+
+  It generates a `settings.py`, a `.env.example`, and a `check-connection` command. That
+  command runs only as an approved post-create check, and receives only the referenced
+  variables.
+- **Quant baseline templates** (decision 0009) are portable. An optional `agent-tools`
+  component registers the app's functions as platform tools. Every metric has documented
+  conventions and known-answer tests, and no template contains trading or broker code.
+- **Template authoring:**
+  - `quant-factory template new` forks a baseline profile into a user pack, then validates it
+    and registers it.
+  - Generic pack authoring is pytemplate-uv's own roadmap. App Factory hands the generic layout
+    to it if it ships.
+
 ## 9. pytemplate-uv integration boundary
 
 **Confirmed:** `pytemplate-uv` 3.0 is published. It provides `plan`, `validate`, `create`, and
@@ -511,6 +559,10 @@ Further rules:
 - Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
   a second `ScaffoldProvider`. Core and Quant Research never import pytemplate-uv.
 - `pytemplate-uv` releases and plans are its own repository's business.
+- **User packs** (proposed, B-23). They are registered by the operator
+  (`quant-factory template add`) and validated with `open_catalog`. A git pack is pinned to a
+  ref and cached under `~/.quant-agent-os/packs/`, so plans read the cache and need no network
+  access.
 
 ## 10. Interface strategy: MCP, REST, SDK, CLI
 
@@ -541,6 +593,10 @@ tests.
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
 | `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
+| `start_app_draft`, `answer_app_draft`, `get_app_draft` | App Factory | `read_local_data` (drafts are platform bookkeeping) | Days 31–45 (B-25) |
+| `save_to_hub` | App Factory | `write_local_data` → approval per call | Days 31–45 (B-25) |
+| `list_hub_entries` | Core | `read_local_data`; names, kinds, and non-secret fields only | Days 31–45 (B-24) |
+| `create_template` | App Factory | `write_local_data` → approval per call | Days 46–60 (B-28) |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
 | `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
 | `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
@@ -605,6 +661,11 @@ See [security.md](security.md) for details.
 
 **Proposed:**
 - approvals through an MCP client's confirmation step.
+- **Secret references** (decision 0008). Hub entries, draft answers, and generated files hold
+  `env:NAME` (or `keyring:...` later), never secret values.
+  - Saving a value that looks like a secret is refused.
+  - A reference resolves only in the process that needs it, as `SecretStr`, and is passed to a
+    program only through `run_command`'s `extra_env`, for exactly the referenced names.
 - HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
   carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
   but multi-tenant hosting remains out of scope.
