@@ -15,7 +15,7 @@ from quant_research.domain.vocabulary import EntityMatcher, load_vocabulary
 from quant_research.infrastructure.embedding import HashingEmbedder
 from quant_research.infrastructure.files import TextFileLoader
 from quant_research.infrastructure.pdf import PdfLoader, UnavailableLoader
-from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
+from quant_research.infrastructure.sqlite_store import SCHEMA_VERSION, SqliteKnowledgeStore
 
 VOCABULARY = load_vocabulary()
 EMBEDDER = HashingEmbedder(EntityMatcher(VOCABULARY))
@@ -118,7 +118,7 @@ def test_version_one_stores_are_migrated_in_place(tmp_path: Path) -> None:
         version = store._db.execute("PRAGMA user_version").fetchone()[0]
 
     assert "page" in columns
-    assert version == 2
+    assert version == SCHEMA_VERSION
 
 
 def test_pdf_pages_become_located_chunks(research: ResearchApp) -> None:

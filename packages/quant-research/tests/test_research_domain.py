@@ -168,3 +168,68 @@ def test_strategies_using_a_signal_get_a_uses_edge() -> None:
     assert _relations("Trend following uses time-series momentum as its signal.") == [
         ("strategy:trend-following", "uses", "signal:time-series-momentum")
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Short-term reversal is predicted by order-flow imbalance.",
+            ("signal:order-flow-imbalance", "predicts", "signal:short-term-reversal"),
+        ),
+        ("Carry is forecast by crowding.", ("concept:crowding", "predicts", "signal:carry")),
+        ("Profitability explains HML.", ("factor:value", "explained_by", "factor:profitability")),
+        (
+            "Profitability captures the value premium.",
+            ("factor:value", "explained_by", "factor:profitability"),
+        ),
+        (
+            "Momentum is extended by time-series momentum.",
+            ("signal:time-series-momentum", "extends", "factor:momentum"),
+        ),
+        (
+            "Momentum is used by factor timing.",
+            ("strategy:factor-timing", "uses", "factor:momentum"),
+        ),
+    ],
+)
+def test_passive_and_inverse_cues_point_edges_the_right_way(
+    text: str, expected: tuple[str, str, str]
+) -> None:
+    assert _relations(text) == [expected]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Order-flow imbalance does not predict carry.",
+        "Profitability fails to explain carry.",
+        "Momentum does not contradict carry.",
+        "Carry is unrelated to crowding.",
+        "Carry isn't correlated with crowding.",
+        "Momentum never predicts carry.",
+        "Momentum is not robust to transaction costs.",
+    ],
+)
+def test_negated_pairs_produce_no_edge(text: str) -> None:
+    assert _relations(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Momentum, which is not a risk factor, predicts carry.",
+            ("factor:momentum", "predicts", "signal:carry"),
+        ),
+        ("Momentum not only predicts carry.", ("factor:momentum", "predicts", "signal:carry")),
+        (
+            "Momentum not just correlates with carry.",
+            ("factor:momentum", "correlates_with", "signal:carry"),
+        ),
+    ],
+)
+def test_negations_away_from_the_cue_do_not_suppress_the_relation(
+    text: str, expected: tuple[str, str, str]
+) -> None:
+    assert _relations(text) == [expected]

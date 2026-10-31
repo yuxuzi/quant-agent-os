@@ -36,7 +36,13 @@ from quant_research.domain.models import (
 )
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+# Additive column changes per schema version: applied in order, each only if missing.
+_MIGRATIONS: dict[int, list[tuple[str, str, str]]] = {
+    1: [("chunks", "page", "INTEGER")],
+    2: [("documents", "pipeline", "TEXT NOT NULL DEFAULT ''")],
+}
 
 
 class StoreError(RuntimeError):
@@ -47,7 +53,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, uri TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL, authors TEXT NOT NULL, published TEXT, license_note TEXT,
-    loader_version TEXT NOT NULL
+    loader_version TEXT NOT NULL, pipeline TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -80,21 +86,43 @@ CREATE TABLE IF NOT EXISTS corpus_snapshots (
 );
 """
 
-_EXPAND = """
-WITH RECURSIVE walk(entity_id, relation_id, hops) AS (
-    SELECT value, NULL, 0 FROM json_each(:seeds)
+# Expansion runs as two queries so the recursive walk is evaluated once (an inlined CTE would
+# be re-run for every relation it is joined with). First: distances of reachable entities,
+# walking entities rather than relations, so a fact stated in many chunks is one step.
+_DISTANCES = """
+WITH RECURSIVE reach(entity_id, hops) AS (
+    SELECT value, 0 FROM json_each(:seeds)
     UNION
-    SELECT CASE WHEN r.subject_id = w.entity_id THEN r.object_id ELSE r.subject_id END,
-           r.id, w.hops + 1
-    FROM walk AS w
-    JOIN relations AS r ON w.entity_id IN (r.subject_id, r.object_id)
+    SELECT r.object_id, w.hops + 1 FROM reach AS w
+    JOIN relations AS r ON r.subject_id = w.entity_id
+    WHERE w.hops < :hops AND r.confidence >= :min_confidence
+    UNION
+    SELECT r.subject_id, w.hops + 1 FROM reach AS w
+    JOIN relations AS r ON r.object_id = w.entity_id
     WHERE w.hops < :hops AND r.confidence >= :min_confidence
 )
-SELECT r.*, MIN(w.hops) AS hops
-FROM walk AS w JOIN relations AS r ON r.id = w.relation_id
-GROUP BY r.id
-ORDER BY hops, r.confidence DESC, r.id
+SELECT entity_id, MIN(hops) AS hops FROM reach GROUP BY entity_id
 """
+# Second: edges between reached entities that lie within the hop limit, keeping at most
+# :per_triple citing edges per (subject, predicate, object) together with its support count.
+_EDGES = """
+WITH distance(entity_id, hops) AS (
+    SELECT key, value FROM json_each(:distances)
+),
+edges AS (
+    SELECT r.*, MIN(s.hops, o.hops) + 1 AS hops,
+           COUNT(*) OVER triple AS support,
+           ROW_NUMBER() OVER (triple ORDER BY r.confidence DESC, r.id) AS strength
+    FROM distance AS s
+    JOIN relations AS r ON r.subject_id = s.entity_id
+    JOIN distance AS o ON o.entity_id = r.object_id
+    WHERE r.confidence >= :min_confidence AND MIN(s.hops, o.hops) < :hops
+    WINDOW triple AS (PARTITION BY r.subject_id, r.predicate, r.object_id)
+)
+SELECT * FROM edges WHERE strength <= :per_triple
+ORDER BY hops, confidence DESC, id
+"""
+EDGES_PER_TRIPLE = 3
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
@@ -172,10 +200,15 @@ class SqliteKnowledgeStore:
         self.close()
 
     @_locked
-    def has_document(self, sha256: str) -> bool:
-        """Return whether a document with this content hash is stored."""
-        row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = ?", (sha256,)).fetchone()
-        return row is not None
+    def has_document(self, sha256: str, pipeline: str | None = None) -> bool:
+        """Return whether this content is stored (and, with ``pipeline``, by that pipeline)."""
+        if pipeline is None:
+            row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = ?", (sha256,))
+        else:
+            row = self._db.execute(
+                "SELECT 1 FROM documents WHERE sha256 = ? AND pipeline = ?", (sha256, pipeline)
+            )
+        return row.fetchone() is not None
 
     @_locked
     def replace_document(
@@ -204,7 +237,8 @@ class SqliteKnowledgeStore:
                     )
                 self._db.execute("DELETE FROM documents WHERE id = ?", (document_id,))
             self._db.execute(
-                "INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO documents (id, sha256, uri, title, authors, published, "
+                "license_note, loader_version, pipeline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     document.id,
                     document.sha256,
@@ -214,6 +248,7 @@ class SqliteKnowledgeStore:
                     document.published,
                     document.license_note,
                     document.loader_version,
+                    document.pipeline,
                 ),
             )
             self._db.executemany(
@@ -397,6 +432,15 @@ class SqliteKnowledgeStore:
         return scored[:limit]
 
     @_locked
+    def all_relations(self) -> list[Relation]:
+        """Return every stored relation, by id (for evaluation and export)."""
+        rows = self._db.execute("SELECT * FROM relations ORDER BY id")
+        return [
+            Relation.model_validate({key: row[key] for key in Relation.model_fields})
+            for row in rows
+        ]
+
+    @_locked
     def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
         """Store ``(chunk_id, vector)`` pairs for ``model_id``, replacing existing ones."""
         self._writable()
@@ -450,34 +494,45 @@ class SqliteKnowledgeStore:
         seeds = sorted(set(entity_ids))
         if not seeds or hops < 1:
             return []
+        limits = {"hops": hops, "min_confidence": min_confidence}
+        distances = {
+            row["entity_id"]: row["hops"]
+            for row in self._db.execute(_DISTANCES, {"seeds": json.dumps(seeds), **limits})
+        }
         rows = self._db.execute(
-            _EXPAND,
-            {"seeds": json.dumps(seeds), "hops": hops, "min_confidence": min_confidence},
+            _EDGES,
+            {"distances": json.dumps(distances), "per_triple": EDGES_PER_TRIPLE, **limits},
         )
         return [
             GraphEdge(
                 relation=Relation.model_validate({key: row[key] for key in Relation.model_fields}),
                 hops=row["hops"],
+                support=row["support"],
             )
             for row in rows
         ]
 
 
 def _migrate(db: sqlite3.Connection) -> None:
-    """Upgrade a version-1 store in place, atomically and idempotently.
+    """Upgrade an older store to `SCHEMA_VERSION` in place, atomically and idempotently.
 
-    The column change and the version bump commit together, and the column is added only if it
-    is missing, so an interrupted upgrade can simply be run again.
+    All column changes and the version bump commit together, and each column is added only if
+    it is missing, so an interrupted upgrade can simply be run again. Documents upgraded from
+    version 2 have no recorded pipeline, so the next ingestion processes them again.
     """
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version != 1 or not _has_table(db, "chunks"):
+    if not 0 < version < SCHEMA_VERSION:
         return
     db.execute("BEGIN IMMEDIATE")
     try:
-        columns = {row[1] for row in db.execute("PRAGMA table_info(chunks)")}
-        if "page" not in columns:
-            db.execute("ALTER TABLE chunks ADD COLUMN page INTEGER")
-        db.execute("PRAGMA user_version = 2")
+        for step in range(version, SCHEMA_VERSION):
+            for table, column, declaration in _MIGRATIONS[step]:
+                if not _has_table(db, table):
+                    continue
+                columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if column not in columns:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+        db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     except BaseException:
         db.execute("ROLLBACK")
         raise

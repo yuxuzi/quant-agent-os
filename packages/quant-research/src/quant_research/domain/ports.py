@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from quant_research.domain.models import (
     Chunk,
@@ -118,17 +118,26 @@ class KeywordHit(BaseModel):
 
 
 class GraphEdge(BaseModel):
-    """A relation reached during graph expansion, ``hops`` steps from a seed entity."""
+    """A relation reached during graph expansion, ``hops`` steps from a seed entity.
+
+    ``support`` counts the chunks that state the same subject, predicate, and object; only the
+    strongest few of those parallel edges are returned.
+    """
 
     relation: Relation
-    hops: int
+    hops: int = Field(ge=1)
+    support: int = Field(default=1, ge=1)
 
 
 class KnowledgeStore(Protocol):
     """Persistence for the knowledge graph and its passages."""
 
-    def has_document(self, sha256: str) -> bool:
-        """Return whether a document with this content hash is stored."""
+    def has_document(self, sha256: str, pipeline: str | None = None) -> bool:
+        """Return whether a document with this content hash is stored.
+
+        With ``pipeline``, it must also have been processed by that pipeline (loader, chunker,
+        extractor, and vocabulary versions); otherwise ingestion processes it again.
+        """
         ...
 
     def replace_document(

@@ -50,6 +50,13 @@ Hosted models (added 2026-10-30): `VoyageEmbedder` (default `voyage-finance-2`) 
 applies to them. They are opt-in until the live evaluation, which includes paraphrase queries,
 shows a gain.
 
+Graph expansion at scale (2026-10-30): the mock-world benchmark showed two-hop expansion
+growing with the number of chunks stating the same fact, at 1.1 s p50 for 3,000 documents. An
+entity-level walk, parallel-edge aggregation (at most 3 citing edges plus a support count),
+and splitting the recursive CTE from the edge query (SQLite re-ran the inlined CTE per joined
+row) brought it to 14 ms. The relational design still holds at this scale, so a graph database
+is not yet justified.
+
 DuckDB was evaluated for this store and not chosen. Its full-text and HNSW extensions download
 on first use, which breaks offline tests, and the workload is point lookups and traversal, not
 columnar scans. DuckDB remains the candidate for the analytics and backtest service.
