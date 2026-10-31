@@ -1,0 +1,72 @@
+"""Known-answer tests for every metric, so a formula change cannot pass unnoticed."""
+
+import math
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.metrics import (
+    annualized_return,
+    annualized_volatility,
+    hit_rate,
+    information_coefficient,
+    max_drawdown,
+    ranks,
+    sharpe_ratio,
+    simple_returns,
+    turnover,
+)
+
+
+def test_simple_returns_follow_prices() -> None:
+    returns = simple_returns(np.array([100.0, 110.0, 99.0]))
+
+    assert returns == pytest.approx([0.10, -0.10])
+
+
+def test_a_constant_return_compounds_and_has_no_volatility() -> None:
+    returns = np.full(252, 0.001)
+
+    assert annualized_return(returns, 252) == pytest.approx(1.001**252 - 1)
+    assert annualized_volatility(returns, 252) == pytest.approx(0.0)
+    assert math.isnan(sharpe_ratio(returns, 252))
+
+
+def test_sharpe_is_mean_over_deviation_times_root_periods() -> None:
+    returns = np.array([0.02, -0.01, 0.03, 0.00])
+
+    expected = returns.mean() / returns.std(ddof=1) * math.sqrt(12)
+    assert sharpe_ratio(returns, 12) == pytest.approx(expected)
+    assert sharpe_ratio(np.array([0.01, -0.01] * 50), 252) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_max_drawdown_of_a_known_path() -> None:
+    returns = simple_returns(np.array([100.0, 120.0, 90.0, 95.0, 130.0]))
+
+    assert max_drawdown(returns) == pytest.approx(90 / 120 - 1)
+    assert max_drawdown(np.array([0.01, 0.02])) == 0.0
+
+
+def test_hit_rate_and_turnover() -> None:
+    weights = np.array([[0.5, -0.5], [-0.5, 0.5], [-0.5, 0.5]])
+
+    assert hit_rate(np.array([0.01, -0.02, 0.03, 0.0])) == pytest.approx(0.5)
+    assert turnover(weights) == pytest.approx((1.0 + 0.0) / 2)
+
+
+def test_tied_values_share_their_average_rank() -> None:
+    assert ranks(np.array([10.0, 20.0, 10.0, 30.0])) == pytest.approx([1.5, 3.0, 1.5, 4.0])
+
+
+def test_information_coefficients_of_known_relations() -> None:
+    signal = np.array([[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]])
+    forward = np.array([[0.01, 0.02, 0.03, 0.04], [0.04, 0.03, 0.02, 0.01]])
+
+    assert information_coefficient(signal, forward) == pytest.approx([1.0, -1.0])
+    assert information_coefficient(signal, forward**3, rank=True) == pytest.approx([1.0, -1.0])
+
+
+def test_bars_with_too_few_pairs_have_no_coefficient() -> None:
+    signal = np.array([[1.0, np.nan, np.nan, 2.0]])
+
+    assert math.isnan(information_coefficient(signal, signal)[0])

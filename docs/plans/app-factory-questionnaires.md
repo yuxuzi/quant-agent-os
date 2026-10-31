@@ -48,6 +48,8 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
 ### Q1. Quant baseline templates and user packs (B-23), covering points 1 and 3
 
+**Done (2026-10-31).** Results are after the step text below.
+
 - **`AppSpec` gains** these fields, and `kind` stays as a shortcut, so existing specs keep
   working:
   - `template`: a built-in pack name, `bundled`, or a path to a local pack directory;
@@ -91,6 +93,27 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
     mypy, and pytest, including the bias tests.
   - A local user pack renders.
   - The existing specs and tests are unchanged.
+- **Results:**
+  - **Offline:** 25 new tests render every profile and component, check that answers reach the
+    code (`frequency = "weekly"` gives 52 periods a year), and render a minimal user pack.
+  - **Smoke test:** `alpha-research`, `backtest`, `report`, and `backtest` with `data-parquet`
+    and `agent-tools` all pass `uv sync`, ruff, mypy, and pytest, including the bias tests.
+  - **A metric bug the tests caught:** the template's first Sharpe returned about 7e16 for a
+    constant series, because floating-point noise made the deviation tiny rather than zero.
+    Flat series now count as constant, within a relative tolerance.
+  - **No hidden bias:** a momentum backtest on 40 random-walk seeds averages −0.15% a year
+    gross (standard error 0.34%, mean Sharpe −0.04). The `--demo` is a random walk and says
+    so.
+- **Deviations:**
+  - **`settings` is not added yet.** The runtime-settings field moves to Q2 and Q3, where
+    something reads it.
+  - **Offered and explicit answers are kept apart.** Identity fields (description, author,
+    email, Python version, license) are offered and kept only where a profile asks for them,
+    so user packs need not ask for them. Explicit `answers` are passed as given, and
+    pytemplate-uv rejects one that a profile does not ask for.
+  - **One template tree.** All three profiles share one template tree
+    (`_subdirectory: "template"`), and profile-only files have names that render empty for
+    other profiles. This is what keeps `metrics` a single source.
 
 ### Q2. Guided specs and factory settings (B-24), covering points 4 and 6
 

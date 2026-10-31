@@ -26,10 +26,17 @@ pytestmark = pytest.mark.skipif(
     [
         ("agent-tool", {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)}),
         ("python-cli", {}),
+        ("alpha-research", {}),
+        ("backtest", {}),
+        ("report", {}),
+        (
+            "backtest",
+            {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},
+        ),
     ],
 )
 def test_generated_projects_pass_their_own_checks(
-    tmp_path: Path, kind: str, extra: dict[str, str]
+    tmp_path: Path, kind: str, extra: dict[str, object]
 ) -> None:
     spec = AppSpec.model_validate(
         {

@@ -1,0 +1,5 @@
+# Entry point for pytemplate-uv. All three profiles share one template tree, so the metric code
+# has a single source; profile-specific files have names that render empty for other profiles.
+# Templates never declare tasks or migrations.
+_subdirectory: "template"
+--- !include questions.yml

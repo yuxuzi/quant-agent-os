@@ -42,7 +42,8 @@ class FactoryReport(BaseModel):
     """What `create` produced: the project, how it was made, and whether its checks pass."""
 
     name: str
-    kind: AppKind
+    kind: AppKind | None
+    template_name: str = Field(description="agent-tool, quant-baseline, bundled, or a pack path")
     project_path: str
     files: list[str]
     profile: str
@@ -99,6 +100,7 @@ class AppFactory:
         return FactoryReport(
             name=spec.name,
             kind=spec.kind,
+            template_name=spec.target[0],
             project_path=result.project_path,
             files=preview.files,
             profile=result.profile,

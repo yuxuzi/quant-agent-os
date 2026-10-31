@@ -54,7 +54,8 @@ def _preview(factory: AppFactory, spec: AppSpec) -> bool:
     except (PlanningError, ScaffoldError) as error:
         raise _fail(error) from error
     console.print(
-        f"[bold]{spec.name}[/bold] ({spec.kind}) -> {preview.project_path}", soft_wrap=True
+        f"[bold]{spec.name}[/bold] ({spec.target[0]}/{spec.target[1]}) -> {preview.project_path}",
+        soft_wrap=True,
     )
     for reason in plan.reasons:
         console.print(f"  - {reason}", soft_wrap=True)

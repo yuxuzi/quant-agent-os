@@ -1,0 +1,51 @@
+"""Price files load into panels, and bad files fail with a message that says what to fix."""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.data import DataError, load_prices
+
+
+def test_a_wide_csv_loads_with_missing_prices_as_nan(tmp_path: Path) -> None:
+    path = tmp_path / "prices.csv"
+    path.write_text("date,AAA,BBB\n2024-01-02,10,20\n2024-01-03,11,\n2024-01-04,12,22\n")
+
+    panel = load_prices(path)
+
+    assert panel.assets == ["AAA", "BBB"]
+    assert panel.dates[0] == "2024-01-02"
+    assert np.isnan(panel.prices[1, 1])
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("date,AAA\n2024-01-03,10\n2024-01-02,11\n", "ascending"),
+        ("date,AAA\n2024-01-02,10\n2024-01-03,-1\n", "positive"),
+        ("date,AAA\n2024-01-02,10\n", "at least two rows"),
+    ],
+)
+def test_bad_price_files_explain_the_problem(tmp_path: Path, body: str, message: str) -> None:
+    path = tmp_path / "prices.csv"
+    path.write_text(body)
+
+    with pytest.raises(DataError, match=message):
+        load_prices(path)
+{%- if 'data-parquet' in components %}
+
+
+def test_a_wide_parquet_file_loads(tmp_path: Path) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / "prices.parquet"
+    table = pa.table({"date": ["2024-01-02", "2024-01-03"], "AAA": [10.0, None]})
+    pq.write_table(table, path)
+
+    panel = load_prices(path)
+
+    assert panel.assets == ["AAA"]
+    assert np.isnan(panel.prices[1, 0])
+{%- endif %}

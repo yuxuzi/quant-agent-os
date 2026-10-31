@@ -26,7 +26,11 @@ class ScaffoldRequest(BaseModel):
     profile: str
     output_dir: str
     components: list[str] = Field(default_factory=list)
-    data: dict[str, str] = Field(default_factory=dict)
+    data: dict[str, str] = Field(default_factory=dict, description="Answers passed as given")
+    defaults: dict[str, str] = Field(
+        default_factory=dict,
+        description="Answers offered to the template; dropped where its profile does not ask",
+    )
     template: str | None = Field(default=None, description="Template pack directory, if any")
 
 

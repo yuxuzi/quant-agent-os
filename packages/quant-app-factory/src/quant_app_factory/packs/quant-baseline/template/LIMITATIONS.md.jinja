@@ -1,0 +1,26 @@
+# Limitations
+
+This template gives you a correct, tested skeleton, not a finished research process. It does
+not handle:
+
+- **Survivorship bias.** Results are only as good as the universe you load. Include delisted
+  assets.
+- **Point-in-time data.** Prices and any fundamentals must be as known at each date, without
+  later revisions.
+- **Corporate actions.** Use prices adjusted for splits and dividends, or adjust them first.
+{%- if profile == 'backtest' %}
+- **Execution.** Costs are linear in turnover. There is no market impact, borrow cost,
+  short-sale constraint, or capacity limit, and the simulation places no orders.
+- **Overfitting.** Choose parameters on walk-forward training ranges only
+  (`walk_forward_splits`), and report the test ranges.
+{%- elif profile == 'alpha-research' %}
+- **Costs and capacity.** Quantile spreads are gross and hypothetical. Backtest a signal before
+  drawing conclusions.
+- **Multiple testing.** Trying many signals inflates the best IC. Record every signal you try.
+{%- else %}
+- **Interpretation.** The report prints computed figures only. Write the interpretation
+  yourself, and keep it apart from the figures.
+{%- endif %}
+
+What the tests guard: metric formulas (known answers){% if profile != 'report' %}, no look-ahead
+in signals{% endif %}{% if profile == 'backtest' %}, the trade lag, and cost ordering{% endif %}.

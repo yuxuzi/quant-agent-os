@@ -1,0 +1,6 @@
+"""Choices made when the project was generated. Change them here."""
+
+PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}  # {{ frequency }} bars
+COST_BPS: float = {{ cost_bps }}  # cost per unit of one-way turnover, in basis points
+MAX_HORIZON: int = {{ max_horizon }}  # longest forward horizon for IC decay, in bars
+TRADE_LAG: int = 1  # bars between a signal's close and the trade (0 trades on that close)

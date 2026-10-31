@@ -79,13 +79,31 @@ An app spec is TOML:
 
 ```toml
 name = "signal-tools"            # project slug
-kind = "agent-tool"              # agent-tool, python-cli, or fastapi-service
+kind = "agent-tool"              # agent-tool, python-cli, fastapi-service, alpha-research,
+                                 #   backtest, or report
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "projects"          # existing parent directory, relative to this file
 tool_name = "count_signals"      # agent-tool only
 # quant_agent_os_source = "../quant-agent-os"   # agent-tool only; default: the git repository
 # components = ["database"]      # python-cli: container; fastapi-service: database, worker,
 #                                #   auth with auth-api-key or auth-oidc, container
+```
+
+A quant spec, or one for your own pack:
+
+```toml
+name = "momo-backtest"
+kind = "backtest"                # or: template = "quant-baseline" and profile = "backtest"
+description = "Momentum long-short backtest"
+output_dir = "."
+components = ["data-parquet"]    # optional: data-parquet, agent-tools
+
+[answers]                        # the template's other questions
+frequency = "daily"              # daily, weekly, or monthly
+cost_bps = "3"                   # backtest only; alpha-research asks max_horizon
+
+# template = "../packs/my-pack"  # your own pytemplate-uv pack, relative to this file
+# profile = "my-profile"
 ```
 
 ## Factory settings (proposed)

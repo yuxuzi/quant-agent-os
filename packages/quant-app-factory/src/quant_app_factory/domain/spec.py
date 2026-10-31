@@ -9,10 +9,40 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-AppKind = Literal["agent-tool", "python-cli", "fastapi-service"]
+AppKind = Literal[
+    "agent-tool", "python-cli", "fastapi-service", "alpha-research", "backtest", "report"
+]
 PythonVersion = Literal["3.11", "3.12", "3.13", "3.14", "3.15"]
 DEFAULT_QUANT_AGENT_OS_SOURCE = "git+https://github.com/yuxuzi/quant-agent-os"
 _ONE_LINE = re.compile(r'^[^"\\\n]+$')  # what pytemplate-uv's questions accept
+
+# Each kind is a shortcut for a (template, profile) pair.
+KIND_TARGETS: dict[str, tuple[str, str]] = {
+    "agent-tool": ("agent-tool", "agent-tool"),
+    "python-cli": ("bundled", "python"),
+    "fastapi-service": ("bundled", "fastapi"),
+    "alpha-research": ("quant-baseline", "alpha-research"),
+    "backtest": ("quant-baseline", "backtest"),
+    "report": ("quant-baseline", "report"),
+}
+BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-baseline", "bundled"})
+# Answers set by spec fields or by pytemplate-uv itself; `answers` may not override them.
+RESERVED_ANSWERS = frozenset(
+    {
+        "project_name",
+        "package_name",
+        "profile",
+        "components",
+        "description",
+        "author",
+        "email",
+        "python_version",
+        "license",
+        "tool_name",
+        "quant_agent_os_source",
+    }
+)
+_ANSWER_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class SpecError(ValueError):
@@ -22,12 +52,22 @@ class SpecError(ValueError):
 class AppSpec(BaseModel):
     """What to build. A model may draft it later (B-16); a person always reviews it.
 
+    Choose what to build with ``kind`` (a shortcut), or with ``template`` and ``profile``:
+    ``template`` is a built-in pack (``agent-tool``, ``quant-baseline``), ``bundled`` for
+    pytemplate-uv's own profiles, or the path of your own pack. ``answers`` hold the
+    template's other questions, such as ``frequency`` or ``cost_bps``.
+
     ``output_dir`` is the existing parent directory of the new project, as an absolute path;
-    `load_spec` resolves a relative one against the spec file.
+    `load_spec` resolves a relative ``output_dir`` or ``template`` path against the spec file.
     """
 
     name: str = Field(pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$", description="Project slug")
-    kind: AppKind
+    kind: AppKind | None = None
+    template: str | None = Field(
+        default=None, description="agent-tool, quant-baseline, bundled, or a pack directory"
+    )
+    profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]*$")
+    answers: dict[str, str] = Field(default_factory=dict, description="Other template answers")
     description: str = Field(min_length=1, max_length=200)
     output_dir: str = Field(description="Existing parent directory (absolute)")
     author: str = "Your Name"
@@ -45,13 +85,36 @@ class AppSpec(BaseModel):
         description="agent-tool only: a git+https URL or a local path to quant-agent-os",
     )
 
-    @field_validator("quant_agent_os_source", mode="before")
+    @field_validator("quant_agent_os_source", "template", mode="before")
     @classmethod
     def _forward_slashes(cls, value: object) -> object:
         """Write a local Windows path with forward slashes, as TOML templates need."""
         if isinstance(value, str) and not value.startswith("git+"):
             return value.replace("\\", "/")
         return value
+
+    @field_validator("template")
+    @classmethod
+    def _known_or_absolute(cls, value: str | None) -> str | None:
+        if value is None or value in BUILT_IN_TEMPLATES:
+            return value
+        if not Path(value).is_absolute():
+            raise ValueError(
+                f"use {', '.join(sorted(BUILT_IN_TEMPLATES))}, or an absolute pack directory"
+            )
+        return value
+
+    @field_validator("answers")
+    @classmethod
+    def _plain_answers(cls, answers: dict[str, str]) -> dict[str, str]:
+        for name, value in answers.items():
+            if not _ANSWER_NAME.match(name):
+                raise ValueError(f"answer name {name!r} must be a lowercase identifier")
+            if name in RESERVED_ANSWERS:
+                raise ValueError(f"set {name!r} as a spec field, not in answers")
+            if not _ONE_LINE.match(value) or not value.strip():
+                raise ValueError(f"answer {name!r} must be one line, without quotes or backslashes")
+        return answers
 
     @field_validator("description", "author", "email", "quant_agent_os_source")
     @classmethod
@@ -68,10 +131,28 @@ class AppSpec(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _kind_specific(self) -> AppSpec:
-        if self.kind != "agent-tool" and self.tool_name is not None:
-            raise ValueError("tool_name applies only to kind 'agent-tool'")
+    def _target_specific(self) -> AppSpec:
+        if self.kind is None and (self.template is None or self.profile is None):
+            raise ValueError("set kind, or both template and profile")
+        if self.kind is not None:
+            expected = KIND_TARGETS[self.kind]
+            given = (self.template or expected[0], self.profile or expected[1])
+            if given != expected:
+                raise ValueError(
+                    f"kind {self.kind!r} means template {expected[0]!r} with profile "
+                    f"{expected[1]!r}; set kind or template and profile, not a mix"
+                )
+        if self.target != ("agent-tool", "agent-tool") and self.tool_name is not None:
+            raise ValueError("tool_name applies only to the agent-tool profile")
         return self
+
+    @property
+    def target(self) -> tuple[str, str]:
+        """The ``(template, profile)`` this spec builds."""
+        if self.kind is not None:
+            return KIND_TARGETS[self.kind]
+        assert self.template is not None and self.profile is not None  # by validation
+        return self.template, self.profile
 
     @property
     def package_name(self) -> str:
@@ -89,6 +170,12 @@ def load_spec(path: Path) -> AppSpec:
     if not output_dir.is_absolute():
         output_dir = path.resolve().parent / output_dir
     data["output_dir"] = str(output_dir.resolve())
+    template = data.get("template")
+    if isinstance(template, str) and template not in BUILT_IN_TEMPLATES:
+        pack = Path(template).expanduser()
+        if not pack.is_absolute():
+            pack = path.resolve().parent / pack
+        data["template"] = pack.resolve().as_posix()
     try:
         return AppSpec.model_validate(data)
     except ValidationError as error:

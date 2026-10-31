@@ -34,6 +34,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Quant baseline templates (B-23):
+  - **Profiles.** App Factory's `quant-baseline` pack has `alpha-research`, `backtest`, and
+    `report`, with the kinds of the same names. The projects are portable numpy projects with
+    one `metrics` module and known-answer tests.
+  - **Bias tests.** Every project checks for look-ahead, the trade lag, and cost ordering, and
+    carries a `LIMITATIONS.md`.
+  - **Components.** Optional `data-parquet` and `agent-tools`.
+- **App specs.** `AppSpec` accepts `template` (a built-in pack, `bundled`, or the path of
+  your own pack), `profile`, and `answers`. `kind` stays a shortcut.
+
 - Planned quant templates and a guided App Factory (`docs/plans/app-factory-questionnaires.md`,
   backlog B-23–B-26, proposed decisions 0007–0009):
   - `quant-baseline` templates (`alpha-research`, `backtest`, `report`), with bias tests;

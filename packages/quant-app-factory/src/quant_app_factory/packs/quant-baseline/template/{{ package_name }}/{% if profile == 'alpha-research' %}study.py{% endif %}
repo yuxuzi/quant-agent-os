@@ -1,0 +1,44 @@
+"""A signal study: evaluate one signal on a price panel and package the results."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from . import config, signals
+from .data import Panel
+from .evaluation import ic_decay, ic_summary, quantile_spread, signal_autocorrelation
+from .metrics import summarize
+
+LIMITATIONS = [
+    "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
+    "the data provider's responsibility.",
+    "The quantile spread is a gross, hypothetical next-bar return, before costs.",
+]
+
+
+def run_study(
+    panel: Panel, signal_name: str = "momentum", lookback: int = 20, quantiles: int = 5
+) -> dict[str, Any]:
+    """Evaluate ``signal_name`` on ``panel`` and return a results document."""
+    signal = signals.compute(signal_name, panel.prices, lookback)
+    spread = summarize(quantile_spread(signal, panel.prices, quantiles), config.PERIODS_PER_YEAR)
+    return {
+        "kind": "study",
+        "title": f"{signal_name} (lookback {lookback}) signal study",
+        "period": [panel.dates[0], panel.dates[-1]],
+        "bars": len(panel.dates),
+        "assets": len(panel.assets),
+        "parameters": {"signal": signal_name, "lookback": lookback, "quantiles": quantiles},
+        "metrics": {
+            **ic_summary(signal, panel.prices),
+            "signal_autocorrelation": signal_autocorrelation(signal),
+            **{f"spread_{key}": value for key, value in spread.items()},
+        },
+        "series": {"ic_decay": ic_decay(signal, panel.prices, config.MAX_HORIZON)},
+        "conventions": {
+            "periods_per_year": config.PERIODS_PER_YEAR,
+            "ic": "signal at bar t against the return from t to t + h",
+            "spread": f"top minus bottom of {quantiles} signal quantiles, next-bar return",
+        },
+        "limitations": LIMITATIONS,
+    }

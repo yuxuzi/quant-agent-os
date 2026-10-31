@@ -15,6 +15,14 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
 | `python-cli` | pytemplate-uv's bundled `python` profile | No |
 | `fastapi-service` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
+| `alpha-research` | the `quant-baseline` pack: signals, IC, rank IC, quantile spreads, decay | No (optional `agent-tools`) |
+| `backtest` | the `quant-baseline` pack: dollar-neutral weights, lagged trades, costs, walk-forward | No (optional `agent-tools`) |
+| `report` | the `quant-baseline` pack: Markdown from study or backtest results, facts apart from interpretation | No (optional `agent-tools`) |
+| your own pack | `template = "path/to/pack"` with `profile = "..."` | Up to the pack |
+
+Every quant baseline project shares one `metrics` module, with documented conventions and
+known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
+cost) and a `LIMITATIONS.md`. Optional components are `data-parquet` and `agent-tools`.
 
 ## Use
 

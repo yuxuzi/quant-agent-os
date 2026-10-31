@@ -196,6 +196,9 @@ What the two commands do:
   - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
   - its tests include `check_tool`, the platform's contract checks.
 
+`kind = "alpha-research"`, `"backtest"`, or `"report"` builds a portable quant project from
+the `quant-baseline` pack. Each one comes with known-answer metric tests, bias tests, and a
+`LIMITATIONS.md`, and `uv run <project> --demo` runs it on a random walk.
 `kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
 profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
 

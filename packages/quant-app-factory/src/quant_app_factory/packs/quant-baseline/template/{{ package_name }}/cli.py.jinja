@@ -1,0 +1,75 @@
+"""Command line: {% if profile == 'alpha-research' %}run a signal study{% elif profile == 'backtest' %}run a backtest{% else %}render a report{% endif %}."""
+
+from __future__ import annotations
+
+import argparse
+from collections.abc import Sequence
+from pathlib import Path
+{%- if profile == 'alpha-research' %}
+
+from . import synthetic
+from .data import Panel, load_prices
+from .results import save_results
+from .study import run_study
+{%- elif profile == 'backtest' %}
+
+from . import synthetic
+from .backtest import run
+from .data import Panel, load_prices
+from .results import save_results
+{%- else %}
+
+from .report import render_markdown
+from .results import load_results
+{%- endif %}
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line and return its exit code."""
+    parser = argparse.ArgumentParser(prog="{{ project_name }}", description=__doc__)
+{%- if profile == 'report' %}
+    parser.add_argument("results", type=Path, help="A results file from a study or backtest.")
+    parser.add_argument("--out", type=Path, default=Path("report.md"), help="Markdown file.")
+    args = parser.parse_args(argv)
+    args.out.write_text(render_markdown(load_results(args.results)), "utf-8")
+{%- else %}
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--prices", type=Path, help="A wide price file (date, then assets).")
+    source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
+    parser.add_argument("--signal", default="momentum", help="momentum or reversal.")
+    parser.add_argument("--lookback", type=int, default=20, help="Signal lookback in bars.")
+{%- if profile == 'backtest' %}
+    parser.add_argument("--cost-bps", type=float, default=None, help="Override the cost.")
+    parser.add_argument("--lag", type=int, default=None, help="Override the trade lag.")
+{%- endif %}
+    parser.add_argument("--out", type=Path, default=Path("results/results.json"))
+    args = parser.parse_args(argv)
+    panel = _demo_panel() if args.demo else load_prices(args.prices)
+{%- if profile == 'alpha-research' %}
+    results = run_study(panel, args.signal, args.lookback)
+{%- else %}
+    options = {"cost_bps": args.cost_bps, "lag": args.lag}
+    results = run(
+        panel,
+        args.signal,
+        args.lookback,
+        **{key: value for key, value in options.items() if value is not None},
+    )
+{%- endif %}
+    save_results(args.out, results)
+{%- endif %}
+    print(f"Wrote {args.out}")
+    return 0
+{%- if profile != 'report' %}
+
+
+def _demo_panel() -> Panel:
+    """A random walk: no signal can have an edge on it, so results near zero are expected."""
+    prices, _ = synthetic.generate_panel()
+    assets = [f"ASSET{index:02d}" for index in range(prices.shape[1])]
+    return Panel(dates=synthetic.dates(prices.shape[0]), assets=assets, prices=prices)
+{%- endif %}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

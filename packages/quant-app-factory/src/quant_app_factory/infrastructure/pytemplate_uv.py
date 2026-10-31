@@ -33,16 +33,32 @@ _INVALID_REQUEST = (
 
 
 def _render_request(request: ScaffoldRequest) -> api.RenderRequest:
-    """Return the pytemplate-uv request for ``request``."""
+    """Return the pytemplate-uv request for ``request``.
+
+    Offered ``defaults`` (such as author and license) are kept only where the profile or its
+    resolved components ask for them; explicit ``data`` is passed as given, so pytemplate-uv
+    reports an answer that does not apply.
+    """
+    asked = _asked(request) if request.defaults else set()
+    offered = {name: value for name, value in request.defaults.items() if name in asked}
     return api.RenderRequest(
         profile_id=request.profile,
         project_name=request.project_name,
         output_dir=Path(request.output_dir),
         components=tuple(sorted(request.components)),
         no_input=True,
-        data=dict(request.data),
+        data={**offered, **request.data},
         template=request.template,
     )
+
+
+def _asked(request: ScaffoldRequest) -> set[str]:
+    """Return the questions the requested profile and its resolved components ask."""
+    with api.open_catalog(request.template) as (catalog, _, _):
+        profile = catalog.profile(request.profile)
+        available = {component.identifier: component for component in catalog.components}
+        resolution = api.resolve(profile, tuple(sorted(request.components)), available)
+    return {*profile.questions, *(q for c in resolution.components for q in c.questions)}
 
 
 def _source(source: api.TemplateSource) -> dict[str, str | None]:
