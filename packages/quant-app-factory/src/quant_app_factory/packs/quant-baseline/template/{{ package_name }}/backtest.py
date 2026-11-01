@@ -24,6 +24,7 @@ import numpy as np
 from . import config, signals
 from .data import Panel
 from .metrics import FloatArray, bar_returns, summarize
+from .parameters import Parameters
 
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
@@ -108,38 +109,35 @@ def walk_forward_splits(
     return splits
 
 
-def run(
-    panel: Panel,
-    signal_name: str = "momentum",
-    lookback: int | None = None,
-    skip: int | None = None,
-    cost_bps: float = config.COST_BPS,
-    lag: int = config.TRADE_LAG,
-    rebalance_every: int = config.REBALANCE_EVERY,
-) -> dict[str, Any]:
-    """Backtest ``signal_name`` on ``panel`` and return a results document."""
-    chosen = signals.parameters(signal_name, lookback=lookback, skip=skip)
-    signal = signals.compute(signal_name, panel.prices, **chosen)
+def run(panel: Panel, parameters: Parameters | None = None) -> dict[str, Any]:
+    """Backtest the signal in ``parameters`` on ``panel`` and return a results document."""
+    chosen = parameters or Parameters()
+    signal_parameters = signals.parameters(
+        chosen.signal, lookback=chosen.lookback, skip=chosen.skip
+    )
+    signal = signals.compute(chosen.signal, panel.prices, **signal_parameters)
     result = run_backtest(
         panel.prices,
         target_weights(signal),
-        cost_bps=cost_bps,
-        lag=lag,
-        rebalance_every=rebalance_every,
+        cost_bps=chosen.cost_bps,
+        lag=chosen.lag,
+        rebalance_every=chosen.rebalance_every,
+        delisting_return=chosen.delisting_return,
     )
     periods = config.PERIODS_PER_YEAR
     return {
         "kind": "backtest",
-        "title": f"{signal_name} ({signals.describe(chosen)}) long-short backtest",
+        "title": f"{chosen.signal} ({signals.describe(signal_parameters)}) long-short backtest",
         "period": [panel.dates[0].isoformat(), panel.dates[-1].isoformat()],
         "bars": len(panel.dates),
         "assets": len(panel.assets),
         "parameters": {
-            "signal": signal_name,
-            **chosen,
-            "cost_bps": cost_bps,
-            "lag": lag,
-            "rebalance_every": rebalance_every,
+            "signal": chosen.signal,
+            **signal_parameters,
+            "cost_bps": chosen.cost_bps,
+            "lag": chosen.lag,
+            "rebalance_every": chosen.rebalance_every,
+            "delisting_return": chosen.delisting_return,
         },
         "metrics": {
             **summarize(result["net"], periods),
@@ -151,10 +149,10 @@ def run(
         "series": {"net_returns": [float(value) for value in result["net"]]},
         "conventions": {
             "periods_per_year": periods,
-            "timing": f"signal at close t, traded at close t + {lag}, as in a study",
-            "rebalance": f"every {rebalance_every} bars; holdings drift in between",
-            "costs": f"{cost_bps} bps per unit of one-way turnover, on actual trades",
-            "delistings": f"a delisted holding earns {config.DELISTING_RETURN:+.0%} once",
+            "timing": f"signal at close t, traded at close t + {chosen.lag}, as in a study",
+            "rebalance": f"every {chosen.rebalance_every} bars; holdings drift in between",
+            "costs": f"{chosen.cost_bps} bps per unit of one-way turnover, on actual trades",
+            "delistings": f"a delisted holding earns {chosen.delisting_return:+.0%} once",
             "weights": "dollar-neutral ranks, gross exposure 1",
         },
         "limitations": LIMITATIONS,

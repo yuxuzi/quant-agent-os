@@ -94,7 +94,7 @@ settings file, and generated apps hold environment-variable names, never secret 
 - **Generated files.** They name variables (`.env.example`, `settings.py`) and hold no values;
   a scan test checks this.
 - **Programs.** By default, programs receive no secrets. The one exception is a generated
-  app's `--check-connection`:
+  app's `check-connection` command:
   - it receives only the variables the spec references, through `run_command`'s `extra_env`;
   - it runs during the operator's approved create, or an approved `quant-factory check`;
   - it runs only for projects from built-in templates, whose connection code App Factory

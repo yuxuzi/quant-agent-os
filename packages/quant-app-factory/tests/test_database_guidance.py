@@ -52,7 +52,7 @@ class FakeChecks:
 def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
     base: dict[str, Any] = {
         "name": "pg-lab",
-        "kind": "backtest",
+        "kind": "quant-research",
         "description": "Backtest on a database",
         "output_dir": str(tmp_path),
     }
@@ -96,7 +96,7 @@ def test_check_spec_with_a_connection_is_ready_and_binds_the_password(tmp_path: 
     check = _factory().check_spec(
         {
             "name": "pg-lab",
-            "kind": "backtest",
+            "kind": "quant-research",
             "description": "d",
             "output_dir": str(tmp_path),
             "connection": "research-pg",
@@ -108,11 +108,9 @@ def test_check_spec_with_a_connection_is_ready_and_binds_the_password(tmp_path: 
     assert check.unbound_settings == ["DATABASE_URL"]
 
 
-def test_the_database_component_is_offered_only_where_prices_are_loaded(tmp_path: Path) -> None:
-    with pytest.raises(PlanningError, match="offers agent-tools"):
-        _factory().plan(_spec(tmp_path, kind="report", components=["data-database"]))
+def test_database_files_appear_only_with_the_database_component(tmp_path: Path) -> None:
+    _, preview = _factory().preview(_spec(tmp_path, kind="quant-research"))
 
-    _, preview = _factory().preview(_spec(tmp_path, kind="report"))
     assert not any("database" in name or ".env" in name for name in preview.files)
 
 
@@ -134,7 +132,7 @@ def test_generated_files_never_hold_a_secret_and_the_check_gets_only_its_variabl
     assert 'DB_HOST: str = "db.internal"' in config
     assert 'DB_SCHEMA: str = "prices"' in config
     assert "DATABASE_PASSWORD=" in (project / ".env.example").read_text()
-    assert command == "uv run pg-lab --check-connection"
+    assert command == "uv run pg-lab check-connection"
     assert extra == {"DATABASE_PASSWORD": SECRET}
     assert SECRET not in report.checks[-1].output_tail
     assert "[REDACTED]" in report.checks[-1].output_tail
@@ -206,13 +204,24 @@ def test_new_uses_a_saved_connection_without_asking_its_details(
     settings = settings.model_copy(update={"connections": {"research-pg": PG}})
     save_settings(settings, settings_file)
     out = tmp_path / "pg.toml"
-    # name, description, directory, components, connection, then frequency, cost_bps,
-    # db_query (defaults kept), then "do not create".
-    lines = ["pg-lab", "Backtest", str(tmp_path), "data-database", "research-pg", "", "", "", "n"]
+    # name, description, directory, components, connection, then frequency, max_horizon,
+    # cost_bps, db_query (defaults kept), then "do not create".
+    lines = [
+        "pg-lab",
+        "Research",
+        str(tmp_path),
+        "data-database",
+        "research-pg",
+        "",
+        "",
+        "",
+        "",
+        "n",
+    ]
 
     result = CliRunner().invoke(
         factory_cli.app,
-        ["new", "--template", "quant-baseline", "--profile", "backtest", "-o", str(out)],
+        ["new", "--template", "quant-baseline", "-o", str(out)],
         input="\n".join(lines) + "\n",
     )
 
@@ -229,14 +238,15 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
     out = tmp_path / "local.toml"
     database = tmp_path / "prices.db"
     sqlite3.connect(database).close()
-    # name, description, directory, components; frequency, cost_bps (defaults); db_kind
+    # name, description, directory, components; frequency, max_horizon, cost_bps; db_kind
     # (default sqlite), db_name, db_query, db_read_only (defaults); DATABASE_URL and
     # DATABASE_PASSWORD variables (blank); save as "local"; do not create.
     lines = [
         "local-lab",
-        "Backtest",
+        "Research",
         str(tmp_path),
         "data-database",
+        "",
         "",
         "",
         "",
@@ -251,7 +261,7 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
 
     result = CliRunner().invoke(
         factory_cli.app,
-        ["new", "--template", "quant-baseline", "--profile", "backtest", "-o", str(out)],
+        ["new", "--template", "quant-baseline", "-o", str(out)],
         input="\n".join(lines) + "\n",
     )
 

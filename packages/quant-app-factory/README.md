@@ -15,15 +15,16 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
 | `python-cli` | pytemplate-uv's bundled `python` profile | No |
 | `fastapi-service` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
-| `alpha-research` | the `quant-baseline` pack: signals, IC, rank IC, quantile spreads, decay | No (optional `agent-tools`) |
-| `backtest` | the `quant-baseline` pack: dollar-neutral weights, lagged trades, costs, walk-forward | No (optional `agent-tools`) |
-| `report` | the `quant-baseline` pack: Markdown from study or backtest results, facts apart from interpretation | No (optional `agent-tools`) |
+| `quant-research` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
 | your own pack | `template = "path/to/pack"` with `profile = "..."` | Up to the pack |
 
-Every quant baseline project shares one `metrics` module, with documented conventions and
+The kinds `alpha-research`, `backtest`, and `report` from quant-baseline 1.x still work for
+one release: each builds a `quant-research` project and warns that it is an alias.
+
+A quant-research project has one `metrics` module, with documented conventions and
 known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
 cost) and a `LIMITATIONS.md`. Optional components are `data-parquet`, `data-database`
-(PostgreSQL, SQLite, or DuckDB, read-only, with `--check-connection`), and `agent-tools`. A
+(PostgreSQL, SQLite, or DuckDB, read-only, with a `check-connection` command), and `agent-tools`. A
 spec can name a connection saved in `factory.toml` (`connection = "research-pg"`).
 
 ## Use
@@ -35,7 +36,7 @@ uv run quant-factory create app.toml    # asks; your yes is the recorded, single
 uv run quant-factory check app.toml     # re-run an existing project's checks
 uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
 uv run quant-factory serve-mcp          # describe_template, check_spec, plan_app for Claude
-uv run quant-factory template fork quant-baseline/backtest packs/mine   # make a template yours
+uv run quant-factory template fork quant-baseline/quant-research packs/mine   # make it yours
 uv run quant-factory template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
 ```
 

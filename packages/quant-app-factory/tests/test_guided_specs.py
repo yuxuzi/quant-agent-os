@@ -45,7 +45,7 @@ def _factory(**kwargs: Any) -> AppFactory:
 def _raw(tmp_path: Path, **fields: Any) -> dict[str, Any]:
     return {
         "name": "momo-lab",
-        "kind": "backtest",
+        "kind": "quant-research",
         "description": "Momentum research",
         "output_dir": str(tmp_path),
     } | fields
@@ -95,11 +95,13 @@ def test_a_spec_round_trips_through_its_toml(tmp_path: Path) -> None:
 
 
 def test_describing_a_profile_lists_only_what_it_can_use() -> None:
-    described = _factory().describe_template("quant-baseline", "backtest")
+    described = _factory().describe_template("quant-baseline", "quant-research")
 
     names = {question.name for question in described.questions}
-    assert {"frequency", "cost_bps"} <= names
-    assert "max_horizon" not in names
+    assert {"frequency", "max_horizon", "cost_bps"} <= names
+    assert not {"profile", "project_name", "components"} & names
+    old_name = _factory().describe_template("quant-baseline", "backtest")
+    assert [profile.id for profile in old_name.profiles] == ["quant-research"]
     assert {c.id for c in described.components} == {
         "agent-tools",
         "data-csv",
@@ -132,7 +134,7 @@ def test_a_ready_spec_lists_its_files_and_toml(tmp_path: Path) -> None:
     [
         ({"description": None}, "description", "string"),
         ({"components": ["database"]}, "template", "offers"),
-        ({"kind": "report", "answers": {"cost_bps": "5"}}, "template", "cost_bps"),
+        ({"answers": {"db_kind": "duckdb"}}, "template", "db_kind"),
         ({"settings": {"WHATEVER": "1"}}, "settings.WHATEVER", "no selected component"),
     ],
 )
@@ -281,19 +283,20 @@ def test_new_asks_until_the_spec_is_ready_and_writes_it(
     tmp_path: Path, settings_file: Path
 ) -> None:
     out = tmp_path / "momo.toml"
-    answers = "\n".join(["momo-lab", "Momentum research", str(tmp_path), "", "weekly", "2.5", "n"])
+    lines = ["momo-lab", "Momentum research", str(tmp_path), "", "weekly", "3", "2.5", "n"]
+    answers = "\n".join(lines)
 
     result = CliRunner().invoke(
         factory_cli.app,
-        ["new", "--template", "quant-baseline", "--profile", "backtest", "-o", str(out)],
+        ["new", "--template", "quant-baseline", "-o", str(out)],
         input=answers + "\n",
     )
 
     assert result.exit_code == 0, result.output
     assert "Ready:" in result.output
     spec = load_spec(out)
-    assert spec.target == ("quant-baseline", "backtest")
-    assert spec.answers == {"frequency": "weekly", "cost_bps": "2.5"}
+    assert spec.target == ("quant-baseline", "quant-research")
+    assert spec.answers == {"frequency": "weekly", "max_horizon": "3", "cost_bps": "2.5"}
     assert not (tmp_path / "momo-lab").exists()
 
 

@@ -4,47 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-{% if profile == 'report' -%}
-from pydantic import BaseModel, Field
-from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
-
-from .report import render_markdown
-
-
-class ReportInput(BaseModel):
-    """A results document from a study or a backtest."""
-
-    results: dict[str, Any]
-
-
-class ReportOutput(BaseModel):
-    """The rendered Markdown report."""
-
-    markdown: str
-    warnings: list[str] = Field(default_factory=list)
-
-
-@tool(name="render_report", description="Render a study or backtest result as Markdown.")
-def render_report(params: ReportInput) -> ReportOutput:
-    """Render ``params.results``."""
-    return ReportOutput(markdown=render_markdown(params.results))
-
-
-TOOLS: list[ToolSpec[Any, Any]] = [render_report]
-{%- else -%}
 import numpy as np
 from pydantic import BaseModel, Field
 from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
 
-{% if profile == 'alpha-research' -%}
-from .data import Panel, parse_date
-from .study import run_study
-from .synthetic import dates
-{%- else -%}
 from .backtest import run
 from .data import Panel, parse_date
+from .parameters import Parameters
+from .report import render_markdown
+from .study import run_study
 from .synthetic import dates
-{%- endif %}
+
+NO_DATES = "No dates were given, so bars are labelled with weekdays from 2020-01-01."
 
 
 class PriceInput(BaseModel):
@@ -66,7 +37,17 @@ class ResultsOutput(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-NO_DATES = "No dates were given, so bars are labelled with weekdays from 2020-01-01."
+class ReportInput(BaseModel):
+    """A results document from a study or a backtest."""
+
+    results: dict[str, Any]
+
+
+class ReportOutput(BaseModel):
+    """The rendered Markdown report."""
+
+    markdown: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 def _panel(params: PriceInput) -> Panel:
@@ -80,30 +61,35 @@ def _panel(params: PriceInput) -> Panel:
     )
 
 
+def _parameters(params: PriceInput) -> Parameters:
+    return Parameters(signal=params.signal, lookback=params.lookback, skip=params.skip)
+
+
 def _warnings(params: PriceInput) -> list[str]:
     return [NO_DATES] if params.dates is None else []
-{% if profile == 'alpha-research' %}
+
 
 @tool(name="evaluate_signal", description="Evaluate a signal on an inline price panel.")
 def evaluate_signal(params: PriceInput) -> ResultsOutput:
-    """Run a signal study."""
-    results = run_study(_panel(params), params.signal, params.lookback, params.skip)
+    """Run a signal study with the project's default timing."""
+    results = run_study(_panel(params), _parameters(params))
     return ResultsOutput(results=results, warnings=_warnings(params))
 
-
-TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
-{%- else %}
 
 @tool(name="backtest_signal", description="Backtest a signal on an inline price panel.")
 def backtest_signal(params: PriceInput) -> ResultsOutput:
-    """Run a backtest with the project's default costs and trade lag."""
-    results = run(_panel(params), params.signal, params.lookback, params.skip)
+    """Run a backtest with the project's default costs, timing, and rebalancing."""
+    results = run(_panel(params), _parameters(params))
     return ResultsOutput(results=results, warnings=_warnings(params))
 
 
-TOOLS: list[ToolSpec[Any, Any]] = [backtest_signal]
-{%- endif %}
-{%- endif %}
+@tool(name="render_report", description="Render a study or backtest result as Markdown.")
+def render_report(params: ReportInput) -> ReportOutput:
+    """Render ``params.results``."""
+    return ReportOutput(markdown=render_markdown(params.results))
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal, backtest_signal, render_report]
 
 
 def registry() -> ToolRegistry:

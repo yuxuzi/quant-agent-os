@@ -1,0 +1,17 @@
+contract = 1
+id = "quant-research"
+name = "Quant research"
+description = "One project for signal research: study (IC, rank IC, quantile spreads, decay), backtest (lagged trades, drift, rebalancing, costs, delistings), and report, sharing data, signals, metrics, and config.toml, with bias tests."
+version = "1"
+kind = "cli"
+status = "experimental"
+supported_python = ["3.11", "3.12", "3.13", "3.14", "3.15"]
+lifecycle_commands = ["uv sync", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy {package} tests", "uv run pytest"]
+default_components = ["metrics", "data-csv"]
+optional_components = ["data-parquet", "data-database", "agent-tools"]
+dependencies = ["numpy>=1.26"]
+questions = ["description", "author", "email", "python_version", "license", "frequency", "max_horizon", "cost_bps"]
+security_posture = "Reads local price files (or one read-only database query) only; no orders, broker connectivity, or credentials in the project."
+
+[dependency_groups]
+dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]

@@ -39,6 +39,7 @@ from quant_app_factory.domain.spec import (
     Identity,
     dump_spec,
     is_template_path,
+    resolve_alias,
 )
 
 Runner = Callable[..., CommandResult]  # the signature of `run_command`
@@ -215,6 +216,7 @@ class AppFactory:
         description = self.scaffolder.describe(location)
         if profile is None:
             return description
+        profile = resolve_alias(template, profile)[1]
         chosen = [p for p in description.profiles if p.id == profile]
         if not chosen:
             offered = ", ".join(p.id for p in description.profiles)
@@ -282,7 +284,7 @@ class AppFactory:
         )
 
     def _check_connection(self, project: Path, spec: AppSpec) -> tuple[CheckResult, list[str]]:
-        """Run ``uv run <app> --check-connection`` with only the referenced variables."""
+        """Run ``uv run <app> check-connection`` with only the referenced variables."""
         extra: dict[str, str] = {}
         notes: list[str] = []
         for name, value in spec.settings.items():
@@ -294,7 +296,7 @@ class AppFactory:
                 extra[name] = self._environ[variable]
             else:
                 notes.append(f"{variable} is not set, so {name} was not passed to the check.")
-        command = ["uv", "run", spec.name, "--check-connection"]
+        command = ["uv", "run", spec.name, "check-connection"]
         result = self._runner(command, cwd=project, timeout=CHECK_TIMEOUT_SECONDS, extra_env=extra)
         output = redact_values((result.stdout_tail + result.stderr_tail).strip(), extra.values())
         return (
@@ -346,7 +348,7 @@ class AppFactory:
     ) -> FactoryReport:
         """Create the project and, unless ``run_checks`` is false, run its lifecycle commands.
 
-        ``check_connection`` also runs the app's ``--check-connection`` once its checks pass
+        ``check_connection`` also runs the app's ``check-connection`` once its checks pass
         (built-in templates only), passing only the variables the spec's settings reference.
         ``expected_pack_digest`` refuses to render a pack that changed since it was previewed.
         """
@@ -365,11 +367,12 @@ class AppFactory:
                 )
         result = self.scaffolder.create(plan.request)
         checks: list[CheckResult] = []
-        warnings: list[str] = []
+        warnings = [spec.alias_note] if spec.alias_note else []
         if run_checks:
-            checks, warnings = self.check(
+            checks, check_warnings = self.check(
                 Path(result.project_path), result.lifecycle_commands, preview.package_name
             )
+            warnings += check_warnings
         if check_connection:
             warnings += self._connection_step(
                 spec, plan.spec, Path(result.project_path), result.components, checks
@@ -403,8 +406,8 @@ class AppFactory:
         if spec.target[0] not in BUILT_IN_PACKS:
             return [
                 "The connection check runs only for built-in templates: it would hand your "
-                "database secret to pack code you have not reviewed. Run the app's "
-                "--check-connection yourself once you trust the pack."
+                "database secret to pack code you have not reviewed. Run the app's own "
+                "connection check yourself once you trust the pack."
             ]
         if checks and not all(check.ok for check in checks):
             return ["The project's checks failed, so the connection was not checked."]

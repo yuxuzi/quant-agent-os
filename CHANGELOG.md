@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Quant baseline projects are now one `quant-research` project (B-28 S1, quant-baseline
+  2.0.0):
+  - **Commands.** `study`, `backtest`, and `report` subcommands, plus `check-connection` with
+    the database component. These replace three separate projects and the `--check-connection`
+    flag.
+  - **Parameters.** Research parameters live in a generated `config.toml`, and flags override
+    them for one run.
+  - **Old names.** `kind = "alpha-research"`, `"backtest"`, or `"report"`, and those profile
+    names, still work for one release: they build `quant-research` and warn.
+  - **Prompts.** `quant-factory new` skips the profile question when a template has one
+    profile.
+  - **Tools.** Projects with `agent-tools` offer `evaluate_signal`, `backtest_signal`, and
+    `render_report` together.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

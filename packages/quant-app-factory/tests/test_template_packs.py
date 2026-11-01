@@ -26,7 +26,7 @@ def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
     return AppSpec.model_validate(base | fields)
 
 
-def _fork(tmp_path: Path, source: str = "quant-baseline/backtest", **kwargs: Any) -> Path:
+def _fork(tmp_path: Path, source: str = "quant-baseline/quant-research", **kwargs: Any) -> Path:
     pack, _, profile = source.partition("/")
     return fork_pack(
         BUILT_IN_PACKS[pack], profile, tmp_path / "my-pack", pack_id="my-pack", **kwargs
@@ -37,14 +37,14 @@ def _fork(tmp_path: Path, source: str = "quant-baseline/backtest", **kwargs: Any
 
 
 def test_a_fork_keeps_one_profile_and_the_components_it_can_use(tmp_path: Path) -> None:
-    pack = _fork(tmp_path, "quant-baseline/report")
+    pack = _fork(tmp_path)
 
     manifest = tomllib.loads((pack / "pytemplate-pack.toml").read_text())
     components = sorted(path.stem for path in (pack / "components").glob("*.toml"))
+    profiles = sorted(p.name for p in pack.iterdir() if (p / "profile.toml").exists())
     assert manifest["id"] == "my-pack"
-    assert sorted(p.name for p in pack.iterdir() if (p / "profile.toml").exists()) == ["report"]
-    assert components == ["agent-tools", "metrics"]
-    assert "    - data-csv" not in (pack / "questions.yml").read_text()
+    assert profiles == ["quant-research"]
+    assert components == ["agent-tools", "data-csv", "data-database", "data-parquet", "metrics"]
     assert _factory().check_template(pack.as_posix()).ok
 
 
@@ -57,10 +57,13 @@ def test_a_renamed_profile_still_renders_its_own_files(tmp_path: Path) -> None:
         _spec(out, template=pack.as_posix(), profile="momentum-bt", components=["data-database"])
     )
 
-    assert {"my_app/backtest.py", "tests/test_backtest.py", "my_app/database.py"} <= set(
-        preview.files
-    )
-    assert "my_app/report.py" not in preview.files
+    assert {
+        "my_app/study.py",
+        "my_app/backtest.py",
+        "my_app/report.py",
+        "my_app/database.py",
+    } <= set(preview.files)
+    assert "my_app/tools.py" not in preview.files
 
 
 def test_the_agent_tool_profile_forks_and_renames(tmp_path: Path) -> None:
@@ -75,8 +78,8 @@ def test_the_agent_tool_profile_forks_and_renames(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("profile", "kwargs", "message"),
     [
-        ("options", {}, "offers alpha-research, backtest, report"),
-        ("backtest", {"profile_id": "Bad_Id"}, "lowercase slug"),
+        ("options", {}, "offers quant-research"),
+        ("quant-research", {"profile_id": "Bad_Id"}, "lowercase slug"),
     ],
 )
 def test_impossible_forks_are_explained(
@@ -100,12 +103,12 @@ def test_a_registered_name_resolves_to_its_pack(tmp_path: Path) -> None:
     pack = _fork(tmp_path)
     factory = _factory(templates=lambda: {"my-pack": pack.as_posix()})
 
-    plan = factory.plan(_spec(tmp_path, template="my-pack", profile="backtest"))
+    plan = factory.plan(_spec(tmp_path, template="my-pack", profile="quant-research"))
 
     assert plan.request.template == pack.as_posix()
-    assert [p.id for p in factory.describe_template("my-pack").profiles] == ["backtest"]
+    assert [p.id for p in factory.describe_template("my-pack").profiles] == ["quant-research"]
     with pytest.raises(PlanningError, match="known templates"):
-        factory.plan(_spec(tmp_path, template="nope", profile="backtest"))
+        factory.plan(_spec(tmp_path, template="nope", profile="quant-research"))
 
 
 def test_names_stay_names_and_paths_must_be_absolute(tmp_path: Path) -> None:
@@ -197,7 +200,8 @@ def test_cli_fork_checks_and_registers_the_pack(tmp_path: Path, settings_file: P
     assert (
         load_settings(settings_file).templates["momentum"].path == destination.resolve().as_posix()
     )
-    assert "momentum: fork of quant-baseline/backtest" in listed.output
+    assert "is now quant-baseline/quant-research" in forked.output  # the old name still works
+    assert "momentum: fork of quant-baseline/quant-research" in listed.output
     assert checked.exit_code == 0, checked.output
 
 
@@ -225,14 +229,15 @@ def test_a_spec_can_use_a_registered_template(tmp_path: Path, settings_file: Pat
     destination = tmp_path / "packs" / "momentum"
     assert (
         runner.invoke(
-            factory_cli.app, ["template", "fork", "quant-baseline/backtest", str(destination)]
+            factory_cli.app,
+            ["template", "fork", "quant-baseline/quant-research", str(destination)],
         ).exit_code
         == 0
     )
     spec = tmp_path / "app.toml"
     spec.write_text(
         'name = "momo-app"\ndescription = "d"\noutput_dir = "."\n'
-        'template = "momentum"\nprofile = "backtest"\n'
+        'template = "momentum"\nprofile = "quant-research"\n'
     )
 
     planned = runner.invoke(factory_cli.app, ["plan", str(spec)])

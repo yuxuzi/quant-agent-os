@@ -197,19 +197,19 @@ What the two commands do:
   - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
   - its tests include `check_tool`, the platform's contract checks.
 
-`kind = "alpha-research"`, `"backtest"`, or `"report"` builds a portable quant project from
-the `quant-baseline` pack. Each one comes with known-answer metric tests, bias tests, and a
-`LIMITATIONS.md`, and `uv run <project> --demo` runs it on a random walk.
+`kind = "quant-research"` builds a portable quant project from the `quant-baseline` pack: a
+signal study, a backtest, and a report in one project, with known-answer metric tests, bias
+tests, and a `LIMITATIONS.md`. `uv run <project> study --demo` runs it on a random walk.
 `kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
 profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
 
 ## 11. A quant project from your own data, with guidance
 
 This section goes from saved settings to a study, a backtest, and a report on prices in a
-database, then makes the backtest template your own. It was run end to end on a fresh clone on
-2026-10-31, and steps 4 to 6 were re-run on 2026-11-01 after the B-27 fixes; the outputs shown
-are from those runs. The prices were 500 weekdays of random walks for 20 assets in a SQLite
-file (`date` as ISO text, then `asset` and `price`), so finding no edge is the expected result.
+database, all in one project, then makes the template your own. It was run end to end on
+2026-11-01; the outputs shown are from that run. The prices were 500 weekdays of random walks
+for 20 assets in a SQLite file (`date` as ISO text, then `asset` and `price`), so finding no
+edge is the expected result.
 
 **1. Save who you are and where your prices live** (in `~/.quant-agent-os/factory.toml`,
 never secrets):
@@ -227,19 +227,20 @@ For PostgreSQL, also set `host`, `port`, `user`, and `schema`. Set `password_env
 that do not apply:
 
 ```bash
-uv run quant-factory new --template quant-baseline --profile alpha-research -o alpha.toml
+uv run quant-factory new --template quant-baseline -o lab.toml
 ```
 
 ```text
-Ready: 26 files.
+Profile: quant-research (One project for signal research: ...)
+Ready: 34 files.
 ```
 
 ```toml
-name = "alpha-lab"
+name = "rev-lab"
 template = "quant-baseline"
-profile = "alpha-research"
+profile = "quant-research"
 connection = "local-prices"
-description = "Reversal study on local prices"
+description = "Reversal research on local prices"
 output_dir = "/Users/you/work"
 components = ["data-database"]
 ```
@@ -247,57 +248,46 @@ components = ["data-database"]
 **3. Create it, and check the connection.** Your yes is the recorded approval:
 
 ```bash
-uv run quant-factory create alpha.toml --check-connection
+uv run quant-factory create lab.toml --check-connection
 ```
 
 ```text
   ok  uv sync
   ok  uv run ruff check .
   ok  uv run ruff format --check .
-  ok  uv run mypy alpha_lab tests
+  ok  uv run mypy rev_lab tests
   ok  uv run pytest
-  ok  uv run alpha-lab --check-connection
+  ok  uv run rev-lab check-connection
 ```
 
-**4. Run the study** on the database prices:
-
-```bash
-cd alpha-lab && uv run alpha-lab --database --signal reversal --lookback 5 --out results/study.json
-```
-
-On the random-walk data: mean rank IC −0.016, with a Newey-West t-statistic of −1.58. There
-is no signal, as expected. The study scores the return from the trade bar, one bar after the
-signal (`--lag` changes it), which is what the backtest below can earn.
-
-**5. Backtest it.** A spec you write by hand works the same way:
+**4. Set the research parameters** in the project's `config.toml`. Every run reads it, and
+flags such as `--lag 0` override it for one run:
 
 ```toml
-# backtest.toml
-name = "reversal-backtest"
-kind = "backtest"
-description = "Short-term reversal on local prices"
-output_dir = "."
-connection = "local-prices"
-
-[answers]
-cost_bps = "2"
+signal = "reversal"
+lookback = 5
+lag = 1          # bars from the signal's close to the trade, shared by study and backtest
+cost_bps = 2
+rebalance_every = 21
 ```
+
+**5. Study, backtest, and report** the database prices:
 
 ```bash
-uv run quant-factory create backtest.toml
-cd reversal-backtest && uv run reversal-backtest --database --signal reversal --lookback 5 \
-  --out results/backtest.json
+cd rev-lab
+uv run rev-lab study --database      # writes results/study.json
+uv run rev-lab backtest --database   # writes results/backtest.json
+uv run rev-lab report results/backtest.json --out report.md
 ```
 
-**6. Report it.** Make a `report` project (`kind = "report"`), then:
-
-```bash
-uv run reversal-report ../reversal-backtest/results/backtest.json --out report.md
-```
+The study finds a mean rank IC of −0.016, with a Newey-West t-statistic of −1.58: no signal,
+as expected. It scores the return from the trade bar, one bar after the signal, which is what
+the backtest can earn. The report:
 
 ```text
 # reversal (lookback 5) long-short backtest
 - Period: 2023-01-02 to 2024-11-29 (500 bars, 20 assets)
+- Parameters: cost_bps = 2, delisting_return = -0.3, lag = 1, lookback = 5, rebalance_every = 21, signal = reversal
 | average turnover | 3.14% |
 | forced exits | 0 |
 | max drawdown | -2.79% |
@@ -307,16 +297,16 @@ _Not written yet. Nothing above this section is interpretation._
 ```
 
 A Sharpe ratio of 0.9 over two years is within noise: its standard error is about 0.7. The
-book rebalances monthly (`--rebalance-every`), so turnover is about a tenth of a daily book's.
+book rebalances monthly, so turnover is about a tenth of a daily book's.
 
-**7. Make the template yours.** Fork it, edit it (by hand or with an AI assistant), and use
+**6. Make the template yours.** Fork it, edit it (by hand or with an AI assistant), and use
 it by name:
 
 ```bash
-uv run quant-factory template fork quant-baseline/backtest packs/desk-backtest --profile-id desk
-#   ok  desk (22 files)
-#   Registered template 'desk-backtest': use template = "desk-backtest" in a spec.
-uv run quant-factory template check desk-backtest   # after each edit
+uv run quant-factory template fork quant-baseline/quant-research packs/desk-research --profile-id desk
+#   ok  desk (31 files)
+#   Registered template 'desk-research': use template = "desk-research" in a spec.
+uv run quant-factory template check desk-research   # after each edit
 ```
 
 Each part of the pack has one job:

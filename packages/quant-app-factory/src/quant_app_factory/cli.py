@@ -26,6 +26,7 @@ from quant_app_factory.domain.spec import (
     SpecError,
     is_template_path,
     load_spec,
+    resolve_alias,
 )
 from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
@@ -305,10 +306,16 @@ def new(
         catalog = factory.describe_template(template)
     except ScaffoldError as error:
         raise _fail(error) from error
-    for item in catalog.profiles:
-        console.print(f"  [bold]{item.id}[/bold]: {item.description}", soft_wrap=True)
     profiles = [item.id for item in catalog.profiles]
-    profile = profile if profile in profiles else _choose("Profile", profiles, profiles[0])
+    if profile is not None:
+        profile = resolve_alias(template, profile)[1]
+    if profile not in profiles and len(profiles) == 1:
+        profile = profiles[0]
+        console.print(f"Profile: [bold]{profile}[/bold] ({catalog.profiles[0].description})")
+    elif profile not in profiles:
+        for item in catalog.profiles:
+            console.print(f"  [bold]{item.id}[/bold]: {item.description}", soft_wrap=True)
+        profile = _choose("Profile", profiles, profiles[0])
     described = factory.describe_template(template, profile)
     chosen_profile = described.profiles[0]
     name = str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
@@ -544,7 +551,7 @@ def template_list() -> None:
 @template_app.command("fork")
 def template_fork(
     source: Annotated[
-        str, typer.Argument(help="A built-in profile, such as quant-baseline/backtest.")
+        str, typer.Argument(help="A built-in profile, such as quant-baseline/quant-research.")
     ],
     destination: Annotated[Path, typer.Argument(help="New pack directory.")],
     name: Annotated[str | None, typer.Option(help="Pack id and template name.")] = None,
@@ -561,6 +568,10 @@ def template_fork(
     pack_name, _, profile = source.partition("/")
     if pack_name not in BUILT_IN_PACKS or not profile:
         raise _fail(f"Fork a built-in profile: {', '.join(sorted(BUILT_IN_PACKS))}/<profile>.")
+    if resolve_alias(pack_name, profile)[1] != profile:
+        profile = resolve_alias(pack_name, profile)[1]
+        errors.print(f"[yellow]{source} is now {pack_name}/{profile}; forking that.[/yellow]")
+        source = f"{pack_name}/{profile}"
     pack_id = name or destination.name
     try:
         forked = fork_pack(

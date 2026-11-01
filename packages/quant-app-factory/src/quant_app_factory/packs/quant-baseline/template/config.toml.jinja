@@ -1,0 +1,17 @@
+# Research parameters for `{{ project_name }} study` and `{{ project_name }} backtest`.
+# Command-line flags override them for one run, and every run records the values it used.
+
+signal = "momentum"  # momentum (12-1 by default) or reversal (one month by default)
+# lookback = 252     # bars; leave unset for the signal's standard definition
+# skip = 21          # momentum only: latest bars to skip
+
+lag = 1  # bars from the signal's close to the trade, shared by studies and backtests
+
+# Study
+quantiles = 5
+max_horizon = {{ max_horizon }}  # longest IC-decay horizon, in bars
+
+# Backtest
+cost_bps = {{ cost_bps }}  # per unit of one-way turnover
+rebalance_every = {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}  # bars; holdings drift in between
+delisting_return = -0.30  # earned once when a held asset's prices stop (Shumway, 1997)

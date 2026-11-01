@@ -168,6 +168,26 @@ The smoke suite builds 9 projects, including a weekly backtest, and all pass the
 | **S5** A report that compares runs | `report` renders one or more experiment folders: an equity curve (inline SVG, no new dependency), a calendar-year table, and parameters side by side. Facts and interpretation stay apart. | A golden-file test checks the Markdown and SVG structure for two runs. |
 | **S6** Tools that read the project's data | `agent-tools` wrappers take a signal and parameters, and read the configured data source (file or database), not inline prices. | `check_tool` passes, and the tool works on the demo panel and on a SQLite fixture. |
 
+**S1 result (2026-11-01).** Done, with one deviation. The `quant-baseline` pack (now 2.0.0)
+has one profile, `quant-research`. Its project has `study`, `backtest`, and `report`
+subcommands, plus `check-connection` with the database component. All of them share data,
+signals, metrics, and the trade lag. Research parameters (signal, lookback, skip, lag,
+quantiles, IC-decay horizon, costs, rebalance schedule, and delisting return) live in a
+generated `config.toml`. `parameters.py` loads it, refuses unknown keys and wrong types by
+name, and lets flags override it for one run. A test checks that the generated file equals
+the defaults in `config.py`.
+- **Aliases.** The old kinds and profile names (`alpha-research`, `backtest`, and `report`, in
+  specs, `new --profile`, `describe_template`, and `template fork`) build `quant-research`. They
+  say so in the plan's reasons and in create's warnings.
+- **Removed prompt.** `new` no longer asks for a profile when a template has only one.
+- **One timing test.** The study-and-backtest agreement is now a single test (`test_timing.py`).
+- **Deviation.** `walk-forward` is not a subcommand yet. A placeholder would have been a
+  command that does nothing, so it arrives with S3, which makes it real.
+
+The smoke suite builds `quant-research` four ways (default, weekly, monthly, and Parquet with
+agent tools), with a database, and as a fork. All pass their own checks. Walkthrough §11 was
+re-run as one project, with the same numbers as B-27.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

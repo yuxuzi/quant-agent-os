@@ -1,31 +1,34 @@
 """Every tool honours the Quant-Agent-OS contract: direct calls, MCP calls, and permissions."""
 
+import pytest
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import READ_ONLY
 
-{% if profile != 'report' -%}
 from {{ package_name }}.synthetic import generate_panel
-{% endif -%}
 from {{ package_name }}.tools import TOOLS, registry
 
 
-def test_the_tool_honours_the_platform_contract() -> None:
-{%- if profile == 'report' %}
-    record = check_tool(TOOLS[0], {"results": {"kind": "study", "metrics": {"mean_ic": 0.1}}})
-
-    assert record.output is not None
-    assert "## Computed results" in record.output["markdown"]
-{%- else %}
+@pytest.mark.parametrize("name", ["evaluate_signal", "backtest_signal"])
+def test_the_research_tools_honour_the_platform_contract(name: str) -> None:
     prices, _ = generate_panel(n_bars=60, n_assets=6, signal_strength=0.3)
+    spec = next(spec for spec in TOOLS if spec.name == name)
 
-    record = check_tool(TOOLS[0], {"prices": prices.tolist(), "lookback": 5, "skip": 1})
+    record = check_tool(spec, {"prices": prices.tolist(), "lookback": 5, "skip": 1})
 
     assert record.output is not None
     assert record.output["results"]["metrics"]
     assert record.output["warnings"]  # no dates were given
-{%- endif %}
+
+
+def test_the_report_tool_honours_the_platform_contract() -> None:
+    spec = next(spec for spec in TOOLS if spec.name == "render_report")
+
+    record = check_tool(spec, {"results": {"kind": "study", "metrics": {"mean_ic": 0.1}}})
+
+    assert record.output is not None
+    assert "## Computed results" in record.output["markdown"]
 
 
 def test_tools_are_read_only_and_registered() -> None:
     assert all(spec.permissions <= READ_ONLY for spec in TOOLS)
-    assert [spec.name for spec in registry().specs()] == [spec.name for spec in TOOLS]
+    assert {spec.name for spec in registry().specs()} == {spec.name for spec in TOOLS}

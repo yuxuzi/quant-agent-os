@@ -1,122 +1,129 @@
-"""Command line: {% if profile == 'alpha-research' %}run a signal study{% elif profile == 'backtest' %}run a backtest{% else %}render a report{% endif %}."""
+"""Study a signal, backtest it, and report the results.
+
+Parameters come from config.toml in the current directory; flags override them for one run.
+"""
 
 from __future__ import annotations
 
 import argparse
-{%- if 'data-database' in components %}
 import sys
-{%- endif %}
 from collections.abc import Sequence
 from pathlib import Path
 {%- if 'data-database' in components %}
 
 from sqlalchemy.exc import SQLAlchemyError
 {%- endif %}
-{%- if profile == 'alpha-research' %}
 
-from . import config, synthetic
-from .data import Panel, load_prices
-{%- if 'data-database' in components %}
-from .database import check_connection, load_database
-{%- endif %}
-from .results import save_results
-from .study import run_study
-{%- elif profile == 'backtest' %}
-
-from . import config, synthetic
+from . import synthetic
 from .backtest import run
 from .data import Panel, load_prices
 {%- if 'data-database' in components %}
 from .database import check_connection, load_database
 {%- endif %}
-from .results import save_results
-{%- else %}
-
+from .parameters import Parameters, load_parameters
 from .report import render_markdown
-from .results import load_results
-{%- endif %}
+from .results import load_results, save_results
+from .study import run_study
+
+CONFIG = Path("config.toml")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return its exit code."""
-    parser = argparse.ArgumentParser(prog="{{ project_name }}", description=__doc__)
-{%- if profile == 'report' %}
-    parser.add_argument("results", type=Path, help="A results file from a study or backtest.")
-    parser.add_argument("--out", type=Path, default=Path("report.md"), help="Markdown file.")
+    parser = _parser()
     args = parser.parse_args(argv)
-    args.out.write_text(render_markdown(load_results(args.results)), "utf-8")
-{%- else %}
+    try:
+        if args.command == "report":
+            args.out.write_text(render_markdown(load_results(args.results)), "utf-8")
+{%- if 'data-database' in components %}
+        elif args.command == "check-connection":
+            return _check_connection()
+{%- endif %}
+        else:
+            parameters = _parameters(args)
+            panel = _panel(args)
+            research = run_study if args.command == "study" else run
+            save_results(args.out, research(panel, parameters))
+    except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
+        parser.error(str(error))
+    print(f"Wrote {args.out}")
+    return 0
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="{{ project_name }}", description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    study = commands.add_parser("study", help="Evaluate a signal: IC, spreads, and decay.")
+    _add_research_options(study, Path("results/study.json"))
+    study.add_argument("--quantiles", type=int, help="Signal quantiles for the spread.")
+    study.add_argument("--max-horizon", type=int, help="Longest IC-decay horizon, in bars.")
+
+    backtest = commands.add_parser("backtest", help="Backtest a signal with costs.")
+    _add_research_options(backtest, Path("results/backtest.json"))
+    backtest.add_argument("--cost-bps", type=float, help="Cost per unit of turnover, in bps.")
+    backtest.add_argument("--rebalance-every", type=int, help="Bars between rebalances.")
+
+    report = commands.add_parser("report", help="Render a results file as Markdown.")
+    report.add_argument("results", type=Path, help="A results file from study or backtest.")
+    report.add_argument("--out", type=Path, default=Path("report.md"), help="Markdown file.")
+{%- if 'data-database' in components %}
+
+    commands.add_parser("check-connection", help="Connect to the configured database, then exit.")
+{%- endif %}
+    return parser
+
+
+def _add_research_options(parser: argparse.ArgumentParser, out: Path) -> None:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--prices", type=Path, help="A wide price file (date, then assets).")
     source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
 {%- if 'data-database' in components %}
     source.add_argument("--database", action="store_true", help="Query the configured database.")
-    source.add_argument(
-        "--check-connection", action="store_true", help="Connect to the database, then exit."
-    )
 {%- endif %}
-    parser.add_argument("--signal", default="momentum", help="momentum or reversal.")
+    parser.add_argument("--config", type=Path, help="Parameters file (default: ./config.toml).")
+    parser.add_argument("--signal", help="momentum or reversal.")
     parser.add_argument("--lookback", type=int, help="Lookback in bars (default: standard).")
     parser.add_argument("--skip", type=int, help="Momentum: bars to skip (default: standard).")
-    parser.add_argument(
-        "--lag", type=int, default=config.TRADE_LAG, help="Bars from the signal to the trade."
-    )
-{%- if profile == 'backtest' %}
-    parser.add_argument("--cost-bps", type=float, default=config.COST_BPS, help="Cost in bps.")
-    parser.add_argument(
-        "--rebalance-every", type=int, default=config.REBALANCE_EVERY, help="Bars per rebalance."
-    )
-{%- endif %}
-    parser.add_argument("--out", type=Path, default=Path("results/results.json"))
-    args = parser.parse_args(argv)
-    if args.lag < 0:
-        parser.error("--lag must be zero or more bars.")
-{%- if profile == 'backtest' %}
-    if args.rebalance_every < 1:
-        parser.error("--rebalance-every must be at least one bar.")
-{%- endif %}
-{%- if 'data-database' in components %}
-    if args.check_connection:
-        try:
-            print(check_connection())
-        except SQLAlchemyError as error:
-            cause = getattr(error, "orig", None) or error
-            print(f"Cannot connect: {type(error).__name__}: {cause}", file=sys.stderr)
-            return 1
-        return 0
-    try:
-        panel = _demo_panel() if args.demo else load_database() if args.database else _prices(args)
-{%- else %}
-    try:
-        panel = _demo_panel() if args.demo else load_prices(args.prices)
-{%- endif %}
-{%- if profile == 'alpha-research' %}
-        results = run_study(panel, args.signal, args.lookback, args.skip, lag=args.lag)
-{%- else %}
-        results = run(
-            panel,
-            args.signal,
-            args.lookback,
-            args.skip,
-            cost_bps=args.cost_bps,
-            lag=args.lag,
-            rebalance_every=args.rebalance_every,
-        )
-{%- endif %}
-    except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
-        parser.error(str(error))
-    save_results(args.out, results)
-{%- endif %}
-    print(f"Wrote {args.out}")
-    return 0
-{%- if 'data-database' in components %}
+    parser.add_argument("--lag", type=int, help="Bars from the signal to the trade.")
+    parser.add_argument("--out", type=Path, default=out, help="Results file.")
 
 
-def _prices(args: argparse.Namespace) -> Panel:
+def _parameters(args: argparse.Namespace) -> Parameters:
+    path: Path | None = args.config
+    if path is None and CONFIG.is_file():
+        path = CONFIG
+    base = load_parameters(path) if path is not None else Parameters()
+    if path is None:
+        print("No config.toml here; using the default parameters.", file=sys.stderr)
+    overrides = {
+        name: getattr(args, name, None)
+        for name in ("signal", "lookback", "skip", "lag", "quantiles", "max_horizon", "cost_bps")
+    }
+    return base.updated(**overrides, rebalance_every=getattr(args, "rebalance_every", None))
+
+
+def _panel(args: argparse.Namespace) -> Panel:
+    if args.demo:
+        return _demo_panel()
+{%- if 'data-database' in components %}
+    if args.database:
+        return load_database()
+{%- endif %}
     path: Path = args.prices
     return load_prices(path)
+{%- if 'data-database' in components %}
+
+
+def _check_connection() -> int:
+    try:
+        print(check_connection())
+    except SQLAlchemyError as error:
+        cause = getattr(error, "orig", None) or error
+        print(f"Cannot connect: {type(error).__name__}: {cause}", file=sys.stderr)
+        return 1
+    return 0
 {%- endif %}
-{%- if profile != 'report' %}
 
 
 def _demo_panel() -> Panel:
@@ -124,7 +131,6 @@ def _demo_panel() -> Panel:
     prices, _ = synthetic.generate_panel()
     assets = [f"ASSET{index:02d}" for index in range(prices.shape[1])]
     return Panel(dates=synthetic.dates(prices.shape[0]), assets=assets, prices=prices)
-{%- endif %}
 
 
 if __name__ == "__main__":

@@ -79,8 +79,7 @@ An app spec is TOML:
 
 ```toml
 name = "signal-tools"            # project slug
-kind = "agent-tool"              # agent-tool, python-cli, fastapi-service, alpha-research,
-                                 #   backtest, or report
+kind = "agent-tool"              # agent-tool, python-cli, fastapi-service, or quant-research
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "projects"          # existing parent directory, relative to this file
 tool_name = "count_signals"      # agent-tool only
@@ -92,19 +91,25 @@ tool_name = "count_signals"      # agent-tool only
 A quant spec, or one for your own pack:
 
 ```toml
-name = "momo-backtest"
-kind = "backtest"                # or: template = "quant-baseline" and profile = "backtest"
-description = "Momentum long-short backtest"
+name = "momo-lab"
+kind = "quant-research"          # or: template = "quant-baseline" and profile = "quant-research"
+description = "Momentum research"
 output_dir = "."
 components = ["data-parquet"]    # optional: data-parquet, agent-tools
 
 [answers]                        # the template's other questions
 frequency = "daily"              # daily, weekly, or monthly
-cost_bps = "3"                   # backtest only; alpha-research asks max_horizon
+cost_bps = "3"                   # also max_horizon (IC decay)
 
 # template = "../packs/my-pack"  # your own pytemplate-uv pack, relative to this file
 # profile = "my-profile"
 ```
+
+The research parameters themselves (signal, lookback, trade lag, quantiles, costs, rebalance
+schedule, and delisting return) live in the generated project's `config.toml`, not in the spec:
+they change from one run to the next, and every results file records the values it used. The
+quant-baseline 1.x kinds `alpha-research`, `backtest`, and `report` still work for one release;
+each builds `quant-research` and warns.
 
 ## Factory settings
 
@@ -144,7 +149,7 @@ and so are unknown fields.
 ### Templates
 
 - **`quant-factory template list`** shows the built-in and registered templates.
-- **`quant-factory template fork quant-baseline/backtest DIR [--profile-id ID]`** copies a
+- **`quant-factory template fork quant-baseline/quant-research DIR [--profile-id ID]`** copies a
   built-in profile into your own pack, checks it, and registers it under the directory's name
   (`--name` to choose).
 - **`quant-factory template check NAME_OR_DIR`** loads a pack and plans every profile with
@@ -157,14 +162,14 @@ A spec then says `template = "NAME"` with `profile = "..."`.
 
 ### Databases
 
-The `data-database` component of `alpha-research` and `backtest` loads prices with one
+The `data-database` component of `quant-research` loads prices with one
 read-only query from PostgreSQL, SQLite, or DuckDB.
 - **Naming a connection.** `connection = "research-pg"` in a spec adds the component and fills
   its answers from `factory.toml`, and the spec's own answers win.
   `quant-factory new` offers saved connections, and offers to save a new one.
 - **What the generated app reads.** It reads its credentials only from `DATABASE_URL` (a full
   URL, which wins) or `DATABASE_PASSWORD`, listed in its `.env.example`. Its
-  `--check-connection` flag connects, then exits.
+  `check-connection` command connects, then exits.
 - **The factory's check.** `quant-factory create --check-connection` runs that check after the
   project's own checks.
   - It passes only the variables the spec's settings reference, such as
