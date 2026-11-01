@@ -7,7 +7,7 @@ from typing import Any
 from . import config, signals
 from .data import Panel
 from .evaluation import ic_decay, ic_summary, quantile_spread, signal_autocorrelation
-from .metrics import summarize
+from .metrics import bar_returns, summarize
 
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
@@ -45,6 +45,7 @@ def run_study(
             "lag": lag,
         },
         "metrics": {
+            "delistings": float(bar_returns(panel.prices)[1].sum()),
             **ic_summary(signal, panel.prices, lag=lag),
             "signal_autocorrelation": signal_autocorrelation(signal),
             **{f"spread_{key}": value for key, value in spread.items()},
@@ -55,6 +56,7 @@ def run_study(
             "timing": f"signal at close t, traded at close t + {lag}, as in a backtest",
             "ic": f"signal at bar t against the return from t + {lag} to t + {lag} + h",
             "spread": f"top minus bottom of {quantiles} signal quantiles, one bar after the trade",
+            "delistings": f"an asset whose prices stop earns {config.DELISTING_RETURN:+.0%} once",
         },
         "limitations": LIMITATIONS,
     }

@@ -82,6 +82,32 @@ def test_shifting_the_signal_forward_changes_the_result() -> None:
     assert sharpe_ratio(honest, 252) > sharpe_ratio(moved, 252)
 
 
+def test_a_held_position_that_delists_loses_once_without_a_trading_cost() -> None:
+    nan = np.nan
+    prices = np.array([[100.0, 50.0]] * 3 + [[100.0, nan]] * 3)
+    weights = np.tile([0.5, 0.5], (6, 1))  # long both from the first close
+
+    result = run_backtest(prices, weights, cost_bps=100.0, lag=0, delisting_return=-0.4)
+
+    assert result["gross"].tolist() == pytest.approx([0.0, 0.0, 0.0, -0.2, 0.0, 0.0])
+    assert result["forced_exits"].sum() == 1
+    np.testing.assert_allclose(result["held"][4:, 1], 0.0)
+    assert result["turnover"][4:].tolist() == [0.0, 0.0]  # the write-off is not a trade
+
+
+def test_a_position_is_carried_through_a_gap_and_earns_the_move_over_it() -> None:
+    nan = np.nan
+    prices = np.array([[100.0, 10.0], [100.0, nan], [100.0, nan], [100.0, 12.0]])
+    weights = np.array([[0.0, 1.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+
+    result = run_backtest(prices, weights, cost_bps=0.0, lag=0)
+
+    # The sell signal at bar 1 cannot trade until a price returns at bar 3.
+    assert result["held"][:, 1].tolist() == [0.0, 1.0, 1.0, 1.0]
+    assert result["gross"].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.2])
+    assert result["forced_exits"].sum() == 0
+
+
 def test_higher_costs_never_raise_returns() -> None:
     prices, _ = generate_panel(n_bars=300, n_assets=20)
 

@@ -5,6 +5,10 @@ on it happens ``lag`` bars later, at the close of bar t + lag. So the signal at 
 against the return from bar t + lag to bar t + lag + horizon. ``lag=0`` trades at the signal's
 own close (the most optimistic choice); the default, ``config.TRADE_LAG``, is what a backtest
 of this signal would assume.
+
+Missing prices follow the backtest too: a signal needs a price at the trade bar to count, a gap
+is bridged by the last known price, and an asset delisted inside the horizon earns
+``config.DELISTING_RETURN`` rather than dropping out of the cross-section.
 """
 
 from __future__ import annotations
@@ -14,19 +18,30 @@ import math
 import numpy as np
 
 from . import config
-from .metrics import FloatArray, information_coefficient, ranks
+from .metrics import FloatArray, bar_returns, information_coefficient, ranks
 
 
 def forward_returns(
-    prices: FloatArray, horizon: int = 1, lag: int = config.TRADE_LAG
+    prices: FloatArray,
+    horizon: int = 1,
+    lag: int = config.TRADE_LAG,
+    delisting_return: float = config.DELISTING_RETURN,
 ) -> FloatArray:
-    """Return from bar t + lag to bar t + lag + horizon, aligned to bar t (NaN at the end)."""
+    """Return from bar t + lag to bar t + lag + horizon, aligned to bar t.
+
+    NaN where there is no price to trade at bar t + lag, and for the last bars.
+    """
     if horizon < 1 or lag < 0:
         raise ValueError("horizon must be at least one bar and lag zero or more bars.")
     forward = np.full(prices.shape, np.nan)
     reach = lag + horizon
     if prices.shape[0] > reach:
-        forward[:-reach] = prices[reach:] / prices[lag : prices.shape[0] - horizon] - 1.0
+        returns, _ = bar_returns(prices, delisting_return)
+        wealth = np.cumprod(1.0 + returns, axis=0)
+        start = wealth[lag : prices.shape[0] - horizon]
+        tradable = np.isfinite(prices[lag : prices.shape[0] - horizon]) & (start > 0.0)
+        moved = np.divide(wealth[reach:], start, out=np.ones(start.shape), where=tradable) - 1.0
+        forward[:-reach] = np.where(tradable, moved, np.nan)
     return forward
 
 

@@ -10,6 +10,9 @@ Conventions used by every function here:
   division. Sharpe is NaN when returns do not vary (up to floating-point noise).
 - Maximum drawdown is the most negative peak-to-trough change of compounded wealth, as a
   negative fraction (-0.25 is a 25% drawdown).
+- Asset returns (`bar_returns`) never look through a missing price: a gap earns 0 until prices
+  resume, then the whole move over the gap. An asset whose prices stop before the panel ends
+  is delisted: its first missing bar returns ``delisting_return``, and later bars 0.
 - Turnover is one-way: half the sum of absolute weight changes in a bar, averaged over bars.
 - Information coefficients compare a signal at bar t with the forward return that starts at t.
   NaN pairs are ignored, and bars with fewer than three valid pairs are NaN.
@@ -23,6 +26,7 @@ import numpy as np
 import numpy.typing as npt
 
 FloatArray = npt.NDArray[np.float64]
+BoolArray = npt.NDArray[np.bool_]
 MIN_PAIRS = 3
 FLAT = 1e-12  # relative deviation below which returns count as constant
 
@@ -31,6 +35,33 @@ def simple_returns(prices: FloatArray) -> FloatArray:
     """Return per-bar simple returns along the first axis (one row fewer than ``prices``)."""
     values = np.asarray(prices, dtype=np.float64)
     return values[1:] / values[:-1] - 1.0
+
+
+def bar_returns(prices: FloatArray, delisting_return: float = 0.0) -> tuple[FloatArray, BoolArray]:
+    """Return ``(returns, exits)``, both bars by assets, with no NaN in ``returns``.
+
+    ``returns[t]`` is the return over bar t (row 0 is 0). Inside a gap it is 0; on the bar
+    prices resume, it is the price over the last known price, minus 1. ``exits[t]`` is True on
+    the bar an asset delists, where ``returns[t]`` is ``delisting_return``.
+    """
+    values = np.asarray(prices, dtype=np.float64)
+    valid = np.isfinite(values)
+    rows = np.arange(values.shape[0])[:, None]
+    last_seen = np.maximum.accumulate(np.where(valid, rows, -1), axis=0)
+    returns = np.zeros(values.shape)
+    exits = np.zeros(values.shape, dtype=bool)
+    if values.shape[0] < 2:
+        return returns, exits
+    previous = last_seen[:-1]
+    priced = valid[1:] & (previous >= 0)
+    known = np.take_along_axis(values, np.maximum(previous, 0), axis=0)
+    returns[1:][priced] = values[1:][priced] / known[priced] - 1.0
+    final = last_seen[-1]
+    delisted = (final >= 0) & (final < values.shape[0] - 1)
+    for asset in np.nonzero(delisted)[0]:
+        returns[final[asset] + 1, asset] = delisting_return
+        exits[final[asset] + 1, asset] = True
+    return returns, exits
 
 
 def annualized_return(returns: FloatArray, periods_per_year: int) -> float:

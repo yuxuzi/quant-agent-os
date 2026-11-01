@@ -24,6 +24,10 @@ All notable changes to this project are documented here. The format follows
   earned nothing in the backtest. Studies, IC decay, and quantile spreads now measure returns
   from the trade, using `config.TRADE_LAG`; results record the lag, and both CLIs take
   `--lag`. Regenerate existing projects, or re-run studies, to get comparable numbers.
+- Quant baseline backtests and studies no longer drop delisting losses (B-27 R2). A held
+  asset whose prices stop now earns `config.DELISTING_RETURN` (default -30%) once instead of
+  0, and studies count it instead of dropping the asset. Positions are carried through price
+  gaps, which settle at the price ratio when prices resume. Results count forced exits.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

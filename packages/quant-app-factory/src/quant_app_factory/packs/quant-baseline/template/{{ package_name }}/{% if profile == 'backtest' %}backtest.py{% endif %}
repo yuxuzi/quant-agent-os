@@ -4,6 +4,11 @@ Timing convention: a signal is known at the close of bar t. With ``lag`` bars of
 weights built from it are first held over bar t + 1 + lag. ``lag=0`` trades at the signal's
 own close (the most optimistic choice); the default, ``config.TRADE_LAG``, trades at the next
 close. A signal study uses the same convention, so its IC describes what this backtest can earn.
+
+Missing prices: an asset can only be traded at a close where it has a price, so a position is
+carried through a gap and earns the move over the gap when prices resume. A position in an
+asset whose prices stop for good earns ``config.DELISTING_RETURN`` once and is then written off,
+at no trading cost.
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ import numpy as np
 
 from . import config, signals
 from .data import Panel
-from .metrics import FloatArray, summarize, turnover
+from .metrics import FloatArray, bar_returns, summarize
 
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
@@ -41,22 +46,33 @@ def target_weights(signal: FloatArray) -> FloatArray:
 
 
 def run_backtest(
-    prices: FloatArray, weights: FloatArray, *, cost_bps: float, lag: int = config.TRADE_LAG
+    prices: FloatArray,
+    weights: FloatArray,
+    *,
+    cost_bps: float,
+    lag: int = config.TRADE_LAG,
+    delisting_return: float = config.DELISTING_RETURN,
 ) -> dict[str, FloatArray]:
-    """Return per-bar gross and net returns, turnover, and the weights actually held."""
+    """Return per-bar gross and net returns, turnover, the weights held, and forced exits."""
     if lag < 0:
         raise ValueError("lag must be zero or more bars.")
-    asset_returns = np.zeros(prices.shape)
-    asset_returns[1:] = prices[1:] / prices[:-1] - 1.0
+    asset_returns, exits = bar_returns(prices, delisting_return)
+    priced = np.isfinite(prices)
+    gone = np.cumsum(exits, axis=0) > 0  # delisted on or before this bar
     held = np.zeros(weights.shape)
-    shift = 1 + lag
-    if weights.shape[0] > shift:
-        held[shift:] = weights[:-shift]
-    gross = np.nansum(held * np.nan_to_num(asset_returns), axis=1)
     traded = np.zeros(held.shape[0])
-    traded[1:] = np.abs(np.diff(held, axis=0)).sum(axis=1) / 2.0
+    shift = 1 + lag
+    for bar in range(1, held.shape[0]):
+        # Weights held over this bar were traded at the previous close, where priced.
+        target = weights[bar - shift] if bar >= shift else np.zeros(weights.shape[1])
+        tradable = priced[bar - 1]
+        before = held[bar - 1] * ~gone[bar - 1]  # a written-off position is simply gone
+        held[bar] = np.where(tradable, target, before)
+        traded[bar] = float(np.abs(held[bar] - before).sum()) / 2.0
+    gross = (held * asset_returns).sum(axis=1)
     net = gross - traded * cost_bps / 10_000.0
-    return {"gross": gross, "net": net, "turnover": traded, "held": held}
+    forced = (exits & (held != 0.0)).sum(axis=1).astype(np.float64)
+    return {"gross": gross, "net": net, "turnover": traded, "held": held, "forced_exits": forced}
 
 
 def walk_forward_splits(
@@ -99,13 +115,15 @@ def run(
         "metrics": {
             **summarize(result["net"], periods),
             "gross_annualized_return": summarize(result["gross"], periods)["annualized_return"],
-            "average_turnover": turnover(result["held"]),
+            "average_turnover": float(result["turnover"][1:].mean()),
+            "forced_exits": float(result["forced_exits"].sum()),
         },
         "series": {"net_returns": [float(value) for value in result["net"]]},
         "conventions": {
             "periods_per_year": periods,
             "timing": f"signal at close t, traded at close t + {lag}, as in a study",
             "costs": f"{cost_bps} bps per unit of one-way turnover",
+            "delistings": f"a delisted holding earns {config.DELISTING_RETURN:+.0%} once",
             "weights": "dollar-neutral ranks, gross exposure 1",
         },
         "limitations": LIMITATIONS,

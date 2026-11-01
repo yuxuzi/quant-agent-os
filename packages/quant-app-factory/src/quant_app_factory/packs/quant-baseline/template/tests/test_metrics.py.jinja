@@ -8,6 +8,7 @@ import pytest
 from {{ package_name }}.metrics import (
     annualized_return,
     annualized_volatility,
+    bar_returns,
     hit_rate,
     information_coefficient,
     max_drawdown,
@@ -22,6 +23,31 @@ def test_simple_returns_follow_prices() -> None:
     returns = simple_returns(np.array([100.0, 110.0, 99.0]))
 
     assert returns == pytest.approx([0.10, -0.10])
+
+
+def test_bar_returns_bridge_gaps_and_charge_delistings_once() -> None:
+    nan = math.nan
+    prices = np.array(
+        [
+            [nan, 100.0, 100.0],
+            [10.0, nan, 110.0],
+            [11.0, nan, nan],
+            [12.1, 121.0, nan],
+            [13.31, 133.1, nan],
+        ]
+    )
+
+    returns, exits = bar_returns(prices, delisting_return=-0.3)
+
+    # Asset 0 starts late: nothing before its first price, then 10% a bar.
+    assert returns[:, 0] == pytest.approx([0.0, 0.0, 0.1, 0.1, 0.1])
+    # Asset 1 has a two-bar gap: 0 inside it, then the whole move (121 / 100) when it ends.
+    assert returns[:, 1] == pytest.approx([0.0, 0.0, 0.0, 0.21, 0.1])
+    # Asset 2 delists after bar 1: -30% once, then nothing.
+    assert returns[:, 2] == pytest.approx([0.0, 0.1, -0.3, 0.0, 0.0])
+    assert exits.sum() == 1
+    assert exits[2, 2]
+    assert np.isfinite(returns).all()
 
 
 def test_a_constant_return_compounds_and_has_no_volatility() -> None:

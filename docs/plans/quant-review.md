@@ -103,6 +103,16 @@ A signal whose edge lasts past the lag (`generate_panel(delay=TRADE_LAG)`) keeps
 is asserted by the same planted world in each project's tests, not by one test across both.
 S1 makes it a single test.
 
+**R2 result.** Done as planned. `metrics.bar_returns` is the one definition of asset
+returns: 0 inside a gap, the whole move when prices resume, and `DELISTING_RETURN` on the bar
+after an asset's final price (only when that comes before the panel's end). The backtest
+trades only where a price exists, so positions are carried through gaps, and a delisted
+position is written off without a trading cost. Study forward returns compound the same
+returns, so a stock delisted inside the horizon counts with its loss. With no missing prices,
+held weights and turnover are unchanged. Deciding that prices have stopped for good uses the
+rest of the panel; that matches how delisting returns are recorded (at the delisting date),
+and it is documented in the code.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in

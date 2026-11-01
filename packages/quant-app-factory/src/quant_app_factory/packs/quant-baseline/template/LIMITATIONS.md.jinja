@@ -4,7 +4,8 @@ This template gives you a correct, tested skeleton, not a finished research proc
 not handle:
 
 - **Survivorship bias.** Results are only as good as the universe you load. Include delisted
-  assets.
+  assets: when an asset's prices stop, the engine charges `config.DELISTING_RETURN` (default
+  -30%) once. Use the real delisting return when your data has it.
 - **Point-in-time data.** Prices and any fundamentals must be as known at each date, without
   later revisions.
 - **Corporate actions.** Use prices adjusted for splits and dividends, or adjust them first.
@@ -27,5 +28,6 @@ not handle:
 {%- endif %}
 
 What the tests guard: metric formulas (known answers){% if profile != 'report' %}, no look-ahead
-in signals, one trade-timing convention (`config.TRADE_LAG`, shared by studies and
-backtests){% endif %}{% if profile == 'backtest' %}, and cost ordering{% endif %}.
+in signals, one trade-timing convention (`config.TRADE_LAG`, shared by studies and backtests),
+{% if profile == 'backtest' %}missing prices (gaps and delistings), and cost ordering{% else %}and
+missing prices (gaps and delistings){% endif %}{% endif %}.

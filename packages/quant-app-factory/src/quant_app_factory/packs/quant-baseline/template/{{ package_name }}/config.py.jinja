@@ -4,6 +4,10 @@ PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency
 COST_BPS: float = {{ cost_bps }}  # cost per unit of one-way turnover, in basis points
 MAX_HORIZON: int = {{ max_horizon }}  # longest forward horizon for IC decay, in bars
 TRADE_LAG: int = 1  # bars between a signal's close and the trade (0 trades on that close)
+# Return on the bar an asset's prices stop for good (a delisting without a final price).
+# -30% follows Shumway (1997) for performance delistings; 0.0 assumes a cash exit at the last
+# price, which overstates results when delistings are bankruptcies.
+DELISTING_RETURN: float = -0.30
 {%- if 'data-database' in components %}
 
 # Database connection, without secrets: DATABASE_URL or DATABASE_PASSWORD come from the
