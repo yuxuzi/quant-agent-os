@@ -512,10 +512,14 @@ quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (
   - it asks for the database kind, a saved or new connection, and the environment variable
     that holds the password or URL;
   - it generates `settings.py`, `.env.example`, and `check-connection`;
-  - `create --check-connection` passes only that variable to the check.
+  - `create --check-connection` passes only that variable to the check, and only for built-in
+    templates, so a secret never reaches pack code the operator did not review.
+- **Approvals bind the reviewed pack.** The approval for `create_app` covers a digest of the
+  template pack's files, so a pack edited after its preview is refused rather than rendered.
 - **Quant templates** (decision 0009) are portable:
   - one required `metrics` component holds all the metric code;
-  - every project carries bias tests (forward-shifted signals, lagged trades, cost ordering)
+  - every project carries bias tests (future prices never change past signals or returns,
+    forward-shifted signals, lagged trades, cost ordering)
     and a `LIMITATIONS.md`;
   - there is no trading code.
 - **Making templates:**
@@ -649,8 +653,10 @@ See [security.md](security.md) for details.
   CLI. The model can never grant an approval. `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` gives a
   standing approval; it is empty by default, and each use is recorded.
 - `execute_code` tools run programs through `runtime.runner.run_command`. It uses a fixed
-  working directory, an allowlisted environment (no secrets passed through), a timeout, and a
-  hard kill of the process tree. A thread timeout is not enough here, because it cannot stop a
+  working directory, an allowlisted environment (no secrets passed through by default), a
+  timeout, and a hard kill of the process tree. The one exception is App Factory's approved
+  connection check, which passes exactly the variables a spec references, only to code from a
+  built-in template, and redacts their values from the output. A thread timeout is not enough here, because it cannot stop a
   running process.
 - Ingestion and other store writes are operator commands, not agent tools.
 

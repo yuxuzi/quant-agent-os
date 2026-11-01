@@ -78,7 +78,9 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - **`agent-tools`** is optional. It adds typed `@tool` wrappers, `check_tool` tests, and a
     deliberate dependency on `quant-agent-os`.
 - **Bias tests in every generated project:**
-  - shifting a signal forward must change the result, which catches look-ahead;
+  - changing future prices must never change a past signal or a past return, which proves
+    the absence of look-ahead directly;
+  - shifting a signal forward must change the result;
   - a known path must give its known drawdown and Sharpe;
   - zero costs and positive costs must order returns correctly.
   - A `LIMITATIONS.md` names what the template does not handle: survivorship, point-in-time
@@ -152,12 +154,23 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - a `settings.py` (pydantic-settings) that reads `DATABASE_URL`;
   - a `.env.example` that names the variable and holds no value;
   - a read-only SQLAlchemy loader, with the driver chosen by `db_kind`;
+  - PostgreSQL connections that verify the server certificate (`sslmode=verify-full`) by
+    default; a weaker mode is an explicit answer, documented as insecure;
   - a `check-connection` command.
 - **The optional connection check.** `quant-factory create --check-connection` runs
   `uv run <app> check-connection` after the other checks, and passes only the referenced
-  variable through `run_command`'s `extra_env`.
-  - It is part of the operator's approved create, and is shown in the confirmation.
-  - The resolved value never appears in the report, the run store, or logs.
+  variable through `run_command`'s `extra_env`. This is the one exception to the runner's
+  no-secrets rule, so it is narrow:
+  - **Built-in templates only.** The check runs only for projects generated from built-in
+    templates, whose connection code App Factory ships and tests. For a user or forked pack it
+    is refused, because a secret would reach code the operator did not review.
+  - **Approved.** It is part of the operator's approved create, and is shown in the
+    confirmation.
+  - **Redacted.** The resolved value, and its URL-encoded forms, are removed from the captured
+    output before it reaches the report, the run store, or logs.
+- **Retries.** A failed check must not need a new project: `quant-factory check SPEC`
+  re-runs the checks (and, if asked, the connection check) on the project a spec created, with
+  the same approval.
 - **Claude Desktop.** A server Desktop starts does not see the shell's environment. Running
   `create` in the terminal avoids the problem. The docs say so.
 - **Accept:**
