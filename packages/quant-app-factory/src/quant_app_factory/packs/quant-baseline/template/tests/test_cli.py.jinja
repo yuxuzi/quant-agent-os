@@ -31,6 +31,10 @@ def test_demo_writes_a_results_file(tmp_path: Path) -> None:
     assert results["limitations"]
     assert results["parameters"]["lag"] == 1
     assert "timing" in results["conventions"]
+{%- if profile == 'backtest' %}
+    assert results["parameters"]["rebalance_every"] == {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
+    assert results["metrics"]["forced_exits"] == 0
+{%- endif %}
 
 
 def test_the_trade_lag_can_be_overridden_and_is_recorded(tmp_path: Path) -> None:

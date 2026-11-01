@@ -113,6 +113,13 @@ held weights and turnover are unchanged. Deciding that prices have stopped for g
 rest of the panel; that matches how delisting returns are recorded (at the delisting date),
 and it is documented in the code.
 
+**R3 result.** Done as planned, in the same bar loop as R2. The schedule counts from the first
+close with a position to take, so a warm-up period does not delay the first trade by up to a
+month. On the demo panel (momentum, 20 bars), average turnover falls from 16.3% a bar
+(daily) to 3.2% (every 21 bars). A constant-target book now trades 0.47% a bar of drift, or
+0.12% a year at 10 bps, where it was modelled as zero. A random walk across 40 seeds still
+shows no edge: mean gross return -0.40% a year, standard error 0.34%.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in

@@ -28,6 +28,11 @@ All notable changes to this project are documented here. The format follows
   asset whose prices stop now earns `config.DELISTING_RETURN` (default -30%) once instead of
   0, and studies count it instead of dropping the asset. Positions are carried through price
   gaps, which settle at the price ratio when prices resume. Results count forced exits.
+- Quant baseline backtests rebalance on a schedule and let holdings drift (B-27 R3).
+  `config.REBALANCE_EVERY` (21 bars for daily data, 4 weekly, 1 monthly; `--rebalance-every`)
+  sets the schedule. Trades are the target minus the drifted holdings, so costs now include
+  the drift that a constant-weight book must trade back, which was modelled as zero. Results
+  add `annual_turnover`.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

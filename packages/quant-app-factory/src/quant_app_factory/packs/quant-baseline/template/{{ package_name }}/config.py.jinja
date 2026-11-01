@@ -2,6 +2,8 @@
 
 PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}  # {{ frequency }} bars
 COST_BPS: float = {{ cost_bps }}  # cost per unit of one-way turnover, in basis points
+# Bars between rebalances: holdings drift with prices in between (monthly by default).
+REBALANCE_EVERY: int = {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
 MAX_HORIZON: int = {{ max_horizon }}  # longest forward horizon for IC decay, in bars
 TRADE_LAG: int = 1  # bars between a signal's close and the trade (0 trades on that close)
 # Return on the bar an asset's prices stop for good (a delisting without a final price).

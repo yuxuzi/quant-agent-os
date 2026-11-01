@@ -62,11 +62,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 {%- if profile == 'backtest' %}
     parser.add_argument("--cost-bps", type=float, default=config.COST_BPS, help="Cost in bps.")
+    parser.add_argument(
+        "--rebalance-every", type=int, default=config.REBALANCE_EVERY, help="Bars per rebalance."
+    )
 {%- endif %}
     parser.add_argument("--out", type=Path, default=Path("results/results.json"))
     args = parser.parse_args(argv)
     if args.lag < 0:
         parser.error("--lag must be zero or more bars.")
+{%- if profile == 'backtest' %}
+    if args.rebalance_every < 1:
+        parser.error("--rebalance-every must be at least one bar.")
+{%- endif %}
 {%- if 'data-database' in components %}
     if args.check_connection:
         try:
@@ -83,7 +90,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 {%- if profile == 'alpha-research' %}
     results = run_study(panel, args.signal, args.lookback, lag=args.lag)
 {%- else %}
-    results = run(panel, args.signal, args.lookback, cost_bps=args.cost_bps, lag=args.lag)
+    results = run(
+        panel,
+        args.signal,
+        args.lookback,
+        cost_bps=args.cost_bps,
+        lag=args.lag,
+        rebalance_every=args.rebalance_every,
+    )
 {%- endif %}
     save_results(args.out, results)
 {%- endif %}

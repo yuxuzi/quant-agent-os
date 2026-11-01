@@ -56,8 +56,8 @@ def test_a_next_bar_signal_is_only_worth_something_without_a_trade_lag() -> None
     prices, signal = generate_panel(n_bars=750, n_assets=30, signal_strength=0.3, delay=0)
     weights = target_weights(signal)
 
-    at_close = run_backtest(prices, weights, cost_bps=0.0, lag=0)["gross"]
-    lagged = run_backtest(prices, weights, cost_bps=0.0, lag=1)["gross"]
+    at_close = run_backtest(prices, weights, cost_bps=0.0, lag=0, rebalance_every=1)["gross"]
+    lagged = run_backtest(prices, weights, cost_bps=0.0, lag=1, rebalance_every=1)["gross"]
 
     assert sharpe_ratio(at_close, 252) > 10
     assert abs(sharpe_ratio(lagged, 252)) < 1.5
@@ -66,7 +66,7 @@ def test_a_next_bar_signal_is_only_worth_something_without_a_trade_lag() -> None
 def test_a_signal_that_lasts_past_the_lag_survives_it() -> None:
     prices, signal = generate_panel(signal_strength=0.3, delay=TRADE_LAG)
 
-    gross = run_backtest(prices, target_weights(signal), cost_bps=0.0)["gross"]
+    gross = run_backtest(prices, target_weights(signal), cost_bps=0.0, rebalance_every=1)["gross"]
 
     assert sharpe_ratio(gross, 252) > 10
 
@@ -75,11 +75,11 @@ def test_shifting_the_signal_forward_changes_the_result() -> None:
     prices, signal = generate_panel(n_bars=300, n_assets=20, signal_strength=0.3)
     shifted = np.roll(signal, 1, axis=0)
 
-    honest = run_backtest(prices, target_weights(signal), cost_bps=0.0, lag=0)["gross"]
-    moved = run_backtest(prices, target_weights(shifted), cost_bps=0.0, lag=0)["gross"]
+    honest = run_backtest(prices, target_weights(signal), cost_bps=0.0, lag=0, rebalance_every=1)
+    moved = run_backtest(prices, target_weights(shifted), cost_bps=0.0, lag=0, rebalance_every=1)
 
-    assert not np.allclose(honest, moved)
-    assert sharpe_ratio(honest, 252) > sharpe_ratio(moved, 252)
+    assert not np.allclose(honest["gross"], moved["gross"])
+    assert sharpe_ratio(honest["gross"], 252) > sharpe_ratio(moved["gross"], 252)
 
 
 def test_a_held_position_that_delists_loses_once_without_a_trading_cost() -> None:
@@ -87,7 +87,9 @@ def test_a_held_position_that_delists_loses_once_without_a_trading_cost() -> Non
     prices = np.array([[100.0, 50.0]] * 3 + [[100.0, nan]] * 3)
     weights = np.tile([0.5, 0.5], (6, 1))  # long both from the first close
 
-    result = run_backtest(prices, weights, cost_bps=100.0, lag=0, delisting_return=-0.4)
+    result = run_backtest(
+        prices, weights, cost_bps=100.0, lag=0, rebalance_every=100, delisting_return=-0.4
+    )
 
     assert result["gross"].tolist() == pytest.approx([0.0, 0.0, 0.0, -0.2, 0.0, 0.0])
     assert result["forced_exits"].sum() == 1
@@ -100,12 +102,48 @@ def test_a_position_is_carried_through_a_gap_and_earns_the_move_over_it() -> Non
     prices = np.array([[100.0, 10.0], [100.0, nan], [100.0, nan], [100.0, 12.0]])
     weights = np.array([[0.0, 1.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
 
-    result = run_backtest(prices, weights, cost_bps=0.0, lag=0)
+    result = run_backtest(prices, weights, cost_bps=0.0, lag=0, rebalance_every=1)
 
     # The sell signal at bar 1 cannot trade until a price returns at bar 3.
     assert result["held"][:, 1].tolist() == [0.0, 1.0, 1.0, 1.0]
     assert result["gross"].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.2])
     assert result["forced_exits"].sum() == 0
+
+
+def test_holdings_drift_and_a_rebalance_trades_the_drift_back() -> None:
+    prices = np.array([[100.0, 100.0], [110.0, 100.0], [110.0, 100.0]])
+    weights = np.tile([0.5, 0.5], (3, 1))  # constant targets
+
+    daily = run_backtest(prices, weights, cost_bps=0.0, lag=0, rebalance_every=1)
+    held_on = run_backtest(prices, weights, cost_bps=0.0, lag=0, rebalance_every=2)
+
+    # After +10% on one asset the book is 0.55 / 1.05 and 0.50 / 1.05; rebalancing sells
+    # 0.025 / 1.05 of the winner into the loser.
+    assert daily["turnover"].tolist() == pytest.approx([0.0, 0.5, 0.025 / 1.05])
+    np.testing.assert_allclose(daily["held"][2], [0.5, 0.5])
+    assert held_on["turnover"].tolist() == pytest.approx([0.0, 0.5, 0.0])
+    np.testing.assert_allclose(held_on["held"][2], [0.55 / 1.05, 0.5 / 1.05])
+
+
+def test_trades_happen_only_on_the_rebalance_schedule() -> None:
+    prices, _ = generate_panel(n_bars=200, n_assets=10)
+    weights = target_weights(compute("momentum", prices, 20))
+
+    turnover = run_backtest(prices, weights, cost_bps=0.0, lag=1, rebalance_every=21)["turnover"]
+
+    trading_bars = np.nonzero(turnover > 0.0)[0]
+    assert len(trading_bars) > 3
+    assert set(np.diff(trading_bars)) == {21}
+
+
+def test_rebalancing_monthly_trades_far_less_than_daily() -> None:
+    prices, _ = generate_panel(n_bars=500, n_assets=20)
+    weights = target_weights(compute("momentum", prices, 20))
+
+    daily = run_backtest(prices, weights, cost_bps=0.0, rebalance_every=1)["turnover"].sum()
+    monthly = run_backtest(prices, weights, cost_bps=0.0, rebalance_every=21)["turnover"].sum()
+
+    assert monthly < daily / 3
 
 
 def test_higher_costs_never_raise_returns() -> None:
