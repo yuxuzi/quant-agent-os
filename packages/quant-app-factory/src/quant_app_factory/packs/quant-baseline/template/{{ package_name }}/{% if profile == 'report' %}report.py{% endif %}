@@ -17,9 +17,11 @@ PERCENT_METRICS = frozenset(
         "hit_rate",
         "gross_annualized_return",
         "average_turnover",
+        "annual_turnover",
         "positive_rank_ic_share",
     }
 )
+COUNT_METRICS = frozenset({"bars", "forced_exits", "delistings"})
 
 
 def render_markdown(results: dict[str, Any]) -> str:
@@ -60,9 +62,12 @@ def render_markdown(results: dict[str, Any]) -> str:
 
 
 def format_value(name: str, value: Any) -> str:
-    """Format a metric: percentages for return-like metrics, four decimals otherwise."""
+    """Format a metric: percentages for return-like metrics, whole numbers for counts, and four
+    decimals otherwise."""
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "n/a"
+    if isinstance(value, int | float) and name in COUNT_METRICS:
+        return f"{value:.0f}"
     if isinstance(value, int | float):
         return f"{value:.2%}" if name in PERCENT_METRICS else f"{value:.4f}"
     return str(value)

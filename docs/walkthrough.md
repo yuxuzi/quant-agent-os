@@ -207,8 +207,9 @@ profiles. Creating needs network access for pytemplate-uv and the project's depe
 
 This section goes from saved settings to a study, a backtest, and a report on prices in a
 database, then makes the backtest template your own. It was run end to end on a fresh clone on
-2026-10-31; the outputs shown are from that run. The prices were 500 days of random walks for
-20 assets in a SQLite file, so finding no edge is the expected result.
+2026-10-31, and steps 4 to 6 were re-run on 2026-11-01 after the B-27 fixes; the outputs shown
+are from those runs. The prices were 500 weekdays of random walks for 20 assets in a SQLite
+file (`date` as ISO text, then `asset` and `price`), so finding no edge is the expected result.
 
 **1. Save who you are and where your prices live** (in `~/.quant-agent-os/factory.toml`,
 never secrets):
@@ -264,8 +265,9 @@ uv run quant-factory create alpha.toml --check-connection
 cd alpha-lab && uv run alpha-lab --database --signal reversal --lookback 5 --out results/study.json
 ```
 
-On the random-walk data: mean rank IC −0.0035, with a t-statistic of −0.33. There is no
-signal, as expected.
+On the random-walk data: mean rank IC −0.016, with a Newey-West t-statistic of −1.58. There
+is no signal, as expected. The study scores the return from the trade bar, one bar after the
+signal (`--lag` changes it), which is what the backtest below can earn.
 
 **5. Backtest it.** A spec you write by hand works the same way:
 
@@ -295,13 +297,17 @@ uv run reversal-report ../reversal-backtest/results/backtest.json --out report.m
 
 ```text
 # reversal (lookback 5) long-short backtest
-- Period: 2023-0000 to 2023-0499 (500 bars, 20 assets)
-| sharpe ratio | -0.3682 |
-| average turnover | 29.65% |
-| max drawdown | -7.05% |
+- Period: 2023-01-02 to 2024-11-29 (500 bars, 20 assets)
+| average turnover | 3.14% |
+| forced exits | 0 |
+| max drawdown | -2.79% |
+| sharpe ratio | 0.8973 |
 ## Interpretation
 _Not written yet. Nothing above this section is interpretation._
 ```
+
+A Sharpe ratio of 0.9 over two years is within noise: its standard error is about 0.7. The
+book rebalances monthly (`--rebalance-every`), so turnover is about a tenth of a daily book's.
 
 **7. Make the template yours.** Fork it, edit it (by hand or with an AI assistant), and use
 it by name:

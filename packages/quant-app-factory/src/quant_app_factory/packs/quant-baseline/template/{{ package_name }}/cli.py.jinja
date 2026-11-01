@@ -56,7 +56,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 {%- endif %}
     parser.add_argument("--signal", default="momentum", help="momentum or reversal.")
-    parser.add_argument("--lookback", type=int, default=20, help="Signal lookback in bars.")
+    parser.add_argument("--lookback", type=int, help="Lookback in bars (default: standard).")
+    parser.add_argument("--skip", type=int, help="Momentum: bars to skip (default: standard).")
     parser.add_argument(
         "--lag", type=int, default=config.TRADE_LAG, help="Bars from the signal to the trade."
     )
@@ -83,22 +84,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Cannot connect: {type(error).__name__}: {cause}", file=sys.stderr)
             return 1
         return 0
-    panel = _demo_panel() if args.demo else load_database() if args.database else _prices(args)
+    try:
+        panel = _demo_panel() if args.demo else load_database() if args.database else _prices(args)
 {%- else %}
-    panel = _demo_panel() if args.demo else load_prices(args.prices)
+    try:
+        panel = _demo_panel() if args.demo else load_prices(args.prices)
 {%- endif %}
 {%- if profile == 'alpha-research' %}
-    results = run_study(panel, args.signal, args.lookback, lag=args.lag)
+        results = run_study(panel, args.signal, args.lookback, args.skip, lag=args.lag)
 {%- else %}
-    results = run(
-        panel,
-        args.signal,
-        args.lookback,
-        cost_bps=args.cost_bps,
-        lag=args.lag,
-        rebalance_every=args.rebalance_every,
-    )
+        results = run(
+            panel,
+            args.signal,
+            args.lookback,
+            args.skip,
+            cost_bps=args.cost_bps,
+            lag=args.lag,
+            rebalance_every=args.rebalance_every,
+        )
 {%- endif %}
+    except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
+        parser.error(str(error))
     save_results(args.out, results)
 {%- endif %}
     print(f"Wrote {args.out}")

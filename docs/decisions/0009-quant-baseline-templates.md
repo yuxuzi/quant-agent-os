@@ -30,6 +30,12 @@ finished. Tests that metric formulas are correct do not catch that.
     trade bar (`config.TRADE_LAG`), so a study never promotes an edge the backtest cannot
     earn;
   - costs order returns correctly.
+  - missing prices are honest: gaps are bridged, and delisted positions lose
+    `config.DELISTING_RETURN` once;
+  - holdings drift between scheduled rebalances, and costs are charged on actual trades;
+  - IC t-statistics use Newey-West standard errors;
+  - signals default to the standard definitions (12-1 momentum, one-month reversal);
+  - a random walk shows no edge across 40 seeds.
   - A `LIMITATIONS.md` lists what the template does not handle: survivorship, point-in-time
     fundamentals, corporate actions, and borrow.
 - **Portable.** The generated apps do not depend on Quant-Agent-OS. The optional

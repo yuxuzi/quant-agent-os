@@ -125,7 +125,7 @@ def turnover(weights: FloatArray) -> float:
 
 def newey_west_lags(n: int) -> int:
     """The Newey-West (1994) rule-of-thumb lag count for ``n`` observations."""
-    return int(math.floor(4.0 * (n / 100.0) ** (2.0 / 9.0))) if n > 0 else 0
+    return math.floor(4.0 * (n / 100.0) ** (2.0 / 9.0)) if n > 0 else 0
 
 
 def newey_west_t_stat(values: FloatArray, lags: int | None = None) -> float:

@@ -41,6 +41,11 @@ All notable changes to this project are documented here. The format follows
   `datetime.date`, so order is checked as dates rather than text. Dates must be ISO
   (`2024-01-09`) and unique; other formats are refused with an example. Synthetic panels use
   weekdays, and the price tools take optional `dates` (warning when they are missing).
+- Quant baseline signals default to the standard definitions (B-27 R6): 12-1 momentum
+  (a year's return, skipping the latest month) and one-month reversal, scaled to the data's
+  frequency. Momentum takes `skip` (`--skip`), results record the parameters used, and bad
+  parameters or data are reported as CLI errors rather than tracebacks. The old momentum
+  default (20 bars, skip 1) is `--lookback 20 --skip 1`.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

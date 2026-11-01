@@ -29,6 +29,7 @@ pytestmark = pytest.mark.skipif(
         ("alpha-research", {}),
         ("backtest", {}),
         ("report", {}),
+        ("backtest", {"answers": {"frequency": "weekly"}}),
         (
             "backtest",
             {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},

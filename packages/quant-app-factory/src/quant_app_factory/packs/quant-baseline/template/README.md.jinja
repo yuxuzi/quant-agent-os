@@ -22,7 +22,8 @@ uv sync
 uv run {{ project_name }} results.json --out report.md
 {%- else -%}
 uv run {{ project_name }} --demo    # a random walk: expect no edge (a sanity check)
-uv run {{ project_name }} --prices prices.csv --signal momentum --lookback 20
+uv run {{ project_name }} --prices prices.csv --signal momentum              # 12-1 momentum
+uv run {{ project_name }} --prices prices.csv --signal reversal --lookback 5   # 5-bar reversal
 {%- endif %}
 ```
 {%- if profile != 'report' %}

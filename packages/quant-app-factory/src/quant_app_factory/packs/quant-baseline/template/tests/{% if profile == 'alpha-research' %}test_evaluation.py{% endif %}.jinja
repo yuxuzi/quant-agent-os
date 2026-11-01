@@ -13,6 +13,7 @@ from {{ package_name }}.evaluation import (
     signal_autocorrelation,
 )
 from {{ package_name }}.metrics import newey_west_t_stat
+from {{ package_name }}.signals import compute
 from {{ package_name }}.synthetic import generate_panel
 
 
@@ -44,6 +45,16 @@ def test_noise_has_no_ic() -> None:
     prices, signal = generate_panel(signal_strength=0.0)
 
     assert abs(ic_summary(signal, prices)["mean_rank_ic"]) < 0.03
+
+
+def test_no_ic_on_a_random_walk_across_seeds() -> None:
+    means = []
+    for seed in range(40):
+        prices, _ = generate_panel(n_bars=300, n_assets=20, seed=seed)
+        means.append(ic_summary(compute("reversal", prices, lookback=5), prices)["mean_rank_ic"])
+
+    standard_error = np.std(means, ddof=1) / np.sqrt(len(means))
+    assert abs(np.mean(means)) < 3 * standard_error
 
 
 def test_the_planted_signal_decays_after_one_bar() -> None:

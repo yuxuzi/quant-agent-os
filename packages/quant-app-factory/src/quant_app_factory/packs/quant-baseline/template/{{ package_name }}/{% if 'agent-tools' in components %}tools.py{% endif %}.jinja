@@ -55,7 +55,8 @@ class PriceInput(BaseModel):
         default=None, description="One ISO date (YYYY-MM-DD) per bar; optional."
     )
     signal: str = Field(default="momentum", description="momentum or reversal.")
-    lookback: int = Field(default=20, ge=1, le=500)
+    lookback: int | None = Field(default=None, ge=1, le=500, description="Default: standard.")
+    skip: int | None = Field(default=None, ge=0, le=500, description="Momentum only.")
 
 
 class ResultsOutput(BaseModel):
@@ -86,7 +87,7 @@ def _warnings(params: PriceInput) -> list[str]:
 @tool(name="evaluate_signal", description="Evaluate a signal on an inline price panel.")
 def evaluate_signal(params: PriceInput) -> ResultsOutput:
     """Run a signal study."""
-    results = run_study(_panel(params), params.signal, params.lookback)
+    results = run_study(_panel(params), params.signal, params.lookback, params.skip)
     return ResultsOutput(results=results, warnings=_warnings(params))
 
 
@@ -96,7 +97,7 @@ TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
 @tool(name="backtest_signal", description="Backtest a signal on an inline price panel.")
 def backtest_signal(params: PriceInput) -> ResultsOutput:
     """Run a backtest with the project's default costs and trade lag."""
-    results = run(_panel(params), params.signal, params.lookback)
+    results = run(_panel(params), params.signal, params.lookback, params.skip)
     return ResultsOutput(results=results, warnings=_warnings(params))
 
 

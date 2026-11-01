@@ -19,7 +19,8 @@ LIMITATIONS = [
 def run_study(
     panel: Panel,
     signal_name: str = "momentum",
-    lookback: int = 20,
+    lookback: int | None = None,
+    skip: int | None = None,
     quantiles: int = 5,
     lag: int = config.TRADE_LAG,
 ) -> dict[str, Any]:
@@ -28,19 +29,20 @@ def run_study(
     ``lag`` is the trade lag a backtest of this signal would use, so the study scores what a
     lagged trade could actually earn.
     """
-    signal = signals.compute(signal_name, panel.prices, lookback)
+    chosen = signals.parameters(signal_name, lookback=lookback, skip=skip)
+    signal = signals.compute(signal_name, panel.prices, **chosen)
     spread = summarize(
         quantile_spread(signal, panel.prices, quantiles, lag), config.PERIODS_PER_YEAR
     )
     return {
         "kind": "study",
-        "title": f"{signal_name} (lookback {lookback}) signal study",
+        "title": f"{signal_name} ({signals.describe(chosen)}) signal study",
         "period": [panel.dates[0].isoformat(), panel.dates[-1].isoformat()],
         "bars": len(panel.dates),
         "assets": len(panel.assets),
         "parameters": {
             "signal": signal_name,
-            "lookback": lookback,
+            **chosen,
             "quantiles": quantiles,
             "lag": lag,
         },

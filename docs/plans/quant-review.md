@@ -134,10 +134,28 @@ reject duplicate dates. The database smoke test had been inserting dates like `2
 which only worked because nothing parsed them; it now uses real dates. The inline price tools
 take optional `dates` and warn when bars are labelled with stand-in weekdays.
 
+**R6 result.** Done as planned. `config` derives the defaults from the frequency
+(`MOMENTUM_LOOKBACK = PERIODS_PER_YEAR`, and `MOMENTUM_SKIP`, `REVERSAL_LOOKBACK`, and
+`REBALANCE_EVERY` all equal `PERIODS_PER_YEAR // 12`), so a weekly project gets 52-4 momentum
+without its own table. Known-answer tests on a +1%-a-bar path check the formulas, and daily,
+weekly, and monthly projects pass their own tests. Asking reversal for a `skip` is refused,
+and the CLI turns bad parameters and data into usage errors.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in
 the smoke test.
+
+**Exit result (2026-11-01).** Met. Every generated project now tests these synthetic worlds
+with known answers:
+- planted next-bar and tradable signals (study and backtest agree at each lag);
+- gaps and delistings (bar returns, backtest positions, and study forward returns);
+- constant targets with drift (exact turnover), and the rebalance schedule;
+- an AR(1) series for the HAC t-statistic;
+- a random walk across 40 seeds, with no edge in the study's IC or the backtest's returns.
+
+The smoke suite builds 9 projects, including a weekly backtest, and all pass their own
+`uv sync`, ruff, mypy, and pytest.
 
 ### Phase 2: one project, honest out-of-sample results (B-28)
 
