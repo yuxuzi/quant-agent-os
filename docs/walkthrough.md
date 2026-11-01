@@ -180,7 +180,8 @@ Quant App Factory creates a new, tested project from a small spec. Let it ask th
 ```bash
 cat > ~/qr-demo/signal-tools.toml <<'TOML'
 name = "signal-tools"
-kind = "agent-tool"
+template = "agent-tool"
+profile = "agent-tool"
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "."
 tool_name = "count_signals"
@@ -191,13 +192,14 @@ uv run quant-factory create ~/qr-demo/signal-tools.toml
 ```
 
 What the two commands do:
-- **`plan`** lists the profile, the reasons, the dependencies, and every file it would write.
+- **`plan`** summarises what it would build: the files, components, and checks (`--verbose`
+  adds the planner's reasons, the dependencies, and every file).
 - **`create`** asks first:
   - your yes is recorded as a single-use approval for that exact spec;
   - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
   - its tests include `check_tool`, the platform's contract checks.
 
-`kind = "quant-research"` builds a portable quant project from the `quant-baseline` pack: a
+`template = "quant-baseline"` with `profile = "quant-research"` builds a portable quant project from the `quant-baseline` pack: a
 signal study, a backtest, and a report in one project, with known-answer metric tests, bias
 tests, and a `LIMITATIONS.md`. `uv run <project> study --demo` runs it on a random walk.
 `kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
@@ -222,6 +224,10 @@ uv run quant-factory settings set connections.local-prices.database "$PWD/prices
 
 For PostgreSQL, also set `host`, `port`, `user`, and `schema`. Set `password_env` to the
 *name* of the environment variable that holds the password, never the password itself.
+
+For a first look, `uv run quant-factory new quant-research my-lab --defaults` takes every
+default and creates the project after one confirmation (`--yes` skips it in scripts). Steps 2
+and 3 do the same with your own answers.
 
 **2. Answer the template's questions.** `new` offers saved connections and skips questions
 that do not apply:

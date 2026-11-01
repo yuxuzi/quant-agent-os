@@ -281,6 +281,30 @@ read the project's own data.
 | **U4** One way to name a target | Docs and `new` use `template` and `profile` only. `kind` is kept as a documented alias. | Every doc example validates, through a test that loads the specs in the docs. |
 | **U5** Operator commands without ceremony | An operator's own `create` and `check` record a standing operator approval (`approved_by = cli:<user>`), without the approve-and-resume dance in the code path. Agent calls still need per-call approval. | Run records show the operator approval, and the agent path is unchanged (the existing approval tests). |
 
+**Phase 3 results (2026-11-01).**
+- **U1.** `quant-factory new quant-research my-lab --defaults` writes the spec and creates the
+  project after one confirmation; `--yes` skips it for scripts.
+  - The target is a built-in shortcut (`quant-research`, `agent-tool`, `python-cli`), or
+    `TEMPLATE/PROFILE`, or a template.
+  - **Deviation.** The project name comes from the argument. Taking it from the current
+    directory would ask pytemplate-uv to write into an existing folder, which it refuses.
+- **U2.** The database component asks only for the secrets its kind uses: a password variable
+  for PostgreSQL, none for SQLite or DuckDB. `DATABASE_URL` stays available as an override, but
+  is no longer asked for. Components are a numbered menu that accepts numbers or names. The
+  "set at runtime" list is replaced by one line per variable the app reads.
+- **U3.** `plan` and `create` print three lines: the target, the files, components, and
+  checks, and any security notes. `--verbose` adds the planner's reasons, dependencies, and every
+  file. Deprecated kinds still warn in quiet mode.
+- **U4.** Every spec example in the docs uses `template` and `profile`, and `new` writes them.
+  `kind` is documented as a shortcut for existing specs. A test extracts every documented spec
+  (TOML blocks and heredocs) and checks that it loads and names template and profile.
+- **U5, changed at the operator's direction.** The plan was to let an operator's own `create`
+  and `check` run without a prompt. That would change a security default, so I asked first.
+  The decision was to keep the prompt: the operator's yes, or `--yes`, stays the recorded
+  single-use approval. U5 became a code simplification: `create` and `check` share one
+  approved-call helper, so the approval path is written once, the same path an agent's call
+  takes.
+
 ### Later, when Phase 1 and 2 have users
 
 - **The metrics library (B-13).** The templates depend on a small platform-independent

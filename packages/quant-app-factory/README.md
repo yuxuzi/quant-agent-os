@@ -30,8 +30,9 @@ spec can name a connection saved in `factory.toml` (`connection = "research-pg"`
 ## Use
 
 ```bash
+uv run quant-factory new quant-research my-lab --defaults   # one command: spec, project, checks
 uv run quant-factory new                # answer the template's questions; writes a ready spec
-uv run quant-factory plan app.toml      # writes nothing
+uv run quant-factory plan app.toml      # writes nothing; --verbose lists every file
 uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
 uv run quant-factory check app.toml     # re-run an existing project's checks
 uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml

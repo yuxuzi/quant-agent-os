@@ -73,18 +73,25 @@ needs the `network` permission (see [docs/security.md](docs/security.md)).
 
 ## Generate an app
 
-Describe the app in a small TOML spec, preview it, then create it. Your confirmation is the
-recorded approval, and the generated project's own checks run before it is reported done.
+One command starts a project with every default. Your confirmation is the recorded approval,
+and the generated project's own checks run before it is reported done:
+
+```bash
+uv run quant-factory new quant-research my-lab --defaults   # asks once, then creates and checks
+```
+
+Or describe the app in a small TOML spec, preview it, then create it:
 
 ```bash
 cat > signal-tools.toml <<'TOML'
 name = "signal-tools"
-kind = "agent-tool"          # or python-cli, fastapi-service
+template = "agent-tool"      # or quant-baseline, bundled (python, fastapi), or a pack path
+profile = "agent-tool"
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "."
 tool_name = "count_signals"
 TOML
-uv run quant-factory plan signal-tools.toml     # profile, reasons, dependencies, exact files
+uv run quant-factory plan signal-tools.toml     # what it builds; --verbose lists every file
 uv run quant-factory create signal-tools.toml   # asks, creates, runs uv sync/ruff/mypy/pytest
 ```
 

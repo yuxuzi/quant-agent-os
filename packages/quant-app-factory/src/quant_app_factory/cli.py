@@ -15,13 +15,19 @@ from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
+from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry
 from quant_app_factory.application.factory import AppFactory, FactoryReport
-from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection
+from quant_app_factory.domain.connections import (
+    DATABASE_COMPONENT,
+    DATABASE_SECRETS,
+    Connection,
+)
 from quant_app_factory.domain.planner import BUILT_IN_PACKS, PlanningError
-from quant_app_factory.domain.ports import ScaffoldError
+from quant_app_factory.domain.ports import ComponentInfo, ScaffoldError
 from quant_app_factory.domain.spec import (
+    KIND_TARGETS,
     RESERVED_ANSWERS,
+    TEMPLATE_NAME,
     AppSpec,
     SpecError,
     is_template_path,
@@ -85,8 +91,12 @@ def _load(path: Path) -> AppSpec:
         raise _fail(error) from error
 
 
-def _preview(factory: AppFactory, spec: AppSpec) -> bool:
-    """Print the plan and the exact files; return whether the target directory already exists."""
+def _preview(factory: AppFactory, spec: AppSpec, *, verbose: bool = False) -> bool:
+    """Print what would be built; return whether the target directory already exists.
+
+    The summary is the target, file count, components, and checks; ``verbose`` adds the
+    planner's reasons, the dependencies, and every file.
+    """
     try:
         plan, preview = factory.preview(spec)
     except (PlanningError, ScaffoldError) as error:
@@ -95,15 +105,24 @@ def _preview(factory: AppFactory, spec: AppSpec) -> bool:
         f"[bold]{spec.name}[/bold] ({spec.target[0]}/{spec.target[1]}) -> {preview.project_path}",
         soft_wrap=True,
     )
-    for reason in plan.reasons:
-        console.print(f"  - {reason}", soft_wrap=True)
+    if spec.alias_note:
+        errors.print(f"[yellow]{spec.alias_note}[/yellow]", soft_wrap=True)
     components = ", ".join(preview.components) or "none"
-    console.print(f"Profile {preview.profile} v{preview.profile_version}; components: {components}")
-    console.print(f"Dependencies: {', '.join(preview.dependencies) or 'none'}", soft_wrap=True)
-    console.print(f"Files ({len(preview.files)}):")
-    for name in preview.files:
-        console.print(f"  {name}", soft_wrap=True)
-    console.print("Checks: " + "; ".join(preview.lifecycle_commands), soft_wrap=True)
+    checks = ", ".join(_short_command(command) for command in preview.lifecycle_commands)
+    console.print(
+        f"  {len(preview.files)} files; components: {components}; checks: {checks}",
+        soft_wrap=True,
+    )
+    if verbose:
+        for reason in plan.reasons:
+            if reason != spec.alias_note:
+                console.print(f"  - {reason}", soft_wrap=True)
+        console.print(f"  Profile {preview.profile} v{preview.profile_version}")
+        console.print(
+            f"  Dependencies: {', '.join(preview.dependencies) or 'none'}", soft_wrap=True
+        )
+        for name in preview.files:
+            console.print(f"    {name}", soft_wrap=True)
     for note in preview.security_notes:
         console.print(f"[yellow]security:[/yellow] {note}", soft_wrap=True)
     if preview.target_exists:
@@ -111,10 +130,26 @@ def _preview(factory: AppFactory, spec: AppSpec) -> bool:
     return preview.target_exists
 
 
+VERBOSE_HELP = "Also show the planner's reasons, dependencies, and every file."
+
+
+def _short_command(command: str) -> str:
+    """``uv run ruff format --check .`` -> ``ruff format``: the tool and subcommand only."""
+    words: list[str] = []
+    for word in command.removeprefix("uv run ").split():
+        if word.startswith(("-", ".", "{")) or len(words) == 2:
+            break
+        words.append(word)
+    return " ".join(words) or command
+
+
 @app.command()
-def plan(spec: SpecArgument) -> None:
-    """Preview the project: profile, reasons, dependencies, and the exact files. Writes nothing."""
-    if _preview(_factory(), _load(spec)):
+def plan(
+    spec: SpecArgument,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help=VERBOSE_HELP)] = False,
+) -> None:
+    """Preview the project: what it builds, its components, and its checks. Writes nothing."""
+    if _preview(_factory(), _load(spec), verbose=verbose):
         raise typer.Exit(code=1)
 
 
@@ -133,6 +168,7 @@ def create(
             help="After the checks, connect to the database with the variables the spec names.",
         ),
     ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help=VERBOSE_HELP)] = False,
 ) -> None:
     """Preview, ask for approval, then create the project and run its checks.
 
@@ -142,42 +178,21 @@ def create(
     """
     factory = _factory()
     app_spec = _load(spec)
-    if _preview(factory, app_spec):
+    if _preview(factory, app_spec, verbose=verbose):
         raise typer.Exit(code=1)
     pack_digest = factory.pack_digest(app_spec)  # the approval covers the pack just shown
-    prompt = (
-        "Create this project? It writes files, runs uv, and downloads packages"
-        if checks
-        else "Create this project? It writes files"
+    prompt = "Create it? It writes files" + (", runs uv, and downloads packages" if checks else "")
+    _confirm(prompt, yes=yes, check_connection=check_connection)
+    report, run_id = _approved_call(
+        factory,
+        "create_app",
+        CREATE_PERMISSIONS,
+        runs,
+        spec=app_spec.model_dump(mode="json"),
+        run_checks=checks,
+        check_connection=check_connection,
+        expected_pack_digest=pack_digest,
     )
-    if check_connection:
-        prompt += ", then connects to the database"
-    if not yes and not typer.confirm(prompt, default=False):
-        raise typer.Exit(code=1)
-    policy = PermissionPolicy(
-        granted=READ_ONLY | CREATE_PERMISSIONS, tool_allowlist=frozenset({"create_app"})
-    )
-    with Platform(
-        factory_tools(factory),
-        policy=policy,
-        run_store=SqliteRunStore(_runs_path(runs)),
-        actor="cli",
-    ) as platform:
-        waiting = platform.call(
-            "create_app",
-            spec=app_spec.model_dump(mode="json"),
-            run_checks=checks,
-            check_connection=check_connection,
-            expected_pack_digest=pack_digest,
-        )
-        run_id = waiting.run_id or ""
-        if waiting.status != "approval_required":
-            raise _fail(f"Expected an approval request, got {waiting.status}: {waiting.error}")
-        platform.approve(run_id, approved_by=f"cli:{getpass.getuser()}")
-        (record,) = platform.resume(run_id)
-    if record.status != "ok" or record.output is None:
-        raise _fail(f"create_app {record.status}: {record.error} (run {run_id})")
-    report = FactoryReport.model_validate(record.output)
     _print_report(report, run_id, _runs_path(runs))
     if report.checks_passed is False:
         raise typer.Exit(code=1)
@@ -196,13 +211,46 @@ def check_project(
     """Re-run the checks of the project a spec created, for example after a failed check."""
     factory = _factory()
     app_spec = _load(spec)
-    prompt = "Re-run this project's checks? It runs uv and may download packages"
+    _confirm(
+        "Re-run this project's checks? It runs uv and may download packages",
+        yes=yes,
+        check_connection=check_connection,
+    )
+    report, run_id = _approved_call(
+        factory,
+        "check_app",
+        CHECK_PERMISSIONS,
+        runs,
+        spec=app_spec.model_dump(mode="json"),
+        check_connection=check_connection,
+    )
+    _print_report(report, run_id, _runs_path(runs), verb="Checked")
+    if report.checks_passed is False:
+        raise typer.Exit(code=1)
+
+
+def _confirm(prompt: str, *, yes: bool, check_connection: bool) -> None:
+    """Ask the operator; their yes (or --yes) becomes the call's single-use approval."""
     if check_connection:
         prompt += ", then connects to the database"
     if not yes and not typer.confirm(prompt, default=False):
         raise typer.Exit(code=1)
+
+
+def _approved_call(
+    factory: AppFactory,
+    tool_name: str,
+    permissions: frozenset[Permission],
+    runs: Path | None,
+    **arguments: Any,
+) -> tuple[FactoryReport, str]:
+    """Call ``tool_name`` once with the operator's recorded approval.
+
+    The call goes through the same approval gate an agent's call does: it waits for an
+    approval, the operator's confirmation is recorded as that approval, and the run resumes.
+    """
     policy = PermissionPolicy(
-        granted=READ_ONLY | CHECK_PERMISSIONS, tool_allowlist=frozenset({"check_app"})
+        granted=READ_ONLY | permissions, tool_allowlist=frozenset({tool_name})
     )
     with Platform(
         factory_tools(factory),
@@ -210,20 +258,15 @@ def check_project(
         run_store=SqliteRunStore(_runs_path(runs)),
         actor="cli",
     ) as platform:
-        waiting = platform.call(
-            "check_app", spec=app_spec.model_dump(mode="json"), check_connection=check_connection
-        )
+        waiting = platform.call(tool_name, **arguments)
         run_id = waiting.run_id or ""
         if waiting.status != "approval_required":
             raise _fail(f"Expected an approval request, got {waiting.status}: {waiting.error}")
         platform.approve(run_id, approved_by=f"cli:{getpass.getuser()}")
         (record,) = platform.resume(run_id)
     if record.status != "ok" or record.output is None:
-        raise _fail(f"check_app {record.status}: {record.error} (run {run_id})")
-    report = FactoryReport.model_validate(record.output)
-    _print_report(report, run_id, _runs_path(runs), verb="Checked")
-    if report.checks_passed is False:
-        raise typer.Exit(code=1)
+        raise _fail(f"{tool_name} {record.status}: {record.error} (run {run_id})")
+    return FactoryReport.model_validate(record.output), run_id
 
 
 def _print_report(report: FactoryReport, run_id: str, runs: Path, verb: str = "Created") -> None:
@@ -280,26 +323,81 @@ def _choose(label: str, options: list[str], default: str) -> str:
         errors.print(f"Choose one of: {', '.join(options)}.")
 
 
+def _resolve_target(
+    target: str | None, template: str | None, profile: str | None
+) -> tuple[str | None, str | None]:
+    """Read ``quant-research`` (a built-in shortcut), ``TEMPLATE/PROFILE``, or a template."""
+    if target is None:
+        return template, profile
+    if target in KIND_TARGETS:
+        return KIND_TARGETS[target]
+    head, separator, tail = target.partition("/")
+    if separator and TEMPLATE_NAME.match(head) and TEMPLATE_NAME.match(tail):
+        return head, tail
+    return target, profile
+
+
+def _pick_components(optional: list[ComponentInfo]) -> list[str]:
+    """A numbered menu; the answer is numbers or names, comma-separated."""
+    if not optional:
+        return []
+    for number, component in enumerate(optional, 1):
+        console.print(
+            f"  {number}. [bold]{component.id}[/bold]: {component.description}", soft_wrap=True
+        )
+    picked = str(typer.prompt("Optional components (numbers or names, blank for none)", default=""))
+    chosen = []
+    for item in (part.strip() for part in picked.split(",")):
+        if item.isdigit() and 1 <= int(item) <= len(optional):
+            chosen.append(optional[int(item) - 1].id)
+        elif item in {component.id for component in optional}:
+            chosen.append(item)
+        elif item:
+            raise _fail(f"Unknown component {item!r}; choose a number from 1 to {len(optional)}.")
+    return list(dict.fromkeys(chosen))
+
+
 @app.command()
 def new(
+    target: Annotated[
+        str | None,
+        typer.Argument(
+            help="What to build: quant-research, agent-tool, TEMPLATE/PROFILE, or a template."
+        ),
+    ] = None,
+    name: Annotated[str | None, typer.Argument(help="Project name, a lowercase slug.")] = None,
     template: Annotated[
         str | None, typer.Option(help="quant-baseline, agent-tool, bundled, or a pack path.")
     ] = None,
     profile: Annotated[str | None, typer.Option(help="The profile to build.")] = None,
     out: Annotated[Path | None, typer.Option("--out", "-o", help="Spec file to write.")] = None,
+    defaults: Annotated[
+        bool,
+        typer.Option("--defaults", help="Ask nothing: take every default, then create it."),
+    ] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="With --defaults, create without asking.")
+    ] = False,
 ) -> None:
-    """Answer questions until the spec is ready, write it, and offer to create the project.
+    """Answer the template's questions (or take its defaults), write the spec, and create it.
 
-    The questions come from the template itself; pytemplate-uv checks the result. Secrets are
-    asked for as environment-variable names, never values.
+    `quant-factory new quant-research my-lab --defaults` is the one-command start. The
+    questions come from the template itself, only those that apply are asked, and
+    pytemplate-uv checks the result. Secrets are asked for as variable names, never values.
     """
     factory = _factory()
-    template = template or str(
-        typer.prompt(
-            "Template (quant-baseline, agent-tool, bundled, or a pack path)",
-            default="quant-baseline",
+    template, profile = _resolve_target(target, template, profile)
+    if template is None:
+        template = (
+            "quant-baseline"
+            if defaults
+            else str(
+                typer.prompt(
+                    "Template (quant-baseline, agent-tool, bundled, or a pack path)",
+                    default="quant-baseline",
+                )
+            )
         )
-    )
     if is_template_path(template):
         template = Path(template).expanduser().resolve().as_posix()
     try:
@@ -311,24 +409,31 @@ def new(
         profile = resolve_alias(template, profile)[1]
     if profile not in profiles and len(profiles) == 1:
         profile = profiles[0]
-        console.print(f"Profile: [bold]{profile}[/bold] ({catalog.profiles[0].description})")
+    elif profile not in profiles and defaults:
+        raise _fail(f"Choose a profile of {template}: {', '.join(profiles)}.")
     elif profile not in profiles:
         for item in catalog.profiles:
             console.print(f"  [bold]{item.id}[/bold]: {item.description}", soft_wrap=True)
         profile = _choose("Profile", profiles, profiles[0])
     described = factory.describe_template(template, profile)
     chosen_profile = described.profiles[0]
-    name = str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
-    description = str(typer.prompt("One-line description"))
-    output_dir = Path(str(typer.prompt("Parent directory", default="."))).expanduser().resolve()
-    optional = {c.id: c for c in described.components if c.id in chosen_profile.optional_components}
-    for component in optional.values():
-        console.print(f"  [bold]{component.id}[/bold]: {component.description}", soft_wrap=True)
-    picked = str(typer.prompt("Optional components (comma-separated, blank for none)", default=""))
-    components = [c.strip() for c in picked.split(",") if c.strip()]
-    unknown = sorted(set(components) - set(optional))
-    if unknown:
-        raise _fail(f"Unknown components: {', '.join(unknown)}.")
+    console.print(f"{template}/{profile}: {chosen_profile.description}", soft_wrap=True)
+    if name is None and defaults:
+        raise _fail("Name the project: quant-factory new TARGET NAME --defaults.")
+    name = name or str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
+    question_defaults = {q.name: q.default for q in described.questions if q.default}
+    if defaults:
+        description = question_defaults.get("description") or name
+        output_dir = Path.cwd()
+        components: list[str] = []
+    else:
+        description = str(
+            typer.prompt("One-line description", default=question_defaults.get("description", ""))
+        )
+        output_dir = Path(str(typer.prompt("Parent directory", default="."))).expanduser().resolve()
+        components = _pick_components(
+            [c for c in described.components if c.id in chosen_profile.optional_components]
+        )
     selected = {*chosen_profile.default_components, *components}
     spec: dict[str, Any] = {
         "name": name,
@@ -351,7 +456,7 @@ def new(
             raise _fail(f"No saved connection {connection_name!r}.")
         if connection_name:
             spec["connection"] = connection_name
-    for question in described.questions:
+    for question in [] if defaults else described.questions:
         if question.name in IDENTITY_QUESTIONS:
             continue
         if connection_name and question.name.startswith("db_") and question.name != "db_query":
@@ -373,12 +478,16 @@ def new(
         else:
             answers[question.name] = value
     settings: dict[str, str] = {}
-    for component in described.components:
+    for component in [] if defaults else described.components:
         if component.id not in selected:
             continue
         if connection_name and component.id == DATABASE_COMPONENT:
             continue  # the saved connection names its variables
         for setting in component.settings:
+            if component.id == DATABASE_COMPONENT and setting.name not in DATABASE_SECRETS.get(
+                effective.get("db_kind", ""), (setting.name,)
+            ):
+                continue  # for example, no password for a SQLite or DuckDB file
             if setting.secret:
                 variable = str(
                     typer.prompt(
@@ -406,26 +515,27 @@ def new(
         for problem in check.problems:
             errors.print(f"[red]{problem.field}: {problem.message}[/red]")
         raise typer.Exit(code=1)
-    target = out or Path(f"{name}.toml")
-    if target.exists() and not typer.confirm(f"{target} exists. Replace it?", default=False):
-        raise typer.Exit(code=1)
-    target.write_text(check.spec_toml, "utf-8")
-    console.print(f"Wrote {target}.")
+    target_file = out or Path(f"{name}.toml")
+    if target_file.exists() and (
+        defaults or not typer.confirm(f"{target_file} exists. Replace it?", default=False)
+    ):
+        raise _fail(f"{target_file} exists; choose another name or --out.")
+    target_file.write_text(check.spec_toml, "utf-8")
+    console.print(f"Wrote {target_file}.")
     if not check.ready:
         for problem in check.problems:
             errors.print(f"[yellow]{problem.field}: {problem.message}[/yellow]")
-        errors.print(f"Edit {target}, then run `quant-factory plan {target}`.")
+        errors.print(f"Edit {target_file}, then run `quant-factory plan {target_file}`.")
         raise typer.Exit(code=1)
-    console.print(f"Ready: {len(check.files)} files.")
-    if check.unbound_settings:
-        console.print(
-            "Set at runtime in the app's environment: " + ", ".join(check.unbound_settings),
-            soft_wrap=True,
-        )
-    if typer.confirm(
+    if not defaults:  # with --defaults, create's summary follows at once
+        console.print(f"Ready: {len(check.files)} files.")
+    for setting_name, value in sorted(settings.items()):
+        if value.startswith("env:"):
+            console.print(f"The app reads {setting_name} from ${value.removeprefix('env:')}.")
+    if defaults or typer.confirm(
         "Create it now? It writes files, runs uv, and downloads packages", default=False
     ):
-        create(target, yes=True, checks=True, runs=None, check_connection=False)
+        create(target_file, yes=yes or not defaults, checks=True, runs=None, check_connection=False)
 
 
 def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str]) -> None:

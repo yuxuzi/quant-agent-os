@@ -239,8 +239,8 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
     database = tmp_path / "prices.db"
     sqlite3.connect(database).close()
     # name, description, directory, components; frequency, max_horizon, cost_bps; db_kind
-    # (default sqlite), db_name, db_query, db_read_only (defaults); DATABASE_URL and
-    # DATABASE_PASSWORD variables (blank); save as "local"; do not create.
+    # (default sqlite), db_name, db_query, db_read_only (defaults); no secret variables for a
+    # SQLite file; save as "local"; do not create.
     lines = [
         "local-lab",
         "Research",
@@ -251,8 +251,6 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
         "",
         "",
         database.as_posix(),
-        "",
-        "",
         "",
         "",
         "local",
@@ -267,6 +265,7 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
 
     assert result.exit_code == 0, result.output
     assert "Database host" not in result.output  # postgres-only questions are skipped
+    assert "DATABASE_PASSWORD" not in result.output and "DATABASE_URL" not in result.output
     assert load_spec(out).answers == {"db_name": database.as_posix()}
     saved = load_settings(settings_file).connections["local"]
     assert (saved.kind, saved.database) == ("sqlite", database.as_posix())

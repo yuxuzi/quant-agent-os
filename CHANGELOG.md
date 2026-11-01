@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Quant App Factory asks less and prints less (B-29):
+  - **One-command start.** `quant-factory new quant-research my-lab --defaults` writes the spec
+    and creates the project after one confirmation; add `--yes` for scripts.
+  - **Only questions that apply.** The database component asks only for the secrets its kind
+    uses (none for SQLite or DuckDB), and components are a numbered menu.
+  - **Quiet output.** `plan` and `create` print a summary by default; `--verbose` lists the
+    reasons, dependencies, and every file.
+  - **One way to name a target.** Docs and `new` use `template` and `profile`, `kind` remains
+    a documented shortcut, and every documented spec is checked in the tests.
 - Quant baseline projects are now one `quant-research` project (B-28 S1, quant-baseline
   2.0.0):
   - **Commands.** `study`, `backtest`, and `report` subcommands, plus `check-connection` with
