@@ -240,7 +240,7 @@ def test_a_spec_can_use_a_registered_template(tmp_path: Path, settings_file: Pat
         'template = "momentum"\nprofile = "quant-research"\n'
     )
 
-    planned = runner.invoke(factory_cli.app, ["plan", str(spec)])
+    planned = runner.invoke(factory_cli.app, ["plan", str(spec), "--verbose"])
 
     assert planned.exit_code == 0, planned.output
     assert "momo_app/backtest.py" in planned.output

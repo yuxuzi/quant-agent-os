@@ -10,6 +10,13 @@ from quant_app_factory.domain.secrets import ENV_NAME
 from quant_app_factory.domain.spec import AppSpec
 
 DATABASE_COMPONENT = "data-database"
+# The secret settings worth asking about for each database kind. SQLite and DuckDB are local
+# files; DATABASE_URL stays available to any kind as an override, but is not asked for.
+DATABASE_SECRETS: dict[str, tuple[str, ...]] = {
+    "postgres": ("DATABASE_PASSWORD",),
+    "sqlite": (),
+    "duckdb": (),
+}
 
 
 class Connection(BaseModel):

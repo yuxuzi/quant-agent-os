@@ -324,13 +324,19 @@ def _spec_file(tmp_path: Path) -> Path:
     return spec_file
 
 
-def test_cli_plan_lists_the_files_and_writes_nothing(
-    tmp_path: Path, fake_checks: FakeChecks
-) -> None:
-    result = CliRunner().invoke(factory_cli.app, ["plan", str(_spec_file(tmp_path))])
+def test_cli_plan_summarises_and_writes_nothing(tmp_path: Path, fake_checks: FakeChecks) -> None:
+    spec = str(_spec_file(tmp_path))
+    quiet = CliRunner().invoke(factory_cli.app, ["plan", spec])
+    verbose = CliRunner().invoke(factory_cli.app, ["plan", spec, "-v"])
 
-    assert result.exit_code == 0, result.output
-    assert "signal_tools/tools.py" in result.output
+    assert quiet.exit_code == verbose.exit_code == 0, quiet.output
+    assert "10 files; components: none; checks: uv sync, ruff check, ruff format, mypy, pytest" in (
+        " ".join(quiet.output.split())
+    )
+    assert "signal_tools/tools.py" not in quiet.output
+    assert len(quiet.output.splitlines()) <= 3
+    assert "signal_tools/tools.py" in verbose.output  # every file
+    assert "Dependencies:" in verbose.output and "- agent-tool packages" in verbose.output
     assert list((tmp_path / "out").iterdir()) == []
 
 

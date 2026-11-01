@@ -79,7 +79,8 @@ An app spec is TOML:
 
 ```toml
 name = "signal-tools"            # project slug
-kind = "agent-tool"              # agent-tool, python-cli, fastapi-service, or quant-research
+template = "agent-tool"          # agent-tool, quant-baseline, bundled, a registered name, or a path
+profile = "agent-tool"           # bundled offers python and fastapi; quant-baseline quant-research
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "projects"          # existing parent directory, relative to this file
 tool_name = "count_signals"      # agent-tool only
@@ -92,7 +93,8 @@ A quant spec, or one for your own pack:
 
 ```toml
 name = "momo-lab"
-kind = "quant-research"          # or: template = "quant-baseline" and profile = "quant-research"
+template = "quant-baseline"
+profile = "quant-research"
 description = "Momentum research"
 output_dir = "."
 components = ["data-parquet"]    # optional: data-parquet, agent-tools
@@ -104,6 +106,10 @@ cost_bps = "3"                   # also max_horizon (IC decay)
 # template = "../packs/my-pack"  # your own pytemplate-uv pack, relative to this file
 # profile = "my-profile"
 ```
+
+`kind` is a shortcut kept for existing specs: `kind = "agent-tool"`, `"python-cli"`,
+`"fastapi-service"`, or `"quant-research"` stands for the matching template and profile.
+`quant-factory new` writes `template` and `profile`, and so do these docs.
 
 The research parameters themselves (signal, lookback, trade lag, quantiles, costs, rebalance
 schedule, and delisting return) live in the generated project's `config.toml`, not in the spec:
