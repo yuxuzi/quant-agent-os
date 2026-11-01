@@ -266,7 +266,7 @@ onto the days below, so there is still only one timeline.
 | B-14 | `PostgresKnowledgeStore` + pgvector, embedding provider port, vector channel gated by evaluation | B-06, B-12 | Passes the shared store contract tests |
 | B-15 | `research_alpha`: server-side synthesis and hypotheses as `interpretation` evidence | B-06, B-12 | Every interpretation cites passages; injection evaluation passes |
 | B-16 | AppSpec drafting from requirements (a model proposes, the human confirms) | B-10, B-12 | The draft validates against `AppSpec` before any scaffold |
-| B-17 | `generate_strategy` (a structured strategy specification from research evidence) | B-06 | The output is a spec, not code; the spec links its sources |
+| B-17 | **Done.** `generate_strategy` (a structured strategy specification from research evidence): `StrategyService` turns the cited graph edges around one signal, factor, or strategy into a `StrategySpec` (signals, universe, data, methods, metrics, risks, context, key passages, open questions); deterministic, no model; CLI `quant-research strategy` | B-06 | The output is a spec, not code; the spec links its sources |
 | B-18 | REST API (FastAPI extra) and API-key auth with scopes and a principal in audit events | B-07, B-08 | REST equals MCP results (contract test) |
 | B-19 | Docker image and team-server deployment guide (PostgreSQL) | B-14, B-18 | `docker compose up` demo; no secrets in the image |
 | B-20 | `generate_factor_code` and the bounded fix-and-validate loop (decision record first) | B-09, B-10, B-12 | At most N rounds; structured diagnostics; approval for each write |

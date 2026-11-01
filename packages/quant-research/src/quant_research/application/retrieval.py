@@ -368,12 +368,17 @@ class ResearchService:
         return cache[chunk_id]
 
     def _source(self, chunk: Chunk) -> SourceRef:
-        document = self.store.get_document(chunk.document_id)
-        return SourceRef(
-            source_id=document.uri if document else chunk.document_id,
-            location=chunk.location,
-            title=document.title if document else None,
-        )
+        return source_of(self.store, chunk)
+
+
+def source_of(store: KnowledgeStore, chunk: Chunk) -> SourceRef:
+    """Return the citation for ``chunk``: its document's URI and title, and its location."""
+    document = store.get_document(chunk.document_id)
+    return SourceRef(
+        source_id=document.uri if document else chunk.document_id,
+        location=chunk.location,
+        title=document.title if document else None,
+    )
 
 
 def _rank_related(

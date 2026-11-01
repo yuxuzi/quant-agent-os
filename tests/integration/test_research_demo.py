@@ -17,7 +17,7 @@ def test_demo_prints_cited_findings(
     runpy.run_path(str(DEMO), run_name="__main__")
 
     output = capsys.readouterr().out
-    assert "MCP tools: find_related_signals, get_source_passage" in output
+    assert "MCP tools: find_related_signals, generate_strategy, get_source_passage" in output
     assert "Order-flow imbalance predicts Short-term reversal" in output
     assert "Data: corpus_snapshot `snap:" in output
 

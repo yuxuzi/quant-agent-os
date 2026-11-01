@@ -598,7 +598,7 @@ tests.
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
 | `describe_template`, `check_spec` | App Factory | `read_local_data` (`check_spec` renders only into a temporary directory) | Days 31–45 (B-24) |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
-| `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
+| `generate_strategy` | Quant Research (cited `StrategySpec` from graph edges; deterministic, no model) | `read_local_data` | Done (B-17) |
 | `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
 | `analyze_risk` | Analytics | `read_local_data` | Days 61–90 |
 | `run_backtest` | Backtest service (new package) | `read_local_data`, `long_running` | After day 90 unless pulled forward |

@@ -32,8 +32,12 @@ It supports Markdown and text with front matter. PDF needs the extra
 `quant-agent-os-research[pdf]`, and its locations cite the page and line range. Scanned PDFs
 are reported, because OCR is not supported.
 
-To register the read-only tools (`find_related_signals`, `get_source_passage`) in a Quant-Agent-OS
-registry:
+To draft a strategy specification whose every item cites its passages, run
+`uv run quant-research strategy "trend following"`. Add `--json` to save the spec. What the
+corpus leaves undecided is listed as open questions, not filled with defaults.
+
+To register the read-only tools (`find_related_signals`, `get_source_passage`,
+`generate_strategy`) in a Quant-Agent-OS registry:
 
 ```python
 from quant_agent_os.tools import ToolRegistry

@@ -92,6 +92,7 @@ Try:
 - "Using quant-research, what is related to short-term reversal, and what supports it?"
 - "Which notes discuss momentum crashes? Quote the passages."
 - "What does my corpus say about protein folding?"
+- "Draft a strategy spec for short-term reversal from my notes."
 
 For the first question, Claude calls `find_related_signals` and receives:
 - **related entities**, each with its graph path, for example
@@ -101,6 +102,21 @@ For the first question, Claude calls `find_related_signals` and receives:
 - the **corpus snapshot id** the answer was read from.
 
 Claude can then call `get_source_passage` for a passage's full text before quoting it.
+
+For the strategy request, Claude calls `generate_strategy` and receives a spec. Each item
+cites its passage:
+- **signals:** short-term reversal correlates with liquidity provision, and order-flow
+  imbalance predicts it;
+- **risks:** it is partly explained by bid-ask bounce, and momentum contradicts it.
+
+The open questions say that no source ties it to a universe, dataset, test method, or metrics
+at the default confidence, and that parameters must be set from the key passages. Add
+`--min-confidence 0.4` to include weaker co-occurrence links, such as US equities. The spec is
+a draft to review, not code. To see it in the terminal, run:
+
+```bash
+uv run quant-research strategy "short-term reversal" --store ~/qr-demo/kb.db
+```
 
 For the off-topic question, the server returns no passages and a warning that nothing in the
 corpus matched. That is the correct answer, and Claude has nothing to cite.

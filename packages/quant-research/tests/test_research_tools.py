@@ -37,6 +37,7 @@ def test_mcp_results_equal_direct_calls(executor: ToolExecutor) -> None:
 
     assert [d["name"] for d in tool_definitions(executor)] == [
         "find_related_signals",
+        "generate_strategy",
         "get_source_passage",
     ]
     assert via_mcp["isError"] is False

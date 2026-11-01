@@ -16,6 +16,12 @@ from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import ToolRegistry
 from quant_research.application.retrieval import RelatedEntity, ResearchQuery
+from quant_research.application.strategy import (
+    NoEvidenceError,
+    StrategyRequest,
+    StrategyService,
+    UnknownFocusError,
+)
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
@@ -33,7 +39,9 @@ MCP_INSTRUCTIONS = (
     "Quant Research searches the user's own ingested research corpus (notes, papers, PDFs). "
     "Use find_related_signals for questions about factors, signals, strategies, and methods; "
     "cite every claim with the passage's source and location; call get_source_passage for the "
-    "full text of a passage. Results are retrieved evidence, not investment advice."
+    "full text of a passage. Use generate_strategy to draft a cited strategy specification for "
+    "one signal, factor, or strategy, and show the user its open questions. Results are "
+    "retrieved evidence, not investment advice."
 )
 
 StoreOption = Annotated[
@@ -159,6 +167,45 @@ def search(
     for warning in packet.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
     console.print(f"Corpus snapshot {packet.corpus_snapshot}.")
+
+
+@app.command()
+def strategy(
+    focus: Annotated[str, typer.Argument(help="A signal, factor, or strategy, or an entity id.")],
+    store: StoreOption = DEFAULT_STORE,
+    min_confidence: Annotated[float, typer.Option(help="Weakest relation to include.")] = 0.5,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the spec as JSON.")] = False,
+) -> None:
+    """Run `generate_strategy` locally (read-only) and show the cited strategy spec.
+
+    Save the spec with --json; every item links the passages that state it.
+    """
+    research = _open(store, None, None, read_only=True)
+    try:
+        draft = StrategyService(research.store, research.research.matcher).generate(
+            StrategyRequest(focus=focus, min_confidence=min_confidence)
+        )
+    except (UnknownFocusError, NoEvidenceError) as error:
+        raise _fail(error) from error
+    finally:
+        research.close()
+    spec = draft.spec
+    if as_json:
+        typer.echo(spec.model_dump_json(indent=2))
+        return
+    table = Table(title=f"{spec.name} ({spec.focus.id})")
+    for column in ("Section", "Statement", "Sources"):
+        table.add_column(column)
+    for section in ("signals", "universe", "data", "methods", "metrics", "risks", "context"):
+        for item in getattr(spec, section):
+            cited = "; ".join(f"{s.source_id} ({s.location})" for s in item.sources)
+            table.add_row(section, item.statement, cited)
+    console.print(table)
+    for question in spec.open_questions:
+        console.print(f"[magenta]open:[/magenta] {question}")
+    for warning in draft.warnings:
+        console.print(f"[yellow]warning:[/yellow] {warning}")
+    console.print(f"Corpus snapshot {spec.corpus_snapshot}.")
 
 
 @app.command("serve-mcp")
