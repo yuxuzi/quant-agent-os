@@ -7,8 +7,11 @@ profile); and leaves the result for the user to edit by hand or with an AI assis
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import stat
+import sys
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -86,11 +89,26 @@ def clone_pack(
         timeout=CLONE_TIMEOUT_SECONDS,
     )
     if not result.ok:
-        shutil.rmtree(destination, ignore_errors=True)
+        _remove_tree(destination)
         detail = (result.stderr_tail or result.stdout_tail).strip()[-500:]
         raise PackError(f"Cannot fetch {source} at {ref}: {detail or 'git failed'}")
-    shutil.rmtree(destination / ".git", ignore_errors=True)
+    _remove_tree(destination / ".git")
     return destination
+
+
+def _remove_tree(path: Path) -> None:
+    """Delete ``path``, including files git marks read-only (as it does on Windows)."""
+
+    def make_writable(function: Callable[..., object], target: str, _: object) -> None:
+        os.chmod(target, stat.S_IWRITE)
+        function(target)
+
+    if not path.exists():
+        return
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=make_writable)
+    else:  # pragma: no cover - Python 3.11
+        shutil.rmtree(path, onerror=make_writable)
 
 
 def _prune_components(pack: Path, profile: str, new_profile: str) -> list[str]:
