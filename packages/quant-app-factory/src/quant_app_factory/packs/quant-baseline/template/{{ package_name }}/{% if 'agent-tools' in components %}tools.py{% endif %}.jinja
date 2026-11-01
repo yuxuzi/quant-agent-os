@@ -1,0 +1,95 @@
+"""Quant-Agent-OS tools: this project's functions as typed, contract-checked tools."""
+
+from __future__ import annotations
+
+from typing import Any
+
+{% if profile == 'report' -%}
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
+
+from .report import render_markdown
+
+
+class ReportInput(BaseModel):
+    """A results document from a study or a backtest."""
+
+    results: dict[str, Any]
+
+
+class ReportOutput(BaseModel):
+    """The rendered Markdown report."""
+
+    markdown: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+@tool(name="render_report", description="Render a study or backtest result as Markdown.")
+def render_report(params: ReportInput) -> ReportOutput:
+    """Render ``params.results``."""
+    return ReportOutput(markdown=render_markdown(params.results))
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [render_report]
+{%- else -%}
+import numpy as np
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
+
+{% if profile == 'alpha-research' -%}
+from .data import Panel
+from .study import run_study
+{%- else -%}
+from .backtest import run
+from .data import Panel
+{%- endif %}
+
+
+class PriceInput(BaseModel):
+    """A small price panel passed inline: one row per bar, one column per asset."""
+
+    prices: list[list[float]] = Field(min_length=3, description="Prices, bars by assets.")
+    signal: str = Field(default="momentum", description="momentum or reversal.")
+    lookback: int = Field(default=20, ge=1, le=500)
+
+
+class ResultsOutput(BaseModel):
+    """A results document, as a study or backtest writes it."""
+
+    results: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def _panel(params: PriceInput) -> Panel:
+    prices = np.array(params.prices, dtype=np.float64)
+    count = prices.shape[1] if prices.ndim == 2 else 0
+    return Panel(
+        dates=[f"bar-{index:05d}" for index in range(prices.shape[0])],
+        assets=[f"ASSET{index:02d}" for index in range(count)],
+        prices=prices,
+    )
+{% if profile == 'alpha-research' %}
+
+@tool(name="evaluate_signal", description="Evaluate a signal on an inline price panel.")
+def evaluate_signal(params: PriceInput) -> ResultsOutput:
+    """Run a signal study."""
+    return ResultsOutput(results=run_study(_panel(params), params.signal, params.lookback))
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
+{%- else %}
+
+@tool(name="backtest_signal", description="Backtest a signal on an inline price panel.")
+def backtest_signal(params: PriceInput) -> ResultsOutput:
+    """Run a backtest with the project's default costs and trade lag."""
+    return ResultsOutput(results=run(_panel(params), params.signal, params.lookback))
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [backtest_signal]
+{%- endif %}
+{%- endif %}
+
+
+def registry() -> ToolRegistry:
+    """Return a registry with every tool, ready for a `Platform` or an MCP server."""
+    return ToolRegistry(TOOLS)

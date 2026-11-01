@@ -1,0 +1,68 @@
+[project]
+name = "{{ project_name }}"
+version = "0.1.0"
+description = "{{ description }}"
+readme = "README.md"
+requires-python = ">={{ python_version }}"
+license = "{{ license }}"
+authors = [{ name = "{{ author }}", email = "{{ email }}" }]
+dependencies = [
+    "numpy>=1.26",
+{%- if 'data-parquet' in components %}
+    "pyarrow>=15",
+{%- endif %}
+{%- if 'data-database' in components %}
+    "sqlalchemy>=2.0",
+{%- if db_kind == 'postgres' %}
+    "psycopg[binary]>=3.1",
+{%- elif db_kind == 'duckdb' %}
+    "duckdb>=1.0",
+    "duckdb-engine>=0.13",
+{%- endif %}
+{%- endif %}
+{%- if 'agent-tools' in components %}
+    "pydantic>=2.7",
+    "quant-agent-os",
+{%- endif %}
+]
+
+[project.scripts]
+{{ project_name }} = "{{ package_name }}.cli:main"
+
+[dependency-groups]
+dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]
+{%- if 'agent-tools' in components %}
+
+[tool.uv.sources]
+{%- if quant_agent_os_source.startswith('git+') %}
+quant-agent-os = { git = "{{ quant_agent_os_source[4:] }}" }
+{%- else %}
+quant-agent-os = { path = "{{ quant_agent_os_source }}", editable = true }
+{%- endif %}
+{%- endif %}
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "{{ package_name }}"
+module-root = ""
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+{%- if 'data-parquet' in components %}
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+{%- endif %}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

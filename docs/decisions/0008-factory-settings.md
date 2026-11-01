@@ -1,6 +1,6 @@
 # 0008: A small factory settings file instead of a configuration hub
 
-- Status: proposed
+- Status: accepted (implemented in B-24, 2026-10-31)
 - Date: 2026-10-31
 
 ## Context

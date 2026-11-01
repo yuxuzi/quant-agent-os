@@ -3,28 +3,56 @@
 from __future__ import annotations
 
 import getpass
+import re
+import shutil
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 
-from quant_agent_os.runs import SqliteRunStore
+from quant_agent_os.mcp import MCPUnavailableError, run_stdio
+from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
+from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, PermissionPolicy
+from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
 from quant_app_factory.application.factory import AppFactory, FactoryReport
-from quant_app_factory.domain.planner import PlanningError
+from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection
+from quant_app_factory.domain.planner import BUILT_IN_PACKS, PlanningError
 from quant_app_factory.domain.ports import ScaffoldError
-from quant_app_factory.domain.spec import AppSpec, SpecError, load_spec
+from quant_app_factory.domain.spec import (
+    RESERVED_ANSWERS,
+    AppSpec,
+    SpecError,
+    is_template_path,
+    load_spec,
+)
+from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
-from quant_app_factory.tools import CREATE_PERMISSIONS, factory_tools
+from quant_app_factory.infrastructure.settings_file import (
+    RegisteredTemplate,
+    SettingsError,
+    git_identity,
+    load_settings,
+    remove_value,
+    set_value,
+    settings_path,
+    update_settings,
+)
+from quant_app_factory.tools import CHECK_PERMISSIONS, CREATE_PERMISSIONS, factory_tools
 
 app = typer.Typer(
     help="Quant App Factory: generate tested, packaged Python applications.", no_args_is_help=True
 )
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
-DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "factory-runs.db"
+RUNS_HELP = "SQLite run store for the audit (default: factory-runs.db beside factory.toml)."
+
+
+def _runs_path(runs: Path | None) -> Path:
+    """Return the run store: ``--runs``, or factory-runs.db beside the settings file."""
+    return runs if runs is not None else settings_path().parent / "factory-runs.db"
+
 
 SpecArgument = Annotated[
     Path, typer.Argument(help="An app spec (TOML): name, kind, description, output_dir, ...")
@@ -37,7 +65,16 @@ def _fail(error: Exception | str) -> typer.Exit:
 
 
 def _factory() -> AppFactory:
-    return AppFactory(PytemplateUvScaffolder())
+    try:
+        settings = load_settings()
+    except SettingsError as error:
+        raise _fail(error) from error
+    return AppFactory(
+        PytemplateUvScaffolder(),
+        identity=lambda: settings.identity.merged(git_identity()),
+        connections=lambda: settings.connections,
+        templates=lambda: {name: entry.path for name, entry in settings.templates.items()},
+    )
 
 
 def _load(path: Path) -> AppSpec:
@@ -54,7 +91,8 @@ def _preview(factory: AppFactory, spec: AppSpec) -> bool:
     except (PlanningError, ScaffoldError) as error:
         raise _fail(error) from error
     console.print(
-        f"[bold]{spec.name}[/bold] ({spec.kind}) -> {preview.project_path}", soft_wrap=True
+        f"[bold]{spec.name}[/bold] ({spec.target[0]}/{spec.target[1]}) -> {preview.project_path}",
+        soft_wrap=True,
     )
     for reason in plan.reasons:
         console.print(f"  - {reason}", soft_wrap=True)
@@ -86,33 +124,50 @@ def create(
     checks: Annotated[
         bool, typer.Option("--checks/--no-checks", help="Run the generated project's checks.")
     ] = True,
-    runs: Annotated[Path, typer.Option("--runs", help="SQLite run store for the audit.")] = (
-        DEFAULT_RUNS
-    ),
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
+    check_connection: Annotated[
+        bool,
+        typer.Option(
+            "--check-connection",
+            help="After the checks, connect to the database with the variables the spec names.",
+        ),
+    ] = False,
 ) -> None:
     """Preview, ask for approval, then create the project and run its checks.
 
     Your confirmation is the approval: it is recorded for this exact spec and used once.
+    With --check-connection, the app's own connection check runs too, receiving only the
+    environment variables the spec's settings reference.
     """
     factory = _factory()
     app_spec = _load(spec)
     if _preview(factory, app_spec):
         raise typer.Exit(code=1)
+    pack_digest = factory.pack_digest(app_spec)  # the approval covers the pack just shown
     prompt = (
         "Create this project? It writes files, runs uv, and downloads packages"
         if checks
         else "Create this project? It writes files"
     )
+    if check_connection:
+        prompt += ", then connects to the database"
     if not yes and not typer.confirm(prompt, default=False):
         raise typer.Exit(code=1)
     policy = PermissionPolicy(
         granted=READ_ONLY | CREATE_PERMISSIONS, tool_allowlist=frozenset({"create_app"})
     )
     with Platform(
-        factory_tools(factory), policy=policy, run_store=SqliteRunStore(runs), actor="cli"
+        factory_tools(factory),
+        policy=policy,
+        run_store=SqliteRunStore(_runs_path(runs)),
+        actor="cli",
     ) as platform:
         waiting = platform.call(
-            "create_app", spec=app_spec.model_dump(mode="json"), run_checks=checks
+            "create_app",
+            spec=app_spec.model_dump(mode="json"),
+            run_checks=checks,
+            check_connection=check_connection,
+            expected_pack_digest=pack_digest,
         )
         run_id = waiting.run_id or ""
         if waiting.status != "approval_required":
@@ -122,13 +177,56 @@ def create(
     if record.status != "ok" or record.output is None:
         raise _fail(f"create_app {record.status}: {record.error} (run {run_id})")
     report = FactoryReport.model_validate(record.output)
-    _print_report(report, run_id, runs)
+    _print_report(report, run_id, _runs_path(runs))
     if report.checks_passed is False:
         raise typer.Exit(code=1)
 
 
-def _print_report(report: FactoryReport, run_id: str, runs: Path) -> None:
-    console.print(f"Created {report.project_path} with {report.scaffolder}.", soft_wrap=True)
+@app.command("check")
+def check_project(
+    spec: SpecArgument,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Approve without asking.")] = False,
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
+    check_connection: Annotated[
+        bool,
+        typer.Option("--check-connection", help="Also connect to the database (built-in only)."),
+    ] = False,
+) -> None:
+    """Re-run the checks of the project a spec created, for example after a failed check."""
+    factory = _factory()
+    app_spec = _load(spec)
+    prompt = "Re-run this project's checks? It runs uv and may download packages"
+    if check_connection:
+        prompt += ", then connects to the database"
+    if not yes and not typer.confirm(prompt, default=False):
+        raise typer.Exit(code=1)
+    policy = PermissionPolicy(
+        granted=READ_ONLY | CHECK_PERMISSIONS, tool_allowlist=frozenset({"check_app"})
+    )
+    with Platform(
+        factory_tools(factory),
+        policy=policy,
+        run_store=SqliteRunStore(_runs_path(runs)),
+        actor="cli",
+    ) as platform:
+        waiting = platform.call(
+            "check_app", spec=app_spec.model_dump(mode="json"), check_connection=check_connection
+        )
+        run_id = waiting.run_id or ""
+        if waiting.status != "approval_required":
+            raise _fail(f"Expected an approval request, got {waiting.status}: {waiting.error}")
+        platform.approve(run_id, approved_by=f"cli:{getpass.getuser()}")
+        (record,) = platform.resume(run_id)
+    if record.status != "ok" or record.output is None:
+        raise _fail(f"check_app {record.status}: {record.error} (run {run_id})")
+    report = FactoryReport.model_validate(record.output)
+    _print_report(report, run_id, _runs_path(runs), verb="Checked")
+    if report.checks_passed is False:
+        raise typer.Exit(code=1)
+
+
+def _print_report(report: FactoryReport, run_id: str, runs: Path, verb: str = "Created") -> None:
+    console.print(f"{verb} {report.project_path} with {report.scaffolder}.", soft_wrap=True)
     for check in report.checks:
         mark = "[green]ok[/green]" if check.ok else "[red]failed[/red]"
         console.print(f"  {mark}  {check.command}  ({check.duration_ms / 1000:.1f} s)")
@@ -139,6 +237,430 @@ def _print_report(report: FactoryReport, run_id: str, runs: Path) -> None:
     if report.checks_passed is None:
         console.print("Checks skipped.")
     console.print(f"Run {run_id} recorded in {runs}.", soft_wrap=True)
+
+
+IDENTITY_QUESTIONS = frozenset({"description", "author", "email", "python_version", "license"})
+_EXPRESSION = re.compile(r"^\{\{\s*(.*?)\s*\}\}$")
+_IN_COMPONENTS = re.compile(r"^'([\w-]+)'\s+(not\s+)?in\s+components$")
+_COMPARISON = re.compile(r"^(\w+)\s*(==|!=)\s*'([^']*)'$")
+
+
+def _applies(when: str | None, components: set[str], answers: dict[str, str]) -> bool:
+    """Evaluate simple conditions joined by ``and``: ``'x' in components`` and ``name == 'v'``.
+
+    Anything subtler counts as true, so the question is asked and `check_spec` decides.
+    """
+    if when is None:
+        return True
+    expression = _EXPRESSION.match(when.strip())
+    if expression is None:
+        return True
+    for clause in expression.group(1).split(" and "):
+        clause = clause.strip()
+        if member := _IN_COMPONENTS.match(clause):
+            if (member.group(1) in components) == bool(member.group(2)):
+                return False
+        elif compared := _COMPARISON.match(clause):
+            name, operator, expected = compared.groups()
+            if name not in answers:
+                return True
+            if (answers[name] == expected) != (operator == "=="):
+                return False
+        else:
+            return True
+    return True
+
+
+def _choose(label: str, options: list[str], default: str) -> str:
+    while True:
+        value = str(typer.prompt(label, default=default)).strip()
+        if value in options:
+            return value
+        errors.print(f"Choose one of: {', '.join(options)}.")
+
+
+@app.command()
+def new(
+    template: Annotated[
+        str | None, typer.Option(help="quant-baseline, agent-tool, bundled, or a pack path.")
+    ] = None,
+    profile: Annotated[str | None, typer.Option(help="The profile to build.")] = None,
+    out: Annotated[Path | None, typer.Option("--out", "-o", help="Spec file to write.")] = None,
+) -> None:
+    """Answer questions until the spec is ready, write it, and offer to create the project.
+
+    The questions come from the template itself; pytemplate-uv checks the result. Secrets are
+    asked for as environment-variable names, never values.
+    """
+    factory = _factory()
+    template = template or str(
+        typer.prompt(
+            "Template (quant-baseline, agent-tool, bundled, or a pack path)",
+            default="quant-baseline",
+        )
+    )
+    if is_template_path(template):
+        template = Path(template).expanduser().resolve().as_posix()
+    try:
+        catalog = factory.describe_template(template)
+    except ScaffoldError as error:
+        raise _fail(error) from error
+    for item in catalog.profiles:
+        console.print(f"  [bold]{item.id}[/bold]: {item.description}", soft_wrap=True)
+    profiles = [item.id for item in catalog.profiles]
+    profile = profile if profile in profiles else _choose("Profile", profiles, profiles[0])
+    described = factory.describe_template(template, profile)
+    chosen_profile = described.profiles[0]
+    name = str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
+    description = str(typer.prompt("One-line description"))
+    output_dir = Path(str(typer.prompt("Parent directory", default="."))).expanduser().resolve()
+    optional = {c.id: c for c in described.components if c.id in chosen_profile.optional_components}
+    for component in optional.values():
+        console.print(f"  [bold]{component.id}[/bold]: {component.description}", soft_wrap=True)
+    picked = str(typer.prompt("Optional components (comma-separated, blank for none)", default=""))
+    components = [c.strip() for c in picked.split(",") if c.strip()]
+    unknown = sorted(set(components) - set(optional))
+    if unknown:
+        raise _fail(f"Unknown components: {', '.join(unknown)}.")
+    selected = {*chosen_profile.default_components, *components}
+    spec: dict[str, Any] = {
+        "name": name,
+        "template": template,
+        "profile": profile,
+        "description": description,
+        "output_dir": output_dir.as_posix(),
+        "components": components,
+    }
+    answers: dict[str, str] = {}
+    effective: dict[str, str] = {}
+    connection_name = ""
+    saved = load_settings().connections
+    if DATABASE_COMPONENT in selected and saved:
+        console.print("Saved connections: " + ", ".join(sorted(saved)), soft_wrap=True)
+        connection_name = str(
+            typer.prompt("Use a saved connection (name, or blank for a new one)", default="")
+        ).strip()
+        if connection_name and connection_name not in saved:
+            raise _fail(f"No saved connection {connection_name!r}.")
+        if connection_name:
+            spec["connection"] = connection_name
+    for question in described.questions:
+        if question.name in IDENTITY_QUESTIONS:
+            continue
+        if connection_name and question.name.startswith("db_") and question.name != "db_query":
+            continue
+        if not _applies(question.when, selected, effective):
+            continue
+        default = question.default if question.default and "{{" not in question.default else ""
+        hint = f" [{'/'.join(question.choices)}]" if question.choices else ""
+        value = str(
+            typer.prompt(f"{question.name}: {question.help}{hint}", default=default)
+        ).strip()
+        if question.choices and value and value not in question.choices:
+            raise _fail(f"{question.name} must be one of {', '.join(question.choices)}.")
+        effective[question.name] = value or default
+        if not value or value == default:
+            continue
+        if question.name in RESERVED_ANSWERS:
+            spec[question.name] = value
+        else:
+            answers[question.name] = value
+    settings: dict[str, str] = {}
+    for component in described.components:
+        if component.id not in selected:
+            continue
+        if connection_name and component.id == DATABASE_COMPONENT:
+            continue  # the saved connection names its variables
+        for setting in component.settings:
+            if setting.secret:
+                variable = str(
+                    typer.prompt(
+                        f"{setting.name} is secret. Environment variable that will hold it "
+                        "(blank: decide later)",
+                        default="",
+                    )
+                ).strip()
+                if variable:
+                    settings[setting.name] = f"env:{variable}"
+            else:
+                value = str(
+                    typer.prompt(
+                        f"{setting.name}: {setting.description} (blank: later)", default=""
+                    )
+                ).strip()
+                if value:
+                    settings[setting.name] = value
+    spec["answers"] = answers
+    spec["settings"] = settings
+    if DATABASE_COMPONENT in selected and not connection_name:
+        _offer_to_save_connection(effective, settings)
+    check = factory.check_spec(spec)
+    if check.spec_toml is None:
+        for problem in check.problems:
+            errors.print(f"[red]{problem.field}: {problem.message}[/red]")
+        raise typer.Exit(code=1)
+    target = out or Path(f"{name}.toml")
+    if target.exists() and not typer.confirm(f"{target} exists. Replace it?", default=False):
+        raise typer.Exit(code=1)
+    target.write_text(check.spec_toml, "utf-8")
+    console.print(f"Wrote {target}.")
+    if not check.ready:
+        for problem in check.problems:
+            errors.print(f"[yellow]{problem.field}: {problem.message}[/yellow]")
+        errors.print(f"Edit {target}, then run `quant-factory plan {target}`.")
+        raise typer.Exit(code=1)
+    console.print(f"Ready: {len(check.files)} files.")
+    if check.unbound_settings:
+        console.print(
+            "Set at runtime in the app's environment: " + ", ".join(check.unbound_settings),
+            soft_wrap=True,
+        )
+    if typer.confirm(
+        "Create it now? It writes files, runs uv, and downloads packages", default=False
+    ):
+        create(target, yes=True, checks=True, runs=None, check_connection=False)
+
+
+def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str]) -> None:
+    """Offer to save the database answers as a named connection in factory.toml."""
+    name = str(
+        typer.prompt("Save this connection in factory.toml as (blank: don't save)", default="")
+    ).strip()
+    if not name:
+        return
+    fields: dict[str, Any] = {"kind": answers.get("db_kind", "sqlite")}
+    if fields["kind"] == "postgres":
+        port = answers.get("db_port", "")
+        fields |= {
+            "host": answers.get("db_host") or None,
+            "port": int(port) if port.isdigit() else None,
+            "user": answers.get("db_user") or None,
+            "schema": answers.get("db_schema") or None,
+            "sslmode": answers.get("db_sslmode") or None,
+        }
+    fields |= {
+        "database": answers.get("db_name") or None,
+        "read_only": answers.get("db_read_only", "yes") == "yes",
+        "url_env": settings.get("DATABASE_URL", "").removeprefix("env:") or None,
+        "password_env": settings.get("DATABASE_PASSWORD", "").removeprefix("env:") or None,
+    }
+    try:
+        connection = Connection.model_validate(
+            {key: value for key, value in fields.items() if value is not None}
+        )
+        update_settings(
+            lambda current: current.model_copy(
+                update={"connections": {**current.connections, name: connection}}
+            )
+        )
+    except (SettingsError, ValueError) as error:
+        errors.print(f"[yellow]Not saved: {error}[/yellow]")
+        return
+    console.print(f"Saved connection {name!r} in {settings_path()}.", soft_wrap=True)
+
+
+settings_app = typer.Typer(help="Show or change factory.toml (identity, connections, templates).")
+app.add_typer(settings_app, name="settings")
+
+
+@settings_app.command("show")
+def settings_show() -> None:
+    """Print the settings file. It holds no secrets, only environment-variable names."""
+    path = settings_path()
+    if not path.is_file():
+        console.print(f"No settings at {path} yet.")
+        return
+    console.print(f"# {path}", soft_wrap=True)
+    console.print(path.read_text("utf-8"), soft_wrap=True, markup=False)
+
+
+@settings_app.command("set")
+def settings_set(
+    key: Annotated[str, typer.Argument(help="identity.FIELD or connections.NAME.FIELD")],
+    value: Annotated[str, typer.Argument(help="The value; never a secret.")],
+) -> None:
+    """Set one field, such as `connections.research-pg.password_env RESEARCH_PG_PASSWORD`."""
+    try:
+        update_settings(lambda settings: set_value(settings, key, value))
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f"Set {key}.")
+
+
+@settings_app.command("remove")
+def settings_remove(
+    key: Annotated[str, typer.Argument(help="A field, or a whole connection or template.")],
+) -> None:
+    """Remove a field, a connection, or a template."""
+    try:
+        update_settings(lambda settings: remove_value(settings, key))
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f"Removed {key}.")
+
+
+template_app = typer.Typer(help="List, fork, check, and register template packs.")
+app.add_typer(template_app, name="template")
+
+
+def _register(name: str, entry: RegisteredTemplate) -> None:
+    try:
+        update_settings(
+            lambda current: current.model_copy(
+                update={"templates": {**current.templates, name: entry}}
+            )
+        )
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f'Registered template {name!r}: use template = "{name}" in a spec.')
+
+
+def _print_check(factory: AppFactory, template: str) -> bool:
+    result = factory.check_template(template)
+    if result.problem:
+        errors.print(f"[red]{result.problem}[/red]")
+    for item in result.profiles:
+        if item.ok:
+            console.print(f"  [green]ok[/green]  {item.profile} ({item.files} files)")
+        else:
+            console.print(f"  [red]failed[/red]  {item.profile}: {item.problem}", soft_wrap=True)
+    return result.ok
+
+
+@template_app.command("list")
+def template_list() -> None:
+    """List the built-in templates and the ones registered in factory.toml."""
+    factory = _factory()
+    for name in [*sorted(BUILT_IN_PACKS), "bundled"]:
+        profiles = ", ".join(p.id for p in factory.describe_template(name).profiles)
+        console.print(f"[bold]{name}[/bold] (built-in): {profiles}", soft_wrap=True)
+    for name, entry in sorted(load_settings().templates.items()):
+        pinned = f" at {entry.ref}" if entry.ref else ""
+        console.print(
+            f"[bold]{name}[/bold]: {entry.source}{pinned} -> {entry.path}", soft_wrap=True
+        )
+
+
+@template_app.command("fork")
+def template_fork(
+    source: Annotated[
+        str, typer.Argument(help="A built-in profile, such as quant-baseline/backtest.")
+    ],
+    destination: Annotated[Path, typer.Argument(help="New pack directory.")],
+    name: Annotated[str | None, typer.Option(help="Pack id and template name.")] = None,
+    profile_id: Annotated[str | None, typer.Option(help="Rename the profile.")] = None,
+    register: Annotated[
+        bool, typer.Option("--register/--no-register", help="Register it in factory.toml.")
+    ] = True,
+) -> None:
+    """Copy a built-in profile into your own pack, check it, and register it.
+
+    Edit the copy by hand or with an AI assistant: add questions to questions.yml, files to the
+    template, or components; then run `quant-factory template check`.
+    """
+    pack_name, _, profile = source.partition("/")
+    if pack_name not in BUILT_IN_PACKS or not profile:
+        raise _fail(f"Fork a built-in profile: {', '.join(sorted(BUILT_IN_PACKS))}/<profile>.")
+    pack_id = name or destination.name
+    try:
+        forked = fork_pack(
+            BUILT_IN_PACKS[pack_name], profile, destination, pack_id=pack_id, profile_id=profile_id
+        )
+    except PackError as error:
+        raise _fail(error) from error
+    console.print(f"Forked {source} into {forked}.", soft_wrap=True)
+    factory = _factory()
+    if not _print_check(factory, forked.resolve().as_posix()):
+        raise typer.Exit(code=1)
+    if register:
+        _register(
+            pack_id,
+            RegisteredTemplate(source=f"fork of {source}", path=forked.resolve().as_posix()),
+        )
+
+
+@template_app.command("check")
+def template_check(
+    template: Annotated[str, typer.Argument(help="A pack directory or a template name.")],
+) -> None:
+    """Load a pack and plan each of its profiles with default answers. Writes nothing."""
+    if is_template_path(template) or Path(template).is_dir():
+        template = Path(template).expanduser().resolve().as_posix()
+    if not _print_check(_factory(), template):
+        raise typer.Exit(code=1)
+
+
+@template_app.command("add")
+def template_add(
+    source: Annotated[str, typer.Argument(help="A pack directory, gh:org/repo, or a git URL.")],
+    name: Annotated[str, typer.Option(help="The name specs will use.")],
+    ref: Annotated[
+        str | None, typer.Option(help="Git tag or branch to pin (required for git sources).")
+    ] = None,
+) -> None:
+    """Register a pack. A git pack is fetched once at --ref and cached, so plans stay offline."""
+    local = Path(source).expanduser()
+    if local.is_dir() and ref is None:
+        path = local.resolve()
+        cached = False
+    else:
+        if ref is None:
+            raise _fail("Pin a git pack with --ref (a tag or branch).")
+        path = settings_path().parent / "packs" / name / ref
+        try:
+            clone_pack(source, ref, path)
+        except PackError as error:
+            raise _fail(error) from error
+        cached = True
+    factory = _factory()
+    if not _print_check(factory, path.as_posix()):
+        if cached:
+            shutil.rmtree(path, ignore_errors=True)
+        raise typer.Exit(code=1)
+    _register(name, RegisteredTemplate(source=source, ref=ref, path=path.as_posix()))
+
+
+MCP_INSTRUCTIONS = (
+    "Quant App Factory guides a user to a ready app spec. Call describe_template to learn what "
+    "a template asks, ask the user, and call check_spec until it is ready. Then give the user "
+    "spec_toml to save and ask them to run `quant-factory create FILE`, which asks for their "
+    "approval. Never put a secret in a spec: use env:NAME references."
+)
+
+
+@app.command("serve-mcp")
+def serve_mcp(
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
+    record: Annotated[
+        bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
+    ] = True,
+) -> None:
+    """Serve the read-only guiding tools (describe_template, check_spec, plan_app) over stdio.
+
+    create_app is not served: MCP clients cannot approve it yet, so people create from the
+    terminal. Messages go to stderr because stdout carries the protocol.
+    """
+    tools = [
+        spec for spec in factory_tools(_factory()) if spec.name not in ("create_app", "check_app")
+    ]
+    run_store: SqliteRunStore | None = None
+    try:
+        if record:
+            try:
+                run_store = SqliteRunStore(_runs_path(runs))
+            except RunStoreError as error:
+                errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
+        run_stdio(
+            ToolExecutor(ToolRegistry(tools), PermissionPolicy()),
+            name="quant-factory",
+            instructions=MCP_INSTRUCTIONS,
+            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
+        )
+    except MCPUnavailableError as error:
+        raise _fail(error) from error
+    finally:
+        if run_store is not None:
+            run_store.close()
 
 
 def main() -> None:

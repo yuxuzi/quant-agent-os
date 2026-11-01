@@ -1,0 +1,7 @@
+contract = 1
+id = "data-csv"
+name = "CSV price data"
+description = "Load a wide CSV of prices (a date column, then one column per asset)."
+version = "1"
+status = "experimental"
+compatible_profiles = ["alpha-research", "backtest"]

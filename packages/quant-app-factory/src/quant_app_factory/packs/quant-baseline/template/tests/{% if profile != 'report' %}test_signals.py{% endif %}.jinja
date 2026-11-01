@@ -1,0 +1,35 @@
+"""Signals never look ahead: changing future prices never changes a past signal."""
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.signals import SIGNALS, compute
+from {{ package_name }}.synthetic import generate_panel
+
+
+@pytest.mark.parametrize("name", sorted(SIGNALS))
+def test_future_prices_never_change_past_signals(name: str) -> None:
+    prices, _ = generate_panel(n_bars=120, n_assets=8)
+    changed = prices.copy()
+    changed[80:] *= 1.5
+
+    original, perturbed = compute(name, prices, 10), compute(name, changed, 10)
+
+    np.testing.assert_array_equal(original[:80], perturbed[:80])
+    assert not np.allclose(original[81:], perturbed[81:], equal_nan=True)
+
+
+def test_signals_are_undefined_until_their_lookback_is_available() -> None:
+    prices, _ = generate_panel(n_bars=30, n_assets=3)
+
+    signal = compute("momentum", prices, 10)
+
+    assert np.isnan(signal[:10]).all()
+    assert np.isfinite(signal[10:]).all()
+
+
+def test_unknown_signals_name_the_choices() -> None:
+    prices, _ = generate_panel(n_bars=30, n_assets=3)
+
+    with pytest.raises(ValueError, match="momentum"):
+        compute("magic", prices, 5)

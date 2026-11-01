@@ -85,7 +85,7 @@ in memory unless it is given a run store. What each part of a record holds:
   project. Any other program is reported and skipped.
 - **Ingestion.** Knowledge-store ingestion is an operator command, not an agent tool.
 
-## Secret references (proposed)
+## Secret references
 
 [Decisions 0007 and 0008](decisions/0008-factory-settings.md). App specs, the factory
 settings file, and generated apps hold environment-variable names, never secret values:
@@ -102,6 +102,11 @@ settings file, and generated apps hold environment-variable names, never secret 
   - the values, including URL-encoded forms, are redacted from its captured output.
 - **Database TLS.** Generated PostgreSQL connections verify the server certificate
   (`sslmode=verify-full`) unless the spec explicitly chooses a weaker mode.
+
+Generated database apps hold no credentials. They read `DATABASE_URL` or `DATABASE_PASSWORD`
+from their environment and open connections read-only by default: SQLite query-only, DuckDB
+read-only files, and PostgreSQL read-only transactions. A scan test checks that no secret
+reaches the generated files.
 
 ## Out of scope for the first release
 

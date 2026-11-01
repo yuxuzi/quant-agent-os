@@ -1,0 +1,53 @@
+"""Evaluation finds a planted signal and finds nothing in pure noise."""
+
+import numpy as np
+
+from {{ package_name }}.evaluation import (
+    forward_returns,
+    ic_decay,
+    ic_summary,
+    quantile_spread,
+    signal_autocorrelation,
+)
+from {{ package_name }}.synthetic import generate_panel
+
+
+def test_a_planted_signal_has_a_positive_ic_and_spread() -> None:
+    prices, signal = generate_panel(signal_strength=0.3)
+
+    summary = ic_summary(signal, prices)
+
+    assert summary["mean_rank_ic"] > 0.1
+    assert summary["rank_ic_t_stat"] > 5
+    assert np.nanmean(quantile_spread(signal, prices)) > 0
+
+
+def test_noise_has_no_ic() -> None:
+    prices, signal = generate_panel(signal_strength=0.0)
+
+    assert abs(ic_summary(signal, prices)["mean_rank_ic"]) < 0.03
+
+
+def test_the_planted_signal_decays_after_one_bar() -> None:
+    prices, signal = generate_panel(signal_strength=0.3)
+
+    decay = ic_decay(signal, prices, 3)
+
+    assert len(decay) == 3
+    assert decay[0] > 0.1
+    assert decay[0] > decay[2]
+
+
+def test_forward_returns_start_at_the_signal_bar() -> None:
+    prices = np.array([[100.0], [110.0], [121.0]])
+
+    forward = forward_returns(prices, 1)
+
+    np.testing.assert_allclose(forward[:2, 0], [0.1, 0.1])
+    assert np.isnan(forward[2, 0])
+
+
+def test_a_fresh_random_signal_has_no_autocorrelation() -> None:
+    _, signal = generate_panel()
+
+    assert abs(signal_autocorrelation(signal)) < 0.05

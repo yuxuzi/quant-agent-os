@@ -22,6 +22,11 @@ dependencies = [
 [project.scripts]
 quant-factory = "quant_app_factory.cli:main"
 
+[project.optional-dependencies]
+mcp = [
+    "quant-agent-os[mcp]",
+]
+
 [tool.uv.sources]
 quant-agent-os = { workspace = true }
 

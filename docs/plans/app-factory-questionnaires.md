@@ -48,6 +48,8 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
 ### Q1. Quant baseline templates and user packs (B-23), covering points 1 and 3
 
+**Done (2026-10-31).** Results are after the step text below.
+
 - **`AppSpec` gains** these fields, and `kind` stays as a shortcut, so existing specs keep
   working:
   - `template`: a built-in pack name, `bundled`, or a path to a local pack directory;
@@ -93,8 +95,31 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
     mypy, and pytest, including the bias tests.
   - A local user pack renders.
   - The existing specs and tests are unchanged.
+- **Results:**
+  - **Offline:** 25 new tests render every profile and component, check that answers reach the
+    code (`frequency = "weekly"` gives 52 periods a year), and render a minimal user pack.
+  - **Smoke test:** `alpha-research`, `backtest`, `report`, and `backtest` with `data-parquet`
+    and `agent-tools` all pass `uv sync`, ruff, mypy, and pytest, including the bias tests.
+  - **A metric bug the tests caught:** the template's first Sharpe returned about 7e16 for a
+    constant series, because floating-point noise made the deviation tiny rather than zero.
+    Flat series now count as constant, within a relative tolerance.
+  - **No hidden bias:** a momentum backtest on 40 random-walk seeds averages −0.15% a year
+    gross (standard error 0.34%, mean Sharpe −0.04). The `--demo` is a random walk and says
+    so.
+- **Deviations:**
+  - **`settings` is not added yet.** The runtime-settings field moves to Q2 and Q3, where
+    something reads it.
+  - **Offered and explicit answers are kept apart.** Identity fields (description, author,
+    email, Python version, license) are offered and kept only where a profile asks for them,
+    so user packs need not ask for them. Explicit `answers` are passed as given, and
+    pytemplate-uv rejects one that a profile does not ask for.
+  - **One template tree.** All three profiles share one template tree
+    (`_subdirectory: "template"`), and profile-only files have names that render empty for
+    other profiles. This is what keeps `metrics` a single source.
 
 ### Q2. Guided specs and factory settings (B-24), covering points 4 and 6
+
+**Done (2026-10-31).** Results are after the step text below.
 
 - **Two read-only tools** do the guiding, so an MCP client such as Claude holds the
   conversation:
@@ -136,8 +161,28 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
     accepts.
   - A secret-looking value in a spec or the settings file is refused.
   - Identity falls back to git config.
+- **Results:**
+  - **Tests:** 30 new tests, covering secrets, spec round trips, `describe_template`, each
+    kind of `check_spec` problem, identity, the settings file, `new` (scripted, including
+    secret settings asked as variable names), `settings`, and `serve-mcp`.
+  - **`serve-mcp`** was checked over a real stdio subprocess. It serves `describe_template`,
+    `check_spec`, and `plan_app`, and not `create_app`.
+  - **A real terminal run of `new`** wrote a ready `alpha-research` spec, and the settings file
+    refused a password while accepting `password_env`.
+- **Additions beyond the step text:**
+  - **`quant-factory serve-mcp`**, so Claude can use the guide.
+  - **`spec_toml` in `check_spec`'s output,** for the person to save.
+  - **The `settings` field.** It was moved here from Q1. `check_spec` checks it against the
+    settings the selected components declare: unknown names are problems, declared secrets
+    must be references, and unset ones are listed as `unbound_settings`.
+  - **Optional author, email, and license.** These spec fields are now optional, filled from
+    `factory.toml`, then `git config`, then the template's own default. They are applied at
+    plan time and not written into the spec.
+  - **`connection = "name"` in specs** moves to Q3, where the database component uses it.
 
 ### Q3. Database guidance (B-25), covering point 5
+
+**Done (2026-10-31).** Results are after the step text below.
 
 - **The `data-database` component** in `quant-baseline`:
   - questions: `db_kind` (`postgres`, `sqlite`, or `duckdb`) and `db_read_only` (default
@@ -178,7 +223,39 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - A scan test finds no secret values in the generated files.
   - In the smoke test, `check-connection` succeeds against a SQLite or DuckDB file.
 
+- **Results:**
+  - **Tests:** 18 new offline tests, covering saved connections, unknown connections, the
+    component's reach (not `report`), a scan proving no secret reaches the generated files, the
+    connection check receiving only `DATABASE_PASSWORD` with its value redacted, the condition
+    evaluator, and `new` with a saved connection and with a new SQLite database it saves.
+  - **Variants:** SQLite, PostgreSQL (with a schema), and DuckDB (with agent-tools) each pass
+    `uv sync`, ruff, mypy, and pytest. The DuckDB variant also proves a read-only DuckDB file.
+  - **Smoke test:** a database backtest on a SQLite file passes its checks, then the real
+    `--check-connection`.
+  - **By hand:** `--database` loaded 300 bars of 10 assets from SQLite and ran the backtest.
+    Against an absent PostgreSQL server, `--check-connection` failed cleanly with exit 1.
+- **Bugs found:**
+  - **Database files in `report` projects.** A component's files are excluded only where a
+    profile offers the component, and `report` does not offer it at all. The files now have
+    names that render empty unless the component is selected.
+  - **Long user values.** A long database path or query broke the generated project's line
+    limit. Those config lines now carry `# noqa: E501`.
+- **Deviations:**
+  - **Fixed variable names.** The generated app always reads `DATABASE_URL` (full URL, wins)
+    and `DATABASE_PASSWORD`. A spec's `[settings]` binding, such as
+    `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`, tells the factory where the secret lives
+    on the operator's machine. It is used only to pass that one value to the approved
+    connection check.
+  - **No `settings.py` or pydantic-settings.** `database.py` reads the environment directly,
+    which saves a dependency.
+  - **The command is `--check-connection`**, as a flag rather than a subcommand.
+  - **Read-only enforcement** depends on the database: SQLite runs query-only, DuckDB opens
+    files read-only, and PostgreSQL uses read-only transactions. Tests prove the first two
+    offline.
+
 ### Q4. Template forks, git packs, and the walkthrough (B-26), covering point 2
+
+**Done (2026-10-31).** Results are after the step text below.
 
 - **`quant-factory template fork <pack>/<profile> <dest> [--name ID]`** copies a built-in
   profile, its questions, and the components it uses into a new user pack. It renames the
@@ -203,6 +280,24 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - A forked pack checks, renders, and passes its smoke checks.
   - A git pack (a local bare repository in tests) registers and plans offline.
   - The walkthrough is reproduced from a clean checkout.
+
+- **Results:**
+  - **Tests:** 15 new offline tests, covering forks (one profile kept, components pruned, a
+    renamed profile still rendering its own files, the agent-tool profile), registered
+    names, `check_template` on every built-in and on a broken pack, a pinned git pack fetched
+    from a local repository without history, and the CLI.
+  - **Smoke test:** a forked backtest with an added question builds a project that passes its
+    checks.
+  - **The walkthrough** (walkthrough §11) ran end to end on a fresh clone: settings, `new`
+    with a saved connection, `create --check-connection`, study, backtest, report, and fork.
+- **Bug found:** the factory's default run store ignored `QUANT_FACTORY_SETTINGS`. It now
+  defaults to `factory-runs.db` beside `factory.toml`.
+- **Deviations:**
+  - **Built-in profiles only.** `template fork` forks built-in profiles, whose layout App
+    Factory controls. Forking an arbitrary pack waits for pytemplate-uv's own authoring
+    (O-12).
+  - **A fork can rename its profile** (`--profile-id`), and references in template file names
+    and `.jinja` contents follow the new name.
 
 ## Gate
 

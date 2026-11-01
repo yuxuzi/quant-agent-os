@@ -1,0 +1,111 @@
+"""A daily vectorised backtest of signal-driven weights, with lagged trades and costs.
+
+Timing convention: a signal is known at the close of bar t. With ``lag`` bars of delay, the
+weights built from it are first held over bar t + 1 + lag. ``lag=0`` trades at the signal's
+own close (the most optimistic choice); the default of 1 trades at the next close.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from . import config, signals
+from .data import Panel
+from .metrics import FloatArray, summarize, turnover
+
+LIMITATIONS = [
+    "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
+    "the data provider's responsibility.",
+    "Costs are linear in turnover; there is no market impact, borrow cost, or capacity limit.",
+    "This is a simulation. It places no orders and connects to no broker.",
+]
+
+
+def target_weights(signal: FloatArray) -> FloatArray:
+    """Dollar-neutral weights from cross-sectional signal ranks, with gross exposure 1."""
+    weights = np.zeros(signal.shape)
+    for bar in range(signal.shape[0]):
+        valid = np.isfinite(signal[bar])
+        if int(valid.sum()) < 2:
+            continue
+        values = signal[bar][valid]
+        order = np.argsort(np.argsort(values, kind="mergesort"), kind="mergesort")
+        centred = order - order.mean()
+        gross = float(np.abs(centred).sum())
+        if gross > 0.0:
+            weights[bar, valid] = centred / gross
+    return weights
+
+
+def run_backtest(
+    prices: FloatArray, weights: FloatArray, *, cost_bps: float, lag: int = 1
+) -> dict[str, FloatArray]:
+    """Return per-bar gross and net returns, turnover, and the weights actually held."""
+    if lag < 0:
+        raise ValueError("lag must be zero or more bars.")
+    asset_returns = np.zeros(prices.shape)
+    asset_returns[1:] = prices[1:] / prices[:-1] - 1.0
+    held = np.zeros(weights.shape)
+    shift = 1 + lag
+    if weights.shape[0] > shift:
+        held[shift:] = weights[:-shift]
+    gross = np.nansum(held * np.nan_to_num(asset_returns), axis=1)
+    traded = np.zeros(held.shape[0])
+    traded[1:] = np.abs(np.diff(held, axis=0)).sum(axis=1) / 2.0
+    net = gross - traded * cost_bps / 10_000.0
+    return {"gross": gross, "net": net, "turnover": traded, "held": held}
+
+
+def walk_forward_splits(
+    n_bars: int, train: int, test: int, step: int | None = None
+) -> list[tuple[range, range]]:
+    """Rolling ``(train, test)`` bar ranges; every test range starts after its train range."""
+    if train <= 0 or test <= 0:
+        raise ValueError("train and test must be positive numbers of bars.")
+    splits = []
+    start = 0
+    while start + train + test <= n_bars:
+        splits.append((range(start, start + train), range(start + train, start + train + test)))
+        start += step or test
+    return splits
+
+
+def run(
+    panel: Panel,
+    signal_name: str = "momentum",
+    lookback: int = 20,
+    cost_bps: float = config.COST_BPS,
+    lag: int = config.TRADE_LAG,
+) -> dict[str, Any]:
+    """Backtest ``signal_name`` on ``panel`` and return a results document."""
+    signal = signals.compute(signal_name, panel.prices, lookback)
+    result = run_backtest(panel.prices, target_weights(signal), cost_bps=cost_bps, lag=lag)
+    periods = config.PERIODS_PER_YEAR
+    return {
+        "kind": "backtest",
+        "title": f"{signal_name} (lookback {lookback}) long-short backtest",
+        "period": [panel.dates[0], panel.dates[-1]],
+        "bars": len(panel.dates),
+        "assets": len(panel.assets),
+        "parameters": {
+            "signal": signal_name,
+            "lookback": lookback,
+            "cost_bps": cost_bps,
+            "lag": lag,
+        },
+        "metrics": {
+            **summarize(result["net"], periods),
+            "gross_annualized_return": summarize(result["gross"], periods)["annualized_return"],
+            "average_turnover": turnover(result["held"]),
+        },
+        "series": {"net_returns": [float(value) for value in result["net"]]},
+        "conventions": {
+            "periods_per_year": periods,
+            "timing": f"signal at close t, held from bar t + {1 + lag}",
+            "costs": f"{cost_bps} bps per unit of one-way turnover",
+            "weights": "dollar-neutral ranks, gross exposure 1",
+        },
+        "limitations": LIMITATIONS,
+    }

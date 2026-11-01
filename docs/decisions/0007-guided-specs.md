@@ -1,6 +1,6 @@
 # 0007: Guided specs are stateless; the spec file is the draft
 
-- Status: proposed
+- Status: accepted (implemented in B-24, 2026-10-31)
 - Date: 2026-10-31
 
 ## Context

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
+  `QUANT_FACTORY_SETTINGS` moves both.
+
 - Serving `find_related_signals` with a hosted embedder now needs `network` both granted and
   pre-approved (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`), because each `network` call needs
   an approval.
@@ -33,6 +36,57 @@ All notable changes to this project are documented here. The format follows
   gives the install hint instead of a traceback.
 
 ### Added
+
+- App Factory review fixes:
+  - **Connection check.** It runs only for built-in templates, and redacts URL-encoded forms
+    of secrets too.
+  - **TLS.** Generated PostgreSQL connections verify the server certificate by default
+    (`sslmode=verify-full`).
+  - **Pack drift.** The approval for `create_app` binds a digest of the previewed pack, and a
+    pack changed after its preview is refused.
+  - **Retries.** `quant-factory check` (the `check_app` tool, approved per call) re-runs an
+    existing project's checks.
+
+- Template forks and registered packs (B-26):
+  - `quant-factory template fork` copies a built-in profile into your own pack, optionally
+    renaming it, then checks and registers it.
+  - `template check` loads a pack and plans every profile.
+  - `template add` registers a local pack, or a git pack pinned to a tag and cached locally.
+  - `template list` shows the built-in and registered templates.
+  - Specs can name a registered template.
+  - Walkthrough §11: settings, questionnaire, study, backtest, report, and fork, on database
+    prices.
+
+- Database guidance (B-25):
+  - **The `data-database` component** of `alpha-research` and `backtest` loads prices with
+    one read-only query from PostgreSQL, SQLite, or DuckDB.
+  - **The generated app** reads credentials only from `DATABASE_URL` or `DATABASE_PASSWORD`,
+    ships a `.env.example`, and has a `--check-connection` flag.
+  - **Saved connections.** Specs can name a connection saved in `factory.toml`.
+    `quant-factory new` offers saved connections and saves new ones.
+  - **The factory's check.** `quant-factory create --check-connection` passes only the
+    referenced variables and redacts them from the output.
+
+- Guided specs and factory settings (B-24; decisions 0007 and 0008 accepted):
+  - **Read-only tools.** `describe_template` lists a template's profiles, components,
+    questions, and runtime settings, with secret ones marked. `check_spec` reports `ready` with
+    the exact files and the spec as TOML, or every problem.
+  - **Commands.** `quant-factory new` asks a template's questions in the terminal.
+    `quant-factory serve-mcp` serves the guiding tools to Claude (not `create_app`).
+  - **Factory settings.** `quant-factory settings` edits `~/.quant-agent-os/factory.toml`:
+    identity, plus connections that hold environment-variable names, never secrets.
+  - **Specs.** `AppSpec.settings` holds runtime settings as values or `env:NAME` references.
+    Author, email, and license default from the settings file, then `git config`.
+
+- Quant baseline templates (B-23):
+  - **Profiles.** App Factory's `quant-baseline` pack has `alpha-research`, `backtest`, and
+    `report`, with the kinds of the same names. The projects are portable numpy projects with
+    one `metrics` module and known-answer tests.
+  - **Bias tests.** Every project checks for look-ahead, the trade lag, and cost ordering, and
+    carries a `LIMITATIONS.md`.
+  - **Components.** Optional `data-parquet` and `agent-tools`.
+- **App specs.** `AppSpec` accepts `template` (a built-in pack, `bundled`, or the path of
+  your own pack), `profile`, and `answers`. `kind` stays a shortcut.
 
 - Planned quant templates and a guided App Factory (`docs/plans/app-factory-questionnaires.md`,
   backlog B-23–B-26, proposed decisions 0007–0009):
