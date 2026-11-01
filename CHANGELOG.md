@@ -37,6 +37,9 @@ All notable changes to this project are documented here. The format follows
   `beta-neutral` (zero beta to the equal-weight market, rolling betas), or `long-only` (top
   quantile, with information ratio and tracking error against the equal-weight market). Every
   backtest reports its realised beta.
+- Quant research reports compare runs (B-28 S5): `report RUN ...` puts parameters, metrics,
+  calendar-year returns, and provenance side by side, and every report with a return series
+  gets an SVG equity curve and a calendar-year table.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

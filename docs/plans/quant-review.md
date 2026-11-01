@@ -235,6 +235,19 @@ Every backtest and walk-forward reports its realised beta. Known answers:
 - **Rolling betas.** They recover the planted betas and never change when later prices do.
 - **Formulas.** IR, TE, active return, and beta match hand calculations.
 
+**S5 result.** Done as planned, with the chart written as a file. `report` takes nothing (the
+latest run), one run, or several:
+- **One run.** The report gains a calendar-year table and an equity curve.
+- **Several runs.** `results/comparison.md` puts runs, parameters, metrics, and calendar years
+  side by side, with one chart. It notes when the runs used different data, merges their
+  limitations, and keeps the interpretation section empty.
+
+The SVG is hand-written: no plotting dependency, break-even line, one labelled curve per run,
+and dates on the axis. It is a separate `*-equity.svg` file next to the report, not inline,
+because Markdown viewers such as GitHub strip inline SVG. Run names drop their timestamps when
+the labels alone tell the runs apart. Structural golden tests cover the comparison's sections,
+rows, and fingerprint note, the chart's polylines and legend, and compounded calendar years.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

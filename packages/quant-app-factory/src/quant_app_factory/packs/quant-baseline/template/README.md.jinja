@@ -28,7 +28,9 @@ Each run gets its own folder, `results/<UTC time>-<kind>-<signal>/` (or `--label
 never overwrites another. It holds `results.json`, with the metrics, series, parameters, a
 SHA-256 fingerprint of the price data, the code version (`git describe` in a git checkout),
 and the time, plus `config.toml`, the exact parameters: `--config results/<run>/config.toml`
-repeats the run. `report RUN_FOLDER` renders a specific run.
+repeats the run. `report RUN_FOLDER` renders a specific run, with a calendar-year table and an
+equity curve (`report-equity.svg`). `report RUN_A RUN_B ...` compares runs side by side, with
+parameters, metrics, calendar years, provenance, and one chart, in `results/comparison.md`.
 
 `exposure` chooses the book. `dollar-neutral` (the default) ranks the signal into zero net
 dollars. `beta-neutral` also removes beta to the equal-weight market, using rolling betas from

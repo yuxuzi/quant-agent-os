@@ -62,6 +62,20 @@ def test_exposure_modes_run_and_report_their_metrics(exposure: str) -> None:
     assert ("information_ratio" in results["metrics"]) == (exposure == "long-only")
 
 
+def test_report_compares_several_runs_with_a_chart() -> None:
+    assert main(["backtest", "--demo", "--label", "daily", "--rebalance-every", "1"]) == 0
+    assert main(["backtest", "--demo", "--label", "monthly"]) == 0
+    runs = sorted(str(path) for path in Path("results").iterdir())
+
+    assert main(["report", *runs]) == 0
+
+    comparison = Path("results/comparison.md").read_text()
+    assert comparison.startswith("# Comparison of 2 runs")
+    assert "| | daily | monthly |" in comparison  # labels, without the timestamps
+    assert "| rebalance every | 1 |" in comparison
+    assert Path("results/comparison-equity.svg").read_text().count("<polyline") == 2
+
+
 def test_runs_never_overwrite_each_other_and_take_labels() -> None:
     assert main(["study", "--demo"]) == 0
     assert main(["study", "--demo", "--label", "second try"]) == 0
