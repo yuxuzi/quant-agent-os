@@ -14,6 +14,9 @@ Conventions used by every function here:
   resume, then the whole move over the gap. An asset whose prices stop before the panel ends
   is delisted: its first missing bar returns ``delisting_return``, and later bars 0.
 - Turnover is one-way: half the sum of absolute weight changes in a bar, averaged over bars.
+- t-statistics of a mean use Newey-West (HAC) standard errors with a Bartlett kernel, so
+  serial correlation, including the overlap of multi-bar forward returns, does not inflate
+  them. The default lag count is ``floor(4 * (n / 100) ** (2 / 9))`` (Newey and West, 1994).
 - Information coefficients compare a signal at bar t with the forward return that starts at t.
   NaN pairs are ignored, and bars with fewer than three valid pairs are NaN.
 """
@@ -118,6 +121,32 @@ def turnover(weights: FloatArray) -> float:
         return 0.0
     changes = np.abs(np.diff(values, axis=0)).sum(axis=1) / 2.0
     return float(np.mean(changes))
+
+
+def newey_west_lags(n: int) -> int:
+    """The Newey-West (1994) rule-of-thumb lag count for ``n`` observations."""
+    return int(math.floor(4.0 * (n / 100.0) ** (2.0 / 9.0))) if n > 0 else 0
+
+
+def newey_west_t_stat(values: FloatArray, lags: int | None = None) -> float:
+    """t-statistic of the mean of ``values`` with Newey-West (HAC) standard errors.
+
+    ``lags`` defaults to `newey_west_lags`; ``lags=0`` gives the plain t-statistic with a
+    population variance. NaN values are dropped; NaN when there is nothing to test.
+    """
+    data = _finite(values)
+    n = data.size
+    if n < 2:
+        return math.nan
+    count = newey_west_lags(n) if lags is None else max(0, min(lags, n - 1))
+    deviations = data - float(np.mean(data))
+    variance = float(deviations @ deviations) / n
+    for lag in range(1, count + 1):
+        weight = 1.0 - lag / (count + 1.0)
+        variance += 2.0 * weight * float(deviations[lag:] @ deviations[:-lag]) / n
+    if variance <= FLAT * max(1.0, float(np.mean(data)) ** 2):
+        return math.nan
+    return float(np.mean(data)) / math.sqrt(variance / n)
 
 
 def ranks(values: FloatArray) -> FloatArray:

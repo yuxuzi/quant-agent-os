@@ -18,7 +18,14 @@ import math
 import numpy as np
 
 from . import config
-from .metrics import FloatArray, bar_returns, information_coefficient, ranks
+from .metrics import (
+    FloatArray,
+    bar_returns,
+    information_coefficient,
+    newey_west_lags,
+    newey_west_t_stat,
+    ranks,
+)
 
 
 def forward_returns(
@@ -48,20 +55,24 @@ def forward_returns(
 def ic_summary(
     signal: FloatArray, prices: FloatArray, horizon: int = 1, lag: int = config.TRADE_LAG
 ) -> dict[str, float]:
-    """Mean IC, mean rank IC, their t-statistic, and the share of bars with a positive IC."""
+    """Mean IC, mean rank IC, its HAC t-statistic, and the share of bars with a positive IC."""
     forward = forward_returns(prices, horizon, lag)
     pearson = information_coefficient(signal, forward)
     spearman = information_coefficient(signal, forward, rank=True)
     valid = spearman[np.isfinite(spearman)]
-    deviation = float(np.std(valid, ddof=1)) if valid.size > 1 else 0.0
-    t_stat = float(np.mean(valid)) / deviation * math.sqrt(valid.size) if deviation else math.nan
     return {
         "mean_ic": float(np.nanmean(pearson)) if np.isfinite(pearson).any() else math.nan,
         "mean_rank_ic": float(np.mean(valid)) if valid.size else math.nan,
-        "rank_ic_t_stat": t_stat,
+        "rank_ic_t_stat": hac_t_stat(valid, horizon),
         "positive_rank_ic_share": float(np.mean(valid > 0.0)) if valid.size else math.nan,
         "bars": float(valid.size),
     }
+
+
+def hac_t_stat(ics: FloatArray, horizon: int) -> float:
+    """Newey-West t-statistic of a mean IC; the lag count covers the ``horizon - 1`` overlap."""
+    valid = ics[np.isfinite(ics)]
+    return newey_west_t_stat(valid, max(horizon - 1, newey_west_lags(valid.size)))
 
 
 def quantile_spread(
@@ -82,13 +93,18 @@ def quantile_spread(
 
 def ic_decay(
     signal: FloatArray, prices: FloatArray, max_horizon: int, lag: int = config.TRADE_LAG
-) -> list[float]:
-    """Mean rank IC at horizons 1 to ``max_horizon`` bars, each measured from the trade."""
-    decay = []
+) -> dict[str, list[float]]:
+    """Mean rank IC and its HAC t-statistic at horizons 1 to ``max_horizon`` bars.
+
+    Each horizon is measured from the trade. Forward returns over h bars overlap for h - 1
+    bars, so neighbouring ICs are correlated; the t-statistics account for it.
+    """
+    means, t_stats = [], []
     for horizon in range(1, max_horizon + 1):
         ic = information_coefficient(signal, forward_returns(prices, horizon, lag), rank=True)
-        decay.append(float(np.nanmean(ic)) if np.isfinite(ic).any() else math.nan)
-    return decay
+        means.append(float(np.nanmean(ic)) if np.isfinite(ic).any() else math.nan)
+        t_stats.append(hac_t_stat(ic, horizon))
+    return {"mean_rank_ic": means, "t_stat": t_stats}
 
 
 def signal_autocorrelation(signal: FloatArray, lag: int = 1) -> float:

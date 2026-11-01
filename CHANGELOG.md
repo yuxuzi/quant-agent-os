@@ -33,6 +33,10 @@ All notable changes to this project are documented here. The format follows
   sets the schedule. Trades are the target minus the drifted holdings, so costs now include
   the drift that a constant-weight book must trade back, which was modelled as zero. Results
   add `annual_turnover`.
+- Quant baseline IC t-statistics use Newey-West (HAC) standard errors (B-27 R4), with at
+  least horizon - 1 lags, so overlapping forward returns no longer inflate them. IC decay
+  reports a t-statistic at each horizon (`ic_decay_mean_rank_ic`, `ic_decay_t_stat`), which
+  replaces the `ic_decay` series.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

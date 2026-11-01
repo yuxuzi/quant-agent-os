@@ -6,11 +6,13 @@ import pytest
 from {{ package_name }}.config import TRADE_LAG
 from {{ package_name }}.evaluation import (
     forward_returns,
+    hac_t_stat,
     ic_decay,
     ic_summary,
     quantile_spread,
     signal_autocorrelation,
 )
+from {{ package_name }}.metrics import newey_west_t_stat
 from {{ package_name }}.synthetic import generate_panel
 
 
@@ -49,9 +51,16 @@ def test_the_planted_signal_decays_after_one_bar() -> None:
 
     decay = ic_decay(signal, prices, 3)
 
-    assert len(decay) == 3
-    assert decay[0] > 0.1
-    assert decay[0] > decay[2]
+    assert len(decay["mean_rank_ic"]) == len(decay["t_stat"]) == 3
+    assert decay["mean_rank_ic"][0] > 0.1
+    assert decay["mean_rank_ic"][0] > decay["mean_rank_ic"][2]
+    assert decay["t_stat"][0] > 5
+
+
+def test_long_horizon_t_stats_cover_the_overlap() -> None:
+    ics = np.random.default_rng(1).standard_normal(60) + 0.2
+
+    assert hac_t_stat(ics, horizon=30) == newey_west_t_stat(ics, lags=29)
 
 
 def test_forward_returns_start_at_the_trade_bar() -> None:

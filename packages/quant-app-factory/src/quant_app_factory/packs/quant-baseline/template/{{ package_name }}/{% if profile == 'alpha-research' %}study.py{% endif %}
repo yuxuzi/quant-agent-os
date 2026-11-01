@@ -50,11 +50,15 @@ def run_study(
             "signal_autocorrelation": signal_autocorrelation(signal),
             **{f"spread_{key}": value for key, value in spread.items()},
         },
-        "series": {"ic_decay": ic_decay(signal, panel.prices, config.MAX_HORIZON, lag)},
+        "series": {
+            f"ic_decay_{key}": values
+            for key, values in ic_decay(signal, panel.prices, config.MAX_HORIZON, lag).items()
+        },
         "conventions": {
             "periods_per_year": config.PERIODS_PER_YEAR,
             "timing": f"signal at close t, traded at close t + {lag}, as in a backtest",
             "ic": f"signal at bar t against the return from t + {lag} to t + {lag} + h",
+            "t_stat": "Newey-West (HAC), lags at least the horizon minus 1",
             "spread": f"top minus bottom of {quantiles} signal quantiles, one bar after the trade",
             "delistings": f"an asset whose prices stop earns {config.DELISTING_RETURN:+.0%} once",
         },

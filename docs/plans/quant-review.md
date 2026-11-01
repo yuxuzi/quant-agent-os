@@ -120,6 +120,13 @@ month. On the demo panel (momentum, 20 bars), average turnover falls from 16.3% 
 0.12% a year at 10 bps, where it was modelled as zero. A random walk across 40 seeds still
 shows no edge: mean gross return -0.40% a year, standard error 0.34%.
 
+**R4 result.** Done as planned. `metrics.newey_west_t_stat` (Bartlett kernel, Newey-West
+1994 lag rule) is checked against a hand-computed series and against the AR(1) closed form
+(HAC t about 0.58 of the naive t at phi = 0.5). IC t-statistics use at least horizon - 1
+lags. On a random walk, where no signal has an edge, 20-bar momentum had a naive rank-IC t of
+-4.6 at a 5-bar horizon; the HAC t is -2.5, and -1.8 at 10 bars. The `ic_decay` series
+became `ic_decay_mean_rank_ic` and `ic_decay_t_stat`.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in
