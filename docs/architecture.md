@@ -139,7 +139,7 @@ Orchestrator┘                        validation·limits·record               
 | `quant_agent_os` (repo root) | Core | pydantic, typer, rich; optional extras | `quant-agent-os` |
 | `quant_research` (`packages/quant-research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
 | `quant_app_factory` (`packages/quant-app-factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
-| Quant analytics (own repository) | Deterministic metrics | Numerical libraries only | Name open |
+| `quant_analytics` (`packages/quant-analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `quant-agent-os-analytics` (name open) |
 | `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | `pytemplate-uv` |
 
 Rules:
@@ -155,7 +155,8 @@ Repository strategy (**proposed**, [decision 0003](decisions/0003-brand-and-prod
 one repository and one uv workspace. Core stays at the root, where it already works, and each
 product is a workspace member with its own `pyproject.toml`, tests, version, and changelog. This
 keeps Core and the products independently installable and testable without moving functioning
-code. Analytics and `pytemplate-uv` keep their own repositories and release cycles.
+code. `pytemplate-uv` keeps its own repository and release cycle. Analytics started in the
+workspace (decision 0010) and moves out when it has its own release cycle.
 
 Core's internal import order is **confirmed**:
 `tools` → `runtime.plan` / `runtime.executor` → `evidence` / `reporting` →
@@ -591,7 +592,7 @@ tests.
 | --- | --- | --- | --- |
 | `find_related_signals` | Quant Research | `read_local_data`, plus `network` when a hosted embedder embeds the query | MVP |
 | `get_source_passage` | Quant Research | `read_local_data` | MVP |
-| `analyze_performance` | Analytics (example tools today) | `read_local_data` | MVP |
+| `analyze_performance` | Analytics (`quant_analytics.tools`, empyrical) | none (pure computation) | Done (B-13) |
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
 | `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |

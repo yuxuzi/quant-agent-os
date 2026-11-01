@@ -16,6 +16,9 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   `AppSpec` goes through the `ArchitecturePlanner` and a `ScaffoldProvider` (pytemplate-uv),
   and the generated project's checks run through the subprocess runner. Its `agent-tool`
   template pack is in `quant_app_factory/packs/`.
+- **Quant Analytics** (`packages/quant-analytics`): performance metrics from empyrical-reloaded
+  ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
+  numerical libraries only; `tools.py` registers `analyze_performance` and friends.
 
 Core must never import a product, and the products must not import each other. Quantitative
 analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
