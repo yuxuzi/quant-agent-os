@@ -35,9 +35,9 @@ from quant_app_factory.infrastructure.settings_file import (
     git_identity,
     load_settings,
     remove_value,
-    save_settings,
     set_value,
     settings_path,
+    update_settings,
 )
 from quant_app_factory.tools import CHECK_PERMISSIONS, CREATE_PERMISSIONS, factory_tools
 
@@ -445,12 +445,13 @@ def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str])
         "password_env": settings.get("DATABASE_PASSWORD", "").removeprefix("env:") or None,
     }
     try:
-        current = load_settings()
         connection = Connection.model_validate(
             {key: value for key, value in fields.items() if value is not None}
         )
-        save_settings(
-            current.model_copy(update={"connections": {**current.connections, name: connection}})
+        update_settings(
+            lambda current: current.model_copy(
+                update={"connections": {**current.connections, name: connection}}
+            )
         )
     except (SettingsError, ValueError) as error:
         errors.print(f"[yellow]Not saved: {error}[/yellow]")
@@ -480,7 +481,7 @@ def settings_set(
 ) -> None:
     """Set one field, such as `connections.research-pg.password_env RESEARCH_PG_PASSWORD`."""
     try:
-        save_settings(set_value(load_settings(), key, value))
+        update_settings(lambda settings: set_value(settings, key, value))
     except SettingsError as error:
         raise _fail(error) from error
     console.print(f"Set {key}.")
@@ -492,7 +493,7 @@ def settings_remove(
 ) -> None:
     """Remove a field, a connection, or a template."""
     try:
-        save_settings(remove_value(load_settings(), key))
+        update_settings(lambda settings: remove_value(settings, key))
     except SettingsError as error:
         raise _fail(error) from error
     console.print(f"Removed {key}.")
@@ -504,8 +505,11 @@ app.add_typer(template_app, name="template")
 
 def _register(name: str, entry: RegisteredTemplate) -> None:
     try:
-        current = load_settings()
-        save_settings(current.model_copy(update={"templates": {**current.templates, name: entry}}))
+        update_settings(
+            lambda current: current.model_copy(
+                update={"templates": {**current.templates, name: entry}}
+            )
+        )
     except SettingsError as error:
         raise _fail(error) from error
     console.print(f'Registered template {name!r}: use template = "{name}" in a spec.')

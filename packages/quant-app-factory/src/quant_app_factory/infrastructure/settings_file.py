@@ -10,8 +10,10 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +90,47 @@ def save_settings(settings: FactorySettings, path: Path | None = None) -> Path:
         os.chmod(temporary, 0o600)
     os.replace(temporary, path)
     return path
+
+
+LOCK_TIMEOUT_SECONDS = 10.0
+
+
+@contextmanager
+def settings_lock(
+    path: Path | None = None, timeout: float = LOCK_TIMEOUT_SECONDS
+) -> Iterator[None]:
+    """Hold an exclusive lock on the settings file, so concurrent updates never overwrite."""
+    path = path or settings_path()
+    lock = path.with_name(path.name + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise SettingsError(
+                    f"{path} is being updated by another command (lock {lock}); try again, or "
+                    "remove the lock file if no other command is running."
+                ) from None
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        os.close(handle)
+        lock.unlink(missing_ok=True)
+
+
+def update_settings(
+    change: Callable[[FactorySettings], FactorySettings], path: Path | None = None
+) -> FactorySettings:
+    """Load, change, and save the settings file under its lock; return the saved settings."""
+    path = path or settings_path()
+    with settings_lock(path):
+        updated = change(load_settings(path))
+        save_settings(updated, path)
+    return updated
 
 
 def set_value(settings: FactorySettings, dotted: str, raw: str) -> FactorySettings:

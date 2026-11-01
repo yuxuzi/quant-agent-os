@@ -275,3 +275,74 @@ def test_typed_answers_reach_templates_with_their_declared_types(tmp_path: Path)
     )
 
     assert (Path(report.project_path) / "OUT.md").read_text() == "6 True\n"
+
+
+# Settings updates and connection readiness
+
+
+def test_concurrent_settings_updates_are_all_kept(tmp_path: Path) -> None:
+    import threading
+
+    from quant_app_factory.infrastructure.settings_file import (
+        load_settings,
+        set_value,
+        update_settings,
+    )
+
+    path = tmp_path / "factory.toml"
+
+    def add(index: int) -> None:
+        update_settings(
+            lambda settings: set_value(settings, f"connections.c{index}.kind", "sqlite"), path
+        )
+
+    workers = [threading.Thread(target=add, args=(index,)) for index in range(8)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+
+    assert sorted(load_settings(path).connections) == [f"c{index}" for index in range(8)]
+    assert not path.with_name("factory.toml.lock").exists()
+
+
+def test_a_held_lock_times_out_with_a_clear_message(tmp_path: Path) -> None:
+    from quant_app_factory.infrastructure.settings_file import SettingsError, settings_lock
+
+    path = tmp_path / "factory.toml"
+    with (
+        settings_lock(path),
+        pytest.raises(SettingsError, match="another command"),
+        settings_lock(path, timeout=0.2),
+    ):
+        pass
+
+
+def test_check_spec_reports_a_connection_that_is_not_saved(tmp_path: Path) -> None:
+    check = _factory().check_spec(
+        {
+            "name": "db-lab",
+            "kind": "backtest",
+            "description": "d",
+            "output_dir": str(tmp_path),
+            "connection": "removed-since",
+        }
+    )
+
+    assert not check.ready
+    assert any("removed-since" in problem.message for problem in check.problems)
+
+
+def test_a_password_connection_needs_no_url(tmp_path: Path) -> None:
+    connection = Connection(
+        kind="postgres", host="db", database="research", user="analyst", password_env="PG_PW"
+    )
+
+    spec = apply_connection(_spec(tmp_path, connection=None), connection)
+    report = _factory().create(spec, run_checks=False)
+
+    config = (Path(report.project_path) / "db_lab" / "config.py").read_text()
+    database = (Path(report.project_path) / "db_lab" / "database.py").read_text()
+    assert spec.settings == {"DATABASE_PASSWORD": "env:PG_PW"}
+    assert 'DB_HOST: str = "db"' in config
+    assert "PASSWORD_VARIABLE" in database and "URL.create(" in database
