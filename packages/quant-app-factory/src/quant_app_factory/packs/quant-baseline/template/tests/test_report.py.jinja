@@ -29,6 +29,20 @@ def test_the_report_has_every_section_and_formats_metrics() -> None:
     assert "Nothing above this section is interpretation" in report
 
 
+def test_the_report_states_where_its_numbers_came_from() -> None:
+    provenance = {
+        "data_fingerprint": "sha256:abc",
+        "code_version": {"package": "0.1.0", "git": "v1-2-gdeadbee"},
+        "created": "2026-01-02T03:04:05+00:00",
+    }
+
+    report = render_markdown({**RESULTS, "provenance": provenance})
+
+    assert "- Data fingerprint: sha256:abc" in report
+    assert "- Code version: 0.1.0 (git v1-2-gdeadbee)" in report
+    assert "- Run at: 2026-01-02T03:04:05+00:00" in report
+
+
 def test_counts_are_whole_numbers_and_turnover_a_percentage() -> None:
     assert format_value("forced_exits", 3.0) == "3"
     assert format_value("annual_turnover", 7.9) == "790.00%"

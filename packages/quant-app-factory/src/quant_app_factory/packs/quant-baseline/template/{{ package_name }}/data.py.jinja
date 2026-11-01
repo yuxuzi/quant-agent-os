@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import hashlib
 import math
 import re
 from dataclasses import dataclass
@@ -42,6 +43,15 @@ class Panel:
         finite = self.prices[np.isfinite(self.prices)]
         if finite.size and float(finite.min()) <= 0.0:
             raise DataError("Prices must be positive.")
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the dates, assets, and prices: changing any of them changes it."""
+        digest = hashlib.sha256()
+        digest.update("\n".join(day.isoformat() for day in self.dates).encode())
+        digest.update(b"\0" + "\n".join(self.assets).encode() + b"\0")
+        canonical = np.where(np.isfinite(self.prices), self.prices, np.nan)  # one NaN pattern
+        digest.update(np.ascontiguousarray(canonical, dtype="<f8").tobytes())
+        return digest.hexdigest()
 
 
 def load_csv(path: Path) -> Panel:

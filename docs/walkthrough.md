@@ -275,18 +275,24 @@ rebalance_every = 21
 
 ```bash
 cd rev-lab
-uv run rev-lab study --database      # writes results/study.json
-uv run rev-lab backtest --database   # writes results/backtest.json
-uv run rev-lab report results/backtest.json --out report.md
+uv run rev-lab study --database      # Mean rank IC -0.0161 (Newey-West t -1.58) over 500 bars.
+uv run rev-lab backtest --database   # Net Sharpe 0.90, ...
+uv run rev-lab report                # renders the latest run
 ```
 
-The study finds a mean rank IC of −0.016, with a Newey-West t-statistic of −1.58: no signal,
-as expected. It scores the return from the trade bar, one bar after the signal, which is what
-the backtest can earn. The report:
+Each run writes its own folder, such as `results/20261101T134801Z-backtest-reversal/`. It
+holds `results.json`, with the metrics, parameters, a SHA-256 fingerprint of the prices, and
+the code version, and `config.toml`, the exact parameters. `--config` pointing at that file
+repeats the run, and no run overwrites another.
+
+The study finds no signal, as expected. It scores the return from the trade bar, one bar after
+the signal, which is what the backtest can earn. The report:
 
 ```text
 # reversal (lookback 5) long-short backtest
 - Period: 2023-01-02 to 2024-11-29 (500 bars, 20 assets)
+- Data fingerprint: sha256:...
+- Code version: 0.1.0
 - Parameters: cost_bps = 2, delisting_return = -0.3, lag = 1, lookback = 5, rebalance_every = 21, signal = reversal
 | average turnover | 3.14% |
 | forced exits | 0 |

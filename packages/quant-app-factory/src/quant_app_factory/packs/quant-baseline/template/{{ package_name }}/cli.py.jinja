@@ -9,6 +9,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 {%- if 'data-database' in components %}
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,10 +23,11 @@ from .database import check_connection, load_database
 {%- endif %}
 from .parameters import Parameters, load_parameters
 from .report import render_markdown
-from .results import load_results, save_results
+from .results import latest_run, load_results, save_run
 from .study import run_study
 
 CONFIG = Path("config.toml")
+RESULTS = Path("results")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -34,7 +36,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "report":
-            args.out.write_text(render_markdown(load_results(args.results)), "utf-8")
+            source: Path = args.results or latest_run(RESULTS)
+            out: Path = args.out or (source if source.is_dir() else source.parent) / "report.md"
+            out.write_text(render_markdown(load_results(source)), "utf-8")
+            print(f"Wrote {out}")
 {%- if 'data-database' in components %}
         elif args.command == "check-connection":
             return _check_connection()
@@ -43,10 +48,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             parameters = _parameters(args)
             panel = _panel(args)
             research = run_study if args.command == "study" else run
-            save_results(args.out, research(panel, parameters))
+            results = research(panel, parameters)
+            folder = save_run(
+                args.results,
+                results,
+                parameters=parameters,
+                fingerprint=panel.fingerprint(),
+                label=args.label,
+            )
+            print(f"Wrote {folder}")
+            print(_headline(results))
     except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
         parser.error(str(error))
-    print(f"Wrote {args.out}")
     return 0
 
 
@@ -55,18 +68,20 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     study = commands.add_parser("study", help="Evaluate a signal: IC, spreads, and decay.")
-    _add_research_options(study, Path("results/study.json"))
+    _add_research_options(study)
     study.add_argument("--quantiles", type=int, help="Signal quantiles for the spread.")
     study.add_argument("--max-horizon", type=int, help="Longest IC-decay horizon, in bars.")
 
     backtest = commands.add_parser("backtest", help="Backtest a signal with costs.")
-    _add_research_options(backtest, Path("results/backtest.json"))
+    _add_research_options(backtest)
     backtest.add_argument("--cost-bps", type=float, help="Cost per unit of turnover, in bps.")
     backtest.add_argument("--rebalance-every", type=int, help="Bars between rebalances.")
 
     report = commands.add_parser("report", help="Render a results file as Markdown.")
-    report.add_argument("results", type=Path, help="A results file from study or backtest.")
-    report.add_argument("--out", type=Path, default=Path("report.md"), help="Markdown file.")
+    report.add_argument(
+        "results", type=Path, nargs="?", help="A run folder or results file (default: latest)."
+    )
+    report.add_argument("--out", type=Path, help="Markdown file (default: in the run folder).")
 {%- if 'data-database' in components %}
 
     commands.add_parser("check-connection", help="Connect to the configured database, then exit.")
@@ -74,7 +89,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_research_options(parser: argparse.ArgumentParser, out: Path) -> None:
+def _add_research_options(parser: argparse.ArgumentParser) -> None:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--prices", type=Path, help="A wide price file (date, then assets).")
     source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
@@ -86,7 +101,10 @@ def _add_research_options(parser: argparse.ArgumentParser, out: Path) -> None:
     parser.add_argument("--lookback", type=int, help="Lookback in bars (default: standard).")
     parser.add_argument("--skip", type=int, help="Momentum: bars to skip (default: standard).")
     parser.add_argument("--lag", type=int, help="Bars from the signal to the trade.")
-    parser.add_argument("--out", type=Path, default=out, help="Results file.")
+    parser.add_argument("--label", help="Name for the run folder (default: kind and signal).")
+    parser.add_argument(
+        "--results", type=Path, default=RESULTS, help="Where run folders go (default: results)."
+    )
 
 
 def _parameters(args: argparse.Namespace) -> Parameters:
@@ -101,6 +119,20 @@ def _parameters(args: argparse.Namespace) -> Parameters:
         for name in ("signal", "lookback", "skip", "lag", "quantiles", "max_horizon", "cost_bps")
     }
     return base.updated(**overrides, rebalance_every=getattr(args, "rebalance_every", None))
+
+
+def _headline(results: dict[str, Any]) -> str:
+    metrics = results["metrics"]
+    if results["kind"] == "study":
+        return (
+            f"Mean rank IC {metrics['mean_rank_ic']:.4f} "
+            f"(Newey-West t {metrics['rank_ic_t_stat']:.2f}) over {results['bars']} bars."
+        )
+    return (
+        f"Net Sharpe {metrics['sharpe_ratio']:.2f}, net return "
+        f"{metrics['annualized_return']:.2%} a year, "
+        f"turnover {metrics['annual_turnover']:.0%} a year."
+    )
 
 
 def _panel(args: argparse.Namespace) -> Panel:

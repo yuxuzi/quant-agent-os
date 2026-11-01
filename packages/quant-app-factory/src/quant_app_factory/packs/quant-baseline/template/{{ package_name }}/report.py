@@ -37,6 +37,15 @@ def render_markdown(results: dict[str, Any]) -> str:
         f"- Period: {start} to {end} ({results.get('bars', '?')} bars, "
         f"{results.get('assets', '?')} assets)",
     ]
+    provenance = results.get("provenance") or {}
+    if provenance:
+        code = provenance.get("code_version") or {}
+        git = f" (git {code['git']})" if code.get("git") else ""
+        lines += [
+            f"- Data fingerprint: {provenance.get('data_fingerprint', '?')}",
+            f"- Code version: {code.get('package', '?')}{git}",
+            f"- Run at: {provenance.get('created', '?')}",
+        ]
     parameters = results.get("parameters") or {}
     if parameters:
         lines.append(

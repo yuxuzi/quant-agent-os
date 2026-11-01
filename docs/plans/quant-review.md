@@ -188,6 +188,22 @@ The smoke suite builds `quant-research` four ways (default, weekly, monthly, and
 agent tools), with a database, and as a fork. All pass their own checks. Walkthrough §11 was
 re-run as one project, with the same numbers as B-27.
 
+**S2 result.** Done as planned, plus a parameters snapshot. Each `study` or `backtest` run
+writes `results/<UTC time>-<kind>-<signal>/` (`--label` names it). A second run in the same
+second gets a `-2` suffix, so no run overwrites another. Each folder holds two files:
+- `results.json` (schema version 2): the metrics, series, and parameters, plus provenance:
+  - `sha256:` of the panel's dates, assets, and prices, with one canonical NaN;
+  - the package version and `git describe --always --dirty` when the project is a git checkout;
+  - the UTC time.
+- `config.toml`: the exact parameters, so `--config results/<run>/config.toml` repeats the run.
+  A test checks the repeat gives identical metrics.
+
+`report` with no argument renders the latest run, takes a run folder or a version-1 results
+file, and shows the provenance. Each run also prints a one-line headline: rank IC and its HAC t
+for a study, and net Sharpe, return, and turnover for a backtest. One bug was found by the
+generated tests: two runs in the same second sorted by label, so "latest" could pick the wrong
+run. Ties now break by when the results file was written.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

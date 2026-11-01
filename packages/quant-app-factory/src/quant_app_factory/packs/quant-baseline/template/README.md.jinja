@@ -16,13 +16,18 @@ uv sync
 uv run {{ project_name }} study --demo       # a random walk: expect no edge (a sanity check)
 uv run {{ project_name }} study --prices prices.csv                 # IC, spreads, decay
 uv run {{ project_name }} backtest --prices prices.csv              # net of costs
-uv run {{ project_name }} report results/backtest.json --out report.md
+uv run {{ project_name }} report                                    # the latest run
 ```
 
 Parameters live in `config.toml`: the signal (12-1 momentum or one-month reversal by
 default), the trade lag, quantiles, costs, the rebalance schedule, and the delisting return.
-Flags such as `--signal reversal --lookback 5` override them for one run, and every results
-file records the values it used.
+Flags such as `--signal reversal --lookback 5` override them for one run.
+
+Each run gets its own folder, `results/<UTC time>-<kind>-<signal>/` (or `--label NAME`), and
+never overwrites another. It holds `results.json`, with the metrics, series, parameters, a
+SHA-256 fingerprint of the price data, the code version (`git describe` in a git checkout),
+and the time, plus `config.toml`, the exact parameters: `--config results/<run>/config.toml`
+repeats the run. `report RUN_FOLDER` renders a specific run.
 
 Price files are wide: a `date` column, then one column of prices per asset. Dates are ISO
 (`2024-01-09`), unique, and ascending{% if 'data-parquet' in components %}; `.parquet` files work

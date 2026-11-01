@@ -7,6 +7,7 @@ or wrong types are refused with a message that names them, so a typo never goes 
 from __future__ import annotations
 
 import dataclasses
+import json
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,6 +76,15 @@ def load_parameters(path: Path) -> Parameters:
         if not _type_ok(_FIELDS[key].type, value):
             raise ParameterError(f"{path}: {key} must be {_FIELDS[key].type}, not {value!r}.")
     return Parameters(**data)
+
+
+def dump_parameters(parameters: Parameters) -> str:
+    """``parameters`` as TOML that `load_parameters` reads back unchanged."""
+    lines = ["# The parameters this run used. Re-run it with --config pointing here."]
+    for name, value in dataclasses.asdict(parameters).items():
+        if value is not None:
+            lines.append(f"{name} = {json.dumps(value)}")
+    return "\n".join(lines) + "\n"
 
 
 def _type_ok(annotation: object, value: object) -> bool:

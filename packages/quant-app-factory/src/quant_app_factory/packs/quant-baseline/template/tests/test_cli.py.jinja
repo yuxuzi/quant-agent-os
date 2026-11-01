@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,19 +14,51 @@ def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
 
 
-def test_study_backtest_and_report_run_on_the_demo_panel() -> None:
+def _runs(kind: str) -> list[Path]:
+    return sorted(Path("results").glob(f"*-{kind}-*"))
+
+
+def _results(folder: Path) -> dict[str, Any]:
+    results: dict[str, Any] = json.loads((folder / "results.json").read_text())
+    return results
+
+
+def test_study_backtest_and_report_run_on_the_demo_panel(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     assert main(["study", "--demo"]) == 0
     assert main(["backtest", "--demo"]) == 0
-    assert main(["report", "results/backtest.json", "--out", "report.md"]) == 0
+    assert main(["report"]) == 0  # the latest run
 
-    study = json.loads(Path("results/study.json").read_text())
-    backtest = json.loads(Path("results/backtest.json").read_text())
-    assert study["kind"] == "study"
-    assert backtest["kind"] == "backtest"
-    assert study["parameters"]["lag"] == backtest["parameters"]["lag"] == 1
-    assert backtest["parameters"]["rebalance_every"] == {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
-    assert backtest["metrics"]["forced_exits"] == 0
-    assert Path("report.md").read_text().startswith("# momentum")
+    (study,), (backtest,) = _runs("study"), _runs("backtest")
+    assert _results(study)["parameters"]["lag"] == _results(backtest)["parameters"]["lag"] == 1
+    assert _results(backtest)["parameters"]["rebalance_every"] == {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
+    assert _results(backtest)["metrics"]["forced_exits"] == 0
+    fingerprints = {_results(run)["provenance"]["data_fingerprint"] for run in (study, backtest)}
+    assert len(fingerprints) == 1  # the same demo panel
+    assert (backtest / "report.md").read_text().startswith("# momentum")
+    output = capsys.readouterr().out
+    assert "Mean rank IC" in output and "Net Sharpe" in output
+
+
+def test_runs_never_overwrite_each_other_and_take_labels() -> None:
+    assert main(["study", "--demo"]) == 0
+    assert main(["study", "--demo", "--label", "second try"]) == 0
+
+    folders = sorted(path.name for path in Path("results").iterdir())
+    assert len(folders) == 2
+    assert any(name.endswith("-second-try") for name in folders)
+
+
+def test_a_run_can_be_repeated_from_its_config_snapshot() -> None:
+    assert main(["backtest", "--demo", "--signal", "reversal", "--lookback", "5"]) == 0
+    (first,) = _runs("backtest")
+
+    assert main(["backtest", "--demo", "--config", str(first / "config.toml")]) == 0
+
+    again = next(folder for folder in _runs("backtest") if folder != first)
+    assert _results(again)["parameters"] == _results(first)["parameters"]
+    assert _results(again)["metrics"] == _results(first)["metrics"]
 
 
 def test_config_toml_sets_parameters_and_flags_override_it() -> None:
@@ -34,26 +67,40 @@ def test_config_toml_sets_parameters_and_flags_override_it() -> None:
     assert main(["study", "--demo"]) == 0
     assert main(["backtest", "--demo", "--lag", "0", "--cost-bps", "1.5"]) == 0
 
-    study = json.loads(Path("results/study.json").read_text())["parameters"]
-    backtest = json.loads(Path("results/backtest.json").read_text())["parameters"]
+    study = _results(_runs("study")[0])["parameters"]
+    backtest = _results(_runs("backtest")[0])["parameters"]
     assert (study["signal"], study["lookback"], study["lag"]) == ("reversal", 5, 2)
     assert (backtest["lag"], backtest["cost_bps"]) == (0, 1.5)
+
+
+def test_report_reads_a_named_run_or_an_old_results_file() -> None:
+    assert main(["study", "--demo"]) == 0
+    (study,) = _runs("study")
+    old = Path("old.json")
+    old.write_text(json.dumps({"schema_version": 1, "kind": "study", "title": "Old"}))
+
+    assert main(["report", str(study), "--out", "named.md"]) == 0
+    assert main(["report", str(old)]) == 0
+
+    assert Path("named.md").read_text().startswith("# momentum")
+    assert Path("report.md").read_text().startswith("# Old")
 
 
 @pytest.mark.parametrize(
     ("config", "flags"),
     [
-        ("lookbak = 5\n", []),  # a typo in config.toml
-        ("lag = -1\n", []),
-        ("", ["--signal", "reversal", "--skip", "1"]),
-        ("", ["--signal", "magic"]),
+        ("lookbak = 5\n", ["study", "--demo"]),  # a typo in config.toml
+        ("lag = -1\n", ["study", "--demo"]),
+        ("", ["study", "--demo", "--signal", "reversal", "--skip", "1"]),
+        ("", ["study", "--demo", "--signal", "magic"]),
+        ("", ["report"]),  # no runs yet
     ],
 )
-def test_bad_parameters_are_usage_errors(config: str, flags: list[str]) -> None:
+def test_mistakes_are_usage_errors(config: str, flags: list[str]) -> None:
     Path("config.toml").write_text(config)
 
     with pytest.raises(SystemExit) as raised:
-        main(["study", "--demo", *flags])
+        main(flags)
 
     assert raised.value.code == 2
 

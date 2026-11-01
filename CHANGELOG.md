@@ -21,6 +21,15 @@ All notable changes to this project are documented here. The format follows
     profile.
   - **Tools.** Projects with `agent-tools` offer `evaluate_signal`, `backtest_signal`, and
     `render_report` together.
+- Quant research runs are experiments (B-28 S2):
+  - **One folder per run.** Each `study` or `backtest` writes its own folder under `results/`
+    and never overwrites another.
+  - **Provenance.** `results.json` (version 2) records a SHA-256 fingerprint of the price data,
+    the code version, and the time.
+  - **Parameter snapshot.** A `config.toml` in the folder holds the exact parameters, and
+    `--config` pointing at it repeats the run.
+  - **Report.** `report` defaults to the latest run and shows the provenance. Runs print a
+    one-line headline, and `--out` is replaced by `--results DIR` and `--label`.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 
