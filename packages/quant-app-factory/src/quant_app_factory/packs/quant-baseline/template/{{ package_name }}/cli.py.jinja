@@ -16,11 +16,10 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 {%- endif %}
 
-from . import synthetic
 from .backtest import run
-from .data import Panel, load_prices
+from .data import Panel, open_panel
 {%- if 'data-database' in components %}
-from .database import check_connection, load_database
+from .database import check_connection
 {%- endif %}
 from .parameters import Parameters, load_parameters
 from .report import equity_svg, render_comparison, render_markdown
@@ -44,8 +43,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _check_connection()
 {%- endif %}
         else:
-            parameters = _parameters(args)
-            panel = _panel(args)
+            parameters, base = _parameters(args)
+            parameters = parameters.updated(data=_source(args, parameters))
+            panel, parameters = _panel(parameters, base)
             research = {"study": run_study, "backtest": run, "walk-forward": run_walk_forward}
             results = research[args.command](panel, parameters)
             folder = save_run(
@@ -102,8 +102,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_research_options(parser: argparse.ArgumentParser) -> None:
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--prices", type=Path, help="A wide price file (date, then assets).")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--prices", type=Path, help="A wide price file (default: data).")
     source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
 {%- if 'data-database' in components %}
     source.add_argument("--database", action="store_true", help="Query the configured database.")
@@ -127,7 +127,8 @@ def _add_trading_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _parameters(args: argparse.Namespace) -> Parameters:
+def _parameters(args: argparse.Namespace) -> tuple[Parameters, Path]:
+    """Parameters from config.toml (or defaults) and flags, and the folder data paths start in."""
     path: Path | None = args.config
     if path is None and CONFIG.is_file():
         path = CONFIG
@@ -148,7 +149,26 @@ def _parameters(args: argparse.Namespace) -> Parameters:
         "train_bars",
         "test_bars",
     )
-    return base.updated(**{name: getattr(args, name, None) for name in names})
+    flags = {name: getattr(args, name, None) for name in names}
+    return base.updated(**flags), (path.parent if path is not None else Path())
+
+
+def _source(args: argparse.Namespace, parameters: Parameters) -> str:
+    if args.demo:
+        return "demo"
+{%- if 'data-database' in components %}
+    if args.database:
+        return "database"
+{%- endif %}
+    if args.prices is not None:
+        return str(Path.cwd() / args.prices)
+    if parameters.data is None:
+        raise ValueError(
+            "No data: set data in config.toml (demo, {% if 'data-database' in components %}"
+            "database, {% endif %}or a price file), "
+            "or pass --prices FILE or --demo."
+        )
+    return parameters.data
 
 
 def _report(sources: list[Path], out: Path | None) -> None:
@@ -204,15 +224,13 @@ def _headline(results: dict[str, Any]) -> str:
     )
 
 
-def _panel(args: argparse.Namespace) -> Panel:
-    if args.demo:
-        return _demo_panel()
-{%- if 'data-database' in components %}
-    if args.database:
-        return load_database()
-{%- endif %}
-    path: Path = args.prices
-    return load_prices(path)
+def _panel(parameters: Parameters, base: Path) -> tuple[Panel, Parameters]:
+    """The panel, and the parameters with a file's path made absolute for the run's record."""
+    assert parameters.data is not None
+    source = parameters.data
+    if source not in {"demo", "database"}:
+        source = str((base / source).resolve())
+    return open_panel(source), parameters.updated(data=source)
 {%- if 'data-database' in components %}
 
 
@@ -225,13 +243,6 @@ def _check_connection() -> int:
         return 1
     return 0
 {%- endif %}
-
-
-def _demo_panel() -> Panel:
-    """A random walk: no signal can have an edge on it, so results near zero are expected."""
-    prices, _ = synthetic.generate_panel()
-    assets = [f"ASSET{index:02d}" for index in range(prices.shape[1])]
-    return Panel(dates=synthetic.dates(prices.shape[0]), assets=assets, prices=prices)
 
 
 if __name__ == "__main__":

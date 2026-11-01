@@ -84,8 +84,26 @@ def load_parquet(path: Path) -> Panel:
 {%- endif %}
 
 
+def open_panel(source: str, base: Path = Path()) -> Panel:
+    """Load what a ``data`` setting names: "demo", "database" (with the database component),
+    or a price file, relative to ``base``."""
+    if source == "demo":
+        from .synthetic import demo_panel
+
+        return demo_panel()
+{%- if 'data-database' in components %}
+    if source == "database":
+        from .database import load_database
+
+        return load_database()
+{%- endif %}
+    return load_prices(base / source)
+
+
 def load_prices(path: Path) -> Panel:
     """Load ``path`` by its suffix."""
+    if not path.is_file():
+        raise DataError(f"No price file at {path}; set data in config.toml or pass --prices.")
     if path.suffix.lower() == ".csv":
         return load_csv(path)
 {%- if 'data-parquet' in components %}

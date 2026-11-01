@@ -26,6 +26,7 @@ class ParameterError(ValueError):
 class Parameters:
     """Everything a study or backtest needs besides the prices."""
 
+    data: str | None = None  # "demo", "database", or a price file; flags override it
     signal: str = "momentum"
     lookback: int | None = None  # None: the signal's standard lookback
     skip: int | None = None  # momentum only; None: the standard skip

@@ -1,44 +1,52 @@
-"""Quant-Agent-OS tools: this project's functions as typed, contract-checked tools."""
+"""Quant-Agent-OS tools: this project's research as typed, contract-checked tools.
+
+The research tools read the project's own data, as ``data`` in its ``config.toml`` names it,
+with the project's parameters. A caller chooses only the signal and a few parameters; it never
+passes prices or file paths. The config file is ``config.toml`` in the working directory, or
+the file that ``{{ package_name | upper }}_CONFIG`` names. Tools return metrics, not series, and
+write nothing.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+import os
+from pathlib import Path
+from typing import Any, Literal
 
-import numpy as np
 from pydantic import BaseModel, Field
-from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
+from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
 
 from .backtest import run
-from .data import Panel, parse_date
-from .parameters import Parameters
+from .data import open_panel
+from .parameters import Parameters, load_parameters
 from .report import render_markdown
 from .study import run_study
-from .synthetic import dates
+from .walk_forward import run_walk_forward
 
-NO_DATES = "No dates were given, so bars are labelled with weekdays from 2020-01-01."
+CONFIG_VARIABLE = "{{ package_name | upper }}_CONFIG"
+# Reading the configured data{% if 'data-database' in components and db_kind == 'postgres' %}, which here is a database across the network{% endif %}.
+PERMISSIONS = [Permission.READ_LOCAL_DATA{% if 'data-database' in components and db_kind == 'postgres' %}, Permission.NETWORK{% endif %}]
 
 
-class PriceInput(BaseModel):
-    """A small price panel passed inline: one row per bar, one column per asset."""
+class SignalInput(BaseModel):
+    """Which signal to evaluate on the project's data; unset fields use config.toml."""
 
-    prices: list[list[float]] = Field(min_length=3, description="Prices, bars by assets.")
-    dates: list[str] | None = Field(
-        default=None, description="One ISO date (YYYY-MM-DD) per bar; optional."
-    )
-    signal: str = Field(default="momentum", description="momentum or reversal.")
-    lookback: int | None = Field(default=None, ge=1, le=500, description="Default: standard.")
-    skip: int | None = Field(default=None, ge=0, le=500, description="Momentum only.")
+    signal: Literal["momentum", "reversal"] = "momentum"
+    lookback: int | None = Field(default=None, ge=1, le=1000, description="Default: config.")
+    skip: int | None = Field(default=None, ge=0, le=1000, description="Momentum only.")
+    lag: int | None = Field(default=None, ge=0, le=20, description="Bars to the trade.")
+    exposure: Literal["dollar-neutral", "beta-neutral", "long-only"] | None = None
 
 
 class ResultsOutput(BaseModel):
-    """A results document, as a study or backtest writes it."""
+    """A results document without its series (dates, returns), which can be long."""
 
     results: dict[str, Any]
     warnings: list[str] = Field(default_factory=list)
 
 
 class ReportInput(BaseModel):
-    """A results document from a study or a backtest."""
+    """A results document from a study, backtest, or walk-forward."""
 
     results: dict[str, Any]
 
@@ -50,37 +58,58 @@ class ReportOutput(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-def _panel(params: PriceInput) -> Panel:
-    prices = np.array(params.prices, dtype=np.float64)
-    count = prices.shape[1] if prices.ndim == 2 else 0
-    labels = dates(prices.shape[0]) if params.dates is None else map(parse_date, params.dates)
-    return Panel(
-        dates=list(labels),
-        assets=[f"ASSET{index:02d}" for index in range(count)],
-        prices=prices,
+def project_parameters() -> tuple[Parameters, Path]:
+    """The project's parameters and the folder its data paths start in."""
+    path = Path(os.environ.get(CONFIG_VARIABLE, "config.toml"))
+    if not path.is_file():
+        raise ValueError(f"No {path}; run the tools from the project, or set {CONFIG_VARIABLE}.")
+    return load_parameters(path), path.parent
+
+
+def _research(params: SignalInput, research: Any) -> ResultsOutput:
+    parameters, base = project_parameters()
+    if parameters.data is None:
+        raise ValueError("config.toml sets no data; set data to a price file or demo.")
+    chosen = parameters.updated(**params.model_dump())
+    results = research(open_panel(parameters.data, base), chosen)
+    warnings = ["The data is a synthetic random walk."] if parameters.data == "demo" else []
+    return ResultsOutput(
+        results={key: value for key, value in results.items() if key != "series"},
+        warnings=warnings,
     )
 
 
-def _parameters(params: PriceInput) -> Parameters:
-    return Parameters(signal=params.signal, lookback=params.lookback, skip=params.skip)
+@tool(
+    name="evaluate_signal",
+    description="Study a signal on the project's data: IC, rank IC, spreads, and decay.",
+    permissions=PERMISSIONS,
+    timeout_seconds=30.0,
+)
+def evaluate_signal(params: SignalInput) -> ResultsOutput:
+    """Run a signal study with the project's data and parameters."""
+    return _research(params, run_study)
 
 
-def _warnings(params: PriceInput) -> list[str]:
-    return [NO_DATES] if params.dates is None else []
+@tool(
+    name="backtest_signal",
+    description="Backtest a signal on the project's data, net of costs (in-sample).",
+    permissions=PERMISSIONS,
+    timeout_seconds=30.0,
+)
+def backtest_signal(params: SignalInput) -> ResultsOutput:
+    """Run a backtest with the project's data and parameters."""
+    return _research(params, run)
 
 
-@tool(name="evaluate_signal", description="Evaluate a signal on an inline price panel.")
-def evaluate_signal(params: PriceInput) -> ResultsOutput:
-    """Run a signal study with the project's default timing."""
-    results = run_study(_panel(params), _parameters(params))
-    return ResultsOutput(results=results, warnings=_warnings(params))
-
-
-@tool(name="backtest_signal", description="Backtest a signal on an inline price panel.")
-def backtest_signal(params: PriceInput) -> ResultsOutput:
-    """Run a backtest with the project's default costs, timing, and rebalancing."""
-    results = run(_panel(params), _parameters(params))
-    return ResultsOutput(results=results, warnings=_warnings(params))
+@tool(
+    name="walk_forward_signal",
+    description="Walk a signal forward on the project's data: out-of-sample results only.",
+    permissions=PERMISSIONS,
+    timeout_seconds=60.0,
+)
+def walk_forward_signal(params: SignalInput) -> ResultsOutput:
+    """Choose the lookback on training windows and report the test windows."""
+    return _research(params, run_walk_forward)
 
 
 @tool(name="render_report", description="Render a study or backtest result as Markdown.")
@@ -89,7 +118,12 @@ def render_report(params: ReportInput) -> ReportOutput:
     return ReportOutput(markdown=render_markdown(params.results))
 
 
-TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal, backtest_signal, render_report]
+TOOLS: list[ToolSpec[Any, Any]] = [
+    evaluate_signal,
+    backtest_signal,
+    walk_forward_signal,
+    render_report,
+]
 
 
 def registry() -> ToolRegistry:

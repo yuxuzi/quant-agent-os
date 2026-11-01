@@ -261,9 +261,11 @@ uv run quant-factory create lab.toml --check-connection
 ```
 
 **4. Set the research parameters** in the project's `config.toml`. Every run reads it, and
-flags such as `--lag 0` override it for one run:
+flags such as `--lag 0` override it for one run. With the database component, `data` already
+names the database:
 
 ```toml
+data = "database"
 signal = "reversal"
 lookback = 5
 lag = 1          # bars from the signal's close to the trade, shared by study and backtest
@@ -275,9 +277,10 @@ rebalance_every = 21
 
 ```bash
 cd rev-lab
-uv run rev-lab study --database      # Mean rank IC -0.0161 (Newey-West t -1.58) over 500 bars.
-uv run rev-lab backtest --database   # Net Sharpe 0.90, ...
-uv run rev-lab report                # renders the latest run
+uv run rev-lab study          # Mean rank IC -0.0161 (Newey-West t -1.58) over 500 bars.
+uv run rev-lab backtest       # Net Sharpe 0.90, ...
+uv run rev-lab walk-forward   # out-of-sample only
+uv run rev-lab report         # renders the latest run
 ```
 
 Each run writes its own folder, such as `results/20261101T134801Z-backtest-reversal/`. It

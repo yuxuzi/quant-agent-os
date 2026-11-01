@@ -1,5 +1,6 @@
 """Parameters: defaults, config.toml, and overrides, with every mistake named."""
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,9 @@ PROJECT_CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
 
 
 def test_the_generated_config_toml_matches_the_defaults() -> None:
-    assert load_parameters(PROJECT_CONFIG) == Parameters()
+    generated = load_parameters(PROJECT_CONFIG)
+    assert dataclasses.replace(generated, data=None) == Parameters()
+    assert generated.data {{ '== "database"' if 'data-database' in components else 'is None' }}
     assert Parameters().rebalance_every == config.REBALANCE_EVERY
 
 

@@ -40,6 +40,10 @@ All notable changes to this project are documented here. The format follows
 - Quant research reports compare runs (B-28 S5): `report RUN ...` puts parameters, metrics,
   calendar-year returns, and provenance side by side, and every report with a return series
   gets an SVG equity curve and a calendar-year table.
+- Quant research projects read their data from `config.toml` (`data = "demo"`, `"database"`,
+  or a price file), so commands need no data flag (B-28 S6). Agent tools (`evaluate_signal`,
+  `backtest_signal`, `walk_forward_signal`) read that data instead of taking inline prices,
+  take no paths, return metrics without series, and declare `network` for PostgreSQL.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

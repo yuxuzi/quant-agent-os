@@ -248,6 +248,29 @@ because Markdown viewers such as GitHub strip inline SVG. Run names drop their t
 the labels alone tell the runs apart. Structural golden tests cover the comparison's sections,
 rows, and fingerprint note, the chart's polylines and legend, and compounded calendar years.
 
+**S6 result.** Done as planned. `data` in `config.toml` names the project's data: `demo`,
+`database` (the default with that component), or a price file relative to the config. The CLI
+uses it when no source flag is given. A run's config snapshot records the file's absolute path.
+
+The agent tools are `evaluate_signal`, `backtest_signal`, a new `walk_forward_signal`, and
+`render_report`:
+- **Inputs.** A signal name, lookback, skip, lag, and exposure. Prices and paths are not
+  inputs, which a test checks.
+- **What they read.** The configured data, through `config.toml` in the working directory or
+  the file `<PACKAGE>_CONFIG` names.
+- **What they return.** Metrics without series, to stay inside output limits, and a warning
+  when the data is the synthetic demo.
+- **Permissions.** They declare `read_local_data`, and also `network` for a PostgreSQL project,
+  so each call there needs an operator's approval.
+
+`check_tool` passes on the demo panel and on a SQLite fixture, and a PostgreSQL project with
+agent tools passes its own checks.
+
+**Phase 2 exit (2026-11-01).** Met. One `quant-research` project studies, backtests, walks
+forward, and compares runs, with each run's provenance recorded. Its out-of-sample choices are
+proven not to see their test windows. Its exposure modes have known-answer tests, and its tools
+read the project's own data.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

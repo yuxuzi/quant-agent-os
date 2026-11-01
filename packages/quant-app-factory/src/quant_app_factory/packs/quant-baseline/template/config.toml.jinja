@@ -1,6 +1,12 @@
 # Research parameters for `{{ project_name }} study` and `{{ project_name }} backtest`.
 # Command-line flags override them for one run, and every run records the values it used.
 
+{% if 'data-database' in components -%}
+data = "database"  # the configured query; or "demo", or a price file relative to this file
+{%- else -%}
+# data = "prices.csv"  # a price file relative to this file, or "demo" for a random walk
+{%- endif %}
+
 signal = "momentum"  # momentum (12-1 by default) or reversal (one month by default)
 # lookback = 252     # bars; leave unset for the signal's standard definition
 # skip = 21          # momentum only: latest bars to skip

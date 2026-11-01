@@ -6,6 +6,7 @@ import datetime as dt
 
 import numpy as np
 
+from .data import Panel
 from .metrics import FloatArray
 
 
@@ -48,3 +49,11 @@ def dates(n_bars: int, start: dt.date = dt.date(2020, 1, 1)) -> list[dt.date]:
             days.append(day)
         day += dt.timedelta(days=1)
     return days
+
+
+def demo_panel() -> Panel:
+    """A random walk with dates: no signal can have an edge on it, so results near zero are
+    expected."""
+    prices, _ = generate_panel()
+    assets = [f"ASSET{index:02d}" for index in range(prices.shape[1])]
+    return Panel(dates=dates(prices.shape[0]), assets=assets, prices=prices)

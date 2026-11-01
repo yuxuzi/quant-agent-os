@@ -140,6 +140,26 @@ def test_mistakes_are_usage_errors(config: str, flags: list[str]) -> None:
     assert raised.value.code == 2
 
 
-def test_a_data_source_is_required() -> None:
+def test_a_data_source_is_required_and_its_absence_explained(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SystemExit):
         main(["backtest"])
+
+    assert "No data" in capsys.readouterr().err
+
+
+def test_config_toml_names_the_data_and_the_run_records_where_it_was(tmp_path: Path) -> None:
+    prices = tmp_path / "data" / "prices.csv"
+    prices.parent.mkdir()
+    rows = ["date,AAA,BBB,CCC"] + [
+        f"2024-01-{day:02d},{100 + day},{100 - day / 2},{100 + day % 3}" for day in range(1, 29)
+    ]
+    prices.write_text("\n".join(rows) + "\n")
+    Path("config.toml").write_text('data = "data/prices.csv"\nsignal = "reversal"\nlookback = 2\n')
+
+    assert main(["study"]) == 0
+
+    (run,) = _runs("study")
+    snapshot = (run / "config.toml").read_text()
+    assert f"data = {json.dumps(str(prices.resolve()))}" in snapshot  # absolute in the record

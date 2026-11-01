@@ -1,34 +1,104 @@
-"""Every tool honours the Quant-Agent-OS contract: direct calls, MCP calls, and permissions."""
+"""The tools honour the Quant-Agent-OS contract and read only the project's configured data."""
+
+{% if 'data-database' in components -%}
+import datetime as dt
+import sqlite3
+{% endif -%}
+from pathlib import Path
+from typing import Any
 
 import pytest
 from quant_agent_os.testing import check_tool
-from quant_agent_os.tools import READ_ONLY
+from quant_agent_os.tools import READ_ONLY, Permission, ToolSpec
 
-from {{ package_name }}.synthetic import generate_panel
-from {{ package_name }}.tools import TOOLS, registry
+from {{ package_name }}.tools import CONFIG_VARIABLE, TOOLS, registry
+
+RESEARCH = ["evaluate_signal", "backtest_signal", "walk_forward_signal"]
 
 
-@pytest.mark.parametrize("name", ["evaluate_signal", "backtest_signal"])
-def test_the_research_tools_honour_the_platform_contract(name: str) -> None:
-    prices, _ = generate_panel(n_bars=60, n_assets=6, signal_strength=0.3)
-    spec = next(spec for spec in TOOLS if spec.name == name)
+def _spec(name: str) -> ToolSpec[Any, Any]:
+    return next(spec for spec in TOOLS if spec.name == name)
 
-    record = check_tool(spec, {"prices": prices.tolist(), "lookback": 5, "skip": 1})
+
+@pytest.fixture
+def demo_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    config = tmp_path / "config.toml"
+    config.write_text('data = "demo"\nrebalance_every = 1\n')
+    monkeypatch.setenv(CONFIG_VARIABLE, str(config))
+    return config
+
+
+@pytest.mark.parametrize("name", RESEARCH)
+def test_the_research_tools_read_the_configured_data(name: str, demo_config: Path) -> None:
+    record = check_tool(_spec(name), {"signal": "reversal", "lookback": 5})
 
     assert record.output is not None
-    assert record.output["results"]["metrics"]
-    assert record.output["warnings"]  # no dates were given
+    results = record.output["results"]
+    assert results["metrics"] and "series" not in results  # metrics only: outputs stay small
+    assert results["parameters"]["signal"] == "reversal"
+    assert record.output["warnings"] == ["The data is a synthetic random walk."]
+
+
+def test_the_tools_take_no_prices_or_paths() -> None:
+    for name in RESEARCH:
+        fields = set(_spec(name).input_model.model_fields)
+        assert fields == {"signal", "lookback", "skip", "lag", "exposure"}
+
+
+def test_a_project_without_data_says_what_to_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text('signal = "momentum"\n')
+    monkeypatch.setenv(CONFIG_VARIABLE, str(config))
+
+    record = check_tool(_spec("backtest_signal"), {}, expect="error")
+
+    assert record.output is None
+    assert "sets no data" in (record.error or "")
+{%- if 'data-database' in components %}
+
+
+def test_the_tools_read_a_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    database = tmp_path / "prices.db"
+    days = [dt.date(2023, 1, 2) + dt.timedelta(days=offset) for offset in range(120)]
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE prices (date TEXT, asset TEXT, price REAL)")
+        db.executemany(
+            "INSERT INTO prices VALUES (?, ?, ?)",
+            [
+                (day.isoformat(), f"A{asset}", 100.0 + offset * (1 + asset) % 7 + asset)
+                for offset, day in enumerate(days)
+                for asset in range(8)
+            ],
+        )
+    db.close()
+    config = tmp_path / "config.toml"
+    config.write_text('data = "database"\n')
+    monkeypatch.setenv(CONFIG_VARIABLE, str(config))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database.as_posix()}")
+
+    record = check_tool(_spec("backtest_signal"), {"signal": "reversal", "lookback": 5})
+
+    assert record.output is not None, record.error
+    assert record.output["results"]["assets"] == 8
+    assert record.output["warnings"] == []
+{%- endif %}
 
 
 def test_the_report_tool_honours_the_platform_contract() -> None:
-    spec = next(spec for spec in TOOLS if spec.name == "render_report")
-
-    record = check_tool(spec, {"results": {"kind": "study", "metrics": {"mean_ic": 0.1}}})
+    record = check_tool(_spec("render_report"), {"results": {"kind": "study", "metrics": {}}})
 
     assert record.output is not None
     assert "## Computed results" in record.output["markdown"]
 
 
-def test_tools_are_read_only_and_registered() -> None:
-    assert all(spec.permissions <= READ_ONLY for spec in TOOLS)
+def test_tools_declare_only_what_they_need_and_are_registered() -> None:
+{%- if 'data-database' in components and db_kind == 'postgres' %}
+    allowed = READ_ONLY | {Permission.NETWORK}  # the database is across the network
+{%- else %}
+    allowed = READ_ONLY
+{%- endif %}
+    assert all(spec.permissions <= allowed for spec in TOOLS)
+    assert all(Permission.READ_LOCAL_DATA in _spec(name).permissions for name in RESEARCH)
     assert {spec.name for spec in registry().specs()} == {spec.name for spec in TOOLS}
