@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from .metrics import FloatArray
+
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 class DataError(ValueError):
@@ -20,7 +25,7 @@ class DataError(ValueError):
 class Panel:
     """Prices for ``assets`` (columns) at ``dates`` (rows). Missing prices are NaN."""
 
-    dates: list[str]
+    dates: list[dt.date]
     assets: list[str]
     prices: FloatArray
 
@@ -29,8 +34,11 @@ class Panel:
             raise DataError("prices must have one row per date and one column per asset.")
         if len(self.dates) < 2:
             raise DataError("A panel needs at least two dates.")
-        if self.dates != sorted(self.dates):
-            raise DataError("Dates must be in ascending order.")
+        for earlier, later in zip(self.dates, self.dates[1:], strict=False):
+            if later <= earlier:
+                raise DataError(
+                    f"Dates must be unique and in ascending order: {later} follows {earlier}."
+                )
         finite = self.prices[np.isfinite(self.prices)]
         if finite.size and float(finite.min()) <= 0.0:
             raise DataError("Prices must be positive.")
@@ -44,7 +52,7 @@ def load_csv(path: Path) -> Panel:
         raise DataError(f"{path} needs a header and at least two rows of prices.")
     header, body = rows[0], rows[1:]
     prices = np.array([[_number(cell) for cell in row[1:]] for row in body], dtype=np.float64)
-    return Panel(dates=[row[0] for row in body], assets=header[1:], prices=prices)
+    return Panel(dates=[parse_date(row[0]) for row in body], assets=header[1:], prices=prices)
 {%- if 'data-parquet' in components %}
 
 
@@ -61,7 +69,7 @@ def load_parquet(path: Path) -> Panel:
         [[math.nan if value is None else float(value) for value in column] for column in columns],
         dtype=np.float64,
     ).T
-    dates = [str(value) for value in table.column("date").to_pylist()]
+    dates = [parse_date(value) for value in table.column("date").to_pylist()]
     return Panel(dates=dates, assets=assets, prices=prices)
 {%- endif %}
 
@@ -75,6 +83,23 @@ def load_prices(path: Path) -> Panel:
         return load_parquet(path)
 {%- endif %}
     raise DataError(f"Unsupported price file {path.name}; use a .csv file.")
+
+
+def parse_date(value: Any) -> dt.date:
+    """Read a date: a ``date``, a midnight ``datetime``, or ISO text such as ``2024-01-09``."""
+    if isinstance(value, dt.datetime):
+        if value.time() != dt.time():
+            raise DataError(f"{value} has a time of day; this template uses one price per date.")
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    text = str(value).strip()
+    if _ISO_DATE.fullmatch(text):
+        try:
+            return dt.date.fromisoformat(text)
+        except ValueError:
+            pass
+    raise DataError(f"{text!r} is not an ISO date; write dates as YYYY-MM-DD, like 2024-01-09.")
 
 
 def _number(cell: str) -> float:

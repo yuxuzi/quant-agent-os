@@ -29,6 +29,7 @@ pytestmark = pytest.mark.skipif(
         ("alpha-research", {}),
         ("backtest", {}),
         ("report", {}),
+        ("backtest", {"answers": {"frequency": "weekly"}}),
         (
             "backtest",
             {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},
@@ -57,14 +58,20 @@ def test_generated_projects_pass_their_own_checks(
 
 
 def test_a_database_backtest_passes_its_checks_and_connects(tmp_path: Path) -> None:
+    import datetime as dt
     import sqlite3
 
     database = tmp_path / "prices.db"
+    days = [dt.date(2024, 1, 1) + dt.timedelta(days=offset) for offset in range(60)]
     with sqlite3.connect(database) as db:
         db.execute("CREATE TABLE prices (date TEXT, asset TEXT, price REAL)")
         db.executemany(
             "INSERT INTO prices VALUES (?, ?, ?)",
-            [(f"2024-{day:04d}", asset, 100.0 + day) for day in range(60) for asset in "ABCD"],
+            [
+                (str(date), asset, 100.0 + index)
+                for index, date in enumerate(days)
+                for asset in "ABCD"
+            ],
         )
     db.close()
     spec = AppSpec.model_validate(

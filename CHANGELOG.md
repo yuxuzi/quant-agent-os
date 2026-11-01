@@ -18,6 +18,34 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Quant baseline studies now use the backtest's trade timing (B-27 R1). A study scored a
+  signal against the return starting at the signal's own close, while the backtest trades one
+  bar later, so a signal with a one-bar edge looked strong in the study (rank IC 0.27) and
+  earned nothing in the backtest. Studies, IC decay, and quantile spreads now measure returns
+  from the trade, using `config.TRADE_LAG`; results record the lag, and both CLIs take
+  `--lag`. Regenerate existing projects, or re-run studies, to get comparable numbers.
+- Quant baseline backtests and studies no longer drop delisting losses (B-27 R2). A held
+  asset whose prices stop now earns `config.DELISTING_RETURN` (default -30%) once instead of
+  0, and studies count it instead of dropping the asset. Positions are carried through price
+  gaps, which settle at the price ratio when prices resume. Results count forced exits.
+- Quant baseline backtests rebalance on a schedule and let holdings drift (B-27 R3).
+  `config.REBALANCE_EVERY` (21 bars for daily data, 4 weekly, 1 monthly; `--rebalance-every`)
+  sets the schedule. Trades are the target minus the drifted holdings, so costs now include
+  the drift that a constant-weight book must trade back, which was modelled as zero. Results
+  add `annual_turnover`.
+- Quant baseline IC t-statistics use Newey-West (HAC) standard errors (B-27 R4), with at
+  least horizon - 1 lags, so overlapping forward returns no longer inflate them. IC decay
+  reports a t-statistic at each horizon (`ic_decay_mean_rank_ic`, `ic_decay_t_stat`), which
+  replaces the `ic_decay` series.
+- Quant baseline loaders parse dates (B-27 R5). CSV, Parquet, and database dates become
+  `datetime.date`, so order is checked as dates rather than text. Dates must be ISO
+  (`2024-01-09`) and unique; other formats are refused with an example. Synthetic panels use
+  weekdays, and the price tools take optional `dates` (warning when they are missing).
+- Quant baseline signals default to the standard definitions (B-27 R6): 12-1 momentum
+  (a year's return, skipping the latest month) and one-month reversal, scaled to the data's
+  frequency. Momentum takes `skip` (`--skip`), results record the parameters used, and bad
+  parameters or data are reported as CLI errors rather than tracebacks. The old momentum
+  default (20 bars, skip 1) is `--lookback 20 --skip 1`.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

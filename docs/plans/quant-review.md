@@ -88,10 +88,74 @@ see.
 | **R5** Real dates | Loaders parse ISO dates (CSV, Parquet, database) into `datetime.date`, and reject other formats with an example of the expected one. | `2024-01-09` sorts before `2024-01-10`. `1/9/2024` is rejected with a message naming ISO dates. |
 | **R6** Standard signal definitions | `momentum(lookback, skip)` defaults to 12-1 (252 and 21 bars daily, scaled by frequency), and `reversal` defaults to 21 bars. Results record the parameters. | Known-answer tests on a constructed price path, at each frequency. |
 
+**R1 result (2026-11-01).** Done as planned. The evaluation functions take `lag` (default
+`config.TRADE_LAG`), and forward returns run from bar t + lag. On the planted next-bar world,
+both profiles now agree:
+
+| | lag 0 | lag 1 (default) |
+| --- | --- | --- |
+| Study rank IC | 0.268 | 0.009 |
+| Backtest Sharpe | 23.9 | 1.0 |
+
+A signal whose edge lasts past the lag (`generate_panel(delay=TRADE_LAG)`) keeps it: rank IC
+0.275 and Sharpe 24.4. Both generated test suites assert this, and the study's CLI gained
+`--lag`. One deviation: the study and the backtest are still separate projects, so "matching"
+is asserted by the same planted world in each project's tests, not by one test across both.
+S1 makes it a single test.
+
+**R2 result.** Done as planned. `metrics.bar_returns` is the one definition of asset
+returns: 0 inside a gap, the whole move when prices resume, and `DELISTING_RETURN` on the bar
+after an asset's final price (only when that comes before the panel's end). The backtest
+trades only where a price exists, so positions are carried through gaps, and a delisted
+position is written off without a trading cost. Study forward returns compound the same
+returns, so a stock delisted inside the horizon counts with its loss. With no missing prices,
+held weights and turnover are unchanged. Deciding that prices have stopped for good uses the
+rest of the panel; that matches how delisting returns are recorded (at the delisting date),
+and it is documented in the code.
+
+**R3 result.** Done as planned, in the same bar loop as R2. The schedule counts from the first
+close with a position to take, so a warm-up period does not delay the first trade by up to a
+month. On the demo panel (momentum, 20 bars), average turnover falls from 16.3% a bar
+(daily) to 3.2% (every 21 bars). A constant-target book now trades 0.47% a bar of drift, or
+0.12% a year at 10 bps, where it was modelled as zero. A random walk across 40 seeds still
+shows no edge: mean gross return -0.40% a year, standard error 0.34%.
+
+**R4 result.** Done as planned. `metrics.newey_west_t_stat` (Bartlett kernel, Newey-West
+1994 lag rule) is checked against a hand-computed series and against the AR(1) closed form
+(HAC t about 0.58 of the naive t at phi = 0.5). IC t-statistics use at least horizon - 1
+lags. On a random walk, where no signal has an edge, 20-bar momentum had a naive rank-IC t of
+-4.6 at a 5-bar horizon; the HAC t is -2.5, and -1.8 at 10 bars. The `ic_decay` series
+became `ic_decay_mean_rank_ic` and `ic_decay_t_stat`.
+
+**R5 result.** Done as planned. `data.parse_date` accepts `date` values, midnight `datetime`
+values (as DuckDB and PostgreSQL return them), and ISO text, and refuses the rest, including
+`1/9/2024`, `20240102`, impossible dates, and times of day. Panels hold `datetime.date` and
+reject duplicate dates. The database smoke test had been inserting dates like `2024-0000`,
+which only worked because nothing parsed them; it now uses real dates. The inline price tools
+take optional `dates` and warn when bars are labelled with stand-in weekdays.
+
+**R6 result.** Done as planned. `config` derives the defaults from the frequency
+(`MOMENTUM_LOOKBACK = PERIODS_PER_YEAR`, and `MOMENTUM_SKIP`, `REVERSAL_LOOKBACK`, and
+`REBALANCE_EVERY` all equal `PERIODS_PER_YEAR // 12`), so a weekly project gets 52-4 momentum
+without its own table. Known-answer tests on a +1%-a-bar path check the formulas, and daily,
+weekly, and monthly projects pass their own tests. Asking reversal for a `skip` is refused,
+and the CLI turns bad parameters and data into usage errors.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in
 the smoke test.
+
+**Exit result (2026-11-01).** Met. Every generated project now tests these synthetic worlds
+with known answers:
+- planted next-bar and tradable signals (study and backtest agree at each lag);
+- gaps and delistings (bar returns, backtest positions, and study forward returns);
+- constant targets with drift (exact turnover), and the rebalance schedule;
+- an AR(1) series for the HAC t-statistic;
+- a random walk across 40 seeds, with no edge in the study's IC or the backtest's returns.
+
+The smoke suite builds 9 projects, including a weekly backtest, and all pass their own
+`uv sync`, ruff, mypy, and pytest.
 
 ### Phase 2: one project, honest out-of-sample results (B-28)
 

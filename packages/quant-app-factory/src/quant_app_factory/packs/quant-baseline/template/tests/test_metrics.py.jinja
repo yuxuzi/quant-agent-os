@@ -8,9 +8,12 @@ import pytest
 from {{ package_name }}.metrics import (
     annualized_return,
     annualized_volatility,
+    bar_returns,
     hit_rate,
     information_coefficient,
     max_drawdown,
+    newey_west_lags,
+    newey_west_t_stat,
     ranks,
     sharpe_ratio,
     simple_returns,
@@ -22,6 +25,60 @@ def test_simple_returns_follow_prices() -> None:
     returns = simple_returns(np.array([100.0, 110.0, 99.0]))
 
     assert returns == pytest.approx([0.10, -0.10])
+
+
+def test_bar_returns_bridge_gaps_and_charge_delistings_once() -> None:
+    nan = math.nan
+    prices = np.array(
+        [
+            [nan, 100.0, 100.0],
+            [10.0, nan, 110.0],
+            [11.0, nan, nan],
+            [12.1, 121.0, nan],
+            [13.31, 133.1, nan],
+        ]
+    )
+
+    returns, exits = bar_returns(prices, delisting_return=-0.3)
+
+    # Asset 0 starts late: nothing before its first price, then 10% a bar.
+    assert returns[:, 0] == pytest.approx([0.0, 0.0, 0.1, 0.1, 0.1])
+    # Asset 1 has a two-bar gap: 0 inside it, then the whole move (121 / 100) when it ends.
+    assert returns[:, 1] == pytest.approx([0.0, 0.0, 0.0, 0.21, 0.1])
+    # Asset 2 delists after bar 1: -30% once, then nothing.
+    assert returns[:, 2] == pytest.approx([0.0, 0.1, -0.3, 0.0, 0.0])
+    assert exits.sum() == 1
+    assert exits[2, 2]
+    assert np.isfinite(returns).all()
+
+
+def test_newey_west_t_stat_of_a_known_series() -> None:
+    values = np.array([1.0, 2.0, 3.0, 4.0])
+    # Mean 2.5; autocovariances 1.25 (lag 0) and 0.3125 (lag 1), so the Bartlett variance
+    # with one lag is 1.25 + 2 * 0.5 * 0.3125 = 1.5625.
+
+    assert newey_west_t_stat(values, lags=1) == pytest.approx(2.5 / math.sqrt(1.5625 / 4))
+    assert newey_west_t_stat(values, lags=0) == pytest.approx(2.5 / math.sqrt(1.25 / 4))
+    assert math.isnan(newey_west_t_stat(np.ones(10)))
+    assert newey_west_lags(100) == 4
+
+
+def test_newey_west_shrinks_the_t_stat_of_autocorrelated_values() -> None:
+    generator = np.random.default_rng(3)
+    phi, n = 0.5, 20_000
+    values = np.empty(n)
+    values[0] = 0.0
+    shocks = generator.standard_normal(n)
+    for index in range(1, n):
+        values[index] = phi * values[index - 1] + shocks[index]
+    values += 0.05
+
+    naive = newey_west_t_stat(values, lags=0)
+    hac = newey_west_t_stat(values, lags=50)
+
+    # The long-run variance of an AR(1) is (1 + phi) / (1 - phi) times its variance, so the
+    # honest t is about sqrt((1 - phi) / (1 + phi)) = 0.58 of the naive one.
+    assert hac / naive == pytest.approx(math.sqrt((1 - phi) / (1 + phi)), abs=0.05)
 
 
 def test_a_constant_return_compounds_and_has_no_volatility() -> None:

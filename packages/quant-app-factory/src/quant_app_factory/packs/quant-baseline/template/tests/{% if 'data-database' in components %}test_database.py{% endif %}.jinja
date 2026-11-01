@@ -1,5 +1,6 @@
 """Database loading, offline: a SQLite file stands in for the configured database."""
 
+import datetime as dt
 import sqlite3
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from {{ package_name }}.database import (
     connect,
     database_url,
     load_database,
+    to_panel,
 )
 
 
@@ -40,9 +42,16 @@ def test_prices_load_as_a_panel_with_missing_prices_as_nan(tmp_path: Path) -> No
 
     panel = load_database(engine, "SELECT date, asset, price FROM prices")
 
-    assert panel.dates == ["2024-01-02", "2024-01-03", "2024-01-04"]
+    assert panel.dates == [dt.date(2024, 1, 2), dt.date(2024, 1, 3), dt.date(2024, 1, 4)]
     assert panel.assets == ["AAA", "BBB"]
     assert np.isnan(panel.prices[1, 1])
+
+
+def test_rows_may_carry_date_values_or_iso_text() -> None:
+    panel = to_panel([(dt.date(2024, 1, 10), "AAA", 2.0), ("2024-01-09", "AAA", 1.0)])
+
+    assert panel.dates == [dt.date(2024, 1, 9), dt.date(2024, 1, 10)]
+    assert panel.prices[:, 0].tolist() == [1.0, 2.0]
 
 
 def test_the_connection_is_read_only_by_default(tmp_path: Path) -> None:
