@@ -108,7 +108,7 @@ def settings_lock(
         try:
             handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):  # Windows: a lock still being deleted
             if time.monotonic() >= deadline:
                 raise SettingsError(
                     f"{path} is being updated by another command (lock {lock}); try again, or "
