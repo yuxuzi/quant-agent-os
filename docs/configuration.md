@@ -87,3 +87,36 @@ tool_name = "count_signals"      # agent-tool only
 # components = ["database"]      # python-cli: container; fastapi-service: database, worker,
 #                                #   auth with auth-api-key or auth-oidc, container
 ```
+
+## Factory settings (proposed)
+
+[Decision 0008](decisions/0008-factory-settings.md), backlog B-24. App Factory reuses these
+settings in specs and in `quant-factory new`. Secrets are stored only as environment-variable
+names:
+
+```toml
+# ~/.quant-agent-os/factory.toml
+[identity]                 # falls back to git config
+author = "Your Name"
+email = "you@example.com"
+
+[connections.research-pg]
+kind = "postgres"
+host = "db.internal"
+port = 5432
+database = "research"
+user = "analyst"
+schema = "prices"
+read_only = true
+password_env = "RESEARCH_PG_PASSWORD"   # the variable's name, never the password
+
+[templates.firm-backtest]  # added by `quant-factory template add`
+source = "gh:firm/quant-packs"
+ref = "v1.2.0"
+```
+
+A spec can then say `connection = "research-pg"`. Edit the file directly, or use
+`quant-factory settings set|remove`. Values that look like secrets are refused.
+
+A server started by Claude Desktop does not see your shell's environment, so run
+`quant-factory create` from a terminal when a connection check needs those variables.

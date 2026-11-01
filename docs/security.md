@@ -85,6 +85,24 @@ in memory unless it is given a run store. What each part of a record holds:
   project. Any other program is reported and skipped.
 - **Ingestion.** Knowledge-store ingestion is an operator command, not an agent tool.
 
+## Secret references (proposed)
+
+[Decisions 0007 and 0008](decisions/0008-factory-settings.md). App specs, the factory
+settings file, and generated apps hold environment-variable names, never secret values:
+- **Refused values.** A value that looks like a secret, under a secret-named key or in a
+  setting declared secret, is refused.
+- **Generated files.** They name variables (`.env.example`, `settings.py`) and hold no values;
+  a scan test checks this.
+- **Programs.** By default, programs receive no secrets. The one exception is a generated
+  app's `--check-connection`:
+  - it receives only the variables the spec references, through `run_command`'s `extra_env`;
+  - it runs during the operator's approved create, or an approved `quant-factory check`;
+  - it runs only for projects from built-in templates, whose connection code App Factory
+    ships;
+  - the values, including URL-encoded forms, are redacted from its captured output.
+- **Database TLS.** Generated PostgreSQL connections verify the server certificate
+  (`sslmode=verify-full`) unless the spec explicitly chooses a weaker mode.
+
 ## Out of scope for the first release
 
 - autonomous trading or brokerage connectivity;

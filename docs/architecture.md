@@ -478,6 +478,56 @@ The pieces:
   structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
   It needs a decision record before it is built (open).
 
+### 8.1 Guided generation and quant templates (proposed)
+
+These pieces are proposed in decisions 0007–0009, with the step plan in
+[plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) and the backlog in
+B-23–B-26.
+
+```text
+templates: built-in (agent-tool, quant-baseline) · bundled (python, fastapi) · user pack (path)
+   │
+   ▼
+describe_template ──▶ person, via Claude or `quant-factory new` ──▶ spec.toml (the draft)
+   ▲                                                                   │
+   └──────────── check_spec: problems, or ready + exact files ◀────────┘
+                  (pytemplate.api.plan is the judge)
+   │ ready
+   ▼
+quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (+ check-connection) ─▶ report
+                ▲
+       factory.toml: identity, connections (environment-variable names), registered packs
+```
+
+- **No draft state.** The spec file is the draft. `check_spec` decides readiness through
+  pytemplate-uv, so Copier's rules are never re-implemented. Model-drafted specs (B-16) fill
+  the same file.
+- **Two kinds of input stay apart.**
+  - Template answers come from the pack's questions and are used when the project renders.
+  - Runtime settings come from the `settings` components declare (for example
+    `DATABASE_URL`) and are read by the generated app. Secret ones accept only `env:NAME`.
+- **Creation in this phase.** Claude can describe, guide, and check. The person confirms
+  creation with `quant-factory create`, because MCP clients cannot approve yet (O-13).
+- **Database guidance** is the `data-database` component:
+  - it asks for the database kind, a saved or new connection, and the environment variable
+    that holds the password or URL;
+  - it generates `settings.py`, `.env.example`, and `check-connection`;
+  - `create --check-connection` passes only that variable to the check, and only for built-in
+    templates, so a secret never reaches pack code the operator did not review.
+- **Approvals bind the reviewed pack.** The approval for `create_app` covers a digest of the
+  template pack's files, so a pack edited after its preview is refused rather than rendered.
+- **Quant templates** (decision 0009) are portable:
+  - one required `metrics` component holds all the metric code;
+  - every project carries bias tests (future prices never change past signals or returns,
+    forward-shifted signals, lagged trades, cost ordering)
+    and a `LIMITATIONS.md`;
+  - there is no trading code.
+- **Making templates:**
+  - `quant-factory template fork` copies a baseline profile into a user pack, which people
+    edit by hand or with Claude Code;
+  - `template check` validates it;
+  - generic authoring is pytemplate-uv's own roadmap.
+
 ## 9. pytemplate-uv integration boundary
 
 **Confirmed:** `pytemplate-uv` 3.0 is published. It provides `plan`, `validate`, `create`, and
@@ -511,6 +561,10 @@ Further rules:
 - Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
   a second `ScaffoldProvider`. Core and Quant Research never import pytemplate-uv.
 - `pytemplate-uv` releases and plans are its own repository's business.
+- **User packs** (proposed).
+  - B-23: a spec names a local pack directory.
+  - B-26: `quant-factory template add` registers a git pack pinned to a ref and caches it under
+    `~/.quant-agent-os/packs/`, so plans read the cache and need no network access.
 
 ## 10. Interface strategy: MCP, REST, SDK, CLI
 
@@ -541,6 +595,7 @@ tests.
 | `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
 | `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
 | `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
+| `describe_template`, `check_spec` | App Factory | `read_local_data` (`check_spec` renders only into a temporary directory) | Days 31–45 (B-24) |
 | `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
 | `generate_strategy` | App Factory + Research | `read_local_data` | Days 31–60 |
 | `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
@@ -598,13 +653,20 @@ See [security.md](security.md) for details.
   CLI. The model can never grant an approval. `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` gives a
   standing approval; it is empty by default, and each use is recorded.
 - `execute_code` tools run programs through `runtime.runner.run_command`. It uses a fixed
-  working directory, an allowlisted environment (no secrets passed through), a timeout, and a
-  hard kill of the process tree. A thread timeout is not enough here, because it cannot stop a
+  working directory, an allowlisted environment (no secrets passed through by default), a
+  timeout, and a hard kill of the process tree. The one exception is App Factory's approved
+  connection check, which passes exactly the variables a spec references, only to code from a
+  built-in template, and redacts their values from the output. A thread timeout is not enough here, because it cannot stop a
   running process.
 - Ingestion and other store writes are operator commands, not agent tools.
 
 **Proposed:**
 - approvals through an MCP client's confirmation step.
+- **Secret references** (decisions 0007 and 0008). Specs, `factory.toml`, and generated files
+  hold environment-variable names (`env:NAME`, `password_env`), never secret values.
+  - A value that looks like a secret is refused.
+  - A name resolves only in the process that needs it, and is passed to a program only through
+    `run_command`'s `extra_env`, for exactly that name.
 - HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
   carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
   but multi-tenant hosting remains out of scope.

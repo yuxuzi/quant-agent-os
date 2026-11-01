@@ -34,6 +34,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Planned quant templates and a guided App Factory (`docs/plans/app-factory-questionnaires.md`,
+  backlog B-23–B-26, proposed decisions 0007–0009):
+  - `quant-baseline` templates (`alpha-research`, `backtest`, `report`), with bias tests;
+  - user packs;
+  - stateless guidance (`describe_template`, `check_spec`, `quant-factory new`);
+  - a factory settings file, with secrets as environment-variable names only;
+  - database setup;
+  - template forks.
 - Approval gate (B-09, decision 0005 accepted).
   - **Gate.** `write_local_data`, `execute_code`, `network`, and `external_action` calls need
     a single-use operator approval, bound to the run, the tool, and the input hash. Without
