@@ -172,6 +172,17 @@ db_schema:
     Use a schema name of letters, digits, and underscores.
     {% endif %}
 
+db_sslmode:
+  type: str
+  help: TLS for postgres; verify-full checks the server certificate (disable is insecure)
+  default: verify-full
+  choices:
+    - verify-full
+    - verify-ca
+    - require
+    - disable
+  when: "{{ 'data-database' in components and db_kind == 'postgres' }}"
+
 db_query:
   type: str
   help: Query returning one row per price, with columns date, asset, price

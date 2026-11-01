@@ -37,6 +37,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- App Factory review fixes:
+  - **Connection check.** It runs only for built-in templates, and redacts URL-encoded forms
+    of secrets too.
+  - **TLS.** Generated PostgreSQL connections verify the server certificate by default
+    (`sslmode=verify-full`).
+  - **Pack drift.** The approval for `create_app` binds a digest of the previewed pack, and a
+    pack changed after its preview is refused.
+  - **Retries.** `quant-factory check` (the `check_app` tool, approved per call) re-runs an
+    existing project's checks.
+
 - Template forks and registered packs (B-26):
   - `quant-factory template fork` copies a built-in profile into your own pack, optionally
     renaming it, then checks and registers it.

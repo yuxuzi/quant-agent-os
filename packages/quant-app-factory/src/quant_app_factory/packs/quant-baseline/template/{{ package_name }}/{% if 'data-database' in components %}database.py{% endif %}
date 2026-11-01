@@ -3,7 +3,10 @@
 Credentials never live in the project: the URL comes from ``DATABASE_URL`` when it is set,
 otherwise from the settings in ``config.py`` plus ``DATABASE_PASSWORD``. Read-only access is
 enforced by each database: SQLite runs query-only, DuckDB opens the file read-only, and
-PostgreSQL uses read-only transactions.
+PostgreSQL uses read-only transactions. PostgreSQL connections verify the server certificate
+(``sslmode=verify-full``) unless ``config.DB_SSLMODE`` or the URL chooses otherwise; point
+``PGSSLROOTCERT`` (or ``sslrootcert`` in the URL) at your CA certificate, or use
+``sslrootcert=system`` for a publicly signed server.
 """
 
 from __future__ import annotations
@@ -28,7 +31,10 @@ _DRIVERS = {"postgres": "postgresql+psycopg", "sqlite": "sqlite", "duckdb": "duc
 def database_url(environ: Mapping[str, str] = os.environ) -> URL:
     """Return the connection URL: ``DATABASE_URL``, or one built from ``config.py``."""
     if environ.get(URL_VARIABLE):
-        return make_url(environ[URL_VARIABLE])
+        url = make_url(environ[URL_VARIABLE])
+        if url.get_backend_name() == "postgresql" and "sslmode" not in url.query:
+            url = url.update_query_dict({"sslmode": config.DB_SSLMODE})
+        return url
     if config.DB_KIND == "postgres":
         return URL.create(
             _DRIVERS["postgres"],
@@ -37,6 +43,7 @@ def database_url(environ: Mapping[str, str] = os.environ) -> URL:
             host=config.DB_HOST,
             port=config.DB_PORT,
             database=config.DB_NAME,
+            query={"sslmode": config.DB_SSLMODE},
         )
     return URL.create(_DRIVERS[config.DB_KIND], database=config.DB_NAME)
 

@@ -67,6 +67,23 @@ def test_database_url_wins_and_passwords_are_never_shown(tmp_path: Path) -> None
     assert "hunter2" not in url.render_as_string(hide_password=True)
 
 
+def test_postgres_verifies_the_server_certificate_unless_told_otherwise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from {{ package_name }} import config
+
+    monkeypatch.setattr(config, "DB_KIND", "postgres")
+    monkeypatch.setattr(config, "DB_SSLMODE", "verify-full")
+
+    built = database_url({})
+    given = database_url({"DATABASE_URL": "postgresql+psycopg://alice@db/research"})
+    chosen = database_url({"DATABASE_URL": "postgresql+psycopg://db/research?sslmode=disable"})
+
+    assert built.query["sslmode"] == "verify-full"
+    assert given.query["sslmode"] == "verify-full"
+    assert chosen.query["sslmode"] == "disable"
+
+
 def test_check_connection_reports_success(tmp_path: Path) -> None:
     message = check_connection(connect(make_url(_sqlite(tmp_path))))
 

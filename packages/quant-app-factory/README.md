@@ -32,6 +32,7 @@ spec can name a connection saved in `factory.toml` (`connection = "research-pg"`
 uv run quant-factory new                # answer the template's questions; writes a ready spec
 uv run quant-factory plan app.toml      # writes nothing
 uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
+uv run quant-factory check app.toml     # re-run an existing project's checks
 uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
 uv run quant-factory serve-mcp          # describe_template, check_spec, plan_app for Claude
 uv run quant-factory template fork quant-baseline/backtest packs/mine   # make a template yours

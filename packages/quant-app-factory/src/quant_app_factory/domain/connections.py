@@ -23,6 +23,9 @@ class Connection(BaseModel):
     database: str | None = Field(default=None, description="Name, or file path for sqlite/duckdb")
     user: str | None = None
     db_schema: str | None = Field(default=None, alias="schema")
+    sslmode: Literal["verify-full", "verify-ca", "require", "disable"] | None = Field(
+        default=None, description="PostgreSQL TLS; the template defaults to verify-full"
+    )
     read_only: bool = True
     url_env: str | None = Field(default=None, description="Variable holding the full URL")
     password_env: str | None = Field(default=None, description="Variable holding the password")
@@ -47,6 +50,7 @@ def apply_connection(spec: AppSpec, connection: Connection) -> AppSpec:
         "db_name": connection.database,
         "db_user": connection.user,
         "db_schema": connection.db_schema,
+        "db_sslmode": connection.sslmode,
         "db_read_only": "yes" if connection.read_only else "no",
     }
     settings = {

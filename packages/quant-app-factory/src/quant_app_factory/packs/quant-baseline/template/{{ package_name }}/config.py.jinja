@@ -16,6 +16,7 @@ DB_PORT: int = {{ db_port }}
 DB_NAME: str = "{{ db_name }}"  # noqa: E501
 DB_USER: str = "{{ db_user }}"
 DB_SCHEMA: str = "{{ db_schema }}"
+DB_SSLMODE: str = "{{ db_sslmode }}"  # postgres TLS; verify-full checks the server certificate
 DB_READ_ONLY: bool = {{ "True" if db_read_only == "yes" else "False" }}
 PRICE_QUERY: str = "{{ db_query }}"  # noqa: E501
 {%- endif %}

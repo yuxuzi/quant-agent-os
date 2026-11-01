@@ -38,7 +38,9 @@ configured there{% if db_read_only == 'yes' %}, read-only{% endif %}. The query 
 `date`, `asset`, and `price` columns. Credentials come from the environment, never from the
 project (see `.env.example`):
 {%- if db_kind == 'postgres' %}
-`DATABASE_PASSWORD` for user `{{ db_user }}`, or a full `DATABASE_URL`.
+`DATABASE_PASSWORD` for user `{{ db_user }}`, or a full `DATABASE_URL`. Connections verify the
+server certificate (`sslmode={{ db_sslmode }}`); set `PGSSLROOTCERT` to your CA certificate, or
+add `sslrootcert=system` to `DATABASE_URL` for a publicly signed server.
 {%- else %}
 an optional `DATABASE_URL` replaces the file path `{{ db_name }}`.
 {%- endif %}

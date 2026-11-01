@@ -166,9 +166,17 @@ read-only query from PostgreSQL, SQLite, or DuckDB.
   URL, which wins) or `DATABASE_PASSWORD`, listed in its `.env.example`. Its
   `--check-connection` flag connects, then exits.
 - **The factory's check.** `quant-factory create --check-connection` runs that check after the
-  project's own checks. It passes only the variables the spec's settings reference, such as
-  `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`, and redacts their values from the
-  output.
+  project's own checks.
+  - It passes only the variables the spec's settings reference, such as
+    `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`.
+  - It redacts their values from the output, including URL-encoded forms.
+  - It runs only for projects from built-in templates, so your secret never reaches pack code
+    you have not reviewed.
+- **Retrying.** `quant-factory check SPEC [--check-connection]` re-runs the checks of a
+  project that already exists, with its own approval.
+- **TLS.** PostgreSQL connections verify the server certificate (`db_sslmode`, default
+  `verify-full`). Point `PGSSLROOTCERT` at your CA certificate, or add `sslrootcert=system` to
+  `DATABASE_URL` for a publicly signed server. `disable` is for local development only.
 
 ### Guided specs
 

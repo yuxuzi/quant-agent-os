@@ -6,9 +6,9 @@ version = "1"
 status = "experimental"
 compatible_profiles = ["alpha-research", "backtest"]
 dependencies = ["sqlalchemy>=2.0"]
-questions = ["db_kind", "db_host", "db_port", "db_name", "db_user", "db_schema", "db_query", "db_read_only"]
+questions = ["db_kind", "db_host", "db_port", "db_name", "db_user", "db_schema", "db_sslmode", "db_query", "db_read_only"]
 paths = ["{package}/database.py", ".env.example", "tests/test_database.py"]
-security_notes = ["Credentials come only from the DATABASE_URL or DATABASE_PASSWORD environment variables; nothing secret is written into the project.", "Connections are read-only by default: SQLite query-only, DuckDB read-only files, PostgreSQL read-only transactions."]
+security_notes = ["PostgreSQL connections verify the server certificate (sslmode=verify-full) unless the spec chooses a weaker mode.", "Credentials come only from the DATABASE_URL or DATABASE_PASSWORD environment variables; nothing secret is written into the project.", "Connections are read-only by default: SQLite query-only, DuckDB read-only files, PostgreSQL read-only transactions."]
 
 [[settings]]
 name = "DATABASE_URL"

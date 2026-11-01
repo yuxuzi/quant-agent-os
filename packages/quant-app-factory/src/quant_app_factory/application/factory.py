@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shlex
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, quote_plus
 
 from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.runner import CommandResult, run_command
 from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection, apply_connection
 from quant_app_factory.domain.planner import (
+    BUILT_IN_PACKS,
     AppPlan,
     ArchitecturePlanner,
     PlanningError,
@@ -293,9 +296,7 @@ class AppFactory:
                 notes.append(f"{variable} is not set, so {name} was not passed to the check.")
         command = ["uv", "run", spec.name, "--check-connection"]
         result = self._runner(command, cwd=project, timeout=CHECK_TIMEOUT_SECONDS, extra_env=extra)
-        output = (result.stdout_tail + result.stderr_tail).strip()
-        for secret in {value for value in extra.values() if value}:
-            output = output.replace(secret, "[REDACTED]")
+        output = redact_values((result.stdout_tail + result.stderr_tail).strip(), extra.values())
         return (
             CheckResult(
                 command=" ".join(command),
@@ -327,47 +328,108 @@ class AppFactory:
         plan = self.plan(spec)
         return plan, self.scaffolder.plan(plan.request)
 
+    def pack_digest(self, spec: AppSpec) -> str | None:
+        """Return a SHA-256 of the spec's template pack files (None for the bundled profiles).
+
+        Passing it to `create` binds the approval to the pack that was previewed.
+        """
+        location = self.plan(spec).request.template
+        return None if location is None else directory_digest(Path(location))
+
     def create(
-        self, spec: AppSpec, *, run_checks: bool = True, check_connection: bool = False
+        self,
+        spec: AppSpec,
+        *,
+        run_checks: bool = True,
+        check_connection: bool = False,
+        expected_pack_digest: str | None = None,
     ) -> FactoryReport:
         """Create the project and, unless ``run_checks`` is false, run its lifecycle commands.
 
-        ``check_connection`` also runs the app's ``--check-connection`` once its checks pass,
-        passing only the variables the spec's settings reference.
+        ``check_connection`` also runs the app's ``--check-connection`` once its checks pass
+        (built-in templates only), passing only the variables the spec's settings reference.
+        ``expected_pack_digest`` refuses to render a pack that changed since it was previewed.
         """
         plan, preview = self.preview(spec)
         if preview.target_exists:
             raise ScaffoldRequestError(
-                f"{preview.project_path} already exists; choose another name or output_dir."
+                f"{preview.project_path} already exists; choose another name or output_dir, or "
+                "re-run its checks with `quant-factory check`."
             )
+        if expected_pack_digest is not None and plan.request.template is not None:
+            current = directory_digest(Path(plan.request.template))
+            if current != expected_pack_digest:
+                raise ScaffoldRequestError(
+                    "The template pack changed after it was previewed; preview it again and "
+                    "approve the new version."
+                )
         result = self.scaffolder.create(plan.request)
-        warnings: list[str] = []
         checks: list[CheckResult] = []
+        warnings: list[str] = []
         if run_checks:
             checks, warnings = self.check(
                 Path(result.project_path), result.lifecycle_commands, preview.package_name
             )
-        completed = plan.spec
         if check_connection:
-            if DATABASE_COMPONENT not in result.components:
-                warnings.append("No database component, so there is no connection to check.")
-            elif checks and not all(check.ok for check in checks):
-                warnings.append("The project's checks failed, so the connection was not checked.")
-            else:
-                connection_check, notes = self._check_connection(
-                    Path(result.project_path), completed
-                )
-                checks.append(connection_check)
-                warnings += notes
+            warnings += self._connection_step(
+                spec, plan.spec, Path(result.project_path), result.components, checks
+            )
+        return self._report(spec, plan, preview, result.project_path, checks, warnings)
+
+    def recheck(self, spec: AppSpec, *, check_connection: bool = False) -> FactoryReport:
+        """Re-run the checks (and, if asked, the connection check) on an existing project."""
+        plan, preview = self.preview(spec)
+        if not preview.target_exists:
+            raise ScaffoldRequestError(
+                f"{preview.project_path} does not exist yet; create it first."
+            )
+        project = Path(preview.project_path)
+        checks, warnings = self.check(project, preview.lifecycle_commands, preview.package_name)
+        if check_connection:
+            warnings += self._connection_step(spec, plan.spec, project, preview.components, checks)
+        return self._report(spec, plan, preview, preview.project_path, checks, warnings)
+
+    def _connection_step(
+        self,
+        spec: AppSpec,
+        completed: AppSpec,
+        project: Path,
+        components: list[str],
+        checks: list[CheckResult],
+    ) -> list[str]:
+        """Run the connection check when it is allowed; return any notes."""
+        if DATABASE_COMPONENT not in components:
+            return ["No database component, so there is no connection to check."]
+        if spec.target[0] not in BUILT_IN_PACKS:
+            return [
+                "The connection check runs only for built-in templates: it would hand your "
+                "database secret to pack code you have not reviewed. Run the app's "
+                "--check-connection yourself once you trust the pack."
+            ]
+        if checks and not all(check.ok for check in checks):
+            return ["The project's checks failed, so the connection was not checked."]
+        connection_check, notes = self._check_connection(project, completed)
+        checks.append(connection_check)
+        return notes
+
+    def _report(
+        self,
+        spec: AppSpec,
+        plan: AppPlan,
+        preview: ScaffoldPlan,
+        project_path: str,
+        checks: list[CheckResult],
+        warnings: list[str],
+    ) -> FactoryReport:
         return FactoryReport(
             name=spec.name,
             kind=spec.kind,
             template_name=spec.target[0],
-            project_path=result.project_path,
+            project_path=project_path,
             files=preview.files,
-            profile=result.profile,
-            profile_version=result.profile_version,
-            components=result.components,
+            profile=preview.profile,
+            profile_version=preview.profile_version,
+            components=preview.components,
             dependencies=preview.dependencies,
             scaffolder=self._scaffolder_version or self.scaffolder.name,
             template=preview.template,
@@ -410,3 +472,27 @@ class AppFactory:
                 warnings.append("Dependency installation failed, so the other checks did not run.")
                 break
         return checks, warnings
+
+
+def redact_values(text: str, values: Iterable[str]) -> str:
+    """Replace each value in ``text``, and its URL-encoded forms, with ``[REDACTED]``."""
+    forms = {
+        form
+        for value in values
+        if value
+        for form in (value, quote(value, safe=""), quote_plus(value))
+    }
+    for form in sorted(forms, key=len, reverse=True):
+        text = text.replace(form, "[REDACTED]")
+    return text
+
+
+def directory_digest(root: Path) -> str:
+    """Return a SHA-256 over every file's relative path and bytes under ``root``."""
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    return digest.hexdigest()

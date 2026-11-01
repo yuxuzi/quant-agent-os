@@ -19,6 +19,7 @@ from quant_app_factory.domain.spec import AppSpec
 CREATE_PERMISSIONS = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.NETWORK}
 )
+CHECK_PERMISSIONS = frozenset({Permission.EXECUTE_CODE, Permission.NETWORK})
 
 
 class DescribeTemplateInput(BaseModel):
@@ -76,6 +77,17 @@ class CreateAppInput(BaseModel):
     check_connection: bool = Field(
         default=False, description="Also run the app's --check-connection after its checks"
     )
+    expected_pack_digest: str | None = Field(
+        default=None,
+        description="The template pack digest from plan_app; a changed pack is refused",
+    )
+
+
+class CheckAppInput(BaseModel):
+    """An existing project to check again, named by the spec that created it."""
+
+    spec: AppSpec
+    check_connection: bool = False
 
 
 def guide_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
@@ -133,7 +145,11 @@ def factory_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
             plan=plan,
             preview=preview,
             warnings=warnings,
-            create_app_input={"spec": params.spec.model_dump(mode="json"), "run_checks": True},
+            create_app_input={
+                "spec": params.spec.model_dump(mode="json"),
+                "run_checks": True,
+                "expected_pack_digest": factory.pack_digest(params.spec),
+            },
             next_step=(
                 "Call create_app with create_app_input. It writes files, runs commands, and "
                 "downloads packages, so it waits for an operator approval of that exact input."
@@ -155,7 +171,26 @@ def factory_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
     )
     def create_app(params: CreateAppInput) -> FactoryReport:
         return factory.create(
-            params.spec, run_checks=params.run_checks, check_connection=params.check_connection
+            params.spec,
+            run_checks=params.run_checks,
+            check_connection=params.check_connection,
+            expected_pack_digest=params.expected_pack_digest,
         )
 
-    return [*guide_tools(factory), plan_app, create_app]
+    @tool(
+        name="check_app",
+        description=(
+            "Re-run an existing project's checks (uv sync, ruff, mypy, pytest) and, if asked, "
+            "its database connection check. Runs commands and uses the network, so each call "
+            "needs an operator approval."
+        ),
+        permissions=CHECK_PERMISSIONS,
+        timeout_seconds=1800.0,
+        max_output_bytes=300_000,
+        deterministic=False,
+        idempotent=True,
+    )
+    def check_app(params: CheckAppInput) -> FactoryReport:
+        return factory.recheck(params.spec, check_connection=params.check_connection)
+
+    return [*guide_tools(factory), plan_app, create_app, check_app]

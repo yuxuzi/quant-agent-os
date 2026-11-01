@@ -39,7 +39,7 @@ from quant_app_factory.infrastructure.settings_file import (
     set_value,
     settings_path,
 )
-from quant_app_factory.tools import CREATE_PERMISSIONS, factory_tools
+from quant_app_factory.tools import CHECK_PERMISSIONS, CREATE_PERMISSIONS, factory_tools
 
 app = typer.Typer(
     help="Quant App Factory: generate tested, packaged Python applications.", no_args_is_help=True
@@ -143,6 +143,7 @@ def create(
     app_spec = _load(spec)
     if _preview(factory, app_spec):
         raise typer.Exit(code=1)
+    pack_digest = factory.pack_digest(app_spec)  # the approval covers the pack just shown
     prompt = (
         "Create this project? It writes files, runs uv, and downloads packages"
         if checks
@@ -166,6 +167,7 @@ def create(
             spec=app_spec.model_dump(mode="json"),
             run_checks=checks,
             check_connection=check_connection,
+            expected_pack_digest=pack_digest,
         )
         run_id = waiting.run_id or ""
         if waiting.status != "approval_required":
@@ -180,8 +182,51 @@ def create(
         raise typer.Exit(code=1)
 
 
-def _print_report(report: FactoryReport, run_id: str, runs: Path) -> None:
-    console.print(f"Created {report.project_path} with {report.scaffolder}.", soft_wrap=True)
+@app.command("check")
+def check_project(
+    spec: SpecArgument,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Approve without asking.")] = False,
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
+    check_connection: Annotated[
+        bool,
+        typer.Option("--check-connection", help="Also connect to the database (built-in only)."),
+    ] = False,
+) -> None:
+    """Re-run the checks of the project a spec created, for example after a failed check."""
+    factory = _factory()
+    app_spec = _load(spec)
+    prompt = "Re-run this project's checks? It runs uv and may download packages"
+    if check_connection:
+        prompt += ", then connects to the database"
+    if not yes and not typer.confirm(prompt, default=False):
+        raise typer.Exit(code=1)
+    policy = PermissionPolicy(
+        granted=READ_ONLY | CHECK_PERMISSIONS, tool_allowlist=frozenset({"check_app"})
+    )
+    with Platform(
+        factory_tools(factory),
+        policy=policy,
+        run_store=SqliteRunStore(_runs_path(runs)),
+        actor="cli",
+    ) as platform:
+        waiting = platform.call(
+            "check_app", spec=app_spec.model_dump(mode="json"), check_connection=check_connection
+        )
+        run_id = waiting.run_id or ""
+        if waiting.status != "approval_required":
+            raise _fail(f"Expected an approval request, got {waiting.status}: {waiting.error}")
+        platform.approve(run_id, approved_by=f"cli:{getpass.getuser()}")
+        (record,) = platform.resume(run_id)
+    if record.status != "ok" or record.output is None:
+        raise _fail(f"check_app {record.status}: {record.error} (run {run_id})")
+    report = FactoryReport.model_validate(record.output)
+    _print_report(report, run_id, _runs_path(runs), verb="Checked")
+    if report.checks_passed is False:
+        raise typer.Exit(code=1)
+
+
+def _print_report(report: FactoryReport, run_id: str, runs: Path, verb: str = "Created") -> None:
+    console.print(f"{verb} {report.project_path} with {report.scaffolder}.", soft_wrap=True)
     for check in report.checks:
         mark = "[green]ok[/green]" if check.ok else "[red]failed[/red]"
         console.print(f"  {mark}  {check.command}  ({check.duration_ms / 1000:.1f} s)")
@@ -391,6 +436,7 @@ def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str])
             "port": int(port) if port.isdigit() else None,
             "user": answers.get("db_user") or None,
             "schema": answers.get("db_schema") or None,
+            "sslmode": answers.get("db_sslmode") or None,
         }
     fields |= {
         "database": answers.get("db_name") or None,
@@ -590,7 +636,9 @@ def serve_mcp(
     create_app is not served: MCP clients cannot approve it yet, so people create from the
     terminal. Messages go to stderr because stdout carries the protocol.
     """
-    tools = [spec for spec in factory_tools(_factory()) if spec.name != "create_app"]
+    tools = [
+        spec for spec in factory_tools(_factory()) if spec.name not in ("create_app", "check_app")
+    ]
     run_store: SqliteRunStore | None = None
     try:
         if record:
