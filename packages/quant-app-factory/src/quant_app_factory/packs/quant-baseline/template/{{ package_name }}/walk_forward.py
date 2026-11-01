@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 
 from . import config, signals
-from .backtest import run_backtest, target_weights, walk_forward_splits
+from .backtest import run_backtest, walk_forward_splits, weights_for
 from .data import Panel
 from .evaluation import forward_returns
 from .metrics import FloatArray, information_coefficient, sharpe_ratio, summarize
@@ -100,6 +100,7 @@ def run_walk_forward(panel: Panel, parameters: Parameters | None = None) -> dict
             "lag": chosen.lag,
             "rebalance_every": chosen.rebalance_every,
             "delisting_return": chosen.delisting_return,
+            "exposure": chosen.exposure,
         },
         "metrics": {
             **summarize(out_of_sample[tested], periods),
@@ -127,7 +128,7 @@ def run_walk_forward(panel: Panel, parameters: Parameters | None = None) -> dict
 def _net(prices: FloatArray, signal: FloatArray, parameters: Parameters) -> FloatArray:
     return run_backtest(
         prices,
-        target_weights(signal),
+        weights_for(prices, signal, parameters),
         cost_bps=parameters.cost_bps,
         lag=parameters.lag,
         rebalance_every=parameters.rebalance_every,

@@ -51,6 +51,17 @@ def test_walk_forward_reports_out_of_sample_folds() -> None:
     assert "## Folds" in (run / "report.md").read_text()
 
 
+@pytest.mark.parametrize("exposure", ["beta-neutral", "long-only"])
+def test_exposure_modes_run_and_report_their_metrics(exposure: str) -> None:
+    assert main(["backtest", "--demo", "--exposure", exposure]) == 0
+
+    (run,) = _runs("backtest")
+    results = _results(run)
+    assert results["parameters"]["exposure"] == exposure
+    assert "beta" in results["metrics"]
+    assert ("information_ratio" in results["metrics"]) == (exposure == "long-only")
+
+
 def test_runs_never_overwrite_each_other_and_take_labels() -> None:
     assert main(["study", "--demo"]) == 0
     assert main(["study", "--demo", "--label", "second try"]) == 0

@@ -19,6 +19,8 @@ PERCENT_METRICS = frozenset(
         "average_turnover",
         "annual_turnover",
         "positive_rank_ic_share",
+        "active_return",
+        "tracking_error",
     }
 )
 COUNT_METRICS = frozenset({"bars", "forced_exits", "delistings", "folds", "out_of_sample_bars"})

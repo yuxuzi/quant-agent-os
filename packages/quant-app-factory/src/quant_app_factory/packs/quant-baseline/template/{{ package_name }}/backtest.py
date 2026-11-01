@@ -23,8 +23,17 @@ import numpy as np
 
 from . import config, signals
 from .data import Panel
-from .metrics import FloatArray, bar_returns, summarize
+from .metrics import FloatArray, active_metrics, bar_returns, beta, summarize
 from .parameters import Parameters
+
+WEIGHTS = {
+    "dollar-neutral": "signal ranks, zero net dollars, gross exposure 1",
+    "beta-neutral": (
+        "signal ranks with zero net dollars and zero beta to the market (rolling betas), "
+        "gross exposure 1"
+    ),
+    "long-only": "equal weights on the top signal quantile, against the equal-weight market",
+}
 
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
@@ -48,6 +57,77 @@ def target_weights(signal: FloatArray) -> FloatArray:
         if gross > 0.0:
             weights[bar, valid] = centred / gross
     return weights
+
+
+def market_returns(
+    prices: FloatArray, delisting_return: float = config.DELISTING_RETURN
+) -> FloatArray:
+    """Equal-weight market return per bar: the mean over assets priced at the previous close."""
+    returns, _ = bar_returns(prices, delisting_return)
+    market = np.zeros(prices.shape[0])
+    priced = np.isfinite(prices)
+    for bar in range(1, prices.shape[0]):
+        held = priced[bar - 1]
+        if held.any():
+            market[bar] = float(returns[bar, held].mean())
+    return market
+
+
+def rolling_betas(prices: FloatArray, window: int, market: FloatArray | None = None) -> FloatArray:
+    """Each asset's beta to the market over the ``window`` bars ending at t (NaN before then).
+
+    Known at the close of bar t, so weights built from it never look ahead.
+    """
+    returns, _ = bar_returns(prices)
+    market = market_returns(prices) if market is None else market
+    betas = np.full(prices.shape, np.nan)
+    for bar in range(window, prices.shape[0]):
+        x = market[bar - window + 1 : bar + 1]
+        x = x - x.mean()
+        spread = float(x @ x)
+        if spread > 0.0:
+            y = returns[bar - window + 1 : bar + 1]
+            betas[bar] = x @ (y - y.mean(axis=0)) / spread
+    return betas
+
+
+def beta_neutral_weights(signal: FloatArray, betas: FloatArray) -> FloatArray:
+    """Rank weights with zero net dollars and zero beta, scaled to gross exposure 1."""
+    ranked = target_weights(np.where(np.isfinite(betas), signal, np.nan))
+    weights = np.zeros(signal.shape)
+    for bar in range(signal.shape[0]):
+        valid = (ranked[bar] != 0.0) & np.isfinite(betas[bar])
+        if int(valid.sum()) < 3:
+            continue
+        exposures = np.column_stack([np.ones(int(valid.sum())), betas[bar, valid]])
+        fit, *_ = np.linalg.lstsq(exposures, ranked[bar, valid], rcond=None)
+        neutral = ranked[bar, valid] - exposures @ fit
+        gross = float(np.abs(neutral).sum())
+        if gross > 1e-12:
+            weights[bar, valid] = neutral / gross
+    return weights
+
+
+def long_only_weights(signal: FloatArray, quantiles: int = 5) -> FloatArray:
+    """Equal weights on the top 1 / ``quantiles`` of assets by signal, summing to 1."""
+    weights = np.zeros(signal.shape)
+    for bar in range(signal.shape[0]):
+        valid = np.flatnonzero(np.isfinite(signal[bar]))
+        if valid.size == 0:
+            continue
+        count = max(1, valid.size // quantiles)
+        top = valid[np.argsort(signal[bar, valid], kind="mergesort")[-count:]]
+        weights[bar, top] = 1.0 / count
+    return weights
+
+
+def weights_for(prices: FloatArray, signal: FloatArray, parameters: Parameters) -> FloatArray:
+    """Target weights for ``parameters.exposure``."""
+    if parameters.exposure == "beta-neutral":
+        return beta_neutral_weights(signal, rolling_betas(prices, parameters.beta_window))
+    if parameters.exposure == "long-only":
+        return long_only_weights(signal, parameters.quantiles)
+    return target_weights(signal)
 
 
 def run_backtest(
@@ -117,16 +197,21 @@ def run(panel: Panel, parameters: Parameters | None = None) -> dict[str, Any]:
     signal = signals.compute(chosen.signal, panel.prices, **signal_parameters)
     result = run_backtest(
         panel.prices,
-        target_weights(signal),
+        weights_for(panel.prices, signal, chosen),
         cost_bps=chosen.cost_bps,
         lag=chosen.lag,
         rebalance_every=chosen.rebalance_every,
         delisting_return=chosen.delisting_return,
     )
     periods = config.PERIODS_PER_YEAR
+    market = market_returns(panel.prices, chosen.delisting_return)
+    exposure_metrics = {"beta": beta(result["net"][1:], market[1:])}
+    if chosen.exposure == "long-only":
+        exposure_metrics |= active_metrics(result["net"][1:], market[1:], periods)
+    book = "long-only" if chosen.exposure == "long-only" else f"{chosen.exposure} long-short"
     return {
         "kind": "backtest",
-        "title": f"{chosen.signal} ({signals.describe(signal_parameters)}) long-short backtest",
+        "title": f"{chosen.signal} ({signals.describe(signal_parameters)}) {book} backtest",
         "period": [panel.dates[0].isoformat(), panel.dates[-1].isoformat()],
         "bars": len(panel.dates),
         "assets": len(panel.assets),
@@ -137,9 +222,11 @@ def run(panel: Panel, parameters: Parameters | None = None) -> dict[str, Any]:
             "lag": chosen.lag,
             "rebalance_every": chosen.rebalance_every,
             "delisting_return": chosen.delisting_return,
+            "exposure": chosen.exposure,
         },
         "metrics": {
             **summarize(result["net"], periods),
+            **exposure_metrics,
             "gross_annualized_return": summarize(result["gross"], periods)["annualized_return"],
             "average_turnover": float(result["turnover"][1:].mean()),
             "annual_turnover": float(result["turnover"][1:].mean()) * periods,
@@ -155,7 +242,8 @@ def run(panel: Panel, parameters: Parameters | None = None) -> dict[str, Any]:
             "rebalance": f"every {chosen.rebalance_every} bars; holdings drift in between",
             "costs": f"{chosen.cost_bps} bps per unit of one-way turnover, on actual trades",
             "delistings": f"a delisted holding earns {chosen.delisting_return:+.0%} once",
-            "weights": "dollar-neutral ranks, gross exposure 1",
+            "weights": WEIGHTS[chosen.exposure],
+            "market": "equal-weight mean of assets priced at the previous close",
         },
         "limitations": LIMITATIONS,
     }

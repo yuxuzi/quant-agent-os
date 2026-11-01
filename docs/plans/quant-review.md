@@ -220,6 +220,21 @@ Writing that test found a real interaction: with the monthly default rebalance, 
 is gone before the book trades, and the choice drifts to longer lookbacks. The test rebalances
 daily and says why.
 
+**S4 result.** Done as planned. `exposure` in `config.toml` (or `--exposure`) chooses the book:
+- **`dollar-neutral`.** Ranks, as before.
+- **`beta-neutral`.** Rank weights projected onto zero net dollars and zero beta, using rolling
+  betas to the equal-weight market from the `beta_window` bars up to each close.
+- **`long-only`.** The top signal quantile, equal-weighted, with active return, tracking error,
+  and information ratio against the equal-weight market. Its headline leads with the IR.
+
+Every backtest and walk-forward reports its realised beta. Known answers:
+- **Planted factor world.** Ranking on a beta-like signal leaves a dollar-neutral book with a
+  realised beta of 0.40; the beta-neutral book has 0.02.
+- **Exact neutrality.** Beta-neutral weights are exactly neutral, to 1e-10, in dollars and
+  beta.
+- **Rolling betas.** They recover the planted betas and never change when later prices do.
+- **Formulas.** IR, TE, active return, and beta match hand calculations.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

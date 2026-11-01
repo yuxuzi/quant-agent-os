@@ -119,6 +119,9 @@ def _add_research_options(parser: argparse.ArgumentParser) -> None:
 def _add_trading_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cost-bps", type=float, help="Cost per unit of turnover, in bps.")
     parser.add_argument("--rebalance-every", type=int, help="Bars between rebalances.")
+    parser.add_argument(
+        "--exposure", choices=["dollar-neutral", "beta-neutral", "long-only"], help="Book type."
+    )
 
 
 def _parameters(args: argparse.Namespace) -> Parameters:
@@ -137,6 +140,7 @@ def _parameters(args: argparse.Namespace) -> Parameters:
         "max_horizon",
         "cost_bps",
         "rebalance_every",
+        "exposure",
         "objective",
         "train_bars",
         "test_bars",
@@ -157,6 +161,12 @@ def _headline(results: dict[str, Any]) -> str:
         return (
             f"Mean rank IC {metrics['mean_rank_ic']:.4f} "
             f"(Newey-West t {metrics['rank_ic_t_stat']:.2f}) over {results['bars']} bars."
+        )
+    if "information_ratio" in metrics:
+        return (
+            f"Information ratio {metrics['information_ratio']:.2f} against the equal-weight "
+            f"market (active return {metrics['active_return']:.2%} a year, tracking error "
+            f"{metrics['tracking_error']:.2%})."
         )
     return (
         f"Net Sharpe {metrics['sharpe_ratio']:.2f}, net return "

@@ -15,6 +15,8 @@ from typing import Any
 
 from . import config
 
+EXPOSURES = ("dollar-neutral", "beta-neutral", "long-only")
+
 
 class ParameterError(ValueError):
     """Raised when parameters are invalid; the message says which one and why."""
@@ -33,6 +35,8 @@ class Parameters:
     cost_bps: float = config.COST_BPS
     rebalance_every: int = config.REBALANCE_EVERY
     delisting_return: float = config.DELISTING_RETURN
+    exposure: str = "dollar-neutral"  # dollar-neutral, beta-neutral, or long-only
+    beta_window: int = config.PERIODS_PER_YEAR  # bars of history for each rolling beta
     # Walk-forward: rolling training and test windows, and the lookbacks to choose from.
     objective: str = "sharpe"  # sharpe (net, training window) or ic (mean rank IC)
     train_bars: int = config.PERIODS_PER_YEAR
@@ -51,6 +55,11 @@ class Parameters:
                 (self.cost_bps < 0, "cost_bps must be zero or more"),
                 (self.rebalance_every < 1, "rebalance_every must be at least 1 bar"),
                 (self.delisting_return < -1, "delisting_return cannot lose more than -1 (100%)"),
+                (
+                    self.exposure not in EXPOSURES,
+                    "exposure must be dollar-neutral, beta-neutral, or long-only",
+                ),
+                (self.beta_window < 3, "beta_window must be at least 3 bars"),
                 (self.objective not in {"sharpe", "ic"}, "objective must be sharpe or ic"),
                 (self.train_bars < 2, "train_bars must be at least 2"),
                 (self.test_bars < 1, "test_bars must be at least 1"),

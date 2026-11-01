@@ -15,6 +15,9 @@ not handle:
 {%- endif %}
 - **Execution.** Costs are linear in turnover. There is no market impact, borrow cost,
   short-sale constraint, or capacity limit, and the simulation places no orders.
+- **Exposures.** Beta neutrality uses one factor, the equal-weight market. There are no sector,
+  size, or style neutralisations, and the long-only benchmark is equal-weight, not a
+  cap-weighted index.
 - **Costs in studies.** Quantile spreads are gross and hypothetical. Backtest a signal before
   drawing conclusions.
 - **Overfitting and multiple testing.** `study` and `backtest` numbers are in-sample; only

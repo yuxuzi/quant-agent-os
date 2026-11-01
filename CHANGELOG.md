@@ -33,6 +33,10 @@ All notable changes to this project are documented here. The format follows
 - Quant research projects have a `walk-forward` command (B-28 S3). It chooses the lookback
   per fold on training data only, from a small grid, by net Sharpe or rank IC, and reports
   out-of-sample results only, with a folds table.
+- Quant research backtests take an `exposure` (B-28 S4): `dollar-neutral` (default),
+  `beta-neutral` (zero beta to the equal-weight market, rolling betas), or `long-only` (top
+  quantile, with information ratio and tracking error against the equal-weight market). Every
+  backtest reports its realised beta.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

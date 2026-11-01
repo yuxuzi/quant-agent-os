@@ -30,6 +30,12 @@ SHA-256 fingerprint of the price data, the code version (`git describe` in a git
 and the time, plus `config.toml`, the exact parameters: `--config results/<run>/config.toml`
 repeats the run. `report RUN_FOLDER` renders a specific run.
 
+`exposure` chooses the book. `dollar-neutral` (the default) ranks the signal into zero net
+dollars. `beta-neutral` also removes beta to the equal-weight market, using rolling betas from
+past data only. `long-only` holds the top signal quantile equally and reports information
+ratio, tracking error, and active return against the equal-weight market. Every backtest
+reports its realised beta.
+
 `walk-forward` is the honest number. It rolls a training window (`train_bars`) and a test
 window (`test_bars`) through the data. In each fold it picks the lookback with the best training
 score (net Sharpe, or rank IC with `objective = "ic"`) from a small grid (`lookbacks`, by default
