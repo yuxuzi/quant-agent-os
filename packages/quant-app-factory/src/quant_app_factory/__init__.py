@@ -7,7 +7,15 @@ platform's subprocess runner. `create_app` needs an operator approval per call.
 
 from importlib.metadata import PackageNotFoundError, version
 
-from quant_app_factory.application.factory import AppFactory, CheckResult, FactoryReport
+from quant_app_factory.application.factory import (
+    AppFactory,
+    CheckResult,
+    FactoryReport,
+    ProfileCheck,
+    SpecCheck,
+    SpecProblem,
+    TemplateCheck,
+)
 from quant_app_factory.domain.planner import AppPlan, ArchitecturePlanner, PlanningError
 from quant_app_factory.domain.ports import (
     ScaffoldError,
@@ -18,9 +26,9 @@ from quant_app_factory.domain.ports import (
     ScaffoldRequestError,
     ScaffoldResult,
 )
-from quant_app_factory.domain.spec import AppSpec, SpecError, load_spec
+from quant_app_factory.domain.spec import AppSpec, Identity, SpecError, dump_spec, load_spec
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
-from quant_app_factory.tools import factory_tools
+from quant_app_factory.tools import factory_tools, guide_tools
 
 try:
     __version__ = version("quant-agent-os-factory")
@@ -34,7 +42,9 @@ __all__ = [
     "ArchitecturePlanner",
     "CheckResult",
     "FactoryReport",
+    "Identity",
     "PlanningError",
+    "ProfileCheck",
     "PytemplateUvScaffolder",
     "ScaffoldError",
     "ScaffoldPlan",
@@ -43,7 +53,12 @@ __all__ = [
     "ScaffoldRequest",
     "ScaffoldRequestError",
     "ScaffoldResult",
+    "SpecCheck",
     "SpecError",
+    "SpecProblem",
+    "TemplateCheck",
+    "dump_spec",
     "factory_tools",
+    "guide_tools",
     "load_spec",
 ]

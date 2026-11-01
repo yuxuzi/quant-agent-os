@@ -1,0 +1,88 @@
+"""Bias tests: no look-ahead, a real trade lag, and costs that only ever cost."""
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.backtest import run_backtest, target_weights, walk_forward_splits
+from {{ package_name }}.metrics import sharpe_ratio, simple_returns
+from {{ package_name }}.signals import compute
+from {{ package_name }}.synthetic import generate_panel
+
+
+def _net(prices: np.ndarray, lag: int = 1, cost_bps: float = 5.0) -> np.ndarray:
+    weights = target_weights(compute("momentum", prices, 10))
+    return run_backtest(prices, weights, cost_bps=cost_bps, lag=lag)["net"]
+
+
+@pytest.mark.parametrize("lag", [0, 1, 2])
+def test_future_prices_never_change_past_returns(lag: int) -> None:
+    prices, _ = generate_panel(n_bars=200, n_assets=10)
+    changed = prices.copy()
+    changed[150:] *= np.linspace(0.5, 1.5, 10)
+
+    np.testing.assert_array_equal(_net(prices, lag)[:150], _net(changed, lag)[:150])
+
+
+def test_a_same_bar_signal_earns_nothing_but_would_if_trades_were_not_lagged() -> None:
+    prices, _ = generate_panel(n_bars=1000, n_assets=40)
+    current_return = np.full(prices.shape, np.nan)
+    current_return[1:] = simple_returns(prices)
+    weights = target_weights(current_return)
+
+    honest = run_backtest(prices, weights, cost_bps=0.0, lag=0)["gross"]
+    asset_returns = np.zeros(prices.shape)
+    asset_returns[1:] = simple_returns(prices)
+    leaked = np.nansum(weights * asset_returns, axis=1)  # same-bar: what a bug would earn
+
+    assert abs(sharpe_ratio(honest, 252)) < 1.5
+    assert sharpe_ratio(leaked, 252) > 20
+
+
+def test_the_trade_lag_delays_the_first_position() -> None:
+    prices, _ = generate_panel(n_bars=40, n_assets=6)
+    weights = target_weights(compute("momentum", prices, 10))
+
+    held_now = run_backtest(prices, weights, cost_bps=0.0, lag=0)["held"]
+    held_later = run_backtest(prices, weights, cost_bps=0.0, lag=1)["held"]
+
+    first = int(np.argmax(np.abs(held_now).sum(axis=1) > 0))
+    assert np.abs(held_later[first]).sum() == 0
+    np.testing.assert_allclose(held_later[first + 1], held_now[first])
+
+
+def test_shifting_the_signal_forward_changes_the_result() -> None:
+    prices, signal = generate_panel(n_bars=300, n_assets=20, signal_strength=0.3)
+    shifted = np.roll(signal, 1, axis=0)
+
+    honest = run_backtest(prices, target_weights(signal), cost_bps=0.0, lag=0)["gross"]
+    moved = run_backtest(prices, target_weights(shifted), cost_bps=0.0, lag=0)["gross"]
+
+    assert not np.allclose(honest, moved)
+    assert sharpe_ratio(honest, 252) > sharpe_ratio(moved, 252)
+
+
+def test_higher_costs_never_raise_returns() -> None:
+    prices, _ = generate_panel(n_bars=300, n_assets=20)
+
+    totals = [_net(prices, cost_bps=cost).sum() for cost in (0.0, 5.0, 50.0)]
+
+    assert totals[0] > totals[1] > totals[2]
+
+
+def test_weights_are_dollar_neutral_with_unit_gross() -> None:
+    _, signal = generate_panel(n_bars=5, n_assets=7)
+
+    weights = target_weights(signal)
+
+    np.testing.assert_allclose(weights.sum(axis=1), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.abs(weights).sum(axis=1), 1.0)
+
+
+def test_walk_forward_tests_always_follow_their_training_range() -> None:
+    splits = walk_forward_splits(100, train=40, test=20)
+
+    assert [(s.start, s.stop, t.start, t.stop) for s, t in splits] == [
+        (0, 40, 40, 60),
+        (20, 60, 60, 80),
+        (40, 80, 80, 100),
+    ]

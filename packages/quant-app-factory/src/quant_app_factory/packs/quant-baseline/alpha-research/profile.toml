@@ -1,0 +1,17 @@
+contract = 1
+id = "alpha-research"
+name = "Alpha research"
+description = "Signal research on a price panel: IC, rank IC, quantile spreads, decay, and signal turnover, with bias tests."
+version = "1"
+kind = "cli"
+status = "experimental"
+supported_python = ["3.11", "3.12", "3.13", "3.14", "3.15"]
+lifecycle_commands = ["uv sync", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy {package} tests", "uv run pytest"]
+default_components = ["metrics", "data-csv"]
+optional_components = ["data-parquet", "data-database", "agent-tools"]
+dependencies = ["numpy>=1.26"]
+questions = ["description", "author", "email", "python_version", "license", "frequency", "max_horizon"]
+security_posture = "Reads local price files only; no network access, credentials, or trading."
+
+[dependency_groups]
+dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]

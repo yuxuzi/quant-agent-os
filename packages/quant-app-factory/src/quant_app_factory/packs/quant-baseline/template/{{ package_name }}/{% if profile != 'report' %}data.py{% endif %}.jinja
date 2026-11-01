@@ -1,0 +1,82 @@
+"""Price panels: load a wide price table (a date column, then one column per asset)."""
+
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+from .metrics import FloatArray
+
+
+class DataError(ValueError):
+    """Raised when a price file cannot be used; the message says what to fix."""
+
+
+@dataclass(frozen=True)
+class Panel:
+    """Prices for ``assets`` (columns) at ``dates`` (rows). Missing prices are NaN."""
+
+    dates: list[str]
+    assets: list[str]
+    prices: FloatArray
+
+    def __post_init__(self) -> None:
+        if self.prices.shape != (len(self.dates), len(self.assets)):
+            raise DataError("prices must have one row per date and one column per asset.")
+        if len(self.dates) < 2:
+            raise DataError("A panel needs at least two dates.")
+        if self.dates != sorted(self.dates):
+            raise DataError("Dates must be in ascending order.")
+        finite = self.prices[np.isfinite(self.prices)]
+        if finite.size and float(finite.min()) <= 0.0:
+            raise DataError("Prices must be positive.")
+
+
+def load_csv(path: Path) -> Panel:
+    """Read a wide CSV: a header ``date,ASSET1,ASSET2,...`` then one row per date."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    if len(rows) < 3 or len(rows[0]) < 2:
+        raise DataError(f"{path} needs a header and at least two rows of prices.")
+    header, body = rows[0], rows[1:]
+    prices = np.array([[_number(cell) for cell in row[1:]] for row in body], dtype=np.float64)
+    return Panel(dates=[row[0] for row in body], assets=header[1:], prices=prices)
+{%- if 'data-parquet' in components %}
+
+
+def load_parquet(path: Path) -> Panel:
+    """Read a wide Parquet file with a ``date`` column and one column per asset."""
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(path)
+    if "date" not in table.column_names:
+        raise DataError(f"{path} has no 'date' column.")
+    assets = [name for name in table.column_names if name != "date"]
+    columns = [table.column(name).to_pylist() for name in assets]
+    prices = np.array(
+        [[math.nan if value is None else float(value) for value in column] for column in columns],
+        dtype=np.float64,
+    ).T
+    dates = [str(value) for value in table.column("date").to_pylist()]
+    return Panel(dates=dates, assets=assets, prices=prices)
+{%- endif %}
+
+
+def load_prices(path: Path) -> Panel:
+    """Load ``path`` by its suffix."""
+    if path.suffix.lower() == ".csv":
+        return load_csv(path)
+{%- if 'data-parquet' in components %}
+    if path.suffix.lower() == ".parquet":
+        return load_parquet(path)
+{%- endif %}
+    raise DataError(f"Unsupported price file {path.name}; use a .csv file.")
+
+
+def _number(cell: str) -> float:
+    text = cell.strip()
+    return math.nan if text == "" else float(text)

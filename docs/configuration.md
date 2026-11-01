@@ -79,7 +79,8 @@ An app spec is TOML:
 
 ```toml
 name = "signal-tools"            # project slug
-kind = "agent-tool"              # agent-tool, python-cli, or fastapi-service
+kind = "agent-tool"              # agent-tool, python-cli, fastapi-service, alpha-research,
+                                 #   backtest, or report
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "projects"          # existing parent directory, relative to this file
 tool_name = "count_signals"      # agent-tool only
@@ -88,7 +89,24 @@ tool_name = "count_signals"      # agent-tool only
 #                                #   auth with auth-api-key or auth-oidc, container
 ```
 
-## Factory settings (proposed)
+A quant spec, or one for your own pack:
+
+```toml
+name = "momo-backtest"
+kind = "backtest"                # or: template = "quant-baseline" and profile = "backtest"
+description = "Momentum long-short backtest"
+output_dir = "."
+components = ["data-parquet"]    # optional: data-parquet, agent-tools
+
+[answers]                        # the template's other questions
+frequency = "daily"              # daily, weekly, or monthly
+cost_bps = "3"                   # backtest only; alpha-research asks max_horizon
+
+# template = "../packs/my-pack"  # your own pytemplate-uv pack, relative to this file
+# profile = "my-profile"
+```
+
+## Factory settings
 
 [Decision 0008](decisions/0008-factory-settings.md), backlog B-24. App Factory reuses these
 settings in specs and in `quant-factory new`. Secrets are stored only as environment-variable
@@ -115,8 +133,60 @@ source = "gh:firm/quant-packs"
 ref = "v1.2.0"
 ```
 
-A spec can then say `connection = "research-pg"`. Edit the file directly, or use
-`quant-factory settings set|remove`. Values that look like secrets are refused.
+Edit the file directly, or use `quant-factory settings show|set|remove`, for example
+`quant-factory settings set connections.research-pg.password_env RESEARCH_PG_PASSWORD`.
+`QUANT_FACTORY_SETTINGS` points to another file. Values that look like secrets are refused,
+and so are unknown fields.
+
+`[identity]` fills a spec's missing author, email, and license; missing ones fall back to
+`git config`, then the template's own defaults.
+
+### Templates
+
+- **`quant-factory template list`** shows the built-in and registered templates.
+- **`quant-factory template fork quant-baseline/backtest DIR [--profile-id ID]`** copies a
+  built-in profile into your own pack, checks it, and registers it under the directory's name
+  (`--name` to choose).
+- **`quant-factory template check NAME_OR_DIR`** loads a pack and plans every profile with
+  default answers.
+- **`quant-factory template add DIR --name NAME`** registers a local pack.
+- **`quant-factory template add gh:org/repo --name NAME --ref TAG`** fetches a git pack once,
+  at that tag, into `packs/` beside `factory.toml`, so plans stay offline.
+
+A spec then says `template = "NAME"` with `profile = "..."`.
+
+### Databases
+
+The `data-database` component of `alpha-research` and `backtest` loads prices with one
+read-only query from PostgreSQL, SQLite, or DuckDB.
+- **Naming a connection.** `connection = "research-pg"` in a spec adds the component and fills
+  its answers from `factory.toml`, and the spec's own answers win.
+  `quant-factory new` offers saved connections, and offers to save a new one.
+- **What the generated app reads.** It reads its credentials only from `DATABASE_URL` (a full
+  URL, which wins) or `DATABASE_PASSWORD`, listed in its `.env.example`. Its
+  `--check-connection` flag connects, then exits.
+- **The factory's check.** `quant-factory create --check-connection` runs that check after the
+  project's own checks.
+  - It passes only the variables the spec's settings reference, such as
+    `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`.
+  - It redacts their values from the output, including URL-encoded forms.
+  - It runs only for projects from built-in templates, so your secret never reaches pack code
+    you have not reviewed.
+- **Retrying.** `quant-factory check SPEC [--check-connection]` re-runs the checks of a
+  project that already exists, with its own approval.
+- **TLS.** PostgreSQL connections verify the server certificate (`db_sslmode`, default
+  `verify-full`). Point `PGSSLROOTCERT` at your CA certificate, or add `sslrootcert=system` to
+  `DATABASE_URL` for a publicly signed server. `disable` is for local development only.
+
+### Guided specs
+
+- **In the terminal:** `quant-factory new [--template T] [--profile P] [-o spec.toml]` asks
+  the template's own questions. It skips those that do not apply, and asks for secret
+  settings as environment-variable names. It writes the spec, checks it, and offers to create
+  the project.
+- **From Claude:** `quant-factory serve-mcp` serves `describe_template`, `check_spec`, and
+  `plan_app` over stdio. Claude can then guide you to a ready spec and give you its TOML.
+  You still create from the terminal, because MCP clients cannot approve `create_app` yet.
 
 A server started by Claude Desktop does not see your shell's environment, so run
 `quant-factory create` from a terminal when a connection check needs those variables.

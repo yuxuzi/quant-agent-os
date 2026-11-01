@@ -1,0 +1,64 @@
+"""Signal evaluation: information coefficients, quantile spreads, decay, and turnover."""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+from .metrics import FloatArray, information_coefficient, ranks
+
+
+def forward_returns(prices: FloatArray, horizon: int = 1) -> FloatArray:
+    """Return from bar t to bar t + horizon, aligned to bar t (NaN for the last bars)."""
+    forward = np.full(prices.shape, np.nan)
+    if prices.shape[0] > horizon:
+        forward[:-horizon] = prices[horizon:] / prices[:-horizon] - 1.0
+    return forward
+
+
+def ic_summary(signal: FloatArray, prices: FloatArray, horizon: int = 1) -> dict[str, float]:
+    """Mean IC, mean rank IC, their t-statistic, and the share of bars with a positive IC."""
+    pearson = information_coefficient(signal, forward_returns(prices, horizon))
+    spearman = information_coefficient(signal, forward_returns(prices, horizon), rank=True)
+    valid = spearman[np.isfinite(spearman)]
+    deviation = float(np.std(valid, ddof=1)) if valid.size > 1 else 0.0
+    t_stat = float(np.mean(valid)) / deviation * math.sqrt(valid.size) if deviation else math.nan
+    return {
+        "mean_ic": float(np.nanmean(pearson)) if np.isfinite(pearson).any() else math.nan,
+        "mean_rank_ic": float(np.mean(valid)) if valid.size else math.nan,
+        "rank_ic_t_stat": t_stat,
+        "positive_rank_ic_share": float(np.mean(valid > 0.0)) if valid.size else math.nan,
+        "bars": float(valid.size),
+    }
+
+
+def quantile_spread(signal: FloatArray, prices: FloatArray, quantiles: int = 5) -> FloatArray:
+    """Per-bar next-bar return of the top signal quantile minus the bottom one."""
+    forward = forward_returns(prices, 1)
+    spread = np.full(signal.shape[0], np.nan)
+    for bar in range(signal.shape[0]):
+        valid = np.isfinite(signal[bar]) & np.isfinite(forward[bar])
+        if int(valid.sum()) < 2 * quantiles:
+            continue
+        bucket = np.floor((ranks(signal[bar][valid]) - 1) * quantiles / int(valid.sum()))
+        returns = forward[bar][valid]
+        spread[bar] = float(returns[bucket == quantiles - 1].mean() - returns[bucket == 0].mean())
+    return spread
+
+
+def ic_decay(signal: FloatArray, prices: FloatArray, max_horizon: int) -> list[float]:
+    """Mean rank IC at horizons 1 to ``max_horizon`` bars."""
+    decay = []
+    for horizon in range(1, max_horizon + 1):
+        ic = information_coefficient(signal, forward_returns(prices, horizon), rank=True)
+        decay.append(float(np.nanmean(ic)) if np.isfinite(ic).any() else math.nan)
+    return decay
+
+
+def signal_autocorrelation(signal: FloatArray, lag: int = 1) -> float:
+    """Mean rank correlation of the signal with itself ``lag`` bars earlier (turnover proxy)."""
+    if signal.shape[0] <= lag:
+        return math.nan
+    ic = information_coefficient(signal[lag:], signal[:-lag], rank=True)
+    return float(np.nanmean(ic)) if np.isfinite(ic).any() else math.nan

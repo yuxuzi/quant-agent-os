@@ -174,7 +174,8 @@ with (
 
 ## 10. Generate a tool package
 
-Quant App Factory creates a new, tested tool package for the platform from a small spec:
+Quant App Factory creates a new, tested project from a small spec. Let it ask the questions
+(`uv run quant-factory new`), or write the spec yourself:
 
 ```bash
 cat > ~/qr-demo/signal-tools.toml <<'TOML'
@@ -196,8 +197,129 @@ What the two commands do:
   - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
   - its tests include `check_tool`, the platform's contract checks.
 
+`kind = "alpha-research"`, `"backtest"`, or `"report"` builds a portable quant project from
+the `quant-baseline` pack. Each one comes with known-answer metric tests, bias tests, and a
+`LIMITATIONS.md`, and `uv run <project> --demo` runs it on a random walk.
 `kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
 profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
+
+## 11. A quant project from your own data, with guidance
+
+This section goes from saved settings to a study, a backtest, and a report on prices in a
+database, then makes the backtest template your own. It was run end to end on a fresh clone on
+2026-10-31; the outputs shown are from that run. The prices were 500 days of random walks for
+20 assets in a SQLite file, so finding no edge is the expected result.
+
+**1. Save who you are and where your prices live** (in `~/.quant-agent-os/factory.toml`,
+never secrets):
+
+```bash
+uv run quant-factory settings set identity.author "Ada Lovelace"
+uv run quant-factory settings set connections.local-prices.kind sqlite
+uv run quant-factory settings set connections.local-prices.database "$PWD/prices.db"
+```
+
+For PostgreSQL, also set `host`, `port`, `user`, and `schema`. Set `password_env` to the
+*name* of the environment variable that holds the password, never the password itself.
+
+**2. Answer the template's questions.** `new` offers saved connections and skips questions
+that do not apply:
+
+```bash
+uv run quant-factory new --template quant-baseline --profile alpha-research -o alpha.toml
+```
+
+```text
+Ready: 26 files.
+```
+
+```toml
+name = "alpha-lab"
+template = "quant-baseline"
+profile = "alpha-research"
+connection = "local-prices"
+description = "Reversal study on local prices"
+output_dir = "/Users/you/work"
+components = ["data-database"]
+```
+
+**3. Create it, and check the connection.** Your yes is the recorded approval:
+
+```bash
+uv run quant-factory create alpha.toml --check-connection
+```
+
+```text
+  ok  uv sync
+  ok  uv run ruff check .
+  ok  uv run ruff format --check .
+  ok  uv run mypy alpha_lab tests
+  ok  uv run pytest
+  ok  uv run alpha-lab --check-connection
+```
+
+**4. Run the study** on the database prices:
+
+```bash
+cd alpha-lab && uv run alpha-lab --database --signal reversal --lookback 5 --out results/study.json
+```
+
+On the random-walk data: mean rank IC −0.0035, with a t-statistic of −0.33. There is no
+signal, as expected.
+
+**5. Backtest it.** A spec you write by hand works the same way:
+
+```toml
+# backtest.toml
+name = "reversal-backtest"
+kind = "backtest"
+description = "Short-term reversal on local prices"
+output_dir = "."
+connection = "local-prices"
+
+[answers]
+cost_bps = "2"
+```
+
+```bash
+uv run quant-factory create backtest.toml
+cd reversal-backtest && uv run reversal-backtest --database --signal reversal --lookback 5 \
+  --out results/backtest.json
+```
+
+**6. Report it.** Make a `report` project (`kind = "report"`), then:
+
+```bash
+uv run reversal-report ../reversal-backtest/results/backtest.json --out report.md
+```
+
+```text
+# reversal (lookback 5) long-short backtest
+- Period: 2023-0000 to 2023-0499 (500 bars, 20 assets)
+| sharpe ratio | -0.3682 |
+| average turnover | 29.65% |
+| max drawdown | -7.05% |
+## Interpretation
+_Not written yet. Nothing above this section is interpretation._
+```
+
+**7. Make the template yours.** Fork it, edit it (by hand or with an AI assistant), and use
+it by name:
+
+```bash
+uv run quant-factory template fork quant-baseline/backtest packs/desk-backtest --profile-id desk
+#   ok  desk (22 files)
+#   Registered template 'desk-backtest': use template = "desk-backtest" in a spec.
+uv run quant-factory template check desk-backtest   # after each edit
+```
+
+Each part of the pack has one job:
+- **`questions.yml`:** add a question there and list it in `desk/profile.toml`.
+- **`template/`:** add or edit files there, and use answers as `{{ name }}`.
+- **`components/`:** add a component there.
+
+`quant-factory template add gh:your-org/quant-packs --name firm --ref v1.0.0` registers a pack
+from git, pinned to a tag and cached locally, so plans stay offline.
 
 ## Known limitations
 

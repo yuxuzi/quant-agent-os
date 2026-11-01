@@ -82,6 +82,8 @@ python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["src", "examples", "packages/quant-research/src", "packages/quant-app-factory/src"]
+# Template packs hold code for generated projects, which type-check it themselves.
+exclude = ["packages/quant-app-factory/src/quant_app_factory/packs/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages/quant-research/tests", "packages/quant-app-factory/tests"]
