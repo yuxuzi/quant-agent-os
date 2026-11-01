@@ -11,8 +11,10 @@ from quant_app_factory.application.factory import (
     AppFactory,
     CheckResult,
     FactoryReport,
+    ProfileCheck,
     SpecCheck,
     SpecProblem,
+    TemplateCheck,
 )
 from quant_app_factory.domain.planner import AppPlan, ArchitecturePlanner, PlanningError
 from quant_app_factory.domain.ports import (
@@ -42,6 +44,7 @@ __all__ = [
     "FactoryReport",
     "Identity",
     "PlanningError",
+    "ProfileCheck",
     "PytemplateUvScaffolder",
     "ScaffoldError",
     "ScaffoldPlan",
@@ -53,6 +56,7 @@ __all__ = [
     "SpecCheck",
     "SpecError",
     "SpecProblem",
+    "TemplateCheck",
     "dump_spec",
     "factory_tools",
     "guide_tools",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -22,12 +23,20 @@ from quant_app_factory.domain.ports import (
     ScaffoldError,
     ScaffoldPlan,
     ScaffoldProvider,
+    ScaffoldRequest,
     ScaffoldRequestError,
     SettingInfo,
     TemplateDescription,
 )
 from quant_app_factory.domain.secrets import is_reference, secret_problem
-from quant_app_factory.domain.spec import AppKind, AppSpec, Identity, dump_spec
+from quant_app_factory.domain.spec import (
+    BUILT_IN_TEMPLATES,
+    AppKind,
+    AppSpec,
+    Identity,
+    dump_spec,
+    is_template_path,
+)
 
 Runner = Callable[..., CommandResult]  # the signature of `run_command`
 
@@ -92,6 +101,23 @@ class SpecCheck(BaseModel):
     spec_toml: str | None = Field(default=None, description="The spec as a file, when valid")
 
 
+class ProfileCheck(BaseModel):
+    """Whether one profile of a template plans with its default answers."""
+
+    profile: str
+    ok: bool
+    files: int = 0
+    problem: str | None = None
+
+
+class TemplateCheck(BaseModel):
+    """Whether a template pack loads, and whether each of its profiles plans."""
+
+    ok: bool
+    problem: str | None = None
+    profiles: list[ProfileCheck] = Field(default_factory=list)
+
+
 class AppFactory:
     """Turn an `AppSpec` into a scaffolded, checked project through a `ScaffoldProvider`."""
 
@@ -104,6 +130,7 @@ class AppFactory:
         scaffolder_version: str | None = None,
         identity: Callable[[], Identity] | None = None,
         connections: Callable[[], Mapping[str, Connection]] | None = None,
+        templates: Callable[[], Mapping[str, str]] | None = None,
         environ: Mapping[str, str] = os.environ,
     ) -> None:
         self.scaffolder = scaffolder
@@ -113,15 +140,58 @@ class AppFactory:
         self._identity_source = identity
         self._identity: Identity | None = None
         self._connections = connections
+        self._templates = templates
         self._environ = environ
 
     def plan(self, spec: AppSpec) -> AppPlan:
         """Return the planner's decision for ``spec`` completed with identity and connection."""
         return self.planner.plan(self.complete(spec))
 
+    def template_location(self, template: str) -> str | None:
+        """Return the pack directory for a built-in name, a registered name, or a path."""
+        if template in BUILT_IN_TEMPLATES or is_template_path(template):
+            return pack_location(template)
+        registered = dict(self._templates()) if self._templates else {}
+        if template not in registered:
+            known = ", ".join(sorted(BUILT_IN_TEMPLATES | set(registered)))
+            raise PlanningError(f"No template {template!r}; known templates: {known}.")
+        return registered[template]
+
+    def check_template(self, template: str) -> TemplateCheck:
+        """Load a template and plan every profile with its default answers, writing nothing."""
+        try:
+            location = self.template_location(template)
+            described = self.scaffolder.describe(location)
+        except (PlanningError, ScaffoldError) as error:
+            return TemplateCheck(ok=False, problem=str(error))
+        profiles = []
+        with tempfile.TemporaryDirectory(prefix="quant-factory-check-") as scratch:
+            for profile in described.profiles:
+                request = ScaffoldRequest(
+                    project_name="template-check",
+                    profile=profile.id,
+                    output_dir=scratch,
+                    template=location,
+                )
+                try:
+                    preview = self.scaffolder.plan(request)
+                except ScaffoldError as error:
+                    profiles.append(ProfileCheck(profile=profile.id, ok=False, problem=str(error)))
+                else:
+                    profiles.append(
+                        ProfileCheck(profile=profile.id, ok=True, files=len(preview.files))
+                    )
+        return TemplateCheck(ok=all(item.ok for item in profiles), profiles=profiles)
+
     def complete(self, spec: AppSpec) -> AppSpec:
-        """Fill identity defaults and apply the spec's saved connection, if it names one."""
+        """Fill identity defaults, resolve a registered template, and apply a connection."""
         spec = self._with_identity(spec)
+        if (
+            spec.template is not None
+            and spec.template not in BUILT_IN_TEMPLATES
+            and not is_template_path(spec.template)
+        ):
+            spec = spec.model_copy(update={"template": self.template_location(spec.template)})
         if spec.connection is None:
             return spec
         saved = dict(self._connections()) if self._connections else {}
@@ -135,7 +205,11 @@ class AppFactory:
 
     def describe_template(self, template: str, profile: str | None = None) -> TemplateDescription:
         """Describe a template; with ``profile``, only what that profile can use."""
-        description = self.scaffolder.describe(pack_location(template))
+        try:
+            location = self.template_location(template)
+        except PlanningError as error:
+            raise ScaffoldRequestError(str(error)) from error
+        description = self.scaffolder.describe(location)
         if profile is None:
             return description
         chosen = [p for p in description.profiles if p.id == profile]

@@ -141,6 +141,20 @@ and so are unknown fields.
 `[identity]` fills a spec's missing author, email, and license; missing ones fall back to
 `git config`, then the template's own defaults.
 
+### Templates
+
+- **`quant-factory template list`** shows the built-in and registered templates.
+- **`quant-factory template fork quant-baseline/backtest DIR [--profile-id ID]`** copies a
+  built-in profile into your own pack, checks it, and registers it under the directory's name
+  (`--name` to choose).
+- **`quant-factory template check NAME_OR_DIR`** loads a pack and plans every profile with
+  default answers.
+- **`quant-factory template add DIR --name NAME`** registers a local pack.
+- **`quant-factory template add gh:org/repo --name NAME --ref TAG`** fetches a git pack once,
+  at that tag, into `packs/` beside `factory.toml`, so plans stay offline.
+
+A spec then says `template = "NAME"` with `profile = "..."`.
+
 ### Databases
 
 The `data-database` component of `alpha-research` and `backtest` loads prices with one

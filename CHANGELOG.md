@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
+  `QUANT_FACTORY_SETTINGS` moves both.
+
 - Serving `find_related_signals` with a hosted embedder now needs `network` both granted and
   pre-approved (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`), because each `network` call needs
   an approval.
@@ -33,6 +36,16 @@ All notable changes to this project are documented here. The format follows
   gives the install hint instead of a traceback.
 
 ### Added
+
+- Template forks and registered packs (B-26):
+  - `quant-factory template fork` copies a built-in profile into your own pack, optionally
+    renaming it, then checks and registers it.
+  - `template check` loads a pack and plans every profile.
+  - `template add` registers a local pack, or a git pack pinned to a tag and cached locally.
+  - `template list` shows the built-in and registered templates.
+  - Specs can name a registered template.
+  - Walkthrough §11: settings, questionnaire, study, backtest, report, and fork, on database
+    prices.
 
 - Database guidance (B-25):
   - **The `data-database` component** of `alpha-research` and `backtest` loads prices with

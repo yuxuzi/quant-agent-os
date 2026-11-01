@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import re
+import shutil
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -17,17 +18,19 @@ from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
 from quant_app_factory.application.factory import AppFactory, FactoryReport
 from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection
-from quant_app_factory.domain.planner import PlanningError
+from quant_app_factory.domain.planner import BUILT_IN_PACKS, PlanningError
 from quant_app_factory.domain.ports import ScaffoldError
 from quant_app_factory.domain.spec import (
-    BUILT_IN_TEMPLATES,
     RESERVED_ANSWERS,
     AppSpec,
     SpecError,
+    is_template_path,
     load_spec,
 )
+from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
 from quant_app_factory.infrastructure.settings_file import (
+    RegisteredTemplate,
     SettingsError,
     git_identity,
     load_settings,
@@ -43,7 +46,13 @@ app = typer.Typer(
 )
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
-DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "factory-runs.db"
+RUNS_HELP = "SQLite run store for the audit (default: factory-runs.db beside factory.toml)."
+
+
+def _runs_path(runs: Path | None) -> Path:
+    """Return the run store: ``--runs``, or factory-runs.db beside the settings file."""
+    return runs if runs is not None else settings_path().parent / "factory-runs.db"
+
 
 SpecArgument = Annotated[
     Path, typer.Argument(help="An app spec (TOML): name, kind, description, output_dir, ...")
@@ -64,6 +73,7 @@ def _factory() -> AppFactory:
         PytemplateUvScaffolder(),
         identity=lambda: settings.identity.merged(git_identity()),
         connections=lambda: settings.connections,
+        templates=lambda: {name: entry.path for name, entry in settings.templates.items()},
     )
 
 
@@ -114,9 +124,7 @@ def create(
     checks: Annotated[
         bool, typer.Option("--checks/--no-checks", help="Run the generated project's checks.")
     ] = True,
-    runs: Annotated[Path, typer.Option("--runs", help="SQLite run store for the audit.")] = (
-        DEFAULT_RUNS
-    ),
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
     check_connection: Annotated[
         bool,
         typer.Option(
@@ -148,7 +156,10 @@ def create(
         granted=READ_ONLY | CREATE_PERMISSIONS, tool_allowlist=frozenset({"create_app"})
     )
     with Platform(
-        factory_tools(factory), policy=policy, run_store=SqliteRunStore(runs), actor="cli"
+        factory_tools(factory),
+        policy=policy,
+        run_store=SqliteRunStore(_runs_path(runs)),
+        actor="cli",
     ) as platform:
         waiting = platform.call(
             "create_app",
@@ -164,7 +175,7 @@ def create(
     if record.status != "ok" or record.output is None:
         raise _fail(f"create_app {record.status}: {record.error} (run {run_id})")
     report = FactoryReport.model_validate(record.output)
-    _print_report(report, run_id, runs)
+    _print_report(report, run_id, _runs_path(runs))
     if report.checks_passed is False:
         raise typer.Exit(code=1)
 
@@ -243,7 +254,7 @@ def new(
             default="quant-baseline",
         )
     )
-    if template not in BUILT_IN_TEMPLATES:
+    if is_template_path(template):
         template = Path(template).expanduser().resolve().as_posix()
     try:
         catalog = factory.describe_template(template)
@@ -362,7 +373,7 @@ def new(
     if typer.confirm(
         "Create it now? It writes files, runs uv, and downloads packages", default=False
     ):
-        create(target, yes=True, checks=True, runs=DEFAULT_RUNS, check_connection=False)
+        create(target, yes=True, checks=True, runs=None, check_connection=False)
 
 
 def _offer_to_save_connection(answers: dict[str, str], settings: dict[str, str]) -> None:
@@ -441,6 +452,124 @@ def settings_remove(
     console.print(f"Removed {key}.")
 
 
+template_app = typer.Typer(help="List, fork, check, and register template packs.")
+app.add_typer(template_app, name="template")
+
+
+def _register(name: str, entry: RegisteredTemplate) -> None:
+    try:
+        current = load_settings()
+        save_settings(current.model_copy(update={"templates": {**current.templates, name: entry}}))
+    except SettingsError as error:
+        raise _fail(error) from error
+    console.print(f'Registered template {name!r}: use template = "{name}" in a spec.')
+
+
+def _print_check(factory: AppFactory, template: str) -> bool:
+    result = factory.check_template(template)
+    if result.problem:
+        errors.print(f"[red]{result.problem}[/red]")
+    for item in result.profiles:
+        if item.ok:
+            console.print(f"  [green]ok[/green]  {item.profile} ({item.files} files)")
+        else:
+            console.print(f"  [red]failed[/red]  {item.profile}: {item.problem}", soft_wrap=True)
+    return result.ok
+
+
+@template_app.command("list")
+def template_list() -> None:
+    """List the built-in templates and the ones registered in factory.toml."""
+    factory = _factory()
+    for name in [*sorted(BUILT_IN_PACKS), "bundled"]:
+        profiles = ", ".join(p.id for p in factory.describe_template(name).profiles)
+        console.print(f"[bold]{name}[/bold] (built-in): {profiles}", soft_wrap=True)
+    for name, entry in sorted(load_settings().templates.items()):
+        pinned = f" at {entry.ref}" if entry.ref else ""
+        console.print(
+            f"[bold]{name}[/bold]: {entry.source}{pinned} -> {entry.path}", soft_wrap=True
+        )
+
+
+@template_app.command("fork")
+def template_fork(
+    source: Annotated[
+        str, typer.Argument(help="A built-in profile, such as quant-baseline/backtest.")
+    ],
+    destination: Annotated[Path, typer.Argument(help="New pack directory.")],
+    name: Annotated[str | None, typer.Option(help="Pack id and template name.")] = None,
+    profile_id: Annotated[str | None, typer.Option(help="Rename the profile.")] = None,
+    register: Annotated[
+        bool, typer.Option("--register/--no-register", help="Register it in factory.toml.")
+    ] = True,
+) -> None:
+    """Copy a built-in profile into your own pack, check it, and register it.
+
+    Edit the copy by hand or with an AI assistant: add questions to questions.yml, files to the
+    template, or components; then run `quant-factory template check`.
+    """
+    pack_name, _, profile = source.partition("/")
+    if pack_name not in BUILT_IN_PACKS or not profile:
+        raise _fail(f"Fork a built-in profile: {', '.join(sorted(BUILT_IN_PACKS))}/<profile>.")
+    pack_id = name or destination.name
+    try:
+        forked = fork_pack(
+            BUILT_IN_PACKS[pack_name], profile, destination, pack_id=pack_id, profile_id=profile_id
+        )
+    except PackError as error:
+        raise _fail(error) from error
+    console.print(f"Forked {source} into {forked}.", soft_wrap=True)
+    factory = _factory()
+    if not _print_check(factory, forked.resolve().as_posix()):
+        raise typer.Exit(code=1)
+    if register:
+        _register(
+            pack_id,
+            RegisteredTemplate(source=f"fork of {source}", path=forked.resolve().as_posix()),
+        )
+
+
+@template_app.command("check")
+def template_check(
+    template: Annotated[str, typer.Argument(help="A pack directory or a template name.")],
+) -> None:
+    """Load a pack and plan each of its profiles with default answers. Writes nothing."""
+    if is_template_path(template) or Path(template).is_dir():
+        template = Path(template).expanduser().resolve().as_posix()
+    if not _print_check(_factory(), template):
+        raise typer.Exit(code=1)
+
+
+@template_app.command("add")
+def template_add(
+    source: Annotated[str, typer.Argument(help="A pack directory, gh:org/repo, or a git URL.")],
+    name: Annotated[str, typer.Option(help="The name specs will use.")],
+    ref: Annotated[
+        str | None, typer.Option(help="Git tag or branch to pin (required for git sources).")
+    ] = None,
+) -> None:
+    """Register a pack. A git pack is fetched once at --ref and cached, so plans stay offline."""
+    local = Path(source).expanduser()
+    if local.is_dir() and ref is None:
+        path = local.resolve()
+        cached = False
+    else:
+        if ref is None:
+            raise _fail("Pin a git pack with --ref (a tag or branch).")
+        path = settings_path().parent / "packs" / name / ref
+        try:
+            clone_pack(source, ref, path)
+        except PackError as error:
+            raise _fail(error) from error
+        cached = True
+    factory = _factory()
+    if not _print_check(factory, path.as_posix()):
+        if cached:
+            shutil.rmtree(path, ignore_errors=True)
+        raise typer.Exit(code=1)
+    _register(name, RegisteredTemplate(source=source, ref=ref, path=path.as_posix()))
+
+
 MCP_INSTRUCTIONS = (
     "Quant App Factory guides a user to a ready app spec. Call describe_template to learn what "
     "a template asks, ask the user, and call check_spec until it is ready. Then give the user "
@@ -451,7 +580,7 @@ MCP_INSTRUCTIONS = (
 
 @app.command("serve-mcp")
 def serve_mcp(
-    runs: Annotated[Path, typer.Option("--runs", help="SQLite run store.")] = DEFAULT_RUNS,
+    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
     record: Annotated[
         bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
     ] = True,
@@ -466,7 +595,7 @@ def serve_mcp(
     try:
         if record:
             try:
-                run_store = SqliteRunStore(runs)
+                run_store = SqliteRunStore(_runs_path(runs))
             except RunStoreError as error:
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         run_stdio(

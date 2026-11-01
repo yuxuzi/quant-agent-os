@@ -34,6 +34,8 @@ uv run quant-factory plan app.toml      # writes nothing
 uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
 uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
 uv run quant-factory serve-mcp          # describe_template, check_spec, plan_app for Claude
+uv run quant-factory template fork quant-baseline/backtest packs/mine   # make a template yours
+uv run quant-factory template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
 ```
 
 Secrets never go in a spec or `factory.toml`. Use `env:NAME` in a spec's `[settings]`, and

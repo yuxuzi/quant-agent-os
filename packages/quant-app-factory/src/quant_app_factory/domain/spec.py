@@ -36,6 +36,14 @@ KIND_TARGETS: dict[str, tuple[str, str]] = {
     "report": ("quant-baseline", "report"),
 }
 BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-baseline", "bundled"})
+TEMPLATE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")  # built-in, or registered in factory.toml
+
+
+def is_template_path(value: str) -> bool:
+    """Return whether ``value`` names a pack directory rather than a template name."""
+    return "/" in value or "\\" in value or value.startswith((".", "~"))
+
+
 # Answers set by spec fields or by pytemplate-uv itself; `answers` may not override them.
 RESERVED_ANSWERS = frozenset(
     {
@@ -82,7 +90,8 @@ class AppSpec(BaseModel):
 
     Choose what to build with ``kind`` (a shortcut), or with ``template`` and ``profile``:
     ``template`` is a built-in pack (``agent-tool``, ``quant-baseline``), ``bundled`` for
-    pytemplate-uv's own profiles, or the path of your own pack. ``answers`` hold the
+    pytemplate-uv's own profiles, a name registered in factory.toml, or the path of your own
+    pack. ``answers`` hold the
     template's other questions, such as ``frequency`` or ``cost_bps``.
 
     ``output_dir`` is the existing parent directory of the new project, as an absolute path;
@@ -133,11 +142,12 @@ class AppSpec(BaseModel):
     @field_validator("template")
     @classmethod
     def _known_or_absolute(cls, value: str | None) -> str | None:
-        if value is None or value in BUILT_IN_TEMPLATES:
-            return value
+        if value is None or (not is_template_path(value) and TEMPLATE_NAME.match(value)):
+            return value  # a built-in or registered name; registered names resolve at plan time
         if not Path(value).is_absolute():
             raise ValueError(
-                f"use {', '.join(sorted(BUILT_IN_TEMPLATES))}, or an absolute pack directory"
+                f"use {', '.join(sorted(BUILT_IN_TEMPLATES))}, a registered template name, or an "
+                "absolute pack directory"
             )
         return value
 
@@ -224,7 +234,7 @@ def load_spec(path: Path) -> AppSpec:
         output_dir = path.resolve().parent / output_dir
     data["output_dir"] = str(output_dir.resolve())
     template = data.get("template")
-    if isinstance(template, str) and template not in BUILT_IN_TEMPLATES:
+    if isinstance(template, str) and is_template_path(template):
         pack = Path(template).expanduser()
         if not pack.is_absolute():
             pack = path.resolve().parent / pack

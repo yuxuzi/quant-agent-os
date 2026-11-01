@@ -84,3 +84,46 @@ def test_a_database_backtest_passes_its_checks_and_connects(tmp_path: Path) -> N
     assert report.checks_passed, "\n\n".join(f"{c.command}\n{c.output_tail}" for c in failed)
     assert report.checks[-1].command == "uv run db-smoke --check-connection"
     assert "Connected to sqlite" in report.checks[-1].output_tail
+
+
+def test_a_forked_pack_with_a_new_question_builds_a_passing_project(tmp_path: Path) -> None:
+    from quant_app_factory.domain.planner import BUILT_IN_PACKS
+    from quant_app_factory.infrastructure.pack_files import fork_pack
+
+    pack = fork_pack(
+        BUILT_IN_PACKS["quant-baseline"],
+        "backtest",
+        tmp_path / "pack",
+        pack_id="desk-backtest",
+        profile_id="desk",
+    )
+    questions = pack / "questions.yml"
+    questions.write_text(
+        questions.read_text().replace(
+            "frequency:",
+            "desk:\n  type: str\n  help: Trading desk\n  default: equities\n\nfrequency:",
+            1,
+        )
+    )
+    profile = pack / "desk" / "profile.toml"
+    profile.write_text(profile.read_text().replace('"frequency",', '"desk", "frequency",'))
+    (pack / "template" / "DESK.md.jinja").write_text("Desk: {{ desk }}\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    spec = AppSpec.model_validate(
+        {
+            "name": "desk-app",
+            "template": pack.as_posix(),
+            "profile": "desk",
+            "description": "A forked backtest",
+            "output_dir": str(out),
+            "answers": {"desk": "rates"},
+        }
+    )
+
+    report = AppFactory(PytemplateUvScaffolder()).create(spec)
+
+    failed = [check for check in report.checks if not check.ok]
+    assert report.checks_passed, "\n\n".join(f"{c.command}\n{c.output_tail}" for c in failed)
+    assert (Path(report.project_path) / "DESK.md").read_text() == "Desk: rates\n"
+    assert (Path(report.project_path) / "desk_app" / "backtest.py").is_file()

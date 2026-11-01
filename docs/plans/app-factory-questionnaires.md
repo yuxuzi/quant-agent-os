@@ -242,6 +242,8 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
 
 ### Q4. Template forks, git packs, and the walkthrough (B-26), covering point 2
 
+**Done (2026-10-31).** Results are after the step text below.
+
 - **`quant-factory template fork <pack>/<profile> <dest> [--name ID]`** copies a built-in
   profile, its questions, and the components it uses into a new user pack. It renames the
   pack and the profile ids, then validates the result with `open_catalog` and `api.plan`.
@@ -265,6 +267,24 @@ that installs or connects is in the opt-in smoke test (`QUANT_FACTORY_SMOKE=1`).
   - A forked pack checks, renders, and passes its smoke checks.
   - A git pack (a local bare repository in tests) registers and plans offline.
   - The walkthrough is reproduced from a clean checkout.
+
+- **Results:**
+  - **Tests:** 15 new offline tests, covering forks (one profile kept, components pruned, a
+    renamed profile still rendering its own files, the agent-tool profile), registered
+    names, `check_template` on every built-in and on a broken pack, a pinned git pack fetched
+    from a local repository without history, and the CLI.
+  - **Smoke test:** a forked backtest with an added question builds a project that passes its
+    checks.
+  - **The walkthrough** (walkthrough §11) ran end to end on a fresh clone: settings, `new`
+    with a saved connection, `create --check-connection`, study, backtest, report, and fork.
+- **Bug found:** the factory's default run store ignored `QUANT_FACTORY_SETTINGS`. It now
+  defaults to `factory-runs.db` beside `factory.toml`.
+- **Deviations:**
+  - **Built-in profiles only.** `template fork` forks built-in profiles, whose layout App
+    Factory controls. Forking an arbitrary pack waits for pytemplate-uv's own authoring
+    (O-12).
+  - **A fork can rename its profile** (`--profile-id`), and references in template file names
+    and `.jinja` contents follow the new name.
 
 ## Gate
 
