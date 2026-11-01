@@ -12,33 +12,49 @@ from .metrics import summarize
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "
     "the data provider's responsibility.",
-    "The quantile spread is a gross, hypothetical next-bar return, before costs.",
+    "The quantile spread is a gross, hypothetical one-bar return after the trade, before costs.",
 ]
 
 
 def run_study(
-    panel: Panel, signal_name: str = "momentum", lookback: int = 20, quantiles: int = 5
+    panel: Panel,
+    signal_name: str = "momentum",
+    lookback: int = 20,
+    quantiles: int = 5,
+    lag: int = config.TRADE_LAG,
 ) -> dict[str, Any]:
-    """Evaluate ``signal_name`` on ``panel`` and return a results document."""
+    """Evaluate ``signal_name`` on ``panel`` and return a results document.
+
+    ``lag`` is the trade lag a backtest of this signal would use, so the study scores what a
+    lagged trade could actually earn.
+    """
     signal = signals.compute(signal_name, panel.prices, lookback)
-    spread = summarize(quantile_spread(signal, panel.prices, quantiles), config.PERIODS_PER_YEAR)
+    spread = summarize(
+        quantile_spread(signal, panel.prices, quantiles, lag), config.PERIODS_PER_YEAR
+    )
     return {
         "kind": "study",
         "title": f"{signal_name} (lookback {lookback}) signal study",
         "period": [panel.dates[0], panel.dates[-1]],
         "bars": len(panel.dates),
         "assets": len(panel.assets),
-        "parameters": {"signal": signal_name, "lookback": lookback, "quantiles": quantiles},
+        "parameters": {
+            "signal": signal_name,
+            "lookback": lookback,
+            "quantiles": quantiles,
+            "lag": lag,
+        },
         "metrics": {
-            **ic_summary(signal, panel.prices),
+            **ic_summary(signal, panel.prices, lag=lag),
             "signal_autocorrelation": signal_autocorrelation(signal),
             **{f"spread_{key}": value for key, value in spread.items()},
         },
-        "series": {"ic_decay": ic_decay(signal, panel.prices, config.MAX_HORIZON)},
+        "series": {"ic_decay": ic_decay(signal, panel.prices, config.MAX_HORIZON, lag)},
         "conventions": {
             "periods_per_year": config.PERIODS_PER_YEAR,
-            "ic": "signal at bar t against the return from t to t + h",
-            "spread": f"top minus bottom of {quantiles} signal quantiles, next-bar return",
+            "timing": f"signal at close t, traded at close t + {lag}, as in a backtest",
+            "ic": f"signal at bar t against the return from t + {lag} to t + {lag} + h",
+            "spread": f"top minus bottom of {quantiles} signal quantiles, one bar after the trade",
         },
         "limitations": LIMITATIONS,
     }

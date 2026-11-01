@@ -18,6 +18,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Quant baseline studies now use the backtest's trade timing (B-27 R1). A study scored a
+  signal against the return starting at the signal's own close, while the backtest trades one
+  bar later, so a signal with a one-bar edge looked strong in the study (rank IC 0.27) and
+  earned nothing in the backtest. Studies, IC decay, and quantile spreads now measure returns
+  from the trade, using `config.TRADE_LAG`; results record the lag, and both CLIs take
+  `--lag`. Regenerate existing projects, or re-run studies, to get comparable numbers.
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

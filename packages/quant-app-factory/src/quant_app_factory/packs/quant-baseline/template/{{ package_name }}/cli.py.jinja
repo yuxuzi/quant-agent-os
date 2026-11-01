@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 {%- endif %}
 {%- if profile == 'alpha-research' %}
 
-from . import synthetic
+from . import config, synthetic
 from .data import Panel, load_prices
 {%- if 'data-database' in components %}
 from .database import check_connection, load_database
@@ -23,7 +23,7 @@ from .results import save_results
 from .study import run_study
 {%- elif profile == 'backtest' %}
 
-from . import synthetic
+from . import config, synthetic
 from .backtest import run
 from .data import Panel, load_prices
 {%- if 'data-database' in components %}
@@ -57,12 +57,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 {%- endif %}
     parser.add_argument("--signal", default="momentum", help="momentum or reversal.")
     parser.add_argument("--lookback", type=int, default=20, help="Signal lookback in bars.")
+    parser.add_argument(
+        "--lag", type=int, default=config.TRADE_LAG, help="Bars from the signal to the trade."
+    )
 {%- if profile == 'backtest' %}
-    parser.add_argument("--cost-bps", type=float, default=None, help="Override the cost.")
-    parser.add_argument("--lag", type=int, default=None, help="Override the trade lag.")
+    parser.add_argument("--cost-bps", type=float, default=config.COST_BPS, help="Cost in bps.")
 {%- endif %}
     parser.add_argument("--out", type=Path, default=Path("results/results.json"))
     args = parser.parse_args(argv)
+    if args.lag < 0:
+        parser.error("--lag must be zero or more bars.")
 {%- if 'data-database' in components %}
     if args.check_connection:
         try:
@@ -77,15 +81,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     panel = _demo_panel() if args.demo else load_prices(args.prices)
 {%- endif %}
 {%- if profile == 'alpha-research' %}
-    results = run_study(panel, args.signal, args.lookback)
+    results = run_study(panel, args.signal, args.lookback, lag=args.lag)
 {%- else %}
-    options = {"cost_bps": args.cost_bps, "lag": args.lag}
-    results = run(
-        panel,
-        args.signal,
-        args.lookback,
-        **{key: value for key, value in options.items() if value is not None},
-    )
+    results = run(panel, args.signal, args.lookback, cost_bps=args.cost_bps, lag=args.lag)
 {%- endif %}
     save_results(args.out, results)
 {%- endif %}

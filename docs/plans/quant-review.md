@@ -88,6 +88,21 @@ see.
 | **R5** Real dates | Loaders parse ISO dates (CSV, Parquet, database) into `datetime.date`, and reject other formats with an example of the expected one. | `2024-01-09` sorts before `2024-01-10`. `1/9/2024` is rejected with a message naming ISO dates. |
 | **R6** Standard signal definitions | `momentum(lookback, skip)` defaults to 12-1 (252 and 21 bars daily, scaled by frequency), and `reversal` defaults to 21 bars. Results record the parameters. | Known-answer tests on a constructed price path, at each frequency. |
 
+**R1 result (2026-11-01).** Done as planned. The evaluation functions take `lag` (default
+`config.TRADE_LAG`), and forward returns run from bar t + lag. On the planted next-bar world,
+both profiles now agree:
+
+| | lag 0 | lag 1 (default) |
+| --- | --- | --- |
+| Study rank IC | 0.268 | 0.009 |
+| Backtest Sharpe | 23.9 | 1.0 |
+
+A signal whose edge lasts past the lag (`generate_panel(delay=TRADE_LAG)`) keeps it: rank IC
+0.275 and Sharpe 24.4. Both generated test suites assert this, and the study's CLI gained
+`--lag`. One deviation: the study and the backtest are still separate projects, so "matching"
+is asserted by the same planted world in each project's tests, not by one test across both.
+S1 makes it a single test.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in

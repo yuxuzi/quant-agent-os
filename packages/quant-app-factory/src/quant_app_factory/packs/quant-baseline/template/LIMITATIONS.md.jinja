@@ -27,4 +27,5 @@ not handle:
 {%- endif %}
 
 What the tests guard: metric formulas (known answers){% if profile != 'report' %}, no look-ahead
-in signals{% endif %}{% if profile == 'backtest' %}, the trade lag, and cost ordering{% endif %}.
+in signals, one trade-timing convention (`config.TRADE_LAG`, shared by studies and
+backtests){% endif %}{% if profile == 'backtest' %}, and cost ordering{% endif %}.

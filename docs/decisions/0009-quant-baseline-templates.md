@@ -26,7 +26,9 @@ finished. Tests that metric formulas are correct do not catch that.
 - **Bias tests in every generated project:**
   - changing future prices never changes a past signal or a past return (no look-ahead);
   - a forward-shifted signal must change the result;
-  - trades lag the signal by one bar by default;
+  - trades lag the signal by one bar by default, and studies measure returns from the same
+    trade bar (`config.TRADE_LAG`), so a study never promotes an edge the backtest cannot
+    earn;
   - costs order returns correctly.
   - A `LIMITATIONS.md` lists what the template does not handle: survivorship, point-in-time
     fundamentals, corporate actions, and borrow.
