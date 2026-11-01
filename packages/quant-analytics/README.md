@@ -1,16 +1,25 @@
 # quant-agent-os-analytics
 
-**Quant Analytics** holds performance metrics with documented conventions, and registers them as
-Quant-Agent-OS tools. It imports no LLM library and no numpy.
+**Quant Analytics** holds performance and risk metrics with documented conventions, and
+registers them as Quant-Agent-OS tools. It imports no LLM library. The performance formulas
+are empyrical-reloaded's ([decision 0010](../../docs/decisions/0010-analytics-on-empyrical.md)).
 
-- `quant_analytics.metrics`: plain functions. They cover annualised return and volatility,
-  Sharpe, maximum drawdown, hit rate, beta, active return, tracking error, and information
-  ratio. The conventions are in the module docstring, and they match the generated
-  `quant-research` projects.
-- `quant_analytics.tools`: `analyze_performance` returns every metric of a series in one
-  read-only call. With a benchmark it adds the benchmark metrics. The result carries the
-  conventions, short-sample warnings, and `computed` evidence. `annualized_return` and
-  `max_drawdown` are single-metric tools.
+- `quant_analytics.metrics`: plain functions on empyrical. They cover annualised return and
+  volatility, Sharpe, Sortino, Calmar, Omega, maximum drawdown, tail ratio, stability, value
+  at risk, and hit rate. Against a benchmark, they add alpha, beta, active return, tracking
+  error, and information ratio. The conventions are in the module docstring.
+- `quant_analytics.risk`: portfolio risk on numpy, because empyrical has none:
+  - Euler volatility contributions (marginal, component, and percent), which add up to the
+    portfolio's volatility;
+  - OLS factor exposures;
+  - each factor's share of the portfolio variance, with the specific share as the remainder.
+- `quant_analytics.tools`: the tools, which need no permissions because every input arrives in
+  the call. Each result carries the conventions, warnings for short samples, and `computed`
+  evidence.
+  - `analyze_performance` returns every metric of a series.
+  - `analyze_risk` returns a portfolio's volatility, its contributions, and, with factor
+    returns, its exposures.
+  - `annualized_return` and `max_drawdown` are single-metric tools.
 
 ```python
 from quant_agent_os.sdk import Platform
@@ -18,6 +27,12 @@ from quant_analytics.tools import analytics_tools
 
 with Platform(analytics_tools()) as platform:
     record = platform.call(
-        "analyze_performance", series_id="fund", returns=[0.01, -0.02, 0.015], periods_per_year=12
+        "analyze_risk",
+        portfolio_id="book",
+        weights={"stocks": 0.6, "bonds": 0.4},
+        asset_returns={"stocks": [0.02, -0.03, 0.01, 0.04], "bonds": [0.004, 0.006, -0.002, 0.001]},
+        factor_returns={"market": [0.015, -0.025, 0.012, 0.03]},
+        periods_per_year=12,
     )
+    print(record.output["contributions"])  # each asset's share of the volatility
 ```

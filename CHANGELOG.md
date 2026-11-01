@@ -110,6 +110,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `analyze_risk` in Quant Analytics (B-21). From a portfolio's weights and its assets' returns,
+  it returns annualised volatility and each asset's marginal, component, and percent
+  contribution to it. The contributions are Euler's, so they add up exactly, and a negative
+  share marks a hedge. It also returns gross and net exposure and the diversification ratio.
+  With factor returns, it adds OLS factor exposures for the portfolio and each asset, and the
+  share of portfolio variance each factor explains, with the specific share as the remainder.
+  Collinear factors and short samples are flagged. empyrical has no risk decomposition, so the
+  formulas use numpy; known-answer tests pin every convention, and the single-factor beta
+  matches empyrical's. Like `analyze_performance`, it needs no permissions.
 - `generate_strategy` in Quant Research (B-17). It drafts a structured strategy specification
   for one signal, factor, or strategy from the user's corpus. The spec has sections for
   signals, universe, data, methods, metrics, risks, and context. Risks are what contradicts
