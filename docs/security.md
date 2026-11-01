@@ -93,8 +93,15 @@ settings file, and generated apps hold environment-variable names, never secret 
   setting declared secret, is refused.
 - **Generated files.** They name variables (`.env.example`, `settings.py`) and hold no values;
   a scan test checks this.
-- **Programs.** A program, such as a generated app's `check-connection`, receives only the
-  named variable, through `run_command`'s `extra_env`, during the operator's approved create.
+- **Programs.** By default, programs receive no secrets. The one exception is a generated
+  app's `--check-connection`:
+  - it receives only the variables the spec references, through `run_command`'s `extra_env`;
+  - it runs during the operator's approved create, or an approved `quant-factory check`;
+  - it runs only for projects from built-in templates, whose connection code App Factory
+    ships;
+  - the values, including URL-encoded forms, are redacted from its captured output.
+- **Database TLS.** Generated PostgreSQL connections verify the server certificate
+  (`sslmode=verify-full`) unless the spec explicitly chooses a weaker mode.
 
 Generated database apps hold no credentials. They read `DATABASE_URL` or `DATABASE_PASSWORD`
 from their environment and open connections read-only by default: SQLite query-only, DuckDB

@@ -24,6 +24,7 @@ finished. Tests that metric formulas are correct do not catch that.
 - **One source for metric code.** The required `metrics` component holds every metric for all
   three profiles, with documented conventions and known-answer tests.
 - **Bias tests in every generated project:**
+  - changing future prices never changes a past signal or a past return (no look-ahead);
   - a forward-shifted signal must change the result;
   - trades lag the signal by one bar by default;
   - costs order returns correctly.

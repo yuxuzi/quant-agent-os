@@ -372,7 +372,7 @@ Success metrics (to be confirmed after the first baseline):
   `quant-agent-os-factory`)?
 - **O-7:** *Resolved by B-10:* packs ship as package data inside `quant_app_factory/packs/`
   and are passed to pytemplate-uv as local paths. User git packs are pinned and cached
-  locally (B-23).
+  locally (B-26).
 - **O-8:** How is iteration in App Factory (B-20) reconciled with the no-feedback invariant?
   This needs its own decision record.
 - **O-9:** *Resolved by B-25:* `data-database` supports PostgreSQL, SQLite, and DuckDB.
