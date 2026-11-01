@@ -1,0 +1,131 @@
+"""Reports print computed figures only and leave interpretation to a person."""
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from {{ package_name }}.report import (
+    calendar_years,
+    equity_svg,
+    format_value,
+    render_comparison,
+    render_markdown,
+)
+from {{ package_name }}.results import load_results, save_results
+
+RESULTS = {
+    "kind": "backtest",
+    "title": "Momentum backtest",
+    "period": ["2020-01-01", "2024-12-31"],
+    "bars": 1258,
+    "assets": 50,
+    "parameters": {"cost_bps": 5},
+    "metrics": {"sharpe_ratio": 0.8123, "max_drawdown": -0.1234, "hit_rate": float("nan")},
+    "conventions": {"periods_per_year": 252},
+    "limitations": ["Prices are taken as given."],
+}
+
+
+def test_the_report_has_every_section_and_formats_metrics() -> None:
+    report = render_markdown(RESULTS)
+
+    for heading in ("## Data", "## Computed results", "## Conventions", "## Interpretation"):
+        assert heading in report
+    assert "| sharpe ratio | 0.8123 |" in report
+    assert "| max drawdown | -12.34% |" in report
+    assert "| hit rate | n/a |" in report
+    assert "Nothing above this section is interpretation" in report
+
+
+def test_the_report_states_where_its_numbers_came_from() -> None:
+    provenance = {
+        "data_fingerprint": "sha256:abc",
+        "code_version": {"package": "0.1.0", "git": "v1-2-gdeadbee"},
+        "created": "2026-01-02T03:04:05+00:00",
+    }
+
+    report = render_markdown({**RESULTS, "provenance": provenance})
+
+    assert "- Data fingerprint: sha256:abc" in report
+    assert "- Code version: 0.1.0 (git v1-2-gdeadbee)" in report
+    assert "- Run at: 2026-01-02T03:04:05+00:00" in report
+
+
+def test_counts_are_whole_numbers_and_turnover_a_percentage() -> None:
+    assert format_value("forced_exits", 3.0) == "3"
+    assert format_value("annual_turnover", 7.9) == "790.00%"
+
+
+def test_results_round_trip_with_nan_as_null(tmp_path: Path) -> None:
+    path = save_results(tmp_path / "results.json", RESULTS)
+
+    loaded = load_results(path)
+
+    assert loaded["metrics"]["hit_rate"] is None
+    assert format_value("hit_rate", loaded["metrics"]["hit_rate"]) == "n/a"
+
+
+def _run(
+    name: str, returns: list[float], fingerprint: str, cost: float
+) -> tuple[str, dict[str, Any]]:
+    dates = ["2023-12-28", "2023-12-29", "2024-01-02", "2024-01-03"]
+    return name, {
+        **RESULTS,
+        "title": name,
+        "parameters": {"cost_bps": cost, "signal": "momentum"},
+        "metrics": {"sharpe_ratio": sum(returns)},
+        "series": {"dates": dates, "net_returns": returns},
+        "provenance": {"data_fingerprint": fingerprint, "code_version": {"package": "0.1.0"}},
+    }
+
+
+RUNS = [
+    _run("cheap", [0.0, 0.10, 0.10, -0.05], "sha256:aaaa", 1.0),
+    _run("dear", [0.0, 0.05, 0.02, 0.01], "sha256:bbbb", 10.0),
+]
+
+
+def test_calendar_years_compound_within_each_year() -> None:
+    assert calendar_years(RUNS[0][1]) == pytest.approx({"2023": 0.10, "2024": 1.10 * 0.95 - 1})
+
+
+def test_a_comparison_puts_runs_side_by_side() -> None:
+    report = render_comparison(RUNS, chart="comparison-equity.svg")
+
+    assert report.startswith("# Comparison of 2 runs")
+    sections = [line for line in report.splitlines() if line.startswith("## ")]
+    assert sections == [
+        "## Runs",
+        "## Parameters",
+        "## Computed results",
+        "## Calendar years",
+        "## Interpretation",
+        "## Limitations",
+    ]
+    assert "| | cheap | dear |" in report
+    assert "| cost bps | 1.0 | 10.0 |" in report
+    assert "| sharpe ratio | 0.1500 | 0.0800 |" in report
+    assert "| 2023 | 10.00% | 5.00% |" in report
+    assert "different data" in report  # the fingerprints differ
+    assert "![Equity curves](comparison-equity.svg)" in report
+    assert report.count("- Prices are taken as given.") == 1  # limitations are merged
+
+
+def test_the_equity_chart_draws_one_labelled_curve_per_run() -> None:
+    svg = equity_svg(RUNS)
+
+    assert svg is not None
+    assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
+    assert svg.count("<polyline") == 2
+    assert ">cheap</text>" in svg and ">dear</text>" in svg
+    assert "2023-12-28" in svg and "2024-01-03" in svg
+    assert equity_svg([("study", {"kind": "study", "metrics": {}})]) is None
+
+
+def test_a_single_run_report_has_calendar_years_and_its_chart() -> None:
+    report = render_markdown(RUNS[0][1], chart="report-equity.svg")
+
+    assert "## Calendar years" in report
+    assert "| 2024 | 4.50% |" in report
+    assert "![Equity curve](report-equity.svg)" in report

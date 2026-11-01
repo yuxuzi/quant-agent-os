@@ -8,6 +8,42 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Quant baseline projects are now one `quant-research` project (B-28 S1, quant-baseline
+  2.0.0):
+  - **Commands.** `study`, `backtest`, and `report` subcommands, plus `check-connection` with
+    the database component. These replace three separate projects and the `--check-connection`
+    flag.
+  - **Parameters.** Research parameters live in a generated `config.toml`, and flags override
+    them for one run.
+  - **Old names.** `kind = "alpha-research"`, `"backtest"`, or `"report"`, and those profile
+    names, still work for one release: they build `quant-research` and warn.
+  - **Prompts.** `quant-factory new` skips the profile question when a template has one
+    profile.
+  - **Tools.** Projects with `agent-tools` offer `evaluate_signal`, `backtest_signal`, and
+    `render_report` together.
+- Quant research runs are experiments (B-28 S2):
+  - **One folder per run.** Each `study` or `backtest` writes its own folder under `results/`
+    and never overwrites another.
+  - **Provenance.** `results.json` (version 2) records a SHA-256 fingerprint of the price data,
+    the code version, and the time.
+  - **Parameter snapshot.** A `config.toml` in the folder holds the exact parameters, and
+    `--config` pointing at it repeats the run.
+  - **Report.** `report` defaults to the latest run and shows the provenance. Runs print a
+    one-line headline, and `--out` is replaced by `--results DIR` and `--label`.
+- Quant research projects have a `walk-forward` command (B-28 S3). It chooses the lookback
+  per fold on training data only, from a small grid, by net Sharpe or rank IC, and reports
+  out-of-sample results only, with a folds table.
+- Quant research backtests take an `exposure` (B-28 S4): `dollar-neutral` (default),
+  `beta-neutral` (zero beta to the equal-weight market, rolling betas), or `long-only` (top
+  quantile, with information ratio and tracking error against the equal-weight market). Every
+  backtest reports its realised beta.
+- Quant research reports compare runs (B-28 S5): `report RUN ...` puts parameters, metrics,
+  calendar-year returns, and provenance side by side, and every report with a return series
+  gets an SVG equity curve and a calendar-year table.
+- Quant research projects read their data from `config.toml` (`data = "demo"`, `"database"`,
+  or a price file), so commands need no data flag (B-28 S6). Agent tools (`evaluate_signal`,
+  `backtest_signal`, `walk_forward_signal`) read that data instead of taking inline prices,
+  take no paths, return metrics without series, and declare `network` for PostgreSQL.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

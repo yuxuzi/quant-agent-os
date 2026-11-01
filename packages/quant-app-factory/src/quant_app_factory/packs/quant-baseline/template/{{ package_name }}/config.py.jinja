@@ -1,4 +1,8 @@
-"""Choices made when the project was generated. Change them here."""
+"""Facts fixed when the project was generated, and the default research parameters.
+
+Change research parameters in ``config.toml`` (see `parameters`); these values are the
+defaults it overrides.
+"""
 
 PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}  # {{ frequency }} bars
 COST_BPS: float = {{ cost_bps }}  # cost per unit of one-way turnover, in basis points

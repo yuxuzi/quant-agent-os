@@ -13,21 +13,20 @@ not handle:
 - **Your query.** The database loader trusts the query in `config.py` to return one adjusted
   price per date and asset, as known on that date.
 {%- endif %}
-{%- if profile == 'backtest' %}
 - **Execution.** Costs are linear in turnover. There is no market impact, borrow cost,
   short-sale constraint, or capacity limit, and the simulation places no orders.
-- **Overfitting.** Choose parameters on walk-forward training ranges only
-  (`walk_forward_splits`), and report the test ranges.
-{%- elif profile == 'alpha-research' %}
-- **Costs and capacity.** Quantile spreads are gross and hypothetical. Backtest a signal before
+- **Exposures.** Beta neutrality uses one factor, the equal-weight market. There are no sector,
+  size, or style neutralisations, and the long-only benchmark is equal-weight, not a
+  cap-weighted index.
+- **Costs in studies.** Quantile spreads are gross and hypothetical. Backtest a signal before
   drawing conclusions.
-- **Multiple testing.** Trying many signals inflates the best IC. Record every signal you try.
-{%- else %}
-- **Interpretation.** The report prints computed figures only. Write the interpretation
-  yourself, and keep it apart from the figures.
-{%- endif %}
+- **Overfitting and multiple testing.** `study` and `backtest` numbers are in-sample; only
+  `walk-forward` reports out-of-sample results. Its grid is small on purpose, but trying many
+  signals or grids still inflates the best result: record every one you try.
+- **Interpretation.** Reports print computed figures only. Write the interpretation yourself,
+  and keep it apart from the figures.
 
-What the tests guard: metric formulas (known answers){% if profile != 'report' %}, no look-ahead
-in signals, one trade-timing convention (`config.TRADE_LAG`, shared by studies and backtests),
-{% if profile == 'backtest' %}missing prices (gaps and delistings), and cost ordering{% else %}and
-missing prices (gaps and delistings){% endif %}{% endif %}.
+What the tests guard: metric formulas (known answers), no look-ahead in signals, one
+trade-timing convention shared by studies and backtests (`lag` in `config.toml`), missing
+prices (gaps and delistings), drift and the rebalance schedule, cost ordering, and walk-forward choices that never see
+their test windows.

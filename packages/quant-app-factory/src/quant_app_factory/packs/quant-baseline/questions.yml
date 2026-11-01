@@ -1,4 +1,4 @@
-# Questions for the quant-baseline profiles. Add questions rather than renaming or removing them,
+# Questions for the quant-baseline pack. Add questions rather than renaming or removing them,
 # so `pytemplate update` can replay recorded answers.
 _min_copier_version: "9.4"
 _templates_suffix: .jinja
@@ -7,9 +7,7 @@ profile:
   type: str
   help: Project profile
   choices:
-    - alpha-research
-    - backtest
-    - report
+    - quant-research
 
 project_name:
   type: str

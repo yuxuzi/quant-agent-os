@@ -75,7 +75,7 @@ class CreateAppInput(BaseModel):
     spec: AppSpec
     run_checks: bool = True
     check_connection: bool = Field(
-        default=False, description="Also run the app's --check-connection after its checks"
+        default=False, description="Also run the app's check-connection command after its checks"
     )
     expected_pack_digest: str | None = Field(
         default=None,

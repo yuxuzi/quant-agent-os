@@ -168,6 +168,109 @@ The smoke suite builds 9 projects, including a weekly backtest, and all pass the
 | **S5** A report that compares runs | `report` renders one or more experiment folders: an equity curve (inline SVG, no new dependency), a calendar-year table, and parameters side by side. Facts and interpretation stay apart. | A golden-file test checks the Markdown and SVG structure for two runs. |
 | **S6** Tools that read the project's data | `agent-tools` wrappers take a signal and parameters, and read the configured data source (file or database), not inline prices. | `check_tool` passes, and the tool works on the demo panel and on a SQLite fixture. |
 
+**S1 result (2026-11-01).** Done, with one deviation. The `quant-baseline` pack (now 2.0.0)
+has one profile, `quant-research`. Its project has `study`, `backtest`, and `report`
+subcommands, plus `check-connection` with the database component. All of them share data,
+signals, metrics, and the trade lag. Research parameters (signal, lookback, skip, lag,
+quantiles, IC-decay horizon, costs, rebalance schedule, and delisting return) live in a
+generated `config.toml`. `parameters.py` loads it, refuses unknown keys and wrong types by
+name, and lets flags override it for one run. A test checks that the generated file equals
+the defaults in `config.py`.
+- **Aliases.** The old kinds and profile names (`alpha-research`, `backtest`, and `report`, in
+  specs, `new --profile`, `describe_template`, and `template fork`) build `quant-research`. They
+  say so in the plan's reasons and in create's warnings.
+- **Removed prompt.** `new` no longer asks for a profile when a template has only one.
+- **One timing test.** The study-and-backtest agreement is now a single test (`test_timing.py`).
+- **Deviation.** `walk-forward` is not a subcommand yet. A placeholder would have been a
+  command that does nothing, so it arrives with S3, which makes it real.
+
+The smoke suite builds `quant-research` four ways (default, weekly, monthly, and Parquet with
+agent tools), with a database, and as a fork. All pass their own checks. Walkthrough §11 was
+re-run as one project, with the same numbers as B-27.
+
+**S2 result.** Done as planned, plus a parameters snapshot. Each `study` or `backtest` run
+writes `results/<UTC time>-<kind>-<signal>/` (`--label` names it). A second run in the same
+second gets a `-2` suffix, so no run overwrites another. Each folder holds two files:
+- `results.json` (schema version 2): the metrics, series, and parameters, plus provenance:
+  - `sha256:` of the panel's dates, assets, and prices, with one canonical NaN;
+  - the package version and `git describe --always --dirty` when the project is a git checkout;
+  - the UTC time.
+- `config.toml`: the exact parameters, so `--config results/<run>/config.toml` repeats the run.
+  A test checks the repeat gives identical metrics.
+
+`report` with no argument renders the latest run, takes a run folder or a version-1 results
+file, and shows the provenance. Each run also prints a one-line headline: rank IC and its HAC t
+for a study, and net Sharpe, return, and turnover for a backtest. One bug was found by the
+generated tests: two runs in the same second sorted by label, so "latest" could pick the wrong
+run. Ties now break by when the results file was written.
+
+**S3 result.** Done as planned. `walk-forward` rolls `train_bars` (one year by default) and
+`test_bars` (three months) windows after a warm-up. Each fold picks the lookback with the best
+training net Sharpe, or rank IC with `objective = "ic"`, from a small grid: `lookbacks`, or 0.5,
+0.75, and 1 times the standard. The choice uses only prices up to the training window's end.
+Only stitched test windows are reported, with a folds table in the report. Three tests prove it:
+- **No leakage.** Randomising every price from a test window on never changes the choices of
+  that fold or earlier ones, for both objectives.
+- **Known answer.** In a world where returns undo the last five bars' move, the walk-forward
+  chooses 5 from {2, 5, 10} in all 11 folds. The edge holds out of sample, with a Sharpe of 21
+  when rebalancing daily.
+- **Too little data.** A short panel is explained, not crashed.
+
+Writing that test found a real interaction: with the monthly default rebalance, a two-bar edge
+is gone before the book trades, and the choice drifts to longer lookbacks. The test rebalances
+daily and says why.
+
+**S4 result.** Done as planned. `exposure` in `config.toml` (or `--exposure`) chooses the book:
+- **`dollar-neutral`.** Ranks, as before.
+- **`beta-neutral`.** Rank weights projected onto zero net dollars and zero beta, using rolling
+  betas to the equal-weight market from the `beta_window` bars up to each close.
+- **`long-only`.** The top signal quantile, equal-weighted, with active return, tracking error,
+  and information ratio against the equal-weight market. Its headline leads with the IR.
+
+Every backtest and walk-forward reports its realised beta. Known answers:
+- **Planted factor world.** Ranking on a beta-like signal leaves a dollar-neutral book with a
+  realised beta of 0.40; the beta-neutral book has 0.02.
+- **Exact neutrality.** Beta-neutral weights are exactly neutral, to 1e-10, in dollars and
+  beta.
+- **Rolling betas.** They recover the planted betas and never change when later prices do.
+- **Formulas.** IR, TE, active return, and beta match hand calculations.
+
+**S5 result.** Done as planned, with the chart written as a file. `report` takes nothing (the
+latest run), one run, or several:
+- **One run.** The report gains a calendar-year table and an equity curve.
+- **Several runs.** `results/comparison.md` puts runs, parameters, metrics, and calendar years
+  side by side, with one chart. It notes when the runs used different data, merges their
+  limitations, and keeps the interpretation section empty.
+
+The SVG is hand-written: no plotting dependency, break-even line, one labelled curve per run,
+and dates on the axis. It is a separate `*-equity.svg` file next to the report, not inline,
+because Markdown viewers such as GitHub strip inline SVG. Run names drop their timestamps when
+the labels alone tell the runs apart. Structural golden tests cover the comparison's sections,
+rows, and fingerprint note, the chart's polylines and legend, and compounded calendar years.
+
+**S6 result.** Done as planned. `data` in `config.toml` names the project's data: `demo`,
+`database` (the default with that component), or a price file relative to the config. The CLI
+uses it when no source flag is given. A run's config snapshot records the file's absolute path.
+
+The agent tools are `evaluate_signal`, `backtest_signal`, a new `walk_forward_signal`, and
+`render_report`:
+- **Inputs.** A signal name, lookback, skip, lag, and exposure. Prices and paths are not
+  inputs, which a test checks.
+- **What they read.** The configured data, through `config.toml` in the working directory or
+  the file `<PACKAGE>_CONFIG` names.
+- **What they return.** Metrics without series, to stay inside output limits, and a warning
+  when the data is the synthetic demo.
+- **Permissions.** They declare `read_local_data`, and also `network` for a PostgreSQL project,
+  so each call there needs an operator's approval.
+
+`check_tool` passes on the demo panel and on a SQLite fixture, and a PostgreSQL project with
+agent tools passes its own checks.
+
+**Phase 2 exit (2026-11-01).** Met. One `quant-research` project studies, backtests, walks
+forward, and compares runs, with each run's provenance recorded. Its out-of-sample choices are
+proven not to see their test windows. Its exposure modes have known-answer tests, and its tools
+read the project's own data.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

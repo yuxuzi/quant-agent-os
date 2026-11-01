@@ -42,19 +42,39 @@ def _files(tmp_path: Path, **fields: Any) -> set[str]:
 # Spec: kind, template, profile, answers
 
 
-@pytest.mark.parametrize("kind", ["alpha-research", "backtest", "report"])
-def test_quant_kinds_are_shortcuts_for_the_quant_baseline_pack(tmp_path: Path, kind: str) -> None:
-    by_kind = _spec(tmp_path, kind=kind)
-    explicit = _spec(tmp_path, template="quant-baseline", profile=kind)
+def test_quant_research_is_a_shortcut_for_the_quant_baseline_pack(tmp_path: Path) -> None:
+    by_kind = _spec(tmp_path, kind="quant-research")
+    explicit = _spec(tmp_path, template="quant-baseline", profile="quant-research")
 
-    assert by_kind.target == explicit.target == ("quant-baseline", kind)
+    assert by_kind.target == explicit.target == ("quant-baseline", "quant-research")
+    assert by_kind.alias_note is None
+
+
+@pytest.mark.parametrize("old", ["alpha-research", "backtest", "report"])
+def test_the_old_quant_names_build_quant_research_and_say_so(tmp_path: Path, old: str) -> None:
+    by_kind = _spec(tmp_path, kind=old)
+    explicit = _spec(tmp_path, template="quant-baseline", profile=old)
+
+    assert by_kind.target == explicit.target == ("quant-baseline", "quant-research")
+    for spec in (by_kind, explicit):
+        assert spec.alias_note is not None and old in spec.alias_note
+        assert spec.alias_note in ArchitecturePlanner().plan(spec).reasons
+
+
+def test_creating_from_an_old_name_warns(tmp_path: Path) -> None:
+    report = AppFactory(PytemplateUvScaffolder()).create(
+        _spec(tmp_path, kind="backtest"), run_checks=False
+    )
+
+    assert any("alias for the quant-research profile" in note for note in report.warnings)
+    assert (Path(report.project_path) / "momo_lab" / "study.py").is_file()
 
 
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
         ({}, "set kind, or both template and profile"),
-        ({"kind": "backtest", "profile": "report"}, "not a mix"),
+        ({"kind": "quant-research", "template": "bundled"}, "not a mix"),
         ({"template": "relative/pack", "profile": "x"}, "absolute pack directory"),
         ({"kind": "backtest", "answers": {"author": "x"}}, "as a spec field"),
         ({"kind": "backtest", "answers": {"Bad": "x"}}, "lowercase identifier"),
@@ -80,7 +100,7 @@ def test_a_relative_template_path_is_relative_to_the_spec_file(tmp_path: Path) -
 def test_an_unknown_built_in_profile_lists_the_offered_ones(tmp_path: Path) -> None:
     spec = _spec(tmp_path, template="quant-baseline", profile="options")
 
-    with pytest.raises(PlanningError, match="alpha-research, backtest, report"):
+    with pytest.raises(PlanningError, match="offers quant-research"):
         ArchitecturePlanner().plan(spec)
 
 
@@ -102,31 +122,26 @@ def test_portability_follows_the_platform_dependency(
 # The quant-baseline pack
 
 
-def test_every_profile_shares_the_metrics_module_and_states_its_limitations(
-    tmp_path: Path,
-) -> None:
-    for kind in ("alpha-research", "backtest", "report"):
-        files = _files(tmp_path, kind=kind)
+def test_one_project_holds_the_study_backtest_and_report(tmp_path: Path) -> None:
+    files = _files(tmp_path, kind="quant-research")
 
-        assert {"momo_lab/metrics.py", "tests/test_metrics.py", "LIMITATIONS.md"} <= files, kind
-
-
-def test_each_profile_gets_only_its_own_modules(tmp_path: Path) -> None:
-    alpha = _files(tmp_path, kind="alpha-research")
-    backtest = _files(tmp_path, kind="backtest")
-    report = _files(tmp_path, kind="report")
-
-    assert {"momo_lab/evaluation.py", "momo_lab/study.py", "tests/test_evaluation.py"} <= alpha
-    assert {"momo_lab/backtest.py", "tests/test_backtest.py", "tests/test_signals.py"} <= backtest
-    assert {"momo_lab/report.py", "tests/test_report.py"} <= report
-    assert "momo_lab/backtest.py" not in alpha
-    assert "momo_lab/data.py" not in report
-    assert "momo_lab/tools.py" not in alpha | backtest | report
+    assert {
+        "config.toml",
+        "LIMITATIONS.md",
+        "momo_lab/metrics.py",
+        "momo_lab/parameters.py",
+        "momo_lab/study.py",
+        "momo_lab/backtest.py",
+        "momo_lab/report.py",
+        "tests/test_timing.py",
+        "tests/test_parameters.py",
+    } <= files
+    assert not {"momo_lab/tools.py", "momo_lab/database.py"} & files
 
 
 def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) -> None:
     _, preview = AppFactory(PytemplateUvScaffolder()).preview(
-        _spec(tmp_path, kind="backtest", components=["data-parquet", "agent-tools"])
+        _spec(tmp_path, kind="quant-research", components=["data-parquet", "agent-tools"])
     )
 
     assert {"momo_lab/tools.py", "tests/test_tools.py"} <= set(preview.files)
@@ -136,7 +151,9 @@ def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) ->
 
 
 def test_answers_reach_the_generated_code(tmp_path: Path) -> None:
-    spec = _spec(tmp_path, kind="backtest", answers={"frequency": "weekly", "cost_bps": "2.5"})
+    spec = _spec(
+        tmp_path, kind="quant-research", answers={"frequency": "weekly", "cost_bps": "2.5"}
+    )
 
     report = AppFactory(PytemplateUvScaffolder()).create(spec, run_checks=False)
 
@@ -147,16 +164,16 @@ def test_answers_reach_the_generated_code(tmp_path: Path) -> None:
 
 
 def test_an_answer_the_profile_does_not_ask_is_rejected(tmp_path: Path) -> None:
-    spec = _spec(tmp_path, kind="report", answers={"cost_bps": "5"})
+    spec = _spec(tmp_path, kind="quant-research", answers={"db_kind": "duckdb"})
 
-    with pytest.raises(ScaffoldRequestError, match="cost_bps"):
+    with pytest.raises(ScaffoldRequestError, match="db_kind"):
         AppFactory(PytemplateUvScaffolder()).preview(spec)
 
 
 def test_the_pack_is_a_valid_pytemplate_pack() -> None:
     assert (QUANT_BASELINE_PACK / "pytemplate-pack.toml").is_file()
-    for profile in ("alpha-research", "backtest", "report"):
-        assert (QUANT_BASELINE_PACK / profile / "profile.toml").is_file()
+    profiles = sorted(path.parent.name for path in QUANT_BASELINE_PACK.glob("*/profile.toml"))
+    assert profiles == ["quant-research"]
 
 
 # User packs

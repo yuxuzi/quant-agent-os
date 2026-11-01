@@ -26,12 +26,11 @@ pytestmark = pytest.mark.skipif(
     [
         ("agent-tool", {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)}),
         ("python-cli", {}),
-        ("alpha-research", {}),
-        ("backtest", {}),
-        ("report", {}),
-        ("backtest", {"answers": {"frequency": "weekly"}}),
+        ("quant-research", {}),
+        ("quant-research", {"answers": {"frequency": "weekly"}}),
+        ("quant-research", {"answers": {"frequency": "monthly"}}),
         (
-            "backtest",
+            "quant-research",
             {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},
         ),
     ],
@@ -57,7 +56,7 @@ def test_generated_projects_pass_their_own_checks(
     assert (Path(report.project_path) / "pyproject.toml").is_file()
 
 
-def test_a_database_backtest_passes_its_checks_and_connects(tmp_path: Path) -> None:
+def test_a_database_project_passes_its_checks_and_connects(tmp_path: Path) -> None:
     import datetime as dt
     import sqlite3
 
@@ -77,8 +76,8 @@ def test_a_database_backtest_passes_its_checks_and_connects(tmp_path: Path) -> N
     spec = AppSpec.model_validate(
         {
             "name": "db-smoke",
-            "kind": "backtest",
-            "description": "A smoke-test database backtest",
+            "kind": "quant-research",
+            "description": "A smoke-test database project",
             "output_dir": str(tmp_path),
             "components": ["data-database"],
             "answers": {"db_name": database.as_posix()},
@@ -89,7 +88,7 @@ def test_a_database_backtest_passes_its_checks_and_connects(tmp_path: Path) -> N
 
     failed = [check for check in report.checks if not check.ok]
     assert report.checks_passed, "\n\n".join(f"{c.command}\n{c.output_tail}" for c in failed)
-    assert report.checks[-1].command == "uv run db-smoke --check-connection"
+    assert report.checks[-1].command == "uv run db-smoke check-connection"
     assert "Connected to sqlite" in report.checks[-1].output_tail
 
 
@@ -99,9 +98,9 @@ def test_a_forked_pack_with_a_new_question_builds_a_passing_project(tmp_path: Pa
 
     pack = fork_pack(
         BUILT_IN_PACKS["quant-baseline"],
-        "backtest",
+        "quant-research",
         tmp_path / "pack",
-        pack_id="desk-backtest",
+        pack_id="desk-research",
         profile_id="desk",
     )
     questions = pack / "questions.yml"
@@ -122,7 +121,7 @@ def test_a_forked_pack_with_a_new_question_builds_a_passing_project(tmp_path: Pa
             "name": "desk-app",
             "template": pack.as_posix(),
             "profile": "desk",
-            "description": "A forked backtest",
+            "description": "A forked research project",
             "output_dir": str(out),
             "answers": {"desk": "rates"},
         }

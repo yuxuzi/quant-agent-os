@@ -53,10 +53,14 @@ def forward_returns(
 
 
 def ic_summary(
-    signal: FloatArray, prices: FloatArray, horizon: int = 1, lag: int = config.TRADE_LAG
+    signal: FloatArray,
+    prices: FloatArray,
+    horizon: int = 1,
+    lag: int = config.TRADE_LAG,
+    delisting_return: float = config.DELISTING_RETURN,
 ) -> dict[str, float]:
     """Mean IC, mean rank IC, its HAC t-statistic, and the share of bars with a positive IC."""
-    forward = forward_returns(prices, horizon, lag)
+    forward = forward_returns(prices, horizon, lag, delisting_return)
     pearson = information_coefficient(signal, forward)
     spearman = information_coefficient(signal, forward, rank=True)
     valid = spearman[np.isfinite(spearman)]
@@ -76,10 +80,14 @@ def hac_t_stat(ics: FloatArray, horizon: int) -> float:
 
 
 def quantile_spread(
-    signal: FloatArray, prices: FloatArray, quantiles: int = 5, lag: int = config.TRADE_LAG
+    signal: FloatArray,
+    prices: FloatArray,
+    quantiles: int = 5,
+    lag: int = config.TRADE_LAG,
+    delisting_return: float = config.DELISTING_RETURN,
 ) -> FloatArray:
     """Per-bar return of the top signal quantile minus the bottom one, one bar after the trade."""
-    forward = forward_returns(prices, 1, lag)
+    forward = forward_returns(prices, 1, lag, delisting_return)
     spread = np.full(signal.shape[0], np.nan)
     for bar in range(signal.shape[0]):
         valid = np.isfinite(signal[bar]) & np.isfinite(forward[bar])
@@ -92,7 +100,11 @@ def quantile_spread(
 
 
 def ic_decay(
-    signal: FloatArray, prices: FloatArray, max_horizon: int, lag: int = config.TRADE_LAG
+    signal: FloatArray,
+    prices: FloatArray,
+    max_horizon: int,
+    lag: int = config.TRADE_LAG,
+    delisting_return: float = config.DELISTING_RETURN,
 ) -> dict[str, list[float]]:
     """Mean rank IC and its HAC t-statistic at horizons 1 to ``max_horizon`` bars.
 
@@ -101,7 +113,8 @@ def ic_decay(
     """
     means, t_stats = [], []
     for horizon in range(1, max_horizon + 1):
-        ic = information_coefficient(signal, forward_returns(prices, horizon, lag), rank=True)
+        forward = forward_returns(prices, horizon, lag, delisting_return)
+        ic = information_coefficient(signal, forward, rank=True)
         means.append(float(np.nanmean(ic)) if np.isfinite(ic).any() else math.nan)
         t_stats.append(hac_t_stat(ic, horizon))
     return {"mean_rank_ic": means, "t_stat": t_stats}

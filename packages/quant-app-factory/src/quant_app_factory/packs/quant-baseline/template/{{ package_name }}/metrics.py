@@ -17,6 +17,10 @@ Conventions used by every function here:
 - t-statistics of a mean use Newey-West (HAC) standard errors with a Bartlett kernel, so
   serial correlation, including the overlap of multi-bar forward returns, does not inflate
   them. The default lag count is ``floor(4 * (n / 100) ** (2 / 9))`` (Newey and West, 1994).
+- Beta is the OLS slope of returns on market returns. Active return is the annualised mean of
+  returns minus benchmark returns (arithmetic, times ``periods_per_year``); tracking error is
+  their sample standard deviation, annualised; the information ratio is the first over the
+  second.
 - Information coefficients compare a signal at bar t with the forward return that starts at t.
   NaN pairs are ignored, and bars with fewer than three valid pairs are NaN.
 """
@@ -182,6 +186,31 @@ def information_coefficient(
             continue
         coefficients[bar] = float(np.corrcoef(left, right)[0, 1])
     return coefficients
+
+
+def beta(returns: FloatArray, market: FloatArray) -> float:
+    """OLS slope of ``returns`` on ``market`` over bars where both are finite."""
+    both = np.isfinite(returns) & np.isfinite(market)
+    if int(both.sum()) < 2:
+        return math.nan
+    x = market[both] - float(np.mean(market[both]))
+    y = returns[both] - float(np.mean(returns[both]))
+    spread = float(x @ x)
+    return float(x @ y) / spread if spread > 0.0 else math.nan
+
+
+def active_metrics(
+    returns: FloatArray, benchmark: FloatArray, periods_per_year: int
+) -> dict[str, float]:
+    """Annualised active return, tracking error, and information ratio against a benchmark."""
+    difference = np.asarray(returns, dtype=np.float64) - np.asarray(benchmark, dtype=np.float64)
+    active = _finite(difference)
+    if active.size < 2:
+        return dict.fromkeys(("active_return", "tracking_error", "information_ratio"), math.nan)
+    mean = float(np.mean(active)) * periods_per_year
+    error = float(np.std(active, ddof=1)) * math.sqrt(periods_per_year)
+    ratio = mean / error if error > FLAT else math.nan
+    return {"active_return": mean, "tracking_error": error, "information_ratio": ratio}
 
 
 def summarize(returns: FloatArray, periods_per_year: int) -> dict[str, float]:

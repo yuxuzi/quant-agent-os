@@ -1,0 +1,51 @@
+"""Parameters: defaults, config.toml, and overrides, with every mistake named."""
+
+import dataclasses
+from pathlib import Path
+
+import pytest
+
+from {{ package_name }} import config
+from {{ package_name }}.parameters import ParameterError, Parameters, load_parameters
+
+PROJECT_CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
+
+
+def test_the_generated_config_toml_matches_the_defaults() -> None:
+    generated = load_parameters(PROJECT_CONFIG)
+    assert dataclasses.replace(generated, data=None) == Parameters()
+    assert generated.data {{ '== "database"' if 'data-database' in components else 'is None' }}
+    assert Parameters().rebalance_every == config.REBALANCE_EVERY
+
+
+def test_overrides_skip_none_and_are_validated() -> None:
+    changed = Parameters().updated(lag=0, lookback=None, cost_bps=2.5)
+
+    assert (changed.lag, changed.lookback, changed.cost_bps) == (0, None, 2.5)
+    with pytest.raises(ParameterError, match="rebalance_every"):
+        Parameters().updated(rebalance_every=0)
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("lookbak = 5\n", "unknown keys lookbak"),
+        ('lag = "1"\n', "lag must be"),
+        ("lag = true\n", "lag must be"),
+        ("cost_bps = -1\n", "cost_bps must be zero or more"),
+        ("signal = \n", "Cannot read"),
+    ],
+)
+def test_bad_files_name_the_problem(tmp_path: Path, text: str, message: str) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(text)
+
+    with pytest.raises(ParameterError, match=message):
+        load_parameters(path)
+
+
+def test_whole_numbers_are_accepted_for_float_parameters(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("cost_bps = 3\ndelisting_return = 0\n")
+
+    assert load_parameters(path).cost_bps == 3

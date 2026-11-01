@@ -20,23 +20,39 @@ from quant_app_factory.domain import toml_text
 from quant_app_factory.domain.secrets import ENV_NAME, secret_problem
 
 AppKind = Literal[
-    "agent-tool", "python-cli", "fastapi-service", "alpha-research", "backtest", "report"
+    "agent-tool",
+    "python-cli",
+    "fastapi-service",
+    "quant-research",
+    "alpha-research",
+    "backtest",
+    "report",
 ]
 PythonVersion = Literal["3.11", "3.12", "3.13", "3.14", "3.15"]
 DEFAULT_QUANT_AGENT_OS_SOURCE = "git+https://github.com/yuxuzi/quant-agent-os"
 _ONE_LINE = re.compile(r'^[^"\\\n]+$')  # what pytemplate-uv's questions accept
+
+QUANT_RESEARCH = ("quant-baseline", "quant-research")
+# The quant-baseline 1.x profile names. Each now builds quant-research; kept for one release.
+QUANT_ALIASES = frozenset({"alpha-research", "backtest", "report"})
 
 # Each kind is a shortcut for a (template, profile) pair.
 KIND_TARGETS: dict[str, tuple[str, str]] = {
     "agent-tool": ("agent-tool", "agent-tool"),
     "python-cli": ("bundled", "python"),
     "fastapi-service": ("bundled", "fastapi"),
-    "alpha-research": ("quant-baseline", "alpha-research"),
-    "backtest": ("quant-baseline", "backtest"),
-    "report": ("quant-baseline", "report"),
+    "quant-research": QUANT_RESEARCH,
+    **dict.fromkeys(sorted(QUANT_ALIASES), QUANT_RESEARCH),
 }
 BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-baseline", "bundled"})
 TEMPLATE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")  # built-in, or registered in factory.toml
+
+
+def resolve_alias(template: str, profile: str) -> tuple[str, str]:
+    """Map a quant-baseline 1.x profile name to ``quant-research``; anything else is unchanged."""
+    if template == QUANT_RESEARCH[0] and profile in QUANT_ALIASES:
+        return QUANT_RESEARCH
+    return template, profile
 
 
 def is_template_path(value: str) -> bool:
@@ -199,7 +215,7 @@ class AppSpec(BaseModel):
             raise ValueError("set kind, or both template and profile")
         if self.kind is not None:
             expected = KIND_TARGETS[self.kind]
-            given = (self.template or expected[0], self.profile or expected[1])
+            given = resolve_alias(self.template or expected[0], self.profile or expected[1])
             if given != expected:
                 raise ValueError(
                     f"kind {self.kind!r} means template {expected[0]!r} with profile "
@@ -215,7 +231,21 @@ class AppSpec(BaseModel):
         if self.kind is not None:
             return KIND_TARGETS[self.kind]
         assert self.template is not None and self.profile is not None  # by validation
-        return self.template, self.profile
+        return resolve_alias(self.template, self.profile)
+
+    @property
+    def alias_note(self) -> str | None:
+        """A deprecation note when the spec names a quant-baseline 1.x kind or profile."""
+        old: str | None = self.kind if self.kind in QUANT_ALIASES else None
+        if self.template == QUANT_RESEARCH[0] and self.profile in QUANT_ALIASES:
+            old = self.profile
+        if old is None:
+            return None
+        return (
+            f"'{old}' is now an alias for the quant-research profile, one project with study, "
+            'backtest, and report commands. Use kind = "quant-research"; the alias will be '
+            "removed in the next release."
+        )
 
     @property
     def package_name(self) -> str:

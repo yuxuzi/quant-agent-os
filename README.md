@@ -89,8 +89,8 @@ uv run quant-factory create signal-tools.toml   # asks, creates, runs uv sync/ru
 ```
 
 An `agent-tool` package comes with one typed example tool, a registry, and tests that run the
-platform's contract checks. Quant projects (`alpha-research`, `backtest`, `report`) come with
-bias tests and can load prices from a database. `uv run quant-factory new` asks the questions
+platform's contract checks. A `quant-research` project holds a signal study, a backtest, and
+a report in one place, with bias tests, and can load prices from a database. `uv run quant-factory new` asks the questions
 for you. See [docs/walkthrough.md](docs/walkthrough.md#10-generate-a-tool-package) and
 [§11](docs/walkthrough.md#11-a-quant-project-from-your-own-data-with-guidance).
 

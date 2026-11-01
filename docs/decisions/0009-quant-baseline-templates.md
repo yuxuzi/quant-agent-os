@@ -18,11 +18,16 @@ finished. Tests that metric formulas are correct do not catch that.
 ## Decision
 
 - **A `quant-baseline` pack ships in `quant_app_factory/packs/`.**
-  - Its profiles are `alpha-research`, `backtest`, and `report`.
+  - Its one profile is `quant-research` (updated 2026-11-01, B-28 S1): a single project with
+    `study`, `backtest`, and `report` commands that share data, signals, metrics, one
+    trade-timing convention, and a `config.toml` of research parameters. The 1.x profiles
+    `alpha-research`, `backtest`, and `report` are aliases for one release. Three projects for
+    one workflow meant copying signal code between them and keeping three environments, and
+    the report profile was too small to stand alone.
   - Its components are `metrics` (required), `data-csv` (the default), `data-parquet`,
     `data-database`, and `agent-tools`.
-- **One source for metric code.** The required `metrics` component holds every metric for all
-  three profiles, with documented conventions and known-answer tests.
+- **One source for metric code.** The required `metrics` component holds every metric, with
+  documented conventions and known-answer tests.
 - **Bias tests in every generated project:**
   - changing future prices never changes a past signal or a past return (no look-ahead);
   - a forward-shifted signal must change the result;

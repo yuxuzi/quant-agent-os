@@ -1,61 +1,165 @@
-"""The command line runs end to end."""
+"""The command line runs end to end: study, backtest, and report in one project."""
 
-{% if profile != 'report' %}import json
-{% endif %}from pathlib import Path
-{%- if profile != 'report' %}
+import json
+from pathlib import Path
+from typing import Any
 
 import pytest
-{%- endif %}
 
 from {{ package_name }}.cli import main
-{%- if profile == 'report' %}
-from {{ package_name }}.results import save_results
 
 
-def test_render_writes_a_markdown_report(tmp_path: Path) -> None:
-    results = save_results(
-        tmp_path / "results.json",
-        {"kind": "study", "title": "Demo", "metrics": {"mean_rank_ic": 0.05}},
-    )
-    out = tmp_path / "report.md"
-
-    assert main([str(results), "--out", str(out)]) == 0
-    assert out.read_text().startswith("# Demo")
-{%- else %}
+@pytest.fixture(autouse=True)
+def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
 
 
-def test_demo_writes_a_results_file(tmp_path: Path) -> None:
-    out = tmp_path / "results.json"
-
-    assert main(["--demo", "--out", str(out)]) == 0
-
-    results = json.loads(out.read_text())
-    assert results["kind"] == "{% if profile == 'alpha-research' %}study{% else %}backtest{% endif %}"
-    assert results["metrics"]
-    assert results["limitations"]
-    assert results["parameters"]["lag"] == 1
-    assert "timing" in results["conventions"]
-{%- if profile == 'backtest' %}
-    assert results["parameters"]["rebalance_every"] == {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
-    assert results["metrics"]["forced_exits"] == 0
-{%- endif %}
+def _runs(kind: str) -> list[Path]:
+    return sorted(Path("results").glob(f"*-{kind}-*"))
 
 
-def test_signal_parameters_are_recorded_and_bad_ones_explained(tmp_path: Path) -> None:
-    out = tmp_path / "results.json"
+def _results(folder: Path) -> dict[str, Any]:
+    results: dict[str, Any] = json.loads((folder / "results.json").read_text())
+    return results
 
-    assert main(["--demo", "--signal", "reversal", "--lookback", "5", "--out", str(out)]) == 0
-    assert json.loads(out.read_text())["parameters"]["lookback"] == 5
+
+def test_study_backtest_and_report_run_on_the_demo_panel(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["study", "--demo"]) == 0
+    assert main(["backtest", "--demo"]) == 0
+    assert main(["report"]) == 0  # the latest run
+
+    (study,), (backtest,) = _runs("study"), _runs("backtest")
+    assert _results(study)["parameters"]["lag"] == _results(backtest)["parameters"]["lag"] == 1
+    assert _results(backtest)["parameters"]["rebalance_every"] == {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}
+    assert _results(backtest)["metrics"]["forced_exits"] == 0
+    fingerprints = {_results(run)["provenance"]["data_fingerprint"] for run in (study, backtest)}
+    assert len(fingerprints) == 1  # the same demo panel
+    assert (backtest / "report.md").read_text().startswith("# momentum")
+    output = capsys.readouterr().out
+    assert "Mean rank IC" in output and "Net Sharpe" in output
+
+
+def test_walk_forward_reports_out_of_sample_folds() -> None:
+    assert main(["walk-forward", "--demo", "--signal", "reversal", "--rebalance-every", "1"]) == 0
+    assert main(["report"]) == 0
+
+    (run,) = _runs("walk-forward")
+    results = _results(run)
+    assert results["folds"] and results["metrics"]["out_of_sample_bars"] > 0
+    assert "## Folds" in (run / "report.md").read_text()
+
+
+@pytest.mark.parametrize("exposure", ["beta-neutral", "long-only"])
+def test_exposure_modes_run_and_report_their_metrics(exposure: str) -> None:
+    assert main(["backtest", "--demo", "--exposure", exposure]) == 0
+
+    (run,) = _runs("backtest")
+    results = _results(run)
+    assert results["parameters"]["exposure"] == exposure
+    assert "beta" in results["metrics"]
+    assert ("information_ratio" in results["metrics"]) == (exposure == "long-only")
+
+
+def test_report_compares_several_runs_with_a_chart() -> None:
+    assert main(["backtest", "--demo", "--label", "daily", "--rebalance-every", "1"]) == 0
+    assert main(["backtest", "--demo", "--label", "monthly"]) == 0
+    runs = sorted(str(path) for path in Path("results").iterdir())
+
+    assert main(["report", *runs]) == 0
+
+    comparison = Path("results/comparison.md").read_text()
+    assert comparison.startswith("# Comparison of 2 runs")
+    assert "| | daily | monthly |" in comparison  # labels, without the timestamps
+    assert "| rebalance every | 1 |" in comparison
+    assert Path("results/comparison-equity.svg").read_text().count("<polyline") == 2
+
+
+def test_runs_never_overwrite_each_other_and_take_labels() -> None:
+    assert main(["study", "--demo"]) == 0
+    assert main(["study", "--demo", "--label", "second try"]) == 0
+
+    folders = sorted(path.name for path in Path("results").iterdir())
+    assert len(folders) == 2
+    assert any(name.endswith("-second-try") for name in folders)
+
+
+def test_a_run_can_be_repeated_from_its_config_snapshot() -> None:
+    assert main(["backtest", "--demo", "--signal", "reversal", "--lookback", "5"]) == 0
+    (first,) = _runs("backtest")
+
+    assert main(["backtest", "--demo", "--config", str(first / "config.toml")]) == 0
+
+    again = next(folder for folder in _runs("backtest") if folder != first)
+    assert _results(again)["parameters"] == _results(first)["parameters"]
+    assert _results(again)["metrics"] == _results(first)["metrics"]
+
+
+def test_config_toml_sets_parameters_and_flags_override_it() -> None:
+    Path("config.toml").write_text('signal = "reversal"\nlookback = 5\nlag = 2\n')
+
+    assert main(["study", "--demo"]) == 0
+    assert main(["backtest", "--demo", "--lag", "0", "--cost-bps", "1.5"]) == 0
+
+    study = _results(_runs("study")[0])["parameters"]
+    backtest = _results(_runs("backtest")[0])["parameters"]
+    assert (study["signal"], study["lookback"], study["lag"]) == ("reversal", 5, 2)
+    assert (backtest["lag"], backtest["cost_bps"]) == (0, 1.5)
+
+
+def test_report_reads_a_named_run_or_an_old_results_file() -> None:
+    assert main(["study", "--demo"]) == 0
+    (study,) = _runs("study")
+    old = Path("old.json")
+    old.write_text(json.dumps({"schema_version": 1, "kind": "study", "title": "Old"}))
+
+    assert main(["report", str(study), "--out", "named.md"]) == 0
+    assert main(["report", str(old)]) == 0
+
+    assert Path("named.md").read_text().startswith("# momentum")
+    assert Path("report.md").read_text().startswith("# Old")
+
+
+@pytest.mark.parametrize(
+    ("config", "flags"),
+    [
+        ("lookbak = 5\n", ["study", "--demo"]),  # a typo in config.toml
+        ("lag = -1\n", ["study", "--demo"]),
+        ("", ["study", "--demo", "--signal", "reversal", "--skip", "1"]),
+        ("", ["study", "--demo", "--signal", "magic"]),
+        ("", ["report"]),  # no runs yet
+    ],
+)
+def test_mistakes_are_usage_errors(config: str, flags: list[str]) -> None:
+    Path("config.toml").write_text(config)
+
+    with pytest.raises(SystemExit) as raised:
+        main(flags)
+
+    assert raised.value.code == 2
+
+
+def test_a_data_source_is_required_and_its_absence_explained(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SystemExit):
-        main(["--demo", "--signal", "reversal", "--skip", "1", "--out", str(out)])
+        main(["backtest"])
+
+    assert "No data" in capsys.readouterr().err
 
 
-def test_the_trade_lag_can_be_overridden_and_is_recorded(tmp_path: Path) -> None:
-    out = tmp_path / "results.json"
+def test_config_toml_names_the_data_and_the_run_records_where_it_was(tmp_path: Path) -> None:
+    prices = tmp_path / "data" / "prices.csv"
+    prices.parent.mkdir()
+    rows = ["date,AAA,BBB,CCC"] + [
+        f"2024-01-{day:02d},{100 + day},{100 - day / 2},{100 + day % 3}" for day in range(1, 29)
+    ]
+    prices.write_text("\n".join(rows) + "\n")
+    Path("config.toml").write_text('data = "data/prices.csv"\nsignal = "reversal"\nlookback = 2\n')
 
-    assert main(["--demo", "--lag", "2", "--out", str(out)]) == 0
+    assert main(["study"]) == 0
 
-    results = json.loads(out.read_text())
-    assert results["parameters"]["lag"] == 2
-    assert "t + 2" in results["conventions"]["timing"]
-{%- endif %}
+    (run,) = _runs("study")
+    snapshot = (run / "config.toml").read_text()
+    assert f"data = {json.dumps(str(prices.resolve()))}" in snapshot  # absolute in the record
