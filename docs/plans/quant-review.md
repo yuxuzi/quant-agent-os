@@ -127,6 +127,13 @@ lags. On a random walk, where no signal has an edge, 20-bar momentum had a naive
 -4.6 at a 5-bar horizon; the HAC t is -2.5, and -1.8 at 10 bars. The `ic_decay` series
 became `ic_decay_mean_rank_ic` and `ic_decay_t_stat`.
 
+**R5 result.** Done as planned. `data.parse_date` accepts `date` values, midnight `datetime`
+values (as DuckDB and PostgreSQL return them), and ISO text, and refuses the rest, including
+`1/9/2024`, `20240102`, impossible dates, and times of day. Panels hold `datetime.date` and
+reject duplicate dates. The database smoke test had been inserting dates like `2024-0000`,
+which only worked because nothing parsed them; it now uses real dates. The inline price tools
+take optional `dates` and warn when bars are labelled with stand-in weekdays.
+
 **Exit:** a template correctness suite of synthetic worlds with known answers covers planted
 next-bar and multi-bar signals, gaps, delistings, a random walk across 40 seeds (mean Sharpe
 consistent with zero), and constant targets with drift. Every generated profile passes it in

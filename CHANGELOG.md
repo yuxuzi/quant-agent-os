@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format follows
   least horizon - 1 lags, so overlapping forward returns no longer inflate them. IC decay
   reports a t-statistic at each horizon (`ic_decay_mean_rank_ic`, `ic_decay_t_stat`), which
   replaces the `ic_decay` series.
+- Quant baseline loaders parse dates (B-27 R5). CSV, Parquet, and database dates become
+  `datetime.date`, so order is checked as dates rather than text. Dates must be ISO
+  (`2024-01-09`) and unique; other formats are refused with an example. Synthetic panels use
+  weekdays, and the price tools take optional `dates` (warning when they are missing).
 - Quant Research on real papers (measured on 21 arXiv papers, `docs/plans/real-corpus-eval.md`):
   - Searches for things the corpus never mentions now return no passages instead of
     passages that share a few common words.

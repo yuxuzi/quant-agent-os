@@ -11,6 +11,7 @@ PostgreSQL uses read-only transactions. PostgreSQL connections verify the server
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -21,7 +22,7 @@ from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.engine import URL, make_url
 
 from . import config
-from .data import DataError, Panel
+from .data import DataError, Panel, parse_date
 
 URL_VARIABLE = "DATABASE_URL"
 PASSWORD_VARIABLE = "DATABASE_PASSWORD"
@@ -72,14 +73,17 @@ def load_database(engine: Engine | None = None, query: str = config.PRICE_QUERY)
             rows = connection.execute(text(query)).all()
     finally:
         engine.dispose()
-    return to_panel((str(date), str(asset), price) for date, asset, price in rows)
+    return to_panel((date, str(asset), price) for date, asset, price in rows)
 
 
-def to_panel(rows: Iterable[tuple[str, str, Any]]) -> Panel:
-    """Pivot ``(date, asset, price)`` rows into a panel; missing prices become NaN."""
-    table: dict[tuple[str, str], float] = {}
+def to_panel(rows: Iterable[tuple[Any, str, Any]]) -> Panel:
+    """Pivot ``(date, asset, price)`` rows into a panel; missing prices become NaN.
+
+    Dates may be ``date`` values or ISO text (see `parse_date`).
+    """
+    table: dict[tuple[dt.date, str], float] = {}
     for date, asset, price in rows:
-        table[(date, asset)] = math.nan if price is None else float(price)
+        table[(parse_date(date), asset)] = math.nan if price is None else float(price)
     if not table:
         raise DataError("The query returned no prices.")
     dates = sorted({date for date, _ in table})

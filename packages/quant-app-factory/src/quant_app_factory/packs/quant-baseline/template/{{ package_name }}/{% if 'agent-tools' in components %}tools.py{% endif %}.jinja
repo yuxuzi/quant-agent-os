@@ -37,11 +37,13 @@ from pydantic import BaseModel, Field
 from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
 
 {% if profile == 'alpha-research' -%}
-from .data import Panel
+from .data import Panel, parse_date
 from .study import run_study
+from .synthetic import dates
 {%- else -%}
 from .backtest import run
-from .data import Panel
+from .data import Panel, parse_date
+from .synthetic import dates
 {%- endif %}
 
 
@@ -49,6 +51,9 @@ class PriceInput(BaseModel):
     """A small price panel passed inline: one row per bar, one column per asset."""
 
     prices: list[list[float]] = Field(min_length=3, description="Prices, bars by assets.")
+    dates: list[str] | None = Field(
+        default=None, description="One ISO date (YYYY-MM-DD) per bar; optional."
+    )
     signal: str = Field(default="momentum", description="momentum or reversal.")
     lookback: int = Field(default=20, ge=1, le=500)
 
@@ -60,20 +65,29 @@ class ResultsOutput(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+NO_DATES = "No dates were given, so bars are labelled with weekdays from 2020-01-01."
+
+
 def _panel(params: PriceInput) -> Panel:
     prices = np.array(params.prices, dtype=np.float64)
     count = prices.shape[1] if prices.ndim == 2 else 0
+    labels = dates(prices.shape[0]) if params.dates is None else map(parse_date, params.dates)
     return Panel(
-        dates=[f"bar-{index:05d}" for index in range(prices.shape[0])],
+        dates=list(labels),
         assets=[f"ASSET{index:02d}" for index in range(count)],
         prices=prices,
     )
+
+
+def _warnings(params: PriceInput) -> list[str]:
+    return [NO_DATES] if params.dates is None else []
 {% if profile == 'alpha-research' %}
 
 @tool(name="evaluate_signal", description="Evaluate a signal on an inline price panel.")
 def evaluate_signal(params: PriceInput) -> ResultsOutput:
     """Run a signal study."""
-    return ResultsOutput(results=run_study(_panel(params), params.signal, params.lookback))
+    results = run_study(_panel(params), params.signal, params.lookback)
+    return ResultsOutput(results=results, warnings=_warnings(params))
 
 
 TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
@@ -82,7 +96,8 @@ TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
 @tool(name="backtest_signal", description="Backtest a signal on an inline price panel.")
 def backtest_signal(params: PriceInput) -> ResultsOutput:
     """Run a backtest with the project's default costs and trade lag."""
-    return ResultsOutput(results=run(_panel(params), params.signal, params.lookback))
+    results = run(_panel(params), params.signal, params.lookback)
+    return ResultsOutput(results=results, warnings=_warnings(params))
 
 
 TOOLS: list[ToolSpec[Any, Any]] = [backtest_signal]

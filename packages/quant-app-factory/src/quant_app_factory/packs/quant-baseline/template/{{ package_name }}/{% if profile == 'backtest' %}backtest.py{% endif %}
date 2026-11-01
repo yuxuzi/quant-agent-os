@@ -129,7 +129,7 @@ def run(
     return {
         "kind": "backtest",
         "title": f"{signal_name} (lookback {lookback}) long-short backtest",
-        "period": [panel.dates[0], panel.dates[-1]],
+        "period": [panel.dates[0].isoformat(), panel.dates[-1].isoformat()],
         "bars": len(panel.dates),
         "assets": len(panel.assets),
         "parameters": {

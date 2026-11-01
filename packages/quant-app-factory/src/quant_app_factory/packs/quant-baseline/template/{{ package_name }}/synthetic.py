@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 import numpy as np
 
 from .metrics import FloatArray
@@ -37,6 +39,12 @@ def generate_panel(
     return prices, signal
 
 
-def dates(n_bars: int) -> list[str]:
-    """Return ``n_bars`` labels for synthetic bars (not calendar dates)."""
-    return [f"bar-{index:05d}" for index in range(n_bars)]
+def dates(n_bars: int, start: dt.date = dt.date(2020, 1, 1)) -> list[dt.date]:
+    """Return ``n_bars`` weekdays from ``start`` (holidays are ignored)."""
+    days: list[dt.date] = []
+    day = start
+    while len(days) < n_bars:
+        if day.weekday() < 5:
+            days.append(day)
+        day += dt.timedelta(days=1)
+    return days

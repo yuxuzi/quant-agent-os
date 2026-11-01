@@ -27,8 +27,9 @@ uv run {{ project_name }} --prices prices.csv --signal momentum --lookback 20
 ```
 {%- if profile != 'report' %}
 
-Price files are wide: a `date` column, then one column of prices per asset. Dates must sort in
-ascending order{% if 'data-parquet' in components %}; `.parquet` files work too{% endif %}.
+Price files are wide: a `date` column, then one column of prices per asset. Dates are ISO
+(`2024-01-09`), unique, and ascending{% if 'data-parquet' in components %}; `.parquet` files work
+too, with text or date columns{% endif %}.
 {%- if 'data-database' in components %}
 
 ### Database
