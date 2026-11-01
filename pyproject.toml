@@ -42,6 +42,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",
+    "quant-agent-os-analytics",
     "quant-agent-os-factory",
     "quant-agent-os-research[pdf]",
     "quant-agent-os[mcp]",
@@ -50,9 +51,10 @@ dev = [
 [tool.uv]
 # Supply-chain cool-off: dependencies added by this project (and their new transitive
 # dependencies) lock only releases at least two weeks old. Move the date forward deliberately
-# when upgrading. pytemplate-uv is exempt: it is first-party (same author), and the App Factory
+# when upgrading. Quant Analytics' empyrical-reloaded stack (B-13) uses 2026-10-18.
+# pytemplate-uv is exempt: it is first-party (same author), and the App Factory
 # needs its 3.0 API.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z" }
 
 [tool.uv.workspace]
 # Core stays at the root; each product is a member with its own version (decision 0003).
@@ -60,6 +62,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }
+quant-agent-os-analytics = { workspace = true }
 quant-agent-os-factory = { workspace = true }
 quant-agent-os-research = { workspace = true }
 
@@ -75,21 +78,36 @@ target-version = "py311"
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["quant_agent_os", "quant_research", "quant_app_factory"]
+known-first-party = ["quant_agent_os", "quant_analytics", "quant_research", "quant_app_factory"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "examples", "packages/quant-research/src", "packages/quant-app-factory/src"]
+files = [
+    "src",
+    "examples",
+    "packages/quant-analytics/src",
+    "packages/quant-research/src",
+    "packages/quant-app-factory/src",
+]
 # Template packs hold code for generated projects, which type-check it themselves.
 exclude = ["packages/quant-app-factory/src/quant_app_factory/packs/"]
 
+[[tool.mypy.overrides]]
+module = ["empyrical", "empyrical.*"]  # untyped; quant_analytics.metrics types its boundary
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/quant-research/tests", "packages/quant-app-factory/tests"]
+testpaths = [
+    "tests",
+    "packages/quant-analytics/tests",
+    "packages/quant-research/tests",
+    "packages/quant-app-factory/tests",
+]
 pythonpath = ["examples/portfolio-research"]
 filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
-addopts = "-ra --cov=quant_agent_os --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
+addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
 
 [tool.coverage.run]
 branch = true

@@ -100,7 +100,7 @@ Windows with Python 3.11–3.15. A release workflow uses PyPI Trusted Publishing
 | --- | --- | --- |
 | A thread timeout cannot stop a running tool | High for `execute_code` | `ToolExecutor` docstring. Use a subprocess runner (B-09) |
 | `runtime/__init__` cannot re-export the orchestrator because of an import cycle | Low | Documented in AGENTS.md. Keep as is |
-| Example metrics live in `examples/` and are imported by the tests through `pythonpath` | Low | `pyproject.toml` `[tool.pytest]`. Move them to analytics (B-13) |
+| ~~Example metrics live in `examples/` and are imported by the tests through `pythonpath`~~ Resolved by B-13: the example re-exports `quant_analytics.tools` | Low | `pyproject.toml` `[tool.pytest]`. Move them to analytics (B-13) |
 | Observability coverage is 68% | Low | Coverage report. Cover the redaction filter |
 | Scope (two products for one developer) | High | MVP = one complete slice plus a factory foundation (section 3) |
 | Copyright of ingested papers | Medium | Store only user-supplied documents. Hosted knowledge packs carry metadata, links, and licensed text only |
@@ -262,7 +262,7 @@ onto the days below, so there is still only one timeline.
 | B-10 | **Done.** App Factory foundation: `AppSpec`, `ArchitecturePlanner`, `ScaffoldProvider`, `PytemplateUvScaffolder`, `agent-tool` pack, `plan_app`/`create_app`, `quant_agent_os.testing.check_tool`, CLI `quant-factory plan/create` | B-03, B-09 | Criterion 5; pytemplate-uv imported only through `pytemplate.api` in the adapter (decision 0006) |
 | B-11 | **Done for Quant Research** ([walkthrough.md](walkthrough.md), verified from a clean clone with `uv sync --locked`). The App Factory part waits for B-10 | B-01, B-06, B-10 | Criterion 8 |
 | B-12 | First real `ModelProvider` adapter (optional extra) and opt-in live evaluations | provider choice | Offline tests unchanged; secrets never logged |
-| B-13 | Analytics package: move the example metrics; add Sharpe, volatility, beta, and tracking error with conventions and known-answer tests | — | Imports no LLM library; `analyze_performance` registered |
+| B-13 | **Done.** Analytics package (`packages/quant-analytics`) on empyrical-reloaded, not hand-written formulas and not pyfolio ([decision 0010](decisions/0010-analytics-on-empyrical.md)): `analyze_performance` (return, volatility, Sharpe, Sortino, Calmar, Omega, drawdown, tail ratio, stability, VaR, hit rate; alpha, beta, active return, tracking error, IR with a benchmark); the example tools moved in | — | Imports no LLM library; `analyze_performance` registered; known-answer tests pin empyrical's conventions |
 | B-14 | `PostgresKnowledgeStore` + pgvector, embedding provider port, vector channel gated by evaluation | B-06, B-12 | Passes the shared store contract tests |
 | B-15 | `research_alpha`: server-side synthesis and hypotheses as `interpretation` evidence | B-06, B-12 | Every interpretation cites passages; injection evaluation passes |
 | B-16 | AppSpec drafting from requirements (a model proposes, the human confirms) | B-10, B-12 | The draft validates against `AppSpec` before any scaffold |
@@ -278,7 +278,7 @@ onto the days below, so there is still only one timeline.
 | B-26 | **Done.** `quant-factory template fork`, `check`, and `add` (git packs pinned and cached); walkthrough (Q4) | B-23, B-24 | A forked pack checks and passes its smoke checks; a git pack plans offline; walkthrough reproduced |
 | B-27 | **Done.** Quant review, phase 1: correct numbers. One trade-timing convention for studies and backtests, delisting exits and gap handling, drifting holdings with a rebalance schedule, Newey-West t-stats, parsed ISO dates, and standard signal definitions. Plan: [plans/quant-review.md](plans/quant-review.md) (R1–R6) | B-23 | A template correctness suite of synthetic worlds with known answers passes for every profile (smoke test) |
 | B-28 | **Done.** Quant review, phase 2: one `quant-research` project (study, backtest, walk-forward, and report subcommands), experiment folders with data fingerprints, out-of-sample walk-forward, exposure modes, run comparisons in reports, and tools that read the project's data (S1–S6) | B-27 | Test windows never influence chosen parameters; known-answer beta, IR, and TE; old kinds alias the new profile |
-| B-29 | **Done.** Quant review, phase 3: a one-command start, questions that apply, quiet output, one way to name a target, and operator commands without the approval ceremony (U1–U5) | B-24, B-28 | Scripted CLI tests per path; every doc example validates; agent approvals unchanged |
+| B-29 | **Done.** Quant review, phase 3: a one-command start, questions that apply, quiet output, one way to name a target, and one approval path for operator commands, keeping the prompt (U1–U5) | B-24, B-28 | Scripted CLI tests per path; every doc example validates; agent approvals unchanged |
 
 `run_backtest` is planned for after day 90 as its own package with explicit cost, slippage,
 calendar, and no-look-ahead tests. Pull it forward only when design-partner demand shows a need.

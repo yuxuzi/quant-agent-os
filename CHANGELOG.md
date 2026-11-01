@@ -110,6 +110,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Quant Analytics (`packages/quant-analytics`, B-13; decision 0010). The `analyze_performance`
+  tool returns a series' performance in one read-only call. Without a benchmark it gives
+  annualised return and volatility, Sharpe, Sortino, Calmar, Omega, maximum drawdown, tail
+  ratio, stability, value at risk, and hit rate. With a benchmark it adds alpha, beta, active
+  return, tracking error, and information ratio. Each result carries its conventions,
+  warnings, and computed evidence. The formulas are empyrical-reloaded's, pinned by
+  known-answer tests; pyfolio was considered and not used, because it adds only plotting at
+  more than twice the footprint. The example `annualized_return` and `max_drawdown` tools now
+  come from this package.
 - A quant review of the templates and App Factory (`docs/plans/quant-review.md`).
   - **Measured flaws.** The study and the backtest use different trade timing, delisted
     positions lose nothing, and costs ignore drift.

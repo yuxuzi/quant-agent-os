@@ -1,0 +1,29 @@
+[project]
+name = "quant-agent-os-analytics"
+version = "0.1.0"
+description = "Quant Analytics: performance metrics with documented conventions, as Quant-Agent-OS tools"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quant-agent-os",
+    "pydantic>=2.7",
+    # The metric formulas (decision 0010): empyrical, not pyfolio, which adds only plotting.
+    "empyrical-reloaded>=0.7,<0.8",
+]
+
+[tool.uv.sources]
+quant-agent-os = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "quant_analytics"
