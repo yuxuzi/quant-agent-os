@@ -30,6 +30,9 @@ All notable changes to this project are documented here. The format follows
     `--config` pointing at it repeats the run.
   - **Report.** `report` defaults to the latest run and shows the provenance. Runs print a
     one-line headline, and `--out` is replaced by `--results DIR` and `--label`.
+- Quant research projects have a `walk-forward` command (B-28 S3). It chooses the lookback
+  per fold on training data only, from a small grid, by net Sharpe or rank IC, and reports
+  out-of-sample results only, with a folds table.
 - `quant-factory` records runs in `factory-runs.db` beside `factory.toml`, so
   `QUANT_FACTORY_SETTINGS` moves both.
 

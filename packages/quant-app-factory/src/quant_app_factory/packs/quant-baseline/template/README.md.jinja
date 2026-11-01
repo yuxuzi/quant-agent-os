@@ -16,6 +16,7 @@ uv sync
 uv run {{ project_name }} study --demo       # a random walk: expect no edge (a sanity check)
 uv run {{ project_name }} study --prices prices.csv                 # IC, spreads, decay
 uv run {{ project_name }} backtest --prices prices.csv              # net of costs
+uv run {{ project_name }} walk-forward --prices prices.csv          # out of sample only
 uv run {{ project_name }} report                                    # the latest run
 ```
 
@@ -28,6 +29,12 @@ never overwrites another. It holds `results.json`, with the metrics, series, par
 SHA-256 fingerprint of the price data, the code version (`git describe` in a git checkout),
 and the time, plus `config.toml`, the exact parameters: `--config results/<run>/config.toml`
 repeats the run. `report RUN_FOLDER` renders a specific run.
+
+`walk-forward` is the honest number. It rolls a training window (`train_bars`) and a test
+window (`test_bars`) through the data. In each fold it picks the lookback with the best training
+score (net Sharpe, or rank IC with `objective = "ic"`) from a small grid (`lookbacks`, by default
+0.5, 0.75, and 1 times the standard). It sees only prices up to the end of the training window,
+and it reports the test windows only.
 
 Price files are wide: a `date` column, then one column of prices per asset. Dates are ISO
 (`2024-01-09`), unique, and ascending{% if 'data-parquet' in components %}; `.parquet` files work

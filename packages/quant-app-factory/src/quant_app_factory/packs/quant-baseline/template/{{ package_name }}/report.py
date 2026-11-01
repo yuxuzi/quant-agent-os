@@ -21,7 +21,7 @@ PERCENT_METRICS = frozenset(
         "positive_rank_ic_share",
     }
 )
-COUNT_METRICS = frozenset({"bars", "forced_exits", "delistings"})
+COUNT_METRICS = frozenset({"bars", "forced_exits", "delistings", "folds", "out_of_sample_bars"})
 
 
 def render_markdown(results: dict[str, Any]) -> str:
@@ -54,6 +54,16 @@ def render_markdown(results: dict[str, Any]) -> str:
     lines += ["", "## Computed results", "", "| Metric | Value |", "| --- | --- |"]
     for name, value in sorted((results.get("metrics") or {}).items()):
         lines.append(f"| {name.replace('_', ' ')} | {format_value(name, value)} |")
+    folds = results.get("folds") or []
+    if folds:
+        lines += ["", "## Folds", "", "| Train | Test | Lookback | Training score |"]
+        lines.append("| --- | --- | --- | --- |")
+        for fold in folds:
+            score = format_value("training_score", fold.get("training_score"))
+            lines.append(
+                f"| {' to '.join(fold['train'])} | {' to '.join(fold['test'])} | "
+                f"{fold['lookback']} | {score} |"
+            )
     conventions = results.get("conventions") or {}
     lines += ["", "## Conventions", ""]
     lines += [f"- {key}: {value}" for key, value in sorted(conventions.items())]

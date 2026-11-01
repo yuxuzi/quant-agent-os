@@ -1,0 +1,88 @@
+"""Walk-forward: parameters come from training data only, and only test windows are reported."""
+
+import math
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.backtest import walk_forward_splits
+from {{ package_name }}.data import Panel
+from {{ package_name }}.parameters import Parameters
+from {{ package_name }}.synthetic import dates, generate_panel
+from {{ package_name }}.walk_forward import candidate_lookbacks, run_walk_forward
+
+PARAMETERS = Parameters(signal="reversal", lookbacks=(2, 5, 10), train_bars=120, test_bars=40)
+
+
+def _panel(prices: np.ndarray) -> Panel:
+    assets = [f"A{index}" for index in range(prices.shape[1])]
+    return Panel(dates=dates(prices.shape[0]), assets=assets, prices=prices)
+
+
+def _choices(prices: np.ndarray, parameters: Parameters = PARAMETERS) -> list[int]:
+    return [fold["lookback"] for fold in run_walk_forward(_panel(prices), parameters)["folds"]]
+
+
+@pytest.mark.parametrize("objective", ["sharpe", "ic"])
+def test_test_window_data_never_changes_that_folds_choice(objective: str) -> None:
+    prices, _ = generate_panel(n_bars=400, n_assets=12, signal_strength=0.2)
+    parameters = Parameters(**{**PARAMETERS.__dict__, "objective": objective})
+    baseline = _choices(prices, parameters)
+    splits = walk_forward_splits(400, 120, 40, start=12)
+    assert len(baseline) == len(splits) >= 5
+
+    generator = np.random.default_rng(0)
+    for index, (_, test) in enumerate(splits):
+        changed = prices.copy()
+        changed[test.start :] *= generator.uniform(0.5, 1.5, size=changed[test.start :].shape)
+        # Every fold up to this one chose from data before this test window.
+        assert _choices(changed, parameters)[: index + 1] == baseline[: index + 1]
+
+
+def test_only_test_windows_are_reported() -> None:
+    prices, _ = generate_panel(n_bars=400, n_assets=12)
+
+    results = run_walk_forward(_panel(prices), PARAMETERS)
+
+    tested = sum(40 for _ in results["folds"])
+    assert (
+        results["metrics"]["out_of_sample_bars"] == len(results["series"]["net_returns"]) == tested
+    )
+    first_test = results["folds"][0]["test"][0]
+    assert results["series"]["dates"][0] == first_test
+    assert all(math.isfinite(value) for value in results["series"]["net_returns"])
+
+
+def _five_bar_reversal_world(n_bars: int = 600, n_assets: int = 20) -> np.ndarray:
+    """Returns that undo part of the last five bars' move, two bars later (after the lag)."""
+    generator = np.random.default_rng(5)
+    returns = generator.standard_normal((n_bars, n_assets)) * 0.01
+    for bar in range(7, n_bars):
+        past_move = returns[bar - 6 : bar - 1].sum(axis=0)  # the 5 bars ending at bar - 2
+        returns[bar] -= 0.15 * (past_move - past_move.mean())
+    return 100.0 * np.cumprod(1.0 + returns, axis=0)
+
+
+def test_the_lookback_that_carries_a_planted_edge_is_chosen() -> None:
+    # The edge lasts two bars, so the book must rebalance daily to earn it; with the monthly
+    # default, a stale five-bar reversal is not the best lookback, and the choice moves.
+    daily = PARAMETERS.updated(rebalance_every=1)
+
+    results = run_walk_forward(_panel(_five_bar_reversal_world()), daily)
+
+    choices = [fold["lookback"] for fold in results["folds"]]
+    assert choices == [5] * len(choices)
+    assert results["metrics"]["sharpe_ratio"] > 1  # the edge holds out of sample, any frequency
+
+
+def test_the_default_grid_scales_the_standard_lookback() -> None:
+    assert candidate_lookbacks(Parameters(signal="reversal", lookback=20)) == [10, 15, 20]
+    assert candidate_lookbacks(Parameters(signal="momentum", lookback=12, skip=1)) == [6, 9, 12]
+    assert candidate_lookbacks(Parameters(lookbacks=(5, 3, 5))) == [3, 5]
+
+
+def test_too_little_data_is_explained() -> None:
+    prices, _ = generate_panel(n_bars=100, n_assets=5)
+
+    with pytest.raises(ValueError, match="Walk-forward needs"):
+        run_walk_forward(_panel(prices), PARAMETERS)

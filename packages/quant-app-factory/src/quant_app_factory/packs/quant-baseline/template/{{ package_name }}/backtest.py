@@ -96,13 +96,12 @@ def run_backtest(
 
 
 def walk_forward_splits(
-    n_bars: int, train: int, test: int, step: int | None = None
+    n_bars: int, train: int, test: int, step: int | None = None, start: int = 0
 ) -> list[tuple[range, range]]:
-    """Rolling ``(train, test)`` bar ranges; every test range starts after its train range."""
+    """Rolling ``(train, test)`` bar ranges from bar ``start``; each test follows its train."""
     if train <= 0 or test <= 0:
         raise ValueError("train and test must be positive numbers of bars.")
     splits = []
-    start = 0
     while start + train + test <= n_bars:
         splits.append((range(start, start + train), range(start + train, start + train + test)))
         start += step or test
@@ -146,7 +145,10 @@ def run(panel: Panel, parameters: Parameters | None = None) -> dict[str, Any]:
             "annual_turnover": float(result["turnover"][1:].mean()) * periods,
             "forced_exits": float(result["forced_exits"].sum()),
         },
-        "series": {"net_returns": [float(value) for value in result["net"]]},
+        "series": {
+            "dates": [day.isoformat() for day in panel.dates],
+            "net_returns": [float(value) for value in result["net"]],
+        },
         "conventions": {
             "periods_per_year": periods,
             "timing": f"signal at close t, traded at close t + {chosen.lag}, as in a study",

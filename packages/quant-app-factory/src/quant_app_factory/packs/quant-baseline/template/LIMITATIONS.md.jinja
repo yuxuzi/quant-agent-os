@@ -17,12 +17,13 @@ not handle:
   short-sale constraint, or capacity limit, and the simulation places no orders.
 - **Costs in studies.** Quantile spreads are gross and hypothetical. Backtest a signal before
   drawing conclusions.
-- **Overfitting and multiple testing.** Every number is in-sample until you choose parameters
-  on walk-forward training ranges only (`walk_forward_splits`). Trying many signals inflates
-  the best result; record every signal you try.
+- **Overfitting and multiple testing.** `study` and `backtest` numbers are in-sample; only
+  `walk-forward` reports out-of-sample results. Its grid is small on purpose, but trying many
+  signals or grids still inflates the best result: record every one you try.
 - **Interpretation.** Reports print computed figures only. Write the interpretation yourself,
   and keep it apart from the figures.
 
 What the tests guard: metric formulas (known answers), no look-ahead in signals, one
 trade-timing convention shared by studies and backtests (`lag` in `config.toml`), missing
-prices (gaps and delistings), drift and the rebalance schedule, and cost ordering.
+prices (gaps and delistings), drift and the rebalance schedule, cost ordering, and walk-forward choices that never see
+their test windows.

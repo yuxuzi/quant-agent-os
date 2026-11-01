@@ -33,6 +33,11 @@ class Parameters:
     cost_bps: float = config.COST_BPS
     rebalance_every: int = config.REBALANCE_EVERY
     delisting_return: float = config.DELISTING_RETURN
+    # Walk-forward: rolling training and test windows, and the lookbacks to choose from.
+    objective: str = "sharpe"  # sharpe (net, training window) or ic (mean rank IC)
+    train_bars: int = config.PERIODS_PER_YEAR
+    test_bars: int = 3 * config.BARS_PER_MONTH
+    lookbacks: tuple[int, ...] | None = None  # None: 0.5, 0.75, and 1 times the standard
 
     def __post_init__(self) -> None:
         problems = [
@@ -46,6 +51,13 @@ class Parameters:
                 (self.cost_bps < 0, "cost_bps must be zero or more"),
                 (self.rebalance_every < 1, "rebalance_every must be at least 1 bar"),
                 (self.delisting_return < -1, "delisting_return cannot lose more than -1 (100%)"),
+                (self.objective not in {"sharpe", "ic"}, "objective must be sharpe or ic"),
+                (self.train_bars < 2, "train_bars must be at least 2"),
+                (self.test_bars < 1, "test_bars must be at least 1"),
+                (
+                    self.lookbacks is not None and (not self.lookbacks or min(self.lookbacks) < 1),
+                    "lookbacks must list whole numbers of at least 1",
+                ),
             )
             if failed
         ]
@@ -75,6 +87,8 @@ def load_parameters(path: Path) -> Parameters:
     for key, value in data.items():
         if not _type_ok(_FIELDS[key].type, value):
             raise ParameterError(f"{path}: {key} must be {_FIELDS[key].type}, not {value!r}.")
+    if "lookbacks" in data:
+        data["lookbacks"] = tuple(data["lookbacks"])
     return Parameters(**data)
 
 
@@ -89,6 +103,8 @@ def dump_parameters(parameters: Parameters) -> str:
 
 def _type_ok(annotation: object, value: object) -> bool:
     text = str(annotation)
+    if text.startswith("tuple"):
+        return isinstance(value, list) and all(_type_ok("int", item) for item in value)
     if isinstance(value, bool):
         return False
     if text.startswith("str"):

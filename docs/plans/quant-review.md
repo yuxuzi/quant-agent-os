@@ -204,6 +204,22 @@ for a study, and net Sharpe, return, and turnover for a backtest. One bug was fo
 generated tests: two runs in the same second sorted by label, so "latest" could pick the wrong
 run. Ties now break by when the results file was written.
 
+**S3 result.** Done as planned. `walk-forward` rolls `train_bars` (one year by default) and
+`test_bars` (three months) windows after a warm-up. Each fold picks the lookback with the best
+training net Sharpe, or rank IC with `objective = "ic"`, from a small grid: `lookbacks`, or 0.5,
+0.75, and 1 times the standard. The choice uses only prices up to the training window's end.
+Only stitched test windows are reported, with a folds table in the report. Three tests prove it:
+- **No leakage.** Randomising every price from a test window on never changes the choices of
+  that fold or earlier ones, for both objectives.
+- **Known answer.** In a world where returns undo the last five bars' move, the walk-forward
+  chooses 5 from {2, 5, 10} in all 11 folds. The edge holds out of sample, with a Sharpe of 21
+  when rebalancing daily.
+- **Too little data.** A short panel is explained, not crashed.
+
+Writing that test found a real interaction: with the monthly default rebalance, a two-bar edge
+is gone before the book trades, and the choice drifts to longer lookbacks. The test rebalances
+daily and says why.
+
 ### Phase 3: less to decide, less to read (B-29)
 
 | Step | Change | Test that proves it |

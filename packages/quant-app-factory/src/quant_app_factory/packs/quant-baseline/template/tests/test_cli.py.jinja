@@ -41,6 +41,16 @@ def test_study_backtest_and_report_run_on_the_demo_panel(
     assert "Mean rank IC" in output and "Net Sharpe" in output
 
 
+def test_walk_forward_reports_out_of_sample_folds() -> None:
+    assert main(["walk-forward", "--demo", "--signal", "reversal", "--rebalance-every", "1"]) == 0
+    assert main(["report"]) == 0
+
+    (run,) = _runs("walk-forward")
+    results = _results(run)
+    assert results["folds"] and results["metrics"]["out_of_sample_bars"] > 0
+    assert "## Folds" in (run / "report.md").read_text()
+
+
 def test_runs_never_overwrite_each_other_and_take_labels() -> None:
     assert main(["study", "--demo"]) == 0
     assert main(["study", "--demo", "--label", "second try"]) == 0
