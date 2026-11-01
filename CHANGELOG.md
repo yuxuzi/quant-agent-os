@@ -37,6 +37,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A quant review of the templates and App Factory (`docs/plans/quant-review.md`).
+  - **Measured flaws.** The study and the backtest use different trade timing, delisted
+    positions lose nothing, and costs ignore drift.
+  - **Plan.** Fixes in three tested phases, B-27 to B-29: correct numbers, then one project
+    with out-of-sample results, then less to decide.
+
 - App Factory review fixes:
   - **Connection check.** It runs only for built-in templates, and redacts URL-encoded forms
     of secrets too.
