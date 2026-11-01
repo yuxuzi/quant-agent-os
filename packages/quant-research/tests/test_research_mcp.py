@@ -53,7 +53,11 @@ def test_claude_style_client_gets_cited_answers(corpus_dir: Path, tmp_path: Path
 
     assert initialised.serverInfo.name == "quant-research"
     assert "cite every claim" in (initialised.instructions or "")
-    assert [item.name for item in tools] == ["find_related_signals", "get_source_passage"]
+    assert [item.name for item in tools] == [
+        "find_related_signals",
+        "generate_strategy",
+        "get_source_passage",
+    ]
     assert all(item.annotations.readOnlyHint for item in tools)
     packet = found.structuredContent
     assert found.isError is False

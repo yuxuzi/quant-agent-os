@@ -1,8 +1,16 @@
 """Strategy specs from research evidence (B-17): known answers on the fixture corpus."""
 
-import pytest
+import json
+from pathlib import Path
 
-from quant_research import ResearchApp
+import pytest
+from conftest import CORPUS
+from typer.testing import CliRunner
+
+from quant_agent_os.mcp import call_tool
+from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.tools import PermissionPolicy, ToolRegistry
+from quant_research import ResearchApp, research_tools
 from quant_research.application.strategy import (
     NoEvidenceError,
     SpecItem,
@@ -11,6 +19,7 @@ from quant_research.application.strategy import (
     StrategySpec,
     UnknownFocusError,
 )
+from quant_research.cli import app as cli
 
 
 @pytest.fixture
@@ -135,3 +144,48 @@ def test_unknown_and_unsupported_focuses_fail_with_actionable_messages(
         strategies.generate(StrategyRequest(focus="US equities"))
     with pytest.raises(NoEvidenceError, match="ingest sources about it first"):
         strategies.generate(StrategyRequest(focus="pairs trading"))
+
+
+def test_the_tool_matches_the_service_and_mcp(
+    strategies: StrategyService, research: ResearchApp
+) -> None:
+    executor = ToolExecutor(ToolRegistry(research_tools(research.research)), PermissionPolicy())
+    arguments = {"focus": "trend following"}
+
+    record = executor.execute(PlanStep(tool="generate_strategy", arguments=arguments))
+    via_mcp = call_tool(executor, "generate_strategy", arguments)
+
+    assert record.status == "ok"
+    assert record.output == strategies.generate(StrategyRequest(**arguments)).model_dump(
+        mode="json"
+    )
+    assert via_mcp["structuredContent"] == record.output
+    assert record.data_versions == record.output["data_versions"]
+
+
+def test_tool_failures_are_recorded_with_actionable_messages(research: ResearchApp) -> None:
+    executor = ToolExecutor(ToolRegistry(research_tools(research.research)), PermissionPolicy())
+
+    unknown = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": "fish"}))
+    invalid = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": ""}))
+
+    assert unknown.status == "error"
+    assert "names no signal, factor, or strategy" in (unknown.error or "")
+    assert invalid.status == "invalid_input"
+
+
+def test_cli_prints_and_saves_the_spec(tmp_path: Path) -> None:
+    runner = CliRunner()
+    store = str(tmp_path / "knowledge.db")
+    runner.invoke(cli, ["ingest", str(CORPUS), "--store", store])
+
+    shown = runner.invoke(cli, ["strategy", "trend following", "--store", store])
+    saved = runner.invoke(cli, ["strategy", "strategy:trend-following", "--store", store, "--json"])
+    unknown = runner.invoke(cli, ["strategy", "fish", "--store", store])
+
+    assert shown.exit_code == 0, shown.output
+    assert "signals" in shown.output and "universe" in shown.output  # Rich wraps statements
+    assert "open:" in shown.output
+    spec = StrategySpec.model_validate(json.loads(saved.output))
+    assert spec.focus.id == "strategy:trend-following" and spec.signals
+    assert unknown.exit_code != 0

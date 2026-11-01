@@ -1,6 +1,6 @@
-"""Quant Research tools: thin `@tool` adapters over `ResearchService` (no logic here).
+"""Quant Research tools: thin `@tool` adapters over the research services (no logic here).
 
-Both tools are read-only. Ingestion is deliberately not a tool: writes to the knowledge store are
+Every tool is read-only. Ingestion is deliberately not a tool: writes to the knowledge store are
 operator commands. When the service embeds queries with a hosted model, `find_related_signals`
 sends the query text to that provider and therefore also declares the ``network`` permission,
 which the default policy does not grant.
@@ -20,6 +20,7 @@ from quant_research.application.retrieval import (
     ResearchService,
     SourcePassage,
 )
+from quant_research.application.strategy import StrategyDraft, StrategyRequest, StrategyService
 
 # Leaves room after a hosted query embedding (bounded by QUERY_EMBEDDING_SECONDS) for the reads.
 SEARCH_TIMEOUT = QUERY_EMBEDDING_SECONDS + 7.0
@@ -59,4 +60,20 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
     def get_source_passage(params: PassageRequest) -> SourcePassage:
         return service.get_passage(params.chunk_id)
 
-    return [find_related_signals, get_source_passage]
+    strategies = StrategyService(service.store, service.matcher)
+
+    @tool(
+        name="generate_strategy",
+        description=(
+            "Draft a structured strategy specification for one signal, factor, or strategy "
+            "from the user's corpus: the signals, universe, data, methods, metrics, and risks "
+            "its sources state, each citing its passages, plus open questions for what they "
+            "leave undecided. Returns a spec to review, not code and not advice."
+        ),
+        permissions=[Permission.READ_LOCAL_DATA],
+        max_output_bytes=200_000,
+    )
+    def generate_strategy(params: StrategyRequest) -> StrategyDraft:
+        return strategies.generate(params)
+
+    return [find_related_signals, get_source_passage, generate_strategy]
