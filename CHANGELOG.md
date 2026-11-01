@@ -110,6 +110,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `generate_strategy` in Quant Research (B-17). It drafts a structured strategy specification
+  for one signal, factor, or strategy from the user's corpus. The spec has sections for
+  signals, universe, data, methods, metrics, risks, and context. Risks are what contradicts
+  or explains away the focus. Every item cites the passages that state it, and anything the
+  corpus leaves undecided (parameters, a missing universe or dataset) becomes an open question
+  rather than a default. The spec is not code and is not built by a model, so the same corpus
+  snapshot always gives the same spec. The tool is read-only; `quant-research strategy
+  "trend following" --json` prints the same spec locally.
 - Quant Analytics (`packages/quant-analytics`, B-13; decision 0010). The `analyze_performance`
   tool returns a series' performance in one read-only call. Without a benchmark it gives
   annualised return and volatility, Sharpe, Sortino, Calmar, Omega, maximum drawdown, tail

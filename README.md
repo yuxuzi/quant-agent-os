@@ -66,7 +66,8 @@ Claude Desktop uses the same command in `claude_desktop_config.json`. Give the f
 ```
 
 Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
-cites file, page, and line ranges. The server is read-only, writes nothing to the store, and
+cites file, page, and line ranges. Ask for a strategy, and `generate_strategy` returns a spec
+whose every item cites its passages, with open questions for what the corpus leaves out. The server is read-only, writes nothing to the store, and
 sends nothing off the machine unless you choose a hosted `--embedder`. Each call is recorded
 in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
