@@ -118,7 +118,9 @@ def test_create_prints_a_summary_not_every_file(workspace: Path) -> None:
     CliRunner().invoke(factory_cli.app, ["new", "quant-research", "lab", "--defaults", "-y"])
     (workspace / "out").mkdir()
     spec = workspace / "lab.toml"
-    spec.write_text(spec.read_text().replace(str(workspace), str(workspace / "out")))
+    text = spec.read_text()
+    assert workspace.as_posix() in text  # specs store paths with forward slashes
+    spec.write_text(text.replace(workspace.as_posix(), (workspace / "out").as_posix()))
 
     result = CliRunner().invoke(factory_cli.app, ["create", str(spec), "-y"])
 
