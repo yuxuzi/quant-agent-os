@@ -52,8 +52,8 @@ We measured both on Python 3.14, under the repository's two-week supply-chain cu
 - No hand-written formulas to defend. The metric names and values are the ones pyfolio users
   already know.
 - **Python 3.15.** bottleneck, which empyrical requires, publishes no cp315 wheels, so on
-  Python 3.15 it builds from source. CI runners have compilers, but this is the riskiest part of
-  the dependency. If it fails, the options are a source-build note, a bottleneck release with
-  cp315 wheels, or dropping 3.15 for this one package.
+  Python 3.15 it builds from source. It did on every CI runner (Linux, macOS, and Windows) when
+  this was decided. A machine without a working C toolchain cannot install the package on 3.15
+  until bottleneck ships cp315 wheels.
 - `peewee<3.17.4` arrives through empyrical, an unusual pin for a metrics library. It is locked
   under the same cut-off as everything else.
