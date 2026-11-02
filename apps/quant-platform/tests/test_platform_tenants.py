@@ -30,6 +30,7 @@ from quant_platform.tenants import (
     TenantsFileError,
     dump_tenants,
     load_tenants,
+    load_tenants_file,
     save_tenants,
 )
 from quant_research import open_research
@@ -248,3 +249,52 @@ def test_the_tenant_commands_add_list_and_disable(tmp_path: Path) -> None:
     assert listed.exit_code == 0 and "acme" in listed.output and "hunter2" not in listed.output
     assert disabled.exit_code == 0 and load_tenants(path)["acme"].disabled
     assert refused.exit_code == 1
+
+
+OAUTH_FILE = """
+[[authorization_servers]]
+issuer = "https://login.acme.example"
+introspection_url = "https://login.acme.example/introspect"
+client_id = "qaos"
+client_secret_env = "QAOS_TEST_ACME_SECRET"
+
+[tenants.acme]
+toolsets = ["analytics"]
+issuer = "https://login.acme.example"
+"""
+
+
+def test_authorization_servers_survive_edits_and_pin_issuers(tmp_path: Path) -> None:
+    path = tmp_path / "tenants.toml"
+    path.write_text(OAUTH_FILE)
+
+    added = CliRunner().invoke(
+        cli, ["tenant", "add", "beta", "--toolsets", "analytics", "--tenants", str(path)]
+    )
+    whole = load_tenants_file(path)
+
+    assert added.exit_code == 0
+    assert [server.issuer for server in whole.authorization_servers] == [
+        "https://login.acme.example"
+    ]
+    assert whole.tenants_by_issuer() == {"https://login.acme.example": {"acme"}}
+    assert "s3cret" not in path.read_text()
+    path.write_text(OAUTH_FILE + '\n[tenants.rogue]\nissuer = "https://evil.example"\n')
+    with pytest.raises(TenantsFileError, match="not among the authorization_servers"):
+        load_tenants_file(path)
+
+
+def test_serve_http_needs_the_resource_url_and_the_secret_for_oauth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "tenants.toml"
+    path.write_text(OAUTH_FILE)
+    add_key(tmp_path / "keys.toml", "svc", ["tools:list"], tenant="acme")
+    base = ["serve-http", "--tenants", str(path), "--keys", str(tmp_path / "keys.toml")]
+    monkeypatch.delenv("QAOS_TEST_ACME_SECRET", raising=False)
+
+    no_url = CliRunner().invoke(cli, base)
+    no_secret = CliRunner().invoke(cli, [*base, "--resource-url", "https://qaos.example/mcp"])
+
+    assert no_url.exit_code == 2 and "--resource-url" in no_url.output
+    assert no_secret.exit_code == 1 and "QAOS_TEST_ACME_SECRET" in no_secret.output

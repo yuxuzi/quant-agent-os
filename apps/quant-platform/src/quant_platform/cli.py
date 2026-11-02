@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
@@ -15,6 +15,8 @@ from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, r
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
+from quant_agent_os.mcp.http import KeyVerifier
+from quant_agent_os.mcp.oauth import FirstOf, IntrospectionVerifier, protected_resource_routes
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import Tenancy
@@ -33,9 +35,10 @@ from quant_platform.http import build_http_app, single_tenant
 from quant_platform.tenants import (
     TenantCatalogs,
     TenantConfig,
+    TenantsFile,
     TenantsFileError,
     describe,
-    load_tenants,
+    load_tenants_file,
     save_tenants,
 )
 from quant_research import ResearchApp, open_research
@@ -196,6 +199,14 @@ def serve_http(
     runs: Annotated[
         Path | None, typer.Option(help="Run store (default ~/.quant-agent-os).")
     ] = None,
+    resource_url: Annotated[
+        str | None,
+        typer.Option(
+            envvar="QUANT_AGENT_OS_RESOURCE_URL",
+            help="The public URL of /mcp; needed when the tenants file lists authorization "
+            "servers (OAuth tokens must name it as their audience).",
+        ),
+    ] = None,
 ) -> None:
     """Serve the toolsets over HTTP: MCP at /mcp and REST at /v1, for callers with an API key.
 
@@ -206,7 +217,8 @@ def serve_http(
     used (--datasets is then the root of the tenants' dataset directories). Permissions come
     from QUANT_AGENT_OS_GRANTED_PERMISSIONS, or per tenant from the tenants file (read-only by
     default). Put TLS and rate limiting in a reverse proxy before binding anything but loopback
-    (decision 0012).
+    (decision 0012). When the tenants file lists authorization_servers, MCP also accepts their
+    OAuth tokens, checked by introspection, and publishes the Protected Resource Metadata.
     """
     settings = get_settings()
     try:
@@ -220,7 +232,9 @@ def serve_http(
             "`quant-agent-os api-key new`."
         )
         raise typer.Exit(1)
-    configured = _load_tenants(tenants) if tenants is not None else None
+    whole = _load_tenants_file(tenants) if tenants is not None else None
+    configured = whole.tenants if whole is not None else None
+    oauth = _oauth(whole, ring, resource_url) if whole is not None else None
     run_store: SqliteRunStore | None = None
     research: ResearchApp | None = None
     catalogs: TenantCatalogs | None = None
@@ -251,7 +265,11 @@ def serve_http(
                 "serve it behind a reverse proxy that terminates TLS and limits request rates."
             )
         http_app = build_http_app(
-            tenancy, ring, instructions=instructions, extra_hosts=allowed_host or []
+            tenancy,
+            ring,
+            instructions=instructions,
+            extra_hosts=allowed_host or [],
+            **(oauth or {}),
         )
         plural = "" if len(ring) == 1 else "s"
         errors.print(
@@ -272,11 +290,46 @@ def serve_http(
 
 
 def _load_tenants(path: Path) -> dict[str, TenantConfig]:
+    return _load_tenants_file(path).tenants
+
+
+def _load_tenants_file(path: Path) -> TenantsFile:
     try:
-        return load_tenants(path)
+        return load_tenants_file(path)
     except TenantsFileError as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
+
+
+def _oauth(whole: TenantsFile, keys: KeyRing, resource_url: str | None) -> dict[str, Any] | None:
+    """Return build_http_app's OAuth arguments for the file's authorization servers, if any."""
+    if not whole.authorization_servers:
+        return None
+    if resource_url is None:
+        errors.print(
+            "[red]error:[/red] the tenants file lists authorization servers; give the public "
+            "URL of /mcp with --resource-url."
+        )
+        raise typer.Exit(2)
+    try:
+        servers = [entry.resolve() for entry in whole.authorization_servers]
+    except TenantsFileError as error:
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
+        raise typer.Exit(1) from error
+    routes, metadata_url = protected_resource_routes(
+        resource_url, [server.issuer for server in servers]
+    )
+    introspection = IntrospectionVerifier(
+        servers,
+        resource=resource_url,
+        tenants_by_issuer=whole.tenants_by_issuer(),
+        tenant_claim=whole.tenant_claim,
+    )
+    return {
+        "verifier": FirstOf(KeyVerifier(keys), introspection),
+        "resource_metadata_url": metadata_url,
+        "metadata_routes": routes,
+    }
 
 
 def _tenants_path(path: Path | None) -> Path:
@@ -311,7 +364,8 @@ def tenant_add(
     path = _tenants_path(file)
     try:
         check_tenant(name)
-        configured = load_tenants(path) if path.exists() else {}
+        whole = load_tenants_file(path) if path.exists() else TenantsFile()
+        configured = whole.tenants
         configured[name] = TenantConfig(
             store=store,
             schema_name=schema,
@@ -320,7 +374,7 @@ def tenant_add(
             granted_permissions=READ_ONLY | frozenset(grant or []),
             issuer=issuer,
         )
-        save_tenants(path, configured)
+        save_tenants(path, whole)
     except (TenantsFileError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
@@ -352,12 +406,12 @@ def tenant_disable(
 ) -> None:
     """Stop serving a tenant at the next restart; its data is kept."""
     path = _tenants_path(file)
-    configured = _load_tenants(path)
-    if name not in configured:
+    whole = _load_tenants_file(path)
+    if name not in whole.tenants:
         errors.print(f"[red]error:[/red] no tenant {name} in {path}.")
         raise typer.Exit(1)
-    configured[name] = configured[name].model_copy(update={"disabled": True})
-    save_tenants(path, configured)
+    whole.tenants[name] = whole.tenants[name].model_copy(update={"disabled": True})
+    save_tenants(path, whole)
     errors.print(f"Tenant {name} disabled in {path}; restart serve-http to apply it.")
 
 

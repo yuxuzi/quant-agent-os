@@ -15,6 +15,7 @@ from quant_platform.composition import Catalog
 if TYPE_CHECKING:
     from fastapi import FastAPI
     from mcp.server.auth.provider import TokenVerifier
+    from starlette.routing import Route
 
 
 def single_tenant(catalog: Catalog, run_store: RunStore, policy: PermissionPolicy) -> Tenancy:
@@ -32,13 +33,16 @@ def build_http_app(
     verifier: TokenVerifier | None = None,
     extra_hosts: list[str] | None = None,
     resource_metadata_url: str | None = None,
+    metadata_routes: list[Route] | None = None,
 ) -> FastAPI:
     """Return one app serving each caller its tenant over REST (0011) and MCP (0012, 0013).
 
     REST takes API keys; MCP takes ``verifier``'s credentials (API keys by default, or OAuth
-    tokens too). Raises `ValueError` without an enabled key.
+    tokens too), and ``metadata_routes`` publish the OAuth Protected Resource Metadata that
+    ``resource_metadata_url`` points to. Raises `ValueError` without an enabled key.
     """
     app = build_app(None, keys, None, title="quant-agent-os", tenancy=tenancy)
+    app.router.routes.extend(metadata_routes or [])
     add_mcp_route(
         app,
         tenancy,

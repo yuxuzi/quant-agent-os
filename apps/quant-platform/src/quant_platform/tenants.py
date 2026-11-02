@@ -9,6 +9,12 @@ tenant's surface: each has its own stores, and the run store filters reads by te
     store = "postgresql://qaos_reader@db/qaos"   # schema qr_acme by default
     toolsets = ["research", "analytics"]
     issuer = "https://login.acme.example"        # the identity provider pinned for its tokens
+
+    [[authorization_servers]]                    # OAuth for remote MCP clients (optional)
+    issuer = "https://login.acme.example"
+    introspection_url = "https://login.acme.example/oauth2/introspect"
+    client_id = "qaos"
+    client_secret_env = "ACME_INTROSPECTION_SECRET"   # the secret stays in the environment
 """
 
 from __future__ import annotations
@@ -20,9 +26,10 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 
 from quant_agent_os.data import DirectoryDatasetStore
+from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_agent_os.runs import RunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import Surface
@@ -65,33 +72,101 @@ class TenantConfig(BaseModel):
         return value
 
 
+class ServerEntry(BaseModel):
+    """An authorization server in the tenants file; its secret is read from the environment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    issuer: str
+    introspection_url: str
+    client_id: str
+    client_secret_env: str = Field(pattern=r"^[A-Z_][A-Z0-9_]*$")
+
+    @field_validator("issuer", "introspection_url", "client_id")
+    @classmethod
+    def _plain(cls, value: str) -> str:
+        if any(char in value for char in '"\\\n'):
+            raise ValueError("must not contain quotes, backslashes, or newlines")
+        return value
+
+    def resolve(self) -> AuthorizationServer:
+        """Return the server with its secret, or raise `TenantsFileError` if it is unset."""
+        secret = os.environ.get(self.client_secret_env)
+        if not secret:
+            raise TenantsFileError(
+                f"Set {self.client_secret_env} to the introspection secret for {self.issuer}."
+            )
+        return AuthorizationServer(
+            issuer=self.issuer,
+            introspection_url=self.introspection_url,
+            client_id=self.client_id,
+            client_secret=SecretStr(secret),
+        )
+
+
+class TenantsFile(BaseModel):
+    """The whole tenants file: tenants, and the authorization servers their tokens come from."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenants: dict[str, TenantConfig] = Field(default_factory=dict)
+    authorization_servers: list[ServerEntry] = Field(default_factory=list)
+    tenant_claim: str = Field(default=DEFAULT_TENANT_CLAIM, pattern=r"^[A-Za-z_][\w:./-]{0,63}$")
+
+    def tenants_by_issuer(self) -> dict[str, set[str]]:
+        """Return each issuer's pinned tenants (enabled ones only)."""
+        pinned: dict[str, set[str]] = {}
+        for name, config in self.tenants.items():
+            if config.issuer and not config.disabled:
+                pinned.setdefault(config.issuer, set()).add(name)
+        return pinned
+
+
 def schema_for(tenant: str) -> str:
     """Return the default PostgreSQL schema of ``tenant``'s knowledge store."""
     return "qr_" + tenant.replace("-", "_")
 
 
-def load_tenants(path: Path) -> dict[str, TenantConfig]:
+def load_tenants_file(path: Path) -> TenantsFile:
     """Read a tenants file; raise `TenantsFileError` naming the problem."""
     try:
-        data = tomllib.loads(path.read_text("utf-8")).get("tenants", {})
-        if not isinstance(data, dict):
-            raise TenantsFileError(f"{path}: [tenants] must be a table.")
-        return {
-            check_tenant(name): TenantConfig.model_validate(entry) for name, entry in data.items()
-        }
+        loaded = TenantsFile.model_validate(tomllib.loads(path.read_text("utf-8")))
+        for name in loaded.tenants:
+            check_tenant(name)
     except FileNotFoundError as error:
         raise TenantsFileError(
             f"No tenants file at {path}; add a tenant with `quant-platform tenant add`."
         ) from error
     except (OSError, tomllib.TOMLDecodeError, ValidationError, ValueError) as error:
         raise TenantsFileError(f"Invalid tenants file {path}: {error}") from error
+    issuers = {server.issuer for server in loaded.authorization_servers}
+    for name, config in loaded.tenants.items():
+        if config.issuer and issuers and config.issuer not in issuers:
+            raise TenantsFileError(
+                f"Invalid tenants file {path}: tenant {name}'s issuer {config.issuer} is not "
+                "among the authorization_servers."
+            )
+    return loaded
 
 
-def dump_tenants(tenants: dict[str, TenantConfig]) -> str:
-    """Return ``tenants`` as a tenants file (values are validated, so none need escaping)."""
+def load_tenants(path: Path) -> dict[str, TenantConfig]:
+    """Read a tenants file's tenants; raise `TenantsFileError` naming the problem."""
+    return load_tenants_file(path).tenants
+
+
+def dump_tenants(tenants: dict[str, TenantConfig] | TenantsFile) -> str:
+    """Return a tenants file (values are validated, so none need escaping)."""
+    whole = tenants if isinstance(tenants, TenantsFile) else TenantsFile(tenants=tenants)
     lines: list[str] = []
-    for name in sorted(tenants):
-        config = tenants[name]
+    if whole.tenant_claim != DEFAULT_TENANT_CLAIM:
+        lines += [f'tenant_claim = "{whole.tenant_claim}"', ""]
+    for server in whole.authorization_servers:
+        lines.append("[[authorization_servers]]")
+        for key, value in server.model_dump().items():
+            lines.append(f'{key} = "{value}"')
+        lines.append("")
+    for name in sorted(whole.tenants):
+        config = whole.tenants[name]
         lines.append(f"[tenants.{name}]")
         data = config.model_dump(mode="json", by_alias=True, exclude_defaults=True)
         for key in ("store", "schema", "datasets", "issuer"):
@@ -107,7 +182,7 @@ def dump_tenants(tenants: dict[str, TenantConfig]) -> str:
     return "\n".join(lines)
 
 
-def save_tenants(path: Path, tenants: dict[str, TenantConfig]) -> None:
+def save_tenants(path: Path, tenants: dict[str, TenantConfig] | TenantsFile) -> None:
     """Write ``tenants`` to ``path`` atomically, readable only by its owner."""
     path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_suffix(path.suffix + ".partial")
