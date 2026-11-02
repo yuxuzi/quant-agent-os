@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runtime.executor import ToolExecutor, failure_details
+from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor, failure_details
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.catalog import (
     PromptArgumentError,
@@ -99,6 +99,11 @@ def call_tool(
     """
     step = PlanStep(tool=name, arguments=arguments)
     record = recorder.call(executor, step) if recorder else executor.execute(step)
+    return call_result(executor, record)
+
+
+def call_result(executor: ToolExecutor, record: ToolCallRecord) -> dict[str, Any]:
+    """Return the MCP ``tools/call`` result for a finished call's ``record``."""
     if record.status == "ok":
         return {
             "content": [{"type": "text", "text": json.dumps(record.output, sort_keys=True)}],

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from quant_agent_os import __version__
 from quant_agent_os.mcp.adapters import (
     ResourceReadError,
+    call_result,
     call_tool,
     get_prompt,
     prompt_definitions,
@@ -28,7 +29,8 @@ from quant_agent_os.mcp.adapters import (
     tool_definitions,
 )
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runtime.executor import ToolExecutor
+from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
+from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools.catalog import PromptArgumentError, PromptSpec, ResourceSpec
 
@@ -46,12 +48,21 @@ class AccessDeniedError(PermissionError):
     """Raised by a `Route` hook when the caller may not make a request."""
 
 
+# Runs a call for one caller, opening an approval request if it waits for one (decision
+# 0014); returns the record and, for a new request, its id and the approval page's address.
+ApprovalGate = Callable[
+    [ToolExecutor, PlanStep, RunRecorder], tuple[ToolCallRecord, tuple[str, str] | None]
+]
+
+
 @dataclass(frozen=True)
 class Served:
-    """What one request is served: its caller's surface, and the recorder for that caller."""
+    """What one request is served: its caller's surface, the recorder for that caller, and
+    (over HTTP, with an approval page) the gate that turns a waiting call into a request."""
 
     surface: Surface
     recorder: RunRecorder | None = None
+    approvals: ApprovalGate | None = None
 
 
 # Called with the transport's request and the scope a request needs ("tools:list" to list,
@@ -70,6 +81,7 @@ def build_server(
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
     route: Route | None = None,
+    confirm_in_client: bool = False,
 ) -> Server[Any, Any]:
     """Return an MCP server whose tools are the executor's allowed tools.
 
@@ -78,13 +90,19 @@ def build_server(
     every tool call and resource read is persisted as a one-call run. Over HTTP, ``route``
     replaces ``executor``, ``recorder``, ``resources``, and ``prompts``: it checks each
     request's scope and returns its caller's tenant surface and recorder (decision 0013).
+
+    With ``confirm_in_client`` (stdio only, and only with a ``recorder``), a call that waits for
+    an approval asks the client to confirm it (form elicitation); a yes is recorded as approved
+    by ``client-confirmation`` and the call runs in its run (decision 0014).
     """
+    if confirm_in_client and (route is not None or recorder is None):
+        raise ValueError("confirm_in_client is for stdio with a recorder (a run store).")
     try:
         import anyio
         from mcp import types
         from mcp.server.lowlevel import Server
         from mcp.server.lowlevel.helper_types import ReadResourceContents
-        from mcp.shared.exceptions import McpError
+        from mcp.shared.exceptions import McpError, UrlElicitationRequiredError
     except ImportError as error:
         raise MCPUnavailableError(f"MCP support is not installed; {INSTALL_HINT}.") from error
     static: Served | None = None
@@ -114,7 +132,39 @@ def build_server(
                 surface.run_store,
             ),
             served.recorder,
+            served.approvals,
         )
+
+    async def confirmed(
+        executor: ToolExecutor, step: PlanStep, record: ToolCallRecord
+    ) -> ToolCallRecord:
+        """Ask the client to confirm a waiting call; run it in its run if confirmed."""
+        assert recorder is not None and record.run_id is not None
+        needs = ", ".join(
+            sorted(
+                permission.value for permission in executor.registry.get(record.tool).permissions
+            )
+        )
+        answer = await server.request_context.session.elicit_form(
+            message=(
+                f"Run {record.tool} once? It needs {needs}. "
+                f"Input SHA-256 {(record.input_sha256 or '')[:16]}."
+            ),
+            requestedSchema={
+                "type": "object",
+                "properties": {"approve": {"type": "boolean", "title": "Run it once"}},
+                "required": ["approve"],
+            },
+        )
+        if answer.action != "accept" or not (answer.content or {}).get("approve"):
+            return record
+        run_id = record.run_id
+
+        def approve_and_resume() -> ToolCallRecord:
+            recorder.approve(run_id, approved_by="client-confirmation")
+            return recorder.resume(executor, run_id, [step])[-1]
+
+        return await anyio.to_thread.run_sync(approve_and_resume)
 
     @server.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]
     async def list_tools() -> list[types.Tool]:
@@ -134,11 +184,35 @@ def build_server(
     @server.call_tool(validate_input=False)  # type: ignore[untyped-decorator]
     async def handle_call(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
         served = serve("tools:call")
-        result = await anyio.to_thread.run_sync(
-            functools.partial(
-                call_tool, served.surface.executor, name, arguments, recorder=served.recorder
+        executor = served.surface.executor
+        step = PlanStep(tool=name, arguments=arguments)
+        if served.approvals is not None and served.recorder is not None:
+            record, opened = await anyio.to_thread.run_sync(
+                served.approvals, executor, step, served.recorder
             )
-        )
+            if opened is not None:
+                request_id, url = opened
+                raise UrlElicitationRequiredError(
+                    [
+                        types.ElicitRequestURLParams(
+                            message=f"{name} needs an approver's approval. Open {url}, then "
+                            "run the same call again.",
+                            url=url,
+                            elicitationId=request_id,
+                        )
+                    ],
+                    message=f"Approval needed: open {url}, then run the same call again.",
+                )
+            result = call_result(executor, record)
+        elif confirm_in_client and recorder is not None:
+            record = await anyio.to_thread.run_sync(recorder.call, executor, step)
+            if record.status == "approval_required":
+                record = await confirmed(executor, step, record)
+            result = call_result(executor, record)
+        else:
+            result = await anyio.to_thread.run_sync(
+                functools.partial(call_tool, executor, name, arguments, recorder=served.recorder)
+            )
         return types.CallToolResult(
             content=[
                 types.TextContent(type="text", text=item["text"]) for item in result["content"]
@@ -211,6 +285,7 @@ async def serve_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
+    confirm_in_client: bool = False,
 ) -> None:
     """Serve the executor's tools (and any resources and prompts) over stdin and stdout."""
     server = build_server(
@@ -220,6 +295,7 @@ async def serve_stdio(
         recorder=recorder,
         resources=resources,
         prompts=prompts,
+        confirm_in_client=confirm_in_client,
     )
     from mcp.server.stdio import stdio_server
 
@@ -235,6 +311,7 @@ def run_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
+    confirm_in_client: bool = False,
 ) -> None:
     """Blocking entry point for console commands; raises `MCPUnavailableError` without the extra."""
     try:
@@ -250,5 +327,6 @@ def run_stdio(
             recorder=recorder,
             resources=resources,
             prompts=prompts,
+            confirm_in_client=confirm_in_client,
         )
     )
