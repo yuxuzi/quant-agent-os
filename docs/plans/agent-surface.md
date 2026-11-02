@@ -283,6 +283,15 @@ Deviations from the steps above:
 **Done when** a client completes plan, approve, and apply without leaving the client, and an
 approval cannot be forged by tool output (injection test).
 
+**Status: done (2026-11-02).** [Decision 0014](../decisions/0014-approvals-in-the-client.md)
+was accepted with approver keys and four eyes except for the local tenant. Deviations from the
+steps above:
+- **Both ways in are opt-in.** The approval page needs `--approval-url`, and the in-client
+  confirmation needs `--confirm-in-client` on `quant-factory serve-mcp` only (the platform's
+  stdio server does not serve `create_app`).
+- **SDK resume.** `Platform.resume` cannot yet resume a call with a secret-named argument;
+  see the decision's notes.
+
 ### P7. Commercial readiness (B-36; decision 0015; needs approval)
 
 1. **P7.1 Metering.** A usage event per call (tenant, tool, duration, bytes, status), written

@@ -12,6 +12,7 @@ from mcp.client.streamable_http import streamable_http_client
 from typer.testing import CliRunner
 
 from quant_agent_os.api import KeyRing, add_key, load_keys
+from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.tools import PermissionPolicy
@@ -83,3 +84,32 @@ def test_serve_http_refuses_to_start_without_a_key(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "api-key new" in " ".join(result.output.split())
+
+
+def test_the_approval_page_is_served_only_with_a_desk(
+    datasets: DirectoryDatasetStore, tmp_path: Path
+) -> None:
+    add_key(tmp_path / "keys.toml", "team", ["tools:list"])
+    keys = KeyRing(load_keys(tmp_path / "keys.toml"))
+    store = MemoryRunStore()
+    catalog = compose(policy=PermissionPolicy(), datasets=datasets)
+    tenancy = single_tenant(catalog, store, PermissionPolicy())
+
+    def status(app: Any) -> tuple[int, str]:
+        async def main() -> httpx.Response:
+            async with _client(app, "none") as client:
+                return await client.get("/approve/unknown")
+
+        response = anyio.run(main)
+        return response.status_code, response.headers.get("content-security-policy", "")
+
+    with_desk = build_http_app(
+        tenancy,
+        keys,
+        instructions=catalog.instructions,
+        desk=ApprovalDesk(store, keys, base_url="https://qaos.example"),
+    )
+    without = build_http_app(tenancy, keys, instructions=catalog.instructions)
+
+    assert status(with_desk)[0] == 404 and "default-src 'none'" in status(with_desk)[1]
+    assert status(without) == (404, "")

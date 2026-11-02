@@ -16,11 +16,17 @@ from pathlib import Path
 from types import TracebackType
 from typing import Protocol, Self
 
-from quant_agent_os.runs.models import AuditEvent, RunRecord, StoredRun
+from quant_agent_os.runs.models import (
+    ApprovalRequest,
+    AuditEvent,
+    RequestStatus,
+    RunRecord,
+    StoredRun,
+)
 from quant_agent_os.runtime.approvals import Approval, MemoryApprovalLedger
 from quant_agent_os.runtime.executor import ToolCallRecord
 
-SCHEMA_VERSION = 3  # 2 added approvals, 3 the audit events' principal
+SCHEMA_VERSION = 4  # 2 added approvals, 3 the audit events' principal, 4 approval requests
 
 
 class RunStoreError(RuntimeError):
@@ -61,6 +67,31 @@ class RunStore(Protocol):
         """Return the most recently started runs, newest first; only ``tenant``'s when given."""
         ...
 
+    def save_request(self, request: ApprovalRequest) -> None:
+        """Store a new approval request (decision 0014)."""
+        ...
+
+    def get_request(self, request_id: str) -> ApprovalRequest | None:
+        """Return an approval request, or None if it is unknown."""
+        ...
+
+    def find_request(
+        self, tenant: str, requested_by: str | None, tool: str, input_sha256: str
+    ) -> ApprovalRequest | None:
+        """Return the newest approved, unused request for this exact call, or None."""
+        ...
+
+    def move_request(
+        self,
+        request_id: str,
+        to: RequestStatus,
+        *,
+        source: RequestStatus,
+        decided_by: str | None = None,
+    ) -> ApprovalRequest | None:
+        """Move a request from ``source`` to ``to`` atomically; None if it was not in ``source``."""
+        ...
+
     def close(self) -> None:
         """Release the store's resources."""
         ...
@@ -75,6 +106,7 @@ class MemoryRunStore:
         self._events: list[AuditEvent] = []
         self._lock = threading.Lock()
         self._approvals = MemoryApprovalLedger()
+        self._requests: dict[str, ApprovalRequest] = {}
 
     def grant(self, approval: Approval) -> None:
         """Store a new, unused approval."""
@@ -117,6 +149,49 @@ class MemoryRunStore:
             runs = [run for run in self._runs.values() if tenant is None or run.tenant == tenant]
             runs.sort(key=lambda run: run.started_at, reverse=True)
             return runs[:limit]
+
+    def save_request(self, request: ApprovalRequest) -> None:
+        """Store a new approval request."""
+        with self._lock:
+            self._requests[request.request_id] = request.model_copy(deep=True)
+
+    def get_request(self, request_id: str) -> ApprovalRequest | None:
+        """Return an approval request."""
+        with self._lock:
+            found = self._requests.get(request_id)
+            return found.model_copy(deep=True) if found else None
+
+    def find_request(
+        self, tenant: str, requested_by: str | None, tool: str, input_sha256: str
+    ) -> ApprovalRequest | None:
+        """Return the newest approved, unused request for this exact call."""
+        with self._lock:
+            matches = [
+                request
+                for request in self._requests.values()
+                if request.status == "approved"
+                and (request.tenant, request.requested_by, request.tool, request.input_sha256)
+                == (tenant, requested_by, tool, input_sha256)
+            ]
+            newest = max(matches, key=lambda request: request.created_at, default=None)
+            return newest.model_copy(deep=True) if newest else None
+
+    def move_request(
+        self,
+        request_id: str,
+        to: RequestStatus,
+        *,
+        source: RequestStatus,
+        decided_by: str | None = None,
+    ) -> ApprovalRequest | None:
+        """Move a request between statuses atomically."""
+        with self._lock:
+            found = self._requests.get(request_id)
+            if found is None or found.status != source:
+                return None
+            moved = found.model_copy(update=_decision(to, decided_by))
+            self._requests[request_id] = moved
+            return moved.model_copy(deep=True)
 
     def close(self) -> None:
         """Nothing to release."""
@@ -168,6 +243,18 @@ CREATE TABLE IF NOT EXISTS approvals (
     used_at TEXT
 );
 CREATE INDEX IF NOT EXISTS approvals_call ON approvals (run_id, tool, input_sha256);
+CREATE TABLE IF NOT EXISTS approval_requests (
+    request_id TEXT PRIMARY KEY,
+    tenant TEXT NOT NULL,
+    requested_by TEXT,
+    tool TEXT NOT NULL,
+    input_sha256 TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    record TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS approval_requests_call
+    ON approval_requests (tenant, tool, input_sha256, status);
 """
 
 
@@ -349,6 +436,74 @@ class SqliteRunStore:
             ).fetchall()
         return [RunRecord.model_validate_json(row["record"]) for row in rows]
 
+    def save_request(self, request: ApprovalRequest) -> None:
+        """Store a new approval request."""
+        self._write(
+            "INSERT INTO approval_requests (request_id, tenant, requested_by, tool, "
+            "input_sha256, status, created_at, record) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                request.request_id,
+                request.tenant,
+                request.requested_by,
+                request.tool,
+                request.input_sha256,
+                request.status,
+                request.created_at.isoformat(),
+                request.model_dump_json(),
+            ),
+        )
+
+    def get_request(self, request_id: str) -> ApprovalRequest | None:
+        """Return an approval request."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT record FROM approval_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+        return ApprovalRequest.model_validate_json(row["record"]) if row else None
+
+    def find_request(
+        self, tenant: str, requested_by: str | None, tool: str, input_sha256: str
+    ) -> ApprovalRequest | None:
+        """Return the newest approved, unused request for this exact call."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT record FROM approval_requests WHERE tenant = ? AND tool = ? AND "
+                "input_sha256 = ? AND status = 'approved' AND requested_by IS ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (tenant, tool, input_sha256, requested_by),
+            ).fetchone()
+        return ApprovalRequest.model_validate_json(row["record"]) if row else None
+
+    def move_request(
+        self,
+        request_id: str,
+        to: RequestStatus,
+        *,
+        source: RequestStatus,
+        decided_by: str | None = None,
+    ) -> ApprovalRequest | None:
+        """Move a request between statuses atomically."""
+        with self._lock:
+            try:
+                with self._db:
+                    row = self._db.execute(
+                        "SELECT record FROM approval_requests WHERE request_id = ? AND status = ?",
+                        (request_id, source),
+                    ).fetchone()
+                    if row is None:
+                        return None
+                    moved = ApprovalRequest.model_validate_json(row["record"]).model_copy(
+                        update=_decision(to, decided_by)
+                    )
+                    self._db.execute(
+                        "UPDATE approval_requests SET status = ?, record = ? "
+                        "WHERE request_id = ? AND status = ?",
+                        (to, moved.model_dump_json(), request_id, source),
+                    )
+            except sqlite3.Error as error:
+                raise RunStoreError(f"Cannot write to the run store: {error}") from error
+        return moved
+
     def close(self) -> None:
         """Close the database connection."""
         with self._lock:
@@ -364,3 +519,10 @@ class SqliteRunStore:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def _decision(to: RequestStatus, decided_by: str | None) -> dict[str, object]:
+    """Return the fields a status change sets: who decided, and when (not for ``used``)."""
+    if to == "used":
+        return {"status": to}
+    return {"status": to, "decided_by": decided_by, "decided_at": datetime.now(UTC)}

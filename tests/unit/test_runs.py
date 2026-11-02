@@ -19,6 +19,7 @@ from quant_agent_os.runs import (
     SqliteRunStore,
     redact,
 )
+from quant_agent_os.runs.store import SCHEMA_VERSION
 from quant_agent_os.runtime import PlanStep, ToolExecutor
 from quant_agent_os.runtime.orchestrator import Orchestrator, PlanningError
 from quant_agent_os.sdk import Platform, ProviderRequiredError
@@ -322,7 +323,7 @@ def test_a_version_1_run_store_is_upgraded_in_place(tmp_path: Path) -> None:
         version = db.execute("PRAGMA user_version").fetchone()[0]
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
     db.close()
-    assert version == 3
+    assert version == SCHEMA_VERSION == 4
     assert "approvals" in tables
 
 

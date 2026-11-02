@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -62,3 +63,32 @@ class StoredRun(BaseModel):
     run: RunRecord
     calls: list[ToolCallRecord] = Field(default_factory=list)
     events: list[AuditEvent] = Field(default_factory=list)
+
+
+RequestStatus = Literal["pending", "approved", "denied", "used"]
+
+
+class ApprovalRequest(BaseModel):
+    """A waiting call a person may approve once, before ``expires_at`` (decision 0014).
+
+    Bound to the tenant, the run, the tool, the validated input's hash, and the requester;
+    ``arguments`` are redacted and only for display. The id has 128 random bits.
+    """
+
+    request_id: str = Field(default_factory=lambda: secrets.token_urlsafe(16))
+    tenant: str = DEFAULT_TENANT
+    run_id: str
+    tool: str
+    input_sha256: str
+    requested_by: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    permissions: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime
+    status: RequestStatus = "pending"
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+    def expired(self, now: datetime | None = None) -> bool:
+        """Return whether the request can no longer be decided or used."""
+        return (now or datetime.now(UTC)) >= self.expires_at

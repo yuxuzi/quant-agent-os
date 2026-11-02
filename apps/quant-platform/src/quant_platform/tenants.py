@@ -24,11 +24,13 @@ import logging
 import os
 import threading
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
+from quant_agent_os.approval_desk import four_eyes_except_local
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_agent_os.runs import RunStore
@@ -63,6 +65,7 @@ class TenantConfig(BaseModel):
     granted_permissions: frozenset[Permission] = READ_ONLY
     preapproved_permissions: frozenset[Permission] = frozenset()
     issuer: str | None = None
+    separate_approver: bool | None = None
     disabled: bool = False
 
 
@@ -164,6 +167,8 @@ def dump_tenants(tenants: dict[str, TenantConfig] | TenantsFile) -> str:
             if key in data:
                 values = ", ".join(_string(value) for value in sorted(data[key]))
                 lines.append(f"{key} = [{values}]")
+        if config.separate_approver is not None:
+            lines.append(f"separate_approver = {str(config.separate_approver).lower()}")
         if config.disabled:
             lines.append("disabled = true")
         lines.append("")
@@ -265,3 +270,18 @@ def describe(tenant: str, config: TenantConfig) -> dict[str, Any]:
         "issuer": config.issuer or "",
         "disabled": "yes" if config.disabled else "",
     }
+
+
+def separate_approver(tenants: dict[str, TenantConfig]) -> Callable[[str], bool]:
+    """Return whether each tenant needs an approver other than the requester (decision 0014).
+
+    A tenant's ``separate_approver`` wins; otherwise every tenant but the local one needs one.
+    """
+
+    def needs(tenant: str) -> bool:
+        config = tenants.get(tenant)
+        if config is not None and config.separate_approver is not None:
+            return config.separate_approver
+        return four_eyes_except_local(tenant)
+
+    return needs

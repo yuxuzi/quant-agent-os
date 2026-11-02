@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The run store is at schema 4 (approval requests); older stores upgrade in place.
+  `RunRecorder.resume` takes the original steps (B-35).
 - The team Docker image serves the platform (`quant-platform serve-http`: research and
   analytics over MCP and REST) instead of `quant-research serve-api`, with a read-only
   `datasets` volume and an operator `datasets` service. The platform's App Factory toolset is
@@ -125,6 +127,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Approving without leaving the client (B-35, [decision 0014](docs/decisions/0014-approvals-in-the-client.md)):
+  - **Approval page.** With `quant-platform serve-http --approval-url URL`, a call that waits
+    for an approval sends the MCP client to `/approve/<id>` (URL elicitation). An approver
+    key (new scope `runs:approve`, never combined with `tools:call`) approves it once, and
+    the retried call runs in its original run. Four eyes outside the `local` tenant,
+    configurable with `separate_approver`.
+  - **Local confirmation.** `quant-factory serve-mcp --confirm-in-client` serves
+    `create_app` and `check_app`, and the client asks the user to confirm each call.
 - Tenants and OAuth (B-34, [decision 0013](docs/decisions/0013-identity-and-tenancy.md)):
   - **Many tenants on one server.** `quant-platform serve-http --tenants FILE` serves each
     caller its own tenant: its knowledge store (a PostgreSQL schema or SQLite file), datasets,

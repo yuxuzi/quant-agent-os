@@ -155,7 +155,8 @@ class IntrospectionVerifier:
         return AccessToken(
             token=token,
             client_id=str(claims.get("client_id") or subject or "oauth"),
-            scopes=[name for name in SCOPES if name in granted],
+            # Approving is done on the approval page with an approver key, never by token.
+            scopes=[name for name in SCOPES if name in granted and name != "runs:approve"],
             expires_at=int(expires),
             resource=self.resource,
             subject=subject if isinstance(subject, str) else None,

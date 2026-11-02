@@ -22,11 +22,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
 
-Scope = Literal["tools:list", "tools:call", "runs:read"]
+Scope = Literal["tools:list", "tools:call", "runs:read", "runs:approve"]
 SCOPES: tuple[Scope, ...] = get_args(Scope)
 KEY_PREFIX = "qaos_"
 PRINCIPAL_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$"
@@ -44,6 +44,15 @@ class ApiKey(BaseModel):
     scopes: frozenset[Scope] = Field(min_length=1)
     tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     disabled: bool = False
+
+    @model_validator(mode="after")
+    def _approvers_cannot_call(self) -> ApiKey:
+        if {"runs:approve", "tools:call"} <= self.scopes:
+            raise ValueError(
+                "a key with runs:approve cannot also have tools:call: the key an agent's client "
+                "holds must never be able to approve (decision 0014)"
+            )
+        return self
 
 
 class _KeyFile(BaseModel):
@@ -86,9 +95,16 @@ def add_key(
     ``tenant``.
     """
     key = new_key()
-    entry = ApiKey(
-        principal=principal, sha256=hash_key(key), scopes=frozenset(scopes), tenant=tenant
-    )
+    try:
+        entry = ApiKey(
+            principal=principal, sha256=hash_key(key), scopes=frozenset(scopes), tenant=tenant
+        )
+    except ValidationError as error:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc']) or 'key'}: {item['msg']}"
+            for item in error.errors()
+        )
+        raise ApiKeyError(f"Cannot add the key: {problems}") from error
     if path.exists():
         load_keys(path)  # refuse to append to a file the server could not read
     path.parent.mkdir(parents=True, exist_ok=True)

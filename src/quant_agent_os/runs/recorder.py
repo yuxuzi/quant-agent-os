@@ -122,11 +122,14 @@ class RunRecorder:
             )
         return approvals
 
-    def resume(self, executor: ToolExecutor, run_id: str) -> list[ToolCallRecord]:
+    def resume(
+        self, executor: ToolExecutor, run_id: str, steps: list[PlanStep] | None = None
+    ) -> list[ToolCallRecord]:
         """Run the calls ``run_id`` is waiting on, in that run, and record how it ends.
 
         A call whose approval is missing records ``approval_required`` again, so resuming
-        without `approve` changes nothing.
+        without `approve` changes nothing. Stored arguments are redacted, so a caller holding
+        the original call passes it as ``steps``; the approval still binds its input hash.
         """
         stored = self.store.get_run(run_id)
         if stored is None:
@@ -135,10 +138,10 @@ class RunRecorder:
             raise NotAwaitingApprovalError(
                 f"Run {run_id} is {stored.run.status}, not awaiting an approval."
             )
-        records = [
-            executor.execute(PlanStep(tool=call.tool, arguments=call.arguments), run_id=run_id)
-            for call in _waiting(stored.calls)
+        waiting = steps or [
+            PlanStep(tool=call.tool, arguments=call.arguments) for call in _waiting(stored.calls)
         ]
+        records = [executor.execute(step, run_id=run_id) for step in waiting]
         for record in records:
             self.record_call(record)
         history = [*stored.calls, *records]

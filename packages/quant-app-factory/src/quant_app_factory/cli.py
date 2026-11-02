@@ -755,31 +755,58 @@ def served_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
     return [spec for spec in factory_tools(factory) if spec.name not in ("create_app", "check_app")]
 
 
+CONFIRM_INSTRUCTIONS = (
+    " This server can also create_app and check_app: each call asks the user to confirm it in "
+    "the client before anything is written or run."
+)
+
+
 @app.command("serve-mcp")
 def serve_mcp(
     runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
     record: Annotated[
         bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
     ] = True,
+    confirm_in_client: Annotated[
+        bool,
+        typer.Option(
+            "--confirm-in-client",
+            help="Also serve create_app and check_app; the client asks the user to confirm "
+            "each call (decision 0014). Local stdio only; needs the run store.",
+        ),
+    ] = False,
 ) -> None:
-    """Serve the read-only guiding tools (describe_template, check_spec, plan_app) over stdio.
+    """Serve the guiding tools (describe_template, check_spec, plan_app) over stdio.
 
-    create_app is not served: MCP clients cannot approve it yet, so people create from the
-    terminal. Messages go to stderr because stdout carries the protocol.
+    By default create_app and check_app are not served, and people create from the terminal.
+    With --confirm-in-client they are: each call waits for an approval that the user gives in
+    the client, recorded as approved by client-confirmation, and the files are written on this
+    machine. Messages go to stderr because stdout carries the protocol.
     """
-    tools = served_tools(default_factory())
+    factory = default_factory()
+    tools = factory_tools(factory) if confirm_in_client else served_tools(factory)
+    policy = (
+        PermissionPolicy(granted=READ_ONLY | CREATE_PERMISSIONS | CHECK_PERMISSIONS)
+        if confirm_in_client
+        else PermissionPolicy()
+    )
+    if confirm_in_client and not record:
+        raise _fail("--confirm-in-client records every approval, so it needs --record.")
     run_store: SqliteRunStore | None = None
     try:
         if record:
             try:
                 run_store = SqliteRunStore(_runs_path(runs))
             except RunStoreError as error:
+                if confirm_in_client:
+                    raise _fail(error) from error
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         run_stdio(
-            ToolExecutor(ToolRegistry(tools), PermissionPolicy()),
+            ToolExecutor(ToolRegistry(tools), policy, approvals=run_store),
             name="quant-factory",
-            instructions=MCP_INSTRUCTIONS,
+            instructions=MCP_INSTRUCTIONS + (CONFIRM_INSTRUCTIONS if confirm_in_client else ""),
             recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
+            confirm_in_client=confirm_in_client,
         )
     except MCPUnavailableError as error:
         raise _fail(error) from error
