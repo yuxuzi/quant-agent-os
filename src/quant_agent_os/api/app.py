@@ -18,7 +18,7 @@ from quant_agent_os.mcp.adapters import tool_definitions
 from quant_agent_os.runs.models import RunRecord, StoredRun
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runs.store import RunStore
-from quant_agent_os.runtime.executor import CallStatus, ToolExecutor
+from quant_agent_os.runtime.executor import CallStatus, ToolExecutor, failure_details
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
@@ -44,7 +44,10 @@ class CallRequest(BaseModel):
 
 
 class CallResponse(BaseModel):
-    """The record of one call: ``output`` is set when ``status`` is ``ok``, else ``error``."""
+    """The record of one call: ``output`` is set when ``status`` is ``ok``, else ``error``.
+
+    A failure also carries ``hint`` (what to do next) and ``retryable``, as MCP reports it.
+    """
 
     run_id: str | None
     call_id: str
@@ -52,6 +55,8 @@ class CallResponse(BaseModel):
     status: CallStatus
     output: dict[str, Any] | None
     error: str | None
+    hint: str | None = None
+    retryable: bool | None = None
     data_versions: dict[str, str]
 
 
@@ -115,7 +120,8 @@ def build_app(
     async def call(
         name: str, request: Request, key: Annotated[ApiKey, requires("tools:call")]
     ) -> Any:
-        if name not in {definition["name"] for definition in tool_definitions(executor)}:
+        served = [spec.name for spec in registry.specs() if executor.policy.allows_tool(spec.name)]
+        if name not in served:
             raise HTTPException(404, f"No tool named '{name}' is served here.")
         body = await _read_body(request, max_request_bytes)
         if body is None:
@@ -130,6 +136,7 @@ def build_app(
         record = await run_in_threadpool(
             recorder.call, executor, PlanStep(tool=name, arguments=arguments)
         )
+        failure = failure_details(record, served) if record.status != "ok" else {}
         return CallResponse(
             run_id=record.run_id,
             call_id=record.call_id,
@@ -137,6 +144,8 @@ def build_app(
             status=record.status,
             output=record.output,
             error=record.error,
+            hint=failure.get("hint"),
+            retryable=failure.get("retryable"),
             data_versions=record.data_versions,
         )
 
