@@ -127,20 +127,22 @@ def test_tool_failures_are_results_with_the_executor_status(
 ) -> None:
     _, issued = keys_file
 
-    def status(name: str, arguments: dict[str, Any]) -> tuple[int, str, str]:
+    def status(name: str, arguments: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         response = client.post(
             f"/v1/tools/{name}/call", headers=_auth(issued["alice"]), json={"arguments": arguments}
         )
-        body = response.json()
-        return response.status_code, body["status"], body["error"]
+        return response.status_code, response.json()
 
     invalid = status("max_drawdown", {"series_id": "s", "returns": []})
     denied = status("fetch_page", {"url": "https://example.com"})
 
     mcp_invalid = call_tool(EXECUTOR, "max_drawdown", {"series_id": "s", "returns": []})
-    assert invalid[:2] == (200, "invalid_input")
-    assert mcp_invalid["content"][0]["text"] == f"invalid_input: {invalid[2]}"
-    assert denied[:2] == (200, "denied")
+    assert invalid[0] == 200
+    assert {key: invalid[1][key] for key in ("status", "error", "hint", "retryable")} == (
+        mcp_invalid["structuredContent"]
+    )
+    assert denied[0] == 200 and denied[1]["status"] == "denied"
+    assert denied[1]["retryable"] is False
 
 
 def test_unknown_tools_and_bad_bodies_are_refused_without_a_run(

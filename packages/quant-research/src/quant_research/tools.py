@@ -8,7 +8,7 @@ which the default policy does not grant.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,14 @@ from quant_research.application.strategy import StrategyDraft, StrategyRequest, 
 
 # Leaves room after a hosted query embedding (bounded by QUERY_EMBEDDING_SECONDS) for the reads.
 SEARCH_TIMEOUT = QUERY_EMBEDDING_SECONDS + 7.0
+
+
+class SearchRequest(ResearchQuery):
+    """A research question, and how much of each passage and edge to return."""
+
+    detail: Literal["concise", "full"] = Field(
+        default="concise", description="full: longer previews and every edge"
+    )
 
 
 class PassageRequest(BaseModel):
@@ -49,8 +57,9 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
         timeout_seconds=SEARCH_TIMEOUT,
         max_output_bytes=200_000,
     )
-    def find_related_signals(params: ResearchQuery) -> EvidencePacket:
-        return service.find_related(params)
+    def find_related_signals(params: SearchRequest) -> EvidencePacket:
+        packet = service.find_related(params)
+        return packet.concise() if params.detail == "concise" else packet
 
     @tool(
         name="get_source_passage",

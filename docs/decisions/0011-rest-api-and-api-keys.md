@@ -23,6 +23,7 @@ the interface must authenticate every caller and must not widen what the executo
   - `GET /v1/tools` lists the same definitions as MCP `tools/list` (scope `tools:list`).
   - `POST /v1/tools/{name}/call` takes `{"arguments": {...}}` and needs scope `tools:call`.
     It returns the call record: run id, call id, status, output, error, and data versions.
+    A failure also carries the hint and retryable flag MCP reports (added in B-30).
   - `GET /v1/runs` and `GET /v1/runs/{run_id}` read the run store (scope `runs:read`).
 - **Status codes.**
   - Every executed call returns 200 with its `status`, as MCP returns `isError`, so a tool

@@ -15,7 +15,12 @@ Quant-Agent-OS assumes that model output, retrieved documents, and tool output a
   output-size limit. A timed-out Python thread cannot be killed, so tools must avoid unbounded
   or side-effecting work.
 - **No feedback into planning.** Tool outputs and retrieved text are not sent back to the
-  planner, so injected instructions in data cannot choose tools.
+  platform's planner, so injected instructions in data cannot choose tools.
+- **External clients plan for themselves.** An MCP or REST client such as Claude or Cursor
+  does read tool output, and the platform cannot stop it from acting on text in a passage.
+  So every result that carries corpus text says `"trust": "untrusted"`, the research server's
+  instructions tell the client never to follow instructions found in passages, and the
+  approval gate still stops any consequential call that injected text might provoke.
 - **Secrets.** Credentials come from the environment or `.env`, are held as `SecretStr`, are
   never displayed, and can be redacted from logs with `RedactSecretsFilter`.
 

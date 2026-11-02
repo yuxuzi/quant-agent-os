@@ -54,8 +54,10 @@ def build_server(
         return [
             types.Tool(
                 name=definition["name"],
+                title=definition["title"],
                 description=definition["description"],
                 inputSchema=definition["inputSchema"],
+                outputSchema=definition["outputSchema"],
                 annotations=types.ToolAnnotations(**definition["annotations"]),
             )
             for definition in tool_definitions(executor)

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import READ_ONLY
 from quant_analytics.tools import (
+    SINGLE_METRIC_TOOLS,
     TOOLS,
     PerformanceInput,
     analytics_tools,
@@ -74,6 +75,9 @@ def test_the_single_metric_tools_honour_the_contract(spec: Any) -> None:
     assert record.output["evidence"]
 
 
-def test_every_tool_is_read_only_and_registered() -> None:
-    assert all(spec.permissions <= READ_ONLY for spec in TOOLS)
-    assert {spec.name for spec in analytics_tools().specs()} == {spec.name for spec in TOOLS}
+def test_every_tool_is_read_only_and_only_the_full_tools_are_served() -> None:
+    assert all(spec.permissions <= READ_ONLY for spec in [*TOOLS, *SINGLE_METRIC_TOOLS])
+    assert {spec.name for spec in analytics_tools().specs()} == {
+        "analyze_performance",
+        "analyze_risk",
+    }

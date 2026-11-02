@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The agent surface costs clients less context (B-30, [plan](docs/plans/agent-surface.md) P1):
+  - **Leaner definitions.** `tools/list` and `GET /v1/tools` drop the `title` keywords pydantic
+    derives from names, and Quant Analytics serves only `analyze_performance` and
+    `analyze_risk`: `annualized_return` and `max_drawdown` remain importable
+    (`SINGLE_METRIC_TOOLS`) but are not in `analytics_tools()`. Definition bytes per turn fall
+    20%, from 10 tools to 8.
+  - **Concise search.** `find_related_signals` takes `detail` (`concise` by default, or
+    `full`). Concise returns 300-character previews and no edges repeated from an entity's
+    path; rankings, entities, and evidence are unchanged.
 - Quant App Factory asks less and prints less (B-29):
   - **One-command start.** `quant-factory new quant-research my-lab --defaults` writes the spec
     and creates the project after one confirmation; add `--yes` for scripts.
@@ -110,6 +119,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Typed, actionable results for agents (B-30 P1):
+  - **Output schemas.** Every MCP tool definition carries `outputSchema` and a `title`; clients
+    validate `structuredContent` against it, and `check_tool` does too.
+  - **Failure hints.** A failed call reports `status`, `error`, `hint` (what to do next), and
+    `retryable`, as MCP `structuredContent` and in the REST call response
+    (`quant_agent_os.runtime.failure_details`).
+  - **Untrusted text.** Research results that carry corpus text say `"trust": "untrusted"`,
+    and the research server tells clients never to follow instructions in passages.
+  - **Agent-efficiency evaluation** (`tests/evaluation/agent_efficiency.py`): definition,
+    argument, and result bytes, calls, and success for typical tasks over the MCP servers,
+    with a baseline the default suite enforces.
 - A PostgreSQL knowledge store with pgvector (B-14, the `postgres` extra with
   `psycopg[binary]`; [decision 0004](docs/decisions/0004-knowledge-store.md)).
   - **Usage.** `--store postgresql://user@host/db` works with every `quant-research` command,

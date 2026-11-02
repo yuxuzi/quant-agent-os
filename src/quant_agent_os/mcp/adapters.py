@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runtime.executor import ToolExecutor
+from quant_agent_os.runtime.executor import ToolExecutor, failure_details
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.permissions import Permission
 
@@ -19,20 +19,25 @@ _WRITES = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.EXTERNAL_ACTION}
 )
 _OUTSIDE = frozenset({Permission.NETWORK, Permission.EXTERNAL_ACTION})
+# Keywords whose keys are names (of properties or definitions), not schema keywords.
+_NAMED_SUBSCHEMAS = frozenset({"properties", "$defs", "definitions", "patternProperties"})
 
 
 def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     """Return MCP ``tools/list`` entries for every tool the policy allows.
 
-    ``annotations`` are MCP behaviour hints derived from the declared contract: read-only unless
-    the tool may write, run code, or act externally; open-world when it reaches outside the
-    machine (network access or external actions).
+    ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
+    rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
+    contract: read-only unless the tool may write, run code, or act externally; open-world when
+    it reaches outside the machine (network access or external actions).
     """
     return [
         {
             "name": spec.name,
+            "title": spec.title,
             "description": spec.description,
-            "inputSchema": spec.input_model.model_json_schema(),
+            "inputSchema": compact_schema(spec.input_model.model_json_schema()),
+            "outputSchema": compact_schema(spec.descriptor()["output_schema"]),
             "annotations": {
                 "readOnlyHint": not (spec.permissions & _WRITES),
                 "idempotentHint": spec.idempotent,
@@ -44,6 +49,27 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     ]
 
 
+def compact_schema(schema: Any) -> Any:
+    """Return ``schema`` without its ``title`` keywords, which pydantic derives from names.
+
+    Titles repeat the property or model name, so they cost every client context on every turn
+    and validate nothing. A property that is itself named ``title`` is kept.
+    """
+    if isinstance(schema, list):
+        return [compact_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    return {
+        key: (
+            {name: compact_schema(value) for name, value in child.items()}
+            if key in _NAMED_SUBSCHEMAS and isinstance(child, dict)
+            else compact_schema(child)
+        )
+        for key, child in schema.items()
+        if key != "title"
+    }
+
+
 def call_tool(
     executor: ToolExecutor,
     name: str,
@@ -51,7 +77,11 @@ def call_tool(
     *,
     recorder: RunRecorder | None = None,
 ) -> dict[str, Any]:
-    """Return an MCP ``tools/call`` result for one invocation, recorded as a run if asked."""
+    """Return an MCP ``tools/call`` result for one invocation, recorded as a run if asked.
+
+    A failure is an error result whose text leads with the status and whose structured content
+    adds a hint on what to do next and whether retrying can help (`failure_details`).
+    """
     step = PlanStep(tool=name, arguments=arguments)
     record = recorder.call(executor, step) if recorder else executor.execute(step)
     if record.status == "ok":
@@ -60,7 +90,14 @@ def call_tool(
             "structuredContent": record.output,
             "isError": False,
         }
+    available = [
+        spec.name for spec in executor.registry.specs() if executor.policy.allows_tool(spec.name)
+    ]
+    details = failure_details(record, available)
     return {
-        "content": [{"type": "text", "text": f"{record.status}: {record.error}"}],
+        "content": [
+            {"type": "text", "text": f"{record.status}: {record.error}\nHint: {details['hint']}"}
+        ],
+        "structuredContent": details,
         "isError": True,
     }

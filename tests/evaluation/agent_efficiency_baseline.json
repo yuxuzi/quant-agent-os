@@ -1,0 +1,63 @@
+{
+  "servers": {
+    "analytics": {
+      "client_only_bytes": 4695,
+      "definition_bytes": 2439,
+      "instruction_bytes": 133,
+      "tools": 2
+    },
+    "factory": {
+      "client_only_bytes": 10217,
+      "definition_bytes": 4116,
+      "instruction_bytes": 331,
+      "tools": 3
+    },
+    "research": {
+      "client_only_bytes": 9306,
+      "definition_bytes": 2257,
+      "instruction_bytes": 566,
+      "tools": 3
+    }
+  },
+  "tasks": {
+    "analyze_a_series": {
+      "argument_bytes": 3750,
+      "calls": 1,
+      "result_bytes": 4350,
+      "success": true
+    },
+    "analyze_portfolio_risk": {
+      "argument_bytes": 5675,
+      "calls": 1,
+      "result_bytes": 2130,
+      "success": true
+    },
+    "check_an_app_spec": {
+      "argument_bytes": 163,
+      "calls": 2,
+      "result_bytes": 7764,
+      "success": true
+    },
+    "draft_strategy": {
+      "argument_bytes": 20,
+      "calls": 1,
+      "result_bytes": 3723,
+      "success": true
+    },
+    "search_and_cite": {
+      "argument_bytes": 88,
+      "calls": 2,
+      "result_bytes": 5644,
+      "success": true
+    }
+  },
+  "totals": {
+    "argument_bytes": 9696,
+    "calls": 7,
+    "definition_bytes": 8812,
+    "instruction_bytes": 1030,
+    "result_bytes": 23611,
+    "success_rate": 1.0,
+    "tools": 8
+  }
+}

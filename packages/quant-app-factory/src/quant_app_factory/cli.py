@@ -15,7 +15,7 @@ from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry
+from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, ToolSpec
 from quant_app_factory.application.factory import AppFactory, FactoryReport
 from quant_app_factory.domain.connections import (
     DATABASE_COMPONENT,
@@ -749,6 +749,11 @@ MCP_INSTRUCTIONS = (
 )
 
 
+def served_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
+    """Return the tools `serve-mcp` serves: every factory tool except create and check."""
+    return [spec for spec in factory_tools(factory) if spec.name not in ("create_app", "check_app")]
+
+
 @app.command("serve-mcp")
 def serve_mcp(
     runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
@@ -761,9 +766,7 @@ def serve_mcp(
     create_app is not served: MCP clients cannot approve it yet, so people create from the
     terminal. Messages go to stderr because stdout carries the protocol.
     """
-    tools = [
-        spec for spec in factory_tools(_factory()) if spec.name not in ("create_app", "check_app")
-    ]
+    tools = served_tools(_factory())
     run_store: SqliteRunStore | None = None
     try:
         if record:

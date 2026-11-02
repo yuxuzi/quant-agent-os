@@ -9,7 +9,8 @@ from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.runtime import PlanStep, ToolExecutor
 from quant_agent_os.runtime.orchestrator import Orchestrator
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry
-from quant_research import ResearchApp, research_tools
+from quant_research import ResearchApp, ResearchQuery, research_tools
+from quant_research.application.retrieval import CONCISE_PREVIEW_CHARS
 
 QUERY = {"query": "What is related to short-term reversal?"}
 
@@ -92,3 +93,46 @@ def test_orchestrated_reports_record_the_corpus_snapshot(research: ResearchApp) 
     assert snapshot is not None
     assert report.metadata.data_versions == {"corpus_snapshot": snapshot.id}
     assert report.findings and all(item.sources for item in report.findings)
+
+
+def test_search_is_concise_by_default_and_full_on_request(
+    research: ResearchApp, executor: ToolExecutor
+) -> None:
+    full = executor.execute(
+        PlanStep(tool="find_related_signals", arguments={**QUERY, "detail": "full"})
+    ).output
+    concise = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    assert full is not None and concise is not None
+
+    assert full == research.research.find_related(ResearchQuery(**QUERY)).model_dump(mode="json")
+    assert [p["chunk_id"] for p in concise["passages"]] == [p["chunk_id"] for p in full["passages"]]
+    assert [e["path"] for e in concise["related"]] == [e["path"] for e in full["related"]]
+    assert concise["evidence"] == full["evidence"]
+    assert all(link not in e["path"] for e in concise["related"] for link in e["links"])
+    assert len(json.dumps(concise)) < len(json.dumps(full))
+
+
+def test_concise_previews_are_short_and_say_they_are_truncated(research: ResearchApp) -> None:
+    packet = research.research.find_related(ResearchQuery(**QUERY))
+    first = packet.passages[0]
+    long = packet.model_copy(
+        update={"passages": [first.model_copy(update={"text": "x" * 700 + "…"})]}
+    )
+
+    (cut,) = long.concise().passages
+    assert cut.text == "x" * CONCISE_PREVIEW_CHARS + "…" and cut.truncated
+    assert packet.concise().passages[0] == first  # already short: unchanged
+
+
+def test_every_result_with_corpus_text_is_marked_untrusted(executor: ToolExecutor) -> None:
+    found = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    assert found is not None
+    chunk_id = found["passages"][0]["chunk_id"]
+    passage = executor.execute(
+        PlanStep(tool="get_source_passage", arguments={"chunk_id": chunk_id})
+    )
+    draft = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": "momentum"}))
+
+    assert found["trust"] == "untrusted"
+    assert passage.output is not None and passage.output["trust"] == "untrusted"
+    assert draft.output is not None and draft.output["trust"] == "untrusted"

@@ -14,6 +14,7 @@ from quant_agent_os.mcp import (
     MCPUnavailableError,
     build_server,
     call_tool,
+    compact_schema,
     run_stdio,
     tool_definitions,
 )
@@ -55,10 +56,10 @@ def test_tools_list_mirrors_the_registry_with_behaviour_hints() -> None:
     assert tools["max_drawdown"].annotations.readOnlyHint is True
     assert tools["max_drawdown"].annotations.openWorldHint is False
     assert tools["fetch_page"].annotations.openWorldHint is True
-    assert (
-        tools["max_drawdown"].inputSchema
-        == REGISTRY.get("max_drawdown").descriptor()["input_schema"]
-    )
+    descriptor = REGISTRY.get("max_drawdown").descriptor()
+    assert tools["max_drawdown"].inputSchema == compact_schema(descriptor["input_schema"])
+    assert tools["max_drawdown"].outputSchema == compact_schema(descriptor["output_schema"])
+    assert tools["max_drawdown"].title == "Max drawdown"
 
 
 def test_tool_results_equal_direct_executor_calls() -> None:
@@ -88,6 +89,13 @@ def test_invalid_input_and_denied_calls_report_executor_errors() -> None:
     assert invalid.isError and invalid.content[0].text.startswith("invalid_input:")
     assert denied.isError and denied.content[0].text.startswith("denied:")
     assert unknown.isError and unknown.content[0].text.startswith("unknown_tool:")
+    assert invalid.structuredContent["retryable"] is True
+    assert "returns" in invalid.structuredContent["error"]
+    assert denied.structuredContent["retryable"] is False
+    assert unknown.structuredContent["hint"] == (
+        "Call one of the available tools: annualized_return, fetch_page, max_drawdown."
+    )
+    assert "Hint: Call one of the available tools" in unknown.content[0].text
 
 
 def test_the_server_announces_its_name_version_and_instructions() -> None:
@@ -121,3 +129,22 @@ def test_a_missing_extra_gives_the_install_hint(monkeypatch: pytest.MonkeyPatch)
 
     with pytest.raises(MCPUnavailableError, match="quant-agent-os\\[mcp\\]"):
         run_stdio(EXECUTOR, name="test")
+
+
+def test_compact_schemas_drop_derived_titles_but_keep_a_property_named_title() -> None:
+    class Source(BaseModel):
+        title: str
+
+    class Report(BaseModel):
+        name: str
+        sources: list[Source]
+
+    schema = compact_schema(Report.model_json_schema())
+
+    assert "title" not in schema
+    assert schema["properties"]["name"] == {"type": "string"}
+    assert schema["$defs"]["Source"] == {
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+        "type": "object",
+    }

@@ -695,7 +695,8 @@ Kubernetes, or several model frameworks.
 - **Tools:** register `ToolSpec`s from your own packages in an explicit `ToolRegistry`. There is
   no plugin discovery and no dynamic code loading.
 - **MCP:** a transport only forwards `tools/list` and `tools/call` to `tool_definitions` and
-  `call_tool`.
+  `call_tool`. Definitions carry compact input and output schemas (`compact_schema`), and a
+  failed call carries `failure_details`: a hint and whether retrying helps. REST reuses both.
 
 Extension points are `KnowledgeStore` and `RunStore` (confirmed), and `ScaffoldProvider` and
 `EmbeddingProvider`. Each has a Protocol, one reference adapter, and contract tests.
