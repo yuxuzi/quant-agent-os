@@ -1,6 +1,6 @@
 # 0014: Approving a consequential call without leaving the client
 
-- Status: proposed (needs the user's approval before implementation, per AGENTS.md)
+- Status: accepted (approved by the user 2026-11-02, with Q-11 to Q-13 as proposed)
 - Date: 2026-11-02
 - Plan: [agent-surface P6](../plans/agent-surface.md), backlog B-35. Builds on
   [0005](0005-approval-gates.md) (approval gates), [0012](0012-remote-mcp-over-http.md)
@@ -99,12 +99,8 @@ The MCP spec has two ways to involve the user:
 - **Hardening the page later.** OAuth sign-in on the approval page (Q-11), and rate limits on
   the page (P7).
 
-## Open questions
+## Resolved questions
 
-- **Q-11.** How does an approver sign in on the page? Proposed: an approver key in a form post
-  now, and OAuth sign-in through the tenant's identity provider later, which makes the server
-  an OAuth client too.
-- **Q-12.** Four eyes by default? Proposed: required for every tenant but `local`, and
-  configurable per tenant (`separate_approver`).
-- **Q-13.** An approval request lives 15 minutes. Proposed: fixed now, configurable per tenant
-  later.
+- **Q-11.** An approver key in a form post now; OAuth sign-in on the page later.
+- **Q-12.** Four eyes is required for every tenant but `local`, and configurable per tenant.
+- **Q-13 (as proposed).** An approval request lives 15 minutes.
