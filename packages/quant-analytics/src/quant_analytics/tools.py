@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from quant_agent_os.data import DatasetStore
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_agent_os.tools import ToolRegistry, ToolSpec, tool
 from quant_analytics import metrics, risk
@@ -193,6 +194,7 @@ class RiskOutput(BaseModel):
     conventions: dict[str, str]
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
+    data_versions: dict[str, str] = Field(default_factory=dict)
 
 
 class MetricOutput(BaseModel):
@@ -215,6 +217,7 @@ class PerformanceOutput(BaseModel):
     conventions: dict[str, str]
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
+    data_versions: dict[str, str] = Field(default_factory=dict)
 
 
 def _sample_warnings(params: ReturnsInput) -> list[str]:
@@ -413,9 +416,17 @@ TOOLS: list[ToolSpec[Any, Any]] = [analyze_performance, analyze_risk]
 SINGLE_METRIC_TOOLS: list[ToolSpec[Any, Any]] = [annualized_return, max_drawdown]
 
 
-def analytics_tools() -> ToolRegistry:
-    """Return a registry with the served analytics tools (`TOOLS`)."""
-    return ToolRegistry(TOOLS)
+def analytics_tools(datasets: DatasetStore | None = None) -> ToolRegistry:
+    """Return a registry with the served analytics tools (`TOOLS`).
+
+    With ``datasets``, the tools also take series by reference to a dataset column, so a
+    client names its data instead of copying the values (`quant_analytics.referenced`).
+    """
+    if datasets is None:
+        return ToolRegistry(TOOLS)
+    from quant_analytics.referenced import referenced_tools
+
+    return ToolRegistry(referenced_tools(datasets))
 
 
 def _label(name: str) -> str:
