@@ -84,6 +84,21 @@ same tools as `serve-mcp` over HTTP, which other machines may reach, so:
   - There are no public schema pages, no CORS, and no server header.
   - Request bodies are capped at 5 MiB, and error messages never echo the key.
 
+## Docker team server
+
+[docs/deployment.md](deployment.md). The image holds code only. The knowledge store, API-key
+hashes, and run store are volumes, and `.dockerignore` keeps `.env` files and databases out of
+the build context.
+
+The compose file applies these settings to the server:
+- it runs as uid 10001, with a read-only root filesystem, no capabilities, and
+  `no-new-privileges`;
+- the knowledge store and keys are mounted read-only;
+- it publishes only on `127.0.0.1`.
+
+The operator's `ingest` and `keys` commands run with no network. CI checks the image for
+data files, key files, and secret-looking environment variables on every pull request.
+
 ## Approvals for consequential permissions
 
 [Decision 0005](decisions/0005-approval-gates.md) treats `write_local_data`, `execute_code`,
