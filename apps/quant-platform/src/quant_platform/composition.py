@@ -77,28 +77,45 @@ def compose(
     tools: list[ToolSpec[Any, Any]] = []
     resources: list[ResourceSpec] = []
     prompts: list[PromptSpec] = []
-    paragraphs = [PLATFORM_INSTRUCTIONS]
+    served: list[Toolset] = []
     if research is not None:
         tools += research_tools(research)
         resources += research_resources()
         prompts.append(RESEARCH_SIGNAL)
-        paragraphs.append(RESEARCH_INSTRUCTIONS)
+        served.append("research")
     if datasets is not None:
         tools += [*analytics_tools(datasets).specs(), *dataset_tools(datasets)]
         resources += dataset_resources()
         prompts.append(ANALYZE_RETURNS)
-        paragraphs.append(ANALYTICS_INSTRUCTIONS)
+        served.append("analytics")
     if research is not None:
         tools.append(research_report_tool(list(tools), policy))
         prompts.append(REPORT_ON_SIGNAL)
-        paragraphs.append(REPORT_INSTRUCTIONS)
     if factory is not None:
         from quant_app_factory import factory_resources
-        from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
         from quant_app_factory.cli import served_tools as factory_served_tools
 
         tools += factory_served_tools(factory)
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
+        served.append("factory")
+    return Catalog(tools, resources, prompts, instructions_for(served))
+
+
+def instructions_for(toolsets: list[Toolset]) -> str:
+    """Return the server instructions for ``toolsets``, without opening any store.
+
+    A server with many tenants announces the instructions for every toolset it may serve.
+    """
+    paragraphs = [PLATFORM_INSTRUCTIONS]
+    if "research" in toolsets:
+        paragraphs.append(RESEARCH_INSTRUCTIONS)
+    if "analytics" in toolsets:
+        paragraphs.append(ANALYTICS_INSTRUCTIONS)
+    if "research" in toolsets:
+        paragraphs.append(REPORT_INSTRUCTIONS)
+    if "factory" in toolsets:
+        from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
+
         paragraphs.append(FACTORY_INSTRUCTIONS)
-    return Catalog(tools, resources, prompts, "\n\n".join(paragraphs))
+    return "\n\n".join(paragraphs)

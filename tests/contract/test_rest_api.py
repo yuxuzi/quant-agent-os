@@ -24,6 +24,7 @@ from quant_agent_os.api import (
 from quant_agent_os.mcp import call_tool, tool_definitions
 from quant_agent_os.runs import MemoryRunStore, RunRecorder
 from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.serving import Surface
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, tool
 
 ARGUMENTS = {"series_id": "s", "returns": [0.01, -0.02, 0.03], "periods_per_year": 12}
@@ -180,6 +181,72 @@ def test_runs_record_the_rest_actor_and_the_keys_principal(
     assert [(run["actor"], run["principal"]) for run in runs] == [("rest", "alice")]
     assert stored["events"] and {event["principal"] for event in stored["events"]} == {"alice"}
     assert client.get("/v1/runs/nope", headers=headers).status_code == 404
+
+
+class TwoTenants:
+    """local serves the portfolio tools; acme serves only max_drawdown; both share one store."""
+
+    def __init__(self, store: MemoryRunStore) -> None:
+        self.surfaces = {
+            "local": Surface(ToolExecutor(REGISTRY, PermissionPolicy()), run_store=store),
+            "acme": Surface(
+                ToolExecutor(
+                    REGISTRY, PermissionPolicy(tool_allowlist=frozenset({"max_drawdown"}))
+                ),
+                run_store=store,
+            ),
+        }
+
+    def surface(self, tenant: str) -> Surface | None:
+        return self.surfaces.get(tenant)
+
+
+def test_each_key_is_served_its_own_tenant_and_sees_only_its_runs(
+    store: MemoryRunStore, tmp_path: Path
+) -> None:
+    path = tmp_path / "tenants.toml"
+    scopes: list[Any] = ["tools:list", "tools:call", "runs:read"]
+    local = add_key(path, "ann", scopes)
+    acme = add_key(path, "bo", scopes, tenant="acme")
+    other = add_key(path, "cy", scopes, tenant="globex")
+    client = TestClient(build_app(None, KeyRing(load_keys(path)), None, tenancy=TwoTenants(store)))
+    call = {"arguments": ARGUMENTS}
+
+    def run(key: str) -> str:
+        response = client.post("/v1/tools/max_drawdown/call", headers=_auth(key), json=call)
+        return str(response.json()["run_id"])
+
+    local_run, acme_run = run(local), run(acme)
+    acme_tools = client.get("/v1/tools", headers=_auth(acme)).json()
+    seen = [item["run_id"] for item in client.get("/v1/runs", headers=_auth(acme)).json()]
+
+    assert [tool["name"] for tool in acme_tools] == ["max_drawdown"]
+    assert (
+        client.post("/v1/tools/annualized_return/call", headers=_auth(acme), json=call).status_code
+        == 404
+    )
+    assert seen == [acme_run]
+    assert client.get(f"/v1/runs/{local_run}", headers=_auth(acme)).status_code == 404
+    assert client.get(f"/v1/runs/{acme_run}", headers=_auth(local)).status_code == 404
+    assert client.get("/v1/tools", headers=_auth(other)).status_code == 403
+    assert 'tenant = "acme"' in path.read_text()
+
+
+def test_a_single_tenant_server_refuses_keys_of_other_tenants(
+    store: MemoryRunStore, tmp_path: Path
+) -> None:
+    path = tmp_path / "keys.toml"
+    acme = add_key(path, "bo", ["tools:list"], tenant="acme")
+    client = TestClient(build_app(REGISTRY, KeyRing(load_keys(path)), store))
+
+    response = client.get("/v1/tools", headers=_auth(acme))
+
+    assert response.status_code == 403 and "acme" in response.json()["detail"]
+
+
+def test_a_malformed_tenant_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="tenant"):
+        add_key(tmp_path / "keys.toml", "eve", ["tools:list"], tenant="Acme Corp")
 
 
 def test_consequential_calls_wait_for_an_operator_approval_no_key_can_give(

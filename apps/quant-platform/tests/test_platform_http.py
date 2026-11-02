@@ -17,7 +17,7 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.tools import PermissionPolicy
 from quant_platform import compose
 from quant_platform.cli import app as cli
-from quant_platform.http import build_http_app
+from quant_platform.http import build_http_app, single_tenant
 from quant_research import ResearchApp
 
 BASE = "http://127.0.0.1:8000"
@@ -43,7 +43,9 @@ def test_one_port_serves_every_toolset_as_mcp_and_rest(
     store = MemoryRunStore()
     catalog = compose(policy=PermissionPolicy(), research=research.research, datasets=datasets)
     app = build_http_app(
-        catalog, KeyRing(load_keys(tmp_path / "keys.toml")), store, policy=PermissionPolicy()
+        single_tenant(catalog, store, PermissionPolicy()),
+        KeyRing(load_keys(tmp_path / "keys.toml")),
+        instructions=catalog.instructions,
     )
 
     async def main() -> Any:

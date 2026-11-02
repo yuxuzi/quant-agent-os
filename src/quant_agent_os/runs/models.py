@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from quant_agent_os.runtime.executor import ToolCallRecord
+from quant_agent_os.tenancy import DEFAULT_TENANT
 
 RunKind = Literal["call", "plan"]
 # `planned` and `awaiting_approval` are reserved for the approval gate (decision 0005).
@@ -29,7 +30,7 @@ class RunRecord(BaseModel):
     principal: str | None = Field(
         default=None, description="The authenticated caller, e.g. an API key's principal"
     )
-    tenant: str = "local"
+    tenant: str = DEFAULT_TENANT
     platform_version: str
     provider: str | None = None
     registry_digest: str

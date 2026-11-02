@@ -134,6 +134,52 @@ The server sends no CORS headers, so browsers on other origins cannot call it di
 up the `knowledge`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
 ingesting again; the `runs` volume is your audit trail.
 
+## Many tenants (decision 0013)
+
+One server can serve several teams or customers, each with its own corpus, datasets, toolsets,
+and permissions:
+
+```bash
+quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos \
+  --toolsets research,analytics --issuer https://login.acme.example
+quant-research ingest /corpus/acme --store postgresql://qaos_ingest@postgres/qaos --schema qr_acme
+quant-agent-os dataset push returns.csv --id returns --tenant acme
+quant-agent-os api-key new --principal acme-bot --scope tools:list --scope tools:call --tenant acme
+quant-platform serve-http --tenants ~/.quant-agent-os/tenants.toml --host 0.0.0.0
+```
+
+- **The tenants file** (`--tenants`, or `QUANT_AGENT_OS_TENANTS_FILE`) lists each tenant's
+  store, schema, datasets directory, toolsets, permissions, and pinned issuer.
+  `quant-platform tenant list` shows it with passwords hidden, and `tenant disable` stops
+  serving a tenant at the next restart while keeping its data.
+- **On PostgreSQL** each tenant's corpus is its own schema, `qr_<tenant>` by default. The
+  roles that `deploy/postgres/init-roles.sh` creates already let the server's read-only role
+  read every schema that ingestion creates.
+- **In Docker**, mount the tenants file and override the server's command with
+  `--tenants /config/tenants.toml`. Each tenant's datasets go in `/data/datasets/<tenant>`.
+
+**OAuth for connectors.** For Claude or Cursor connectors that sign in through a tenant's
+identity provider, list the provider in the tenants file. Then start the server with the
+public URL of `/mcp`, which tokens must name as their audience:
+
+```toml
+[[authorization_servers]]
+issuer = "https://login.acme.example"
+introspection_url = "https://login.acme.example/oauth2/introspect"
+client_id = "qaos"
+client_secret_env = "ACME_INTROSPECTION_SECRET"   # set this variable on the server
+```
+
+```bash
+ACME_INTROSPECTION_SECRET=... quant-platform serve-http --tenants tenants.toml \
+  --resource-url https://qaos.example.com/mcp --allowed-host qaos.example.com
+```
+
+The server publishes `/.well-known/oauth-protected-resource/mcp`, and its 401 responses point
+there, so a client finds the provider by itself. In the provider, register the server as a
+resource with that audience. Its tokens must carry the scopes (`tools:list`, `tools:call`) and
+a `qaos_tenant` claim naming the tenant; `tenant_claim` in the file changes the claim name.
+
 ## Permissions
 
 The server is read-only by default. The tools that need more (for example `network`, for a

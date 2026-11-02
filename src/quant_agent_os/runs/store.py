@@ -50,12 +50,15 @@ class RunStore(Protocol):
         """Append an audit event; events are never changed or removed."""
         ...
 
-    def get_run(self, run_id: str) -> StoredRun | None:
-        """Return a run with its calls and events, or None if it is unknown."""
+    def get_run(self, run_id: str, *, tenant: str | None = None) -> StoredRun | None:
+        """Return a run with its calls and events, or None if it is unknown.
+
+        With ``tenant``, a run of another tenant is unknown too (decision 0013).
+        """
         ...
 
-    def list_runs(self, limit: int = 20) -> list[RunRecord]:
-        """Return the most recently started runs, newest first."""
+    def list_runs(self, limit: int = 20, *, tenant: str | None = None) -> list[RunRecord]:
+        """Return the most recently started runs, newest first; only ``tenant``'s when given."""
         ...
 
     def close(self) -> None:
@@ -96,11 +99,11 @@ class MemoryRunStore:
         with self._lock:
             self._events.append(event.model_copy(deep=True))
 
-    def get_run(self, run_id: str) -> StoredRun | None:
+    def get_run(self, run_id: str, *, tenant: str | None = None) -> StoredRun | None:
         """Return the run with its calls and events."""
         with self._lock:
             run = self._runs.get(run_id)
-            if run is None:
+            if run is None or (tenant is not None and run.tenant != tenant):
                 return None
             return StoredRun(
                 run=run,
@@ -108,10 +111,11 @@ class MemoryRunStore:
                 events=[event for event in self._events if event.run_id == run_id],
             )
 
-    def list_runs(self, limit: int = 20) -> list[RunRecord]:
+    def list_runs(self, limit: int = 20, *, tenant: str | None = None) -> list[RunRecord]:
         """Return the newest runs first."""
         with self._lock:
-            runs = sorted(self._runs.values(), key=lambda run: run.started_at, reverse=True)
+            runs = [run for run in self._runs.values() if tenant is None or run.tenant == tenant]
+            runs.sort(key=lambda run: run.started_at, reverse=True)
             return runs[:limit]
 
     def close(self) -> None:
@@ -128,6 +132,7 @@ CREATE TABLE IF NOT EXISTS runs (
     record TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS runs_started ON runs (started_at);
+CREATE INDEX IF NOT EXISTS runs_tenant_started ON runs (tenant, started_at);
 CREATE TABLE IF NOT EXISTS tool_calls (
     call_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
@@ -302,10 +307,13 @@ class SqliteRunStore:
             ),
         )
 
-    def get_run(self, run_id: str) -> StoredRun | None:
+    def get_run(self, run_id: str, *, tenant: str | None = None) -> StoredRun | None:
         """Return the run with its calls and events."""
         with self._lock:
-            row = self._db.execute("SELECT record FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            row = self._db.execute(
+                "SELECT record FROM runs WHERE run_id = ? AND (? IS NULL OR tenant = ?)",
+                (run_id, tenant, tenant),
+            ).fetchone()
             if row is None:
                 return None
             calls = self._db.execute(
@@ -331,11 +339,13 @@ class SqliteRunStore:
             ],
         )
 
-    def list_runs(self, limit: int = 20) -> list[RunRecord]:
+    def list_runs(self, limit: int = 20, *, tenant: str | None = None) -> list[RunRecord]:
         """Return the newest runs first."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT record FROM runs ORDER BY started_at DESC, run_id LIMIT ?", (limit,)
+                "SELECT record FROM runs WHERE (? IS NULL OR tenant = ?) "
+                "ORDER BY started_at DESC, run_id LIMIT ?",
+                (tenant, tenant, limit),
             ).fetchall()
         return [RunRecord.model_validate_json(row["record"]) for row in rows]
 

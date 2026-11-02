@@ -1,36 +1,38 @@
-"""MCP over Streamable HTTP (decision 0012): stateless, JSON responses, and REST's API keys.
+"""MCP over Streamable HTTP (decisions 0012, 0013): stateless, JSON, keys or OAuth tokens.
 
-`add_mcp_route` adds ``/mcp`` to an app (the REST app, so both share one port and one set of
-keys). Each request stands alone: a bearer ``qaos_`` key is verified through the SDK's
-`TokenVerifier` interface (P5's OAuth tokens plug in at the same place), each MCP method then
-checks the key's scope (`authorize_request`), and every call is recorded with actor
-``mcp-http`` and the key's principal. DNS-rebinding protection admits only the allowed hosts.
-Needs the ``mcp`` and ``api`` extras.
+`add_mcp_route` adds ``/mcp`` to an app (the REST app, so both share one port). Each request
+stands alone: its bearer credential is verified through the SDK's `TokenVerifier` interface
+(`KeyVerifier` for API keys; OAuth tokens through another verifier), which names the caller's
+tenant in the token's claims. Each MCP method then checks the credential's scope and is served
+the caller's tenant surface (`caller_of`), and every call is recorded with actor ``mcp-http``,
+the principal, and the tenant. DNS-rebinding protection admits only the allowed hosts. Needs
+the ``mcp`` and ``api`` extras.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os.api.keys import KeyRing
-from quant_agent_os.mcp.server import AccessDeniedError, build_server
+from quant_agent_os.mcp.server import AccessDeniedError, Route, Served, build_server
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runs.store import RunStore
-from quant_agent_os.runtime.executor import ToolExecutor
-from quant_agent_os.tools.catalog import PromptSpec, ResourceSpec
+from quant_agent_os.serving import Tenancy
 
 if TYPE_CHECKING:
-    from mcp.server.auth.provider import AccessToken
+    from mcp.server.auth.provider import AccessToken, TokenVerifier
     from starlette.applications import Starlette
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 MAX_REQUEST_BYTES = 5 * 1024 * 1024
+TENANT_CLAIM = "tenant"  # set by every verifier from the verified credential, never the request
 
 
 class KeyVerifier:
-    """A `TokenVerifier` over API keys: the key's principal is the client, its scopes the scopes."""
+    """A `TokenVerifier` over API keys: the key's principal is the client, with its scopes and
+    tenant."""
 
     def __init__(self, keys: KeyRing) -> None:
         self.keys = keys
@@ -42,19 +44,63 @@ class KeyVerifier:
         key = self.keys.authenticate(token)
         if key is None:
             return None
-        return AccessToken(token=token, client_id=key.principal, scopes=list(key.scopes))
+        return AccessToken(
+            token=token,
+            client_id=key.principal,
+            scopes=list(key.scopes),
+            claims={TENANT_CLAIM: key.tenant},
+        )
 
 
-def authorize_request(request: Any, scope: str) -> str:
-    """Return the principal of an authenticated request whose key has ``scope``."""
+@dataclass(frozen=True)
+class Caller:
+    """Who made a request, and in which tenant."""
+
+    principal: str
+    tenant: str
+
+
+def caller_of(request: Any, scope: str) -> Caller:
+    """Return the caller of an authenticated request whose credential has ``scope``.
+
+    The tenant comes only from the verified credential's claims; a credential without one is
+    refused.
+    """
     from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 
     user = request.scope.get("user") if request is not None else None
     if not isinstance(user, AuthenticatedUser):
-        raise AccessDeniedError("Send an API key as 'Authorization: Bearer <key>'.")
+        raise AccessDeniedError("Send a credential as 'Authorization: Bearer <key or token>'.")
     if scope not in user.scopes:
-        raise AccessDeniedError(f"This API key lacks the '{scope}' scope.")
-    return user.access_token.client_id
+        raise AccessDeniedError(f"This credential lacks the '{scope}' scope.")
+    token = user.access_token
+    tenant = (token.claims or {}).get(TENANT_CLAIM)
+    if not isinstance(tenant, str):
+        raise AccessDeniedError("This credential names no tenant.")
+    return Caller(principal=token.subject or token.client_id, tenant=tenant)
+
+
+def tenant_route(tenancy: Tenancy) -> Route:
+    """Return the `Route` that serves each caller its tenant's surface, recording as them."""
+
+    def route(request: Any, scope: str) -> Served:
+        caller = caller_of(request, scope)
+        surface = tenancy.surface(caller.tenant)
+        if surface is None:
+            raise AccessDeniedError(f"Tenant '{caller.tenant}' is not served here.")
+        recorder = (
+            RunRecorder(
+                surface.run_store,
+                actor="mcp-http",
+                principal=caller.principal,
+                tenant=caller.tenant,
+            )
+            if surface.run_store is not None
+            else None
+        )
+        return Served(surface, recorder)
+
+    return route
 
 
 def allowed_hosts(extra: list[str]) -> tuple[list[str], list[str]]:
@@ -70,41 +116,29 @@ def allowed_hosts(extra: list[str]) -> tuple[list[str], list[str]]:
 
 def add_mcp_route(
     app: Starlette,
-    executor: ToolExecutor,
+    tenancy: Tenancy,
     *,
     name: str,
-    keys: KeyRing,
-    run_store: RunStore,
+    verifier: TokenVerifier,
     instructions: str | None = None,
-    resources: list[ResourceSpec] | None = None,
-    prompts: list[PromptSpec] | None = None,
     extra_hosts: list[str] | None = None,
     max_request_bytes: int = MAX_REQUEST_BYTES,
     path: str = "/mcp",
+    resource_metadata_url: str | None = None,
 ) -> None:
-    """Serve ``executor``'s tools, resources, and prompts as MCP at ``path`` on ``app``.
+    """Serve each caller its tenant's tools, resources, and prompts as MCP at ``path``.
 
-    Raises `ValueError` without an enabled key, as the REST app does.
+    ``verifier`` checks bearer credentials (`KeyVerifier` for API keys). With
+    ``resource_metadata_url``, a 401 points clients to the OAuth Protected Resource Metadata.
     """
     from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend, RequireAuthMiddleware
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from mcp.server.transport_security import TransportSecuritySettings
+    from pydantic import AnyHttpUrl
     from starlette.middleware.authentication import AuthenticationMiddleware
-    from starlette.routing import Route
+    from starlette.routing import Route as StarletteRoute
 
-    if not len(keys):
-        raise ValueError("MCP over HTTP needs at least one enabled API key.")
-    server = build_server(
-        executor,
-        name=name,
-        instructions=instructions,
-        resources=resources,
-        prompts=prompts,
-        authorize=authorize_request,
-        recorder_for=lambda principal: RunRecorder(
-            run_store, actor="mcp-http", principal=principal
-        ),
-    )
+    server = build_server(None, name=name, instructions=instructions, route=tenant_route(tenancy))
     hosts, origins = allowed_hosts(extra_hosts or [])
     security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True, allowed_hosts=hosts, allowed_origins=origins
@@ -117,11 +151,14 @@ def add_mcp_route(
             raise RuntimeError("The app's lifespan must run before it serves MCP requests.")
         await running[-1].handle_request(scope, receive, send)
 
+    metadata = AnyHttpUrl(resource_metadata_url) if resource_metadata_url else None
     endpoint = AuthenticationMiddleware(
-        RequireAuthMiddleware(handle, required_scopes=[]),
-        backend=BearerAuthBackend(KeyVerifier(keys)),
+        RequireAuthMiddleware(handle, required_scopes=[], resource_metadata_url=metadata),
+        backend=BearerAuthBackend(verifier),
     )
-    app.router.routes.append(Route(path, endpoint=endpoint, methods=["GET", "POST", "DELETE"]))
+    app.router.routes.append(
+        StarletteRoute(path, endpoint=endpoint, methods=["GET", "POST", "DELETE"])
+    )
     previous = app.router.lifespan_context
 
     @asynccontextmanager

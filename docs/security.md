@@ -108,6 +108,29 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   never logs or echoes a key (contract test). It has no rate limiting yet, so put a
   rate-limiting proxy in front of any non-loopback deployment.
 
+## Tenants and OAuth
+
+[Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
+(`quant-platform serve-http --tenants FILE`):
+- **The tenant comes from the credential only.** An API key's entry names its tenant
+  (`api-key new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
+  or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
+- **Each tenant has its own data.** Its knowledge store is its own PostgreSQL schema
+  (`qr_<tenant>`) or SQLite file, its datasets are its own directory, and its toolsets and
+  permissions are its own. Runs share one store, and every read is filtered by tenant. An
+  unknown or disabled tenant reaches nothing (403).
+- **OAuth tokens are checked by introspection** at an authorization server listed in the
+  tenants file. A token is accepted only if it is active and unexpired, its audience is this
+  server's `--resource-url`, and its tenant claim names a tenant pinned to its issuer. A token
+  is never sent to a server that could not have issued it: a JWT's unverified `iss` only
+  chooses which configured server to ask, and an opaque token needs exactly one configured
+  server. API keys are never introspected. Introspection secrets come from environment
+  variables that the file names; results are cached for at most 60 seconds, and a failed check
+  refuses the token without logging it.
+- **Isolation is a release gate.** `apps/quant-platform/tests/test_platform_tenants.py` runs
+  two tenants with different corpora and datasets on one server and checks that neither can
+  reach the other's passages, datasets, or runs by any tool, URI, or route.
+
 ## PostgreSQL knowledge store
 
 [Decision 0004](decisions/0004-knowledge-store.md).

@@ -24,6 +24,8 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
+from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
+
 Scope = Literal["tools:list", "tools:call", "runs:read"]
 SCOPES: tuple[Scope, ...] = get_args(Scope)
 KEY_PREFIX = "qaos_"
@@ -35,11 +37,12 @@ class ApiKeyError(ValueError):
 
 
 class ApiKey(BaseModel):
-    """One key's hash, who it belongs to, and what it may do."""
+    """One key's hash, who it belongs to, its tenant (decision 0013), and what it may do."""
 
     principal: str = Field(pattern=PRINCIPAL_PATTERN)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     scopes: frozenset[Scope] = Field(min_length=1)
+    tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     disabled: bool = False
 
 
@@ -74,21 +77,27 @@ def load_keys(path: Path) -> list[ApiKey]:
     return keys
 
 
-def add_key(path: Path, principal: str, scopes: Iterable[Scope]) -> str:
+def add_key(
+    path: Path, principal: str, scopes: Iterable[Scope], *, tenant: str = DEFAULT_TENANT
+) -> str:
     """Generate a key, append its hash to ``path`` (created with mode 0600), and return it.
 
-    The key itself is returned once and never written anywhere.
+    The key itself is returned once and never written anywhere. A key acts only within its
+    ``tenant``.
     """
     key = new_key()
-    entry = ApiKey(principal=principal, sha256=hash_key(key), scopes=frozenset(scopes))
+    entry = ApiKey(
+        principal=principal, sha256=hash_key(key), scopes=frozenset(scopes), tenant=tenant
+    )
     if path.exists():
         load_keys(path)  # refuse to append to a file the server could not read
     path.parent.mkdir(parents=True, exist_ok=True)
     scope_list = ", ".join(f'"{scope}"' for scope in sorted(entry.scopes))
-    # The principal pattern and the hex hash need no TOML escaping.
+    # The principal and tenant patterns and the hex hash need no TOML escaping.
     block = (
         f'\n[[keys]]\nprincipal = "{entry.principal}"\nsha256 = "{entry.sha256}"\n'
         f"scopes = [{scope_list}]\n"
+        + (f'tenant = "{entry.tenant}"\n' if entry.tenant != DEFAULT_TENANT else "")
     )
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(descriptor, "a", encoding="utf-8") as handle:

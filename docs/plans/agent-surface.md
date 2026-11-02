@@ -258,6 +258,16 @@ accepted with the factory toolset as an optional extra. Deviations from the step
 **Done when** two tenants on one server cannot observe each other in any test, and Claude
 connects through OAuth.
 
+**Status: done (2026-11-02).** [Decision 0013](../decisions/0013-identity-and-tenancy.md)
+was accepted with introspection, a schema per tenant, and the HTTP admin API left for later.
+Deviations from the steps above:
+- **The default tenant is `local`**, which the run store already recorded, so no migration
+  was needed.
+- **Tenant admin is operator commands.** `quant-platform tenant`, `ingest --schema`, and
+  `dataset push --tenant` (Q-9).
+- **The Keycloak test compose** is documented, not shipped, because Docker was not available
+  to verify it.
+
 ### P6. Approvals in the client, and the remote/local split (B-35; decision 0014; needs approval)
 
 1. **P6.1 URL-mode elicitation.** A consequential call returns `approval_required` and sends

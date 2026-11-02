@@ -20,6 +20,7 @@ from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runs.store import RunStore
 from quant_agent_os.runtime.executor import CallStatus, ToolExecutor, failure_details
 from quant_agent_os.runtime.plan import PlanStep
+from quant_agent_os.serving import SingleTenant, Surface, Tenancy
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
 
@@ -61,19 +62,22 @@ class CallResponse(BaseModel):
 
 
 def build_app(
-    registry: ToolRegistry,
+    registry: ToolRegistry | None,
     keys: KeyRing,
-    run_store: RunStore,
+    run_store: RunStore | None,
     *,
     policy: PermissionPolicy | None = None,
     max_request_bytes: int = MAX_REQUEST_BYTES,
     title: str = "Quant-Agent-OS",
+    tenancy: Tenancy | None = None,
 ) -> "FastAPI":
     """Return the REST app serving ``registry``'s allowed tools.
 
     ``run_store`` records every call and is the approval ledger, so an operator can approve a
-    call that returned ``approval_required`` through the SDK on the same store. Raises
-    `ApiUnavailableError` without the extra and `ValueError` without an enabled key.
+    call that returned ``approval_required`` through the SDK on the same store. With
+    ``tenancy`` (decision 0013), each key is served its own tenant's surface instead, and
+    ``registry``, ``run_store``, and ``policy`` are not used. Raises `ApiUnavailableError`
+    without the extra and `ValueError` without an enabled key.
     """
     try:
         from fastapi import Depends, FastAPI, HTTPException, Request
@@ -84,8 +88,13 @@ def build_app(
         raise ApiUnavailableError(f"REST support is not installed; {INSTALL_HINT}.") from error
     if not len(keys):
         raise ValueError("The REST API needs at least one enabled API key.")
+    if tenancy is None:
+        if registry is None or run_store is None:
+            raise ValueError("Give a registry and a run store, or a tenancy.")
+        executor = ToolExecutor(registry, policy or PermissionPolicy(), approvals=run_store)
+        tenancy = SingleTenant(Surface(executor, run_store=run_store))
+    served_by: Tenancy = tenancy
 
-    executor = ToolExecutor(registry, policy or PermissionPolicy(), approvals=run_store)
     bearer = HTTPBearer(auto_error=False)
     # No unauthenticated schema pages: the tool list itself needs a key.
     app = FastAPI(title=title, docs_url=None, redoc_url=None, openapi_url=None)
@@ -108,19 +117,37 @@ def build_app(
 
         return Depends(check)
 
+    def surface_of(key: ApiKey) -> Surface:
+        surface = served_by.surface(key.tenant)
+        if surface is None:
+            raise HTTPException(403, f"Tenant '{key.tenant}' is not served here.")
+        return surface
+
+    def runs_of(key: ApiKey) -> RunStore:
+        surface = surface_of(key)
+        if surface.run_store is None:
+            raise HTTPException(404, "This server keeps no runs.")
+        return surface.run_store
+
     @app.get("/healthz")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/v1/tools")
     def list_tools(key: Annotated[ApiKey, requires("tools:list")]) -> list[dict[str, Any]]:
-        return tool_definitions(executor)
+        return tool_definitions(surface_of(key).executor)
 
     @app.post("/v1/tools/{name}/call", response_model=CallResponse)
     async def call(
         name: str, request: Request, key: Annotated[ApiKey, requires("tools:call")]
     ) -> Any:
-        served = [spec.name for spec in registry.specs() if executor.policy.allows_tool(spec.name)]
+        surface = surface_of(key)
+        executor = surface.executor
+        served = [
+            spec.name
+            for spec in executor.registry.specs()
+            if executor.policy.allows_tool(spec.name)
+        ]
         if name not in served:
             raise HTTPException(404, f"No tool named '{name}' is served here.")
         body = await _read_body(request, max_request_bytes)
@@ -132,10 +159,14 @@ def build_app(
             raise HTTPException(
                 422, 'The body must be a JSON object: {"arguments": {...}}.'
             ) from None
-        recorder = RunRecorder(run_store, actor="rest", principal=key.principal)
-        record = await run_in_threadpool(
-            recorder.call, executor, PlanStep(tool=name, arguments=arguments)
-        )
+        step = PlanStep(tool=name, arguments=arguments)
+        if surface.run_store is None:
+            record = await run_in_threadpool(executor.execute, step)
+        else:
+            recorder = RunRecorder(
+                surface.run_store, actor="rest", principal=key.principal, tenant=key.tenant
+            )
+            record = await run_in_threadpool(recorder.call, executor, step)
         failure = failure_details(record, served) if record.status != "ok" else {}
         return CallResponse(
             run_id=record.run_id,
@@ -153,11 +184,11 @@ def build_app(
     def list_runs(
         key: Annotated[ApiKey, requires("runs:read")], limit: int = 20
     ) -> list[RunRecord]:
-        return run_store.list_runs(max(1, min(limit, MAX_RUNS)))
+        return runs_of(key).list_runs(max(1, min(limit, MAX_RUNS)), tenant=key.tenant)
 
     @app.get("/v1/runs/{run_id}")
     def get_run(run_id: str, key: Annotated[ApiKey, requires("runs:read")]) -> StoredRun:
-        stored = run_store.get_run(run_id)
+        stored = runs_of(key).get_run(run_id, tenant=key.tenant)
         if stored is None:
             raise HTTPException(404, f"No run {run_id}.")
         return stored

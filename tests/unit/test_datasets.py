@@ -125,3 +125,21 @@ def test_the_cli_pushes_and_lists_datasets(tmp_path: Path) -> None:
     assert pushed.exit_code == 0 and "3 rows, columns fund, market" in pushed.output
     assert listed.exit_code == 0 and "returns" in listed.output
     assert refused.exit_code == 1
+
+
+def test_the_cli_keeps_each_tenants_datasets_apart(tmp_path: Path) -> None:
+    source = tmp_path / "returns.csv"
+    source.write_bytes(PRICES)
+    root = ["--dir", str(tmp_path / "datasets")]
+
+    pushed = CliRunner().invoke(
+        app, ["dataset", "push", str(source), "--id", "returns", "--tenant", "acme", *root]
+    )
+    refused = CliRunner().invoke(
+        app, ["dataset", "push", str(source), "--id", "returns", "--tenant", "../x", *root]
+    )
+
+    assert pushed.exit_code == 0
+    assert DirectoryDatasetStore(tmp_path / "datasets" / "acme").ids() == ["returns"]
+    assert DirectoryDatasetStore(tmp_path / "datasets").ids() == []
+    assert refused.exit_code == 1 and "Tenant id" in refused.output
