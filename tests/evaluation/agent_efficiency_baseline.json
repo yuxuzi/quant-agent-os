@@ -1,19 +1,19 @@
 {
   "servers": {
     "analytics": {
-      "client_only_bytes": 8,
+      "client_only_bytes": 8991,
       "definition_bytes": 3958,
       "instruction_bytes": 133,
       "tools": 4
     },
     "factory": {
-      "client_only_bytes": 6,
+      "client_only_bytes": 12462,
       "definition_bytes": 4583,
       "instruction_bytes": 331,
       "tools": 3
     },
     "research": {
-      "client_only_bytes": 6,
+      "client_only_bytes": 10669,
       "definition_bytes": 2364,
       "instruction_bytes": 479,
       "tools": 3

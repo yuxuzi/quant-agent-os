@@ -4,8 +4,9 @@ A scripted client drives the MCP servers the products serve, over an in-memory M
 way a well-behaved agent would. For each task it records the calls made, the bytes the model
 must write as arguments, the bytes returned into its context, and whether the task succeeded.
 For each server it records the bytes of tool definitions and instructions the model sees on
-every turn (name, title, description, and input schema; output schemas are for the client and
-are counted apart). Bytes stand in for tokens, so the numbers are model-independent.
+every turn: name, description, and input schema. The title, output schema, and annotations are
+for the client and are counted apart. Bytes stand in for tokens, so the numbers do not depend on
+a model. The client validates every result against its tool's output schema.
 
 Run ``uv run python tests/evaluation/agent_efficiency.py`` to print the metrics, and add
 ``--update`` to rewrite the recorded baseline after an intended change. Offline, deterministic,
@@ -46,8 +47,10 @@ ANALYTICS_INSTRUCTIONS = (
     "Report its numbers as computed; do not recompute them."
 )
 WORKDIR_PLACEHOLDER = "/work"
-# Visible to the model on every turn; outputSchema is used by the client only.
-MODEL_VISIBLE = ("name", "title", "description", "inputSchema")
+# What a client sends the model for each tool (the Messages API tool format); the title is for
+# display and the output schema for validating results, so both are counted as client-only.
+MODEL_VISIBLE = ("name", "description", "inputSchema")
+CLIENT_ONLY = ("title", "outputSchema", "annotations")
 
 
 def daily_returns(seed: int, periods: int = 252) -> list[float]:
@@ -203,7 +206,9 @@ async def _evaluate(
                     for tool in listed
                 ),
                 "instruction_bytes": len(instructions.encode("utf-8")),
-                "client_only_bytes": sum(_size(tool.get("outputSchema", {})) for tool in listed),
+                "client_only_bytes": sum(
+                    _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
+                ),
             }
             for task_name, (server_name, task) in TASKS.items():
                 if server_name != name:

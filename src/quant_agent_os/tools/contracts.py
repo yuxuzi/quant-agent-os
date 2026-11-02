@@ -56,14 +56,23 @@ class ToolSpec(Generic[InputT, OutputT]):
         if self.timeout_seconds <= 0 or self.max_output_bytes <= 0:
             raise ToolContractError(f"Tool '{self.name}' limits must be positive.")
 
+    @property
+    def title(self) -> str:
+        """A human-readable display name derived from ``name``, such as "Analyze performance"."""
+        return self.name.replace("_", " ").capitalize()
+
     def descriptor(self) -> dict[str, Any]:
-        """Return a JSON-serializable description for planners, MCP, and documentation."""
+        """Return a JSON-serializable description for planners, MCP, and documentation.
+
+        ``output_schema`` describes the serialized output (what MCP returns as
+        ``structuredContent``), not the Python model's validation input.
+        """
         return {
             "name": self.name,
             "description": self.description,
             "version": self.version,
             "input_schema": self.input_model.model_json_schema(),
-            "output_schema": self.output_model.model_json_schema(),
+            "output_schema": self.output_model.model_json_schema(mode="serialization"),
             "permissions": sorted(permission.value for permission in self.permissions),
             "timeout_seconds": self.timeout_seconds,
             "max_output_bytes": self.max_output_bytes,

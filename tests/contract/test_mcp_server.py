@@ -59,6 +59,11 @@ def test_tools_list_mirrors_the_registry_with_behaviour_hints() -> None:
         tools["max_drawdown"].inputSchema
         == REGISTRY.get("max_drawdown").descriptor()["input_schema"]
     )
+    assert (
+        tools["max_drawdown"].outputSchema
+        == REGISTRY.get("max_drawdown").descriptor()["output_schema"]
+    )
+    assert tools["max_drawdown"].title == "Max drawdown"
 
 
 def test_tool_results_equal_direct_executor_calls() -> None:

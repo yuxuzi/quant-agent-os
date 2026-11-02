@@ -24,15 +24,18 @@ _OUTSIDE = frozenset({Permission.NETWORK, Permission.EXTERNAL_ACTION})
 def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     """Return MCP ``tools/list`` entries for every tool the policy allows.
 
-    ``annotations`` are MCP behaviour hints derived from the declared contract: read-only unless
-    the tool may write, run code, or act externally; open-world when it reaches outside the
-    machine (network access or external actions).
+    ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
+    rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
+    contract: read-only unless the tool may write, run code, or act externally; open-world when
+    it reaches outside the machine (network access or external actions).
     """
     return [
         {
             "name": spec.name,
+            "title": spec.title,
             "description": spec.description,
             "inputSchema": spec.input_model.model_json_schema(),
+            "outputSchema": spec.descriptor()["output_schema"],
             "annotations": {
                 "readOnlyHint": not (spec.permissions & _WRITES),
                 "idempotentHint": spec.idempotent,

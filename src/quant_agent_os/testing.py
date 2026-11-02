@@ -1,7 +1,8 @@
 """Contract checks that tool packages run in their own tests (`check_tool`).
 
 A tool that passes behaves the same through the executor and through MCP, declares a complete,
-serialisable contract, and gives the same output twice when it says it is deterministic.
+serialisable contract, returns output that matches its published output schema, and gives the
+same output twice when it says it is deterministic.
 """
 
 from __future__ import annotations
@@ -49,6 +50,9 @@ def check_tool(
     if record.status == "ok":
         if via_mcp.get("structuredContent") != record.output:
             problems.append("MCP output differs from the direct output")
+        problem = _schema_problem(record.output, descriptor["output_schema"])
+        if problem:
+            problems.append(f"output does not match the published output schema: {problem}")
         if spec.deterministic:
             again = executor.execute(PlanStep(tool=spec.name, arguments=arguments))
             if again.output != record.output:
@@ -56,3 +60,20 @@ def check_tool(
     if problems:
         raise ToolContractError(f"Tool '{spec.name}' breaks the contract: " + "; ".join(problems))
     return record
+
+
+def _schema_problem(output: Any, schema: dict[str, Any]) -> str | None:
+    """Return why ``output`` fails ``schema``, as an MCP client would check it, or None.
+
+    Uses ``jsonschema`` when it is installed (it comes with the ``mcp`` extra) and skips the
+    check otherwise.
+    """
+    try:
+        import jsonschema  # type: ignore[import-untyped]  # no stubs; comes with the mcp extra
+    except ImportError:
+        return None
+    try:
+        jsonschema.validate(output, schema)
+    except jsonschema.ValidationError as error:
+        return str(error.message)
+    return None
