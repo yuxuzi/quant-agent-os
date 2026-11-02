@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build the team-server image and prove it works end to end (B-19). CI runs this; so can you.
+# Build the team-server image and prove it works end to end (B-19, B-33). CI runs this; so can
+# you.
 #   deploy/smoke-test.sh            # the SQLite store (compose.yaml)
 #   deploy/smoke-test.sh postgres   # PostgreSQL with pgvector (compose.postgres.yaml)
 # It uses its own compose project and port, and removes its volumes when it finishes.
@@ -50,6 +51,8 @@ echo "== operator commands: ingest the sample corpus and issue a key"
 key="$("${compose[@]}" run --rm -T keys new --principal smoke \
   --scope tools:list --scope tools:call --scope runs:read 2>/dev/null | tail -n 1)"
 [[ "$key" == qaos_* ]] || fail "no API key was printed"
+"${compose[@]}" run --rm -T datasets push /import/monthly-returns.csv --id monthly >/dev/null \
+  || fail "the sample dataset was not added"
 
 echo "== docker compose up"
 "${compose[@]}" up -d server
@@ -71,6 +74,25 @@ grep -q '"status":"ok"' <<<"$result" || fail "the call did not succeed: $result"
 run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$result")"
 curl -fsS "${auth[@]}" "$base/v1/runs/$run_id" | grep -q '"principal":"smoke"' \
   || fail "the run does not record the key's principal"
+
+echo "== MCP over HTTP at /mcp (decision 0012)"
+rpc() { printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}' "$1" "$2"; }
+mcp_headers=(-H 'content-type: application/json' -H 'accept: application/json, text/event-stream')
+code="$(curl -s -o /dev/null -w '%{http_code}' "${mcp_headers[@]}" \
+  -d "$(rpc tools/list '{}')" "$base/mcp")"
+[[ "$code" == "401" ]] || fail "an unauthenticated MCP request got $code, not 401"
+code="$(curl -s -o /dev/null -w '%{http_code}' "${auth[@]}" "${mcp_headers[@]}" \
+  -H 'Host: evil.example' -d "$(rpc tools/list '{}')" "$base/mcp")"
+[[ "$code" != "200" ]] || fail "a foreign Host header was accepted"
+curl -fsS "${auth[@]}" "${mcp_headers[@]}" -d "$(rpc tools/list '{}')" "$base/mcp" \
+  | grep -q '"research_report"' || fail "MCP tools/list lacks research_report"
+called="$(curl -fsS "${auth[@]}" "${mcp_headers[@]}" -d "$(rpc tools/call \
+  '{"name":"research_report","arguments":{"focus":"momentum","returns":{"dataset":"monthly","column":"strategy"},"periods_per_year":12}}')" \
+  "$base/mcp")"
+grep -q '"isError":false' <<<"$called" || fail "the MCP call failed: $called"
+grep -q '"sharpe_ratio"' <<<"$called" || fail "the report has no metrics: $called"
+curl -fsS "${auth[@]}" "$base/v1/runs" | grep -q '"actor":"mcp-http"' \
+  || fail "the MCP call was not recorded with its caller"
 
 echo "== the server cannot write its knowledge store"
 if [[ "$variant" == sqlite ]]; then

@@ -26,6 +26,13 @@ dependencies = [
 factory = [
     "quant-agent-os-factory",
 ]
+# Pass-throughs to Quant Research, for the team image.
+pdf = [
+    "quant-agent-os-research[pdf]",
+]
+postgres = [
+    "quant-agent-os-research[postgres]",
+]
 
 [project.scripts]
 quant-platform = "quant_platform.cli:main"

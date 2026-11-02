@@ -5,10 +5,15 @@
 #   CORPUS=/path/to/notes docker compose -f deploy/compose.postgres.yaml run --rm ingest
 #   docker compose -f deploy/compose.postgres.yaml run --rm -T keys new --principal alice \
 #       --scope tools:list --scope tools:call
+#   DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.postgres.yaml run --rm \
+#       datasets push /import/returns.csv --id returns
 #   docker compose -f deploy/compose.postgres.yaml up -d server
 #
+# The server answers MCP at /mcp and REST at /v1 (decision 0012).
+#
 # PostgreSQL is on an internal network only. The server connects as qaos_reader, which can
-# only read; ingestion connects as qaos_ingest. Only the run store volume is writable.
+# only read; ingestion connects as qaos_ingest. Datasets and keys are mounted read-only; only
+# the run store volume is writable.
 
 x-image: &image
   image: ${QAOS_IMAGE:-quant-agent-os:local}
@@ -42,7 +47,7 @@ services:
   server:
     <<: [*image, *hardened]
     restart: unless-stopped
-    command: ["serve-api", "--store", "postgresql://qaos_reader@postgres:5432/qaos",
+    command: ["serve-http", "--store", "postgresql://qaos_reader@postgres:5432/qaos",
               "--runs", "/data/runs/runs.db", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       PGPASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
@@ -54,6 +59,7 @@ services:
       - "127.0.0.1:${QAOS_PORT:-8000}:8000"
     volumes:
       - keys:/keys:ro
+      - datasets:/data/datasets:ro
       - runs:/data/runs
     networks: [backend, frontend]
     read_only: true
@@ -74,6 +80,16 @@ services:
     volumes:
       - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
     networks: [backend]  # internal: PostgreSQL only, no internet
+
+  datasets:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["quant-agent-os", "dataset"]
+    command: ["--help"]
+    volumes:
+      - datasets:/data/datasets
+      - ${DATASETS_SOURCE:-./sample-data}:/import:ro
+    network_mode: none
 
   keys:
     <<: [*image, *hardened]
@@ -100,5 +116,6 @@ networks:
 
 volumes:
   pgdata:
+  datasets:
   keys:
   runs:

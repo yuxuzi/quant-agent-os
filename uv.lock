@@ -1970,6 +1970,12 @@ dependencies = [
 factory = [
     { name = "quant-agent-os-factory" },
 ]
+pdf = [
+    { name = "quant-agent-os-research", extra = ["pdf"] },
+]
+postgres = [
+    { name = "quant-agent-os-research", extra = ["postgres"] },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1978,10 +1984,12 @@ requires-dist = [
     { name = "quant-agent-os-analytics", editable = "packages/quant-analytics" },
     { name = "quant-agent-os-factory", marker = "extra == 'factory'", editable = "packages/quant-app-factory" },
     { name = "quant-agent-os-research", editable = "packages/quant-research" },
+    { name = "quant-agent-os-research", extras = ["pdf"], marker = "extra == 'pdf'", editable = "packages/quant-research" },
+    { name = "quant-agent-os-research", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/quant-research" },
     { name = "rich", specifier = ">=13.7" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["factory"]
+provides-extras = ["factory", "pdf", "postgres"]
 
 [[package]]
 name = "quant-agent-os-research"
