@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Build the team-server image and prove it works end to end (B-19). CI runs this; so can you.
+# It uses its own compose project and port, and removes its volumes when it finishes.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+export QAOS_PORT="${QAOS_PORT:-18000}"
+compose=(docker compose -p qaos-smoke -f deploy/compose.yaml)
+base="http://127.0.0.1:${QAOS_PORT}"
+trap '"${compose[@]}" logs server || true; "${compose[@]}" down -v --remove-orphans' EXIT
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+"${compose[@]}" build
+image="$("${compose[@]}" config --images | head -n 1)"
+
+echo "== the image holds no data, keys, or secrets, and runs as a non-root user"
+[[ "$(docker run --rm --entrypoint id "$image" -u)" == "10001" ]] || fail "image runs as root"
+found="$(docker run --rm --entrypoint sh "$image" -c \
+  'find / -xdev \( -name "*.db" -o -name "api-keys.toml" -o -name ".env" -o -name "*.toml.bak" \) \
+     -not -path "/proc/*" 2>/dev/null' || true)"
+[[ -z "$found" ]] || fail "files that belong in volumes are in the image: $found"
+env_names="$(docker image inspect "$image" --format '{{range .Config.Env}}{{println .}}{{end}}')"
+if grep -Ei '^[A-Z_]*(SECRET|TOKEN|PASSWORD|API_KEY)=' <<<"$env_names"; then
+  fail "the image sets a secret-looking environment variable"
+fi
+
+echo "== operator commands: ingest the sample corpus and issue a key"
+"${compose[@]}" run --rm -T ingest
+key="$("${compose[@]}" run --rm -T keys new --principal smoke \
+  --scope tools:list --scope tools:call --scope runs:read 2>/dev/null | tail -n 1)"
+[[ "$key" == qaos_* ]] || fail "no API key was printed"
+
+echo "== docker compose up"
+"${compose[@]}" up -d server
+for _ in $(seq 1 60); do
+  curl -fsS "$base/healthz" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS "$base/healthz" | grep -q '"ok"' || fail "the server never became healthy"
+
+echo "== authentication and a real call"
+code="$(curl -s -o /dev/null -w '%{http_code}' "$base/v1/tools")"
+[[ "$code" == "401" ]] || fail "an unauthenticated request got $code, not 401"
+auth=(-H "Authorization: Bearer $key")
+curl -fsS "${auth[@]}" "$base/v1/tools" | grep -q '"generate_strategy"' || fail "tools not listed"
+result="$(curl -fsS "${auth[@]}" -X POST -H 'content-type: application/json' \
+  -d '{"arguments": {"focus": "short-term reversal"}}' \
+  "$base/v1/tools/generate_strategy/call")"
+grep -q '"status":"ok"' <<<"$result" || fail "the call did not succeed: $result"
+run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$result")"
+curl -fsS "${auth[@]}" "$base/v1/runs/$run_id" | grep -q '"principal":"smoke"' \
+  || fail "the run does not record the key's principal"
+
+echo "== the server cannot write its knowledge store"
+if "${compose[@]}" exec -T server sh -c 'touch /data/knowledge/x' 2>/dev/null; then
+  fail "the knowledge store is writable from the server"
+fi
+
+echo "PASS: team server smoke test"

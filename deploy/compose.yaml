@@ -1,0 +1,74 @@
+# Quant-Agent-OS team server (B-19). See docs/deployment.md for the full walkthrough.
+#
+#   docker compose -f deploy/compose.yaml build
+#   CORPUS=/path/to/notes docker compose -f deploy/compose.yaml run --rm ingest
+#   docker compose -f deploy/compose.yaml run --rm keys new --principal alice \
+#       --scope tools:list --scope tools:call
+#   docker compose -f deploy/compose.yaml up -d server
+#
+# The server reaches the knowledge store and keys read-only. Only the run store is writable.
+
+x-image: &image
+  image: ${QAOS_IMAGE:-quant-agent-os:local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+services:
+  server:
+    <<: *image
+    restart: unless-stopped
+    # Permissions stay read-only unless QUANT_AGENT_OS_GRANTED_PERMISSIONS is set here
+    # (docs/security.md).
+    ports:
+      # Loopback only. Put a TLS-terminating reverse proxy in front before exposing it.
+      - "127.0.0.1:${QAOS_PORT:-8000}:8000"
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - keys:/keys:ro
+      - runs:/data/runs
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # Operator commands: run them with `docker compose run --rm <name> ...`.
+  ingest:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["quant-research", "ingest"]
+    command: ["/corpus", "--store", "/data/knowledge/kb.db"]
+    volumes:
+      - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
+      - knowledge:/data/knowledge
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  keys:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["quant-agent-os", "api-key"]
+    command: ["--help"]
+    volumes:
+      - keys:/keys
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  runs:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["quant-research", "runs", "--runs", "/data/runs/runs.db"]
+    command: []
+    volumes:
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  knowledge:
+  keys:
+  runs:
