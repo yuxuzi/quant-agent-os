@@ -88,7 +88,7 @@ product.
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
 | MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra); tool annotations from declared permissions | Confirmed |
 | SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Confirmed |
-| REST API | `api/` | FastAPI over the same executor (optional `api` extra) | Proposed, deferred |
+| REST API | `api/` | FastAPI over the same executor and recorder (optional `api` extra); scoped API keys stored as hashes ([0011](decisions/0011-rest-api-and-api-keys.md)) | Confirmed (B-18) |
 | Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
 
 Core builds only the interfaces the first vertical slice needs. Each proposed row names the
@@ -574,7 +574,7 @@ Further rules:
 | MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter; `quant-research serve-mcp` | Confirmed |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
 | CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
-| REST | Web apps, non-Python clients, the hosted offering | FastAPI over the executor (optional extra) | Deferred until a client needs it |
+| REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `quant-research serve-api` | Confirmed (B-18) |
 
 The rules that apply to every interface:
 - Interfaces contain no business logic.
@@ -668,9 +668,10 @@ See [security.md](security.md) for details.
   - A value that looks like a secret is refused.
   - A name resolves only in the process that needs it, and is passed to a program only through
     `run_command`'s `extra_env`, for exactly that name.
-- HTTP interfaces (later) need authentication: API keys with scopes first, then OIDC. They also
-  carry a `principal` on every audit event. Tenancy is a column in the run store from day one,
-  but multi-tenant hosting remains out of scope.
+- HTTP interfaces need authentication. The REST interface has API keys with scopes (B-18,
+  [decision 0011](decisions/0011-rest-api-and-api-keys.md)); OIDC comes later. Each REST call
+  records the key's `principal` on the run and on every audit event. Tenancy is a column in
+  the run store from day one, but multi-tenant hosting remains out of scope.
 - Still out of scope: trading, brokerage connectivity, unrestricted code execution, and
   autonomous external actions.
 

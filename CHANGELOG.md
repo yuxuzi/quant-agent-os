@@ -110,6 +110,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A REST interface with scoped API keys (B-18, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md);
+  optional `api` extra with FastAPI and uvicorn):
+  - **Serving.** `quant-research serve-api` serves the research tools over HTTP on
+    `127.0.0.1:8000` by default. It lists tools, calls them, and reads runs, through the same
+    executor and run recorder as MCP, so a REST result equals the MCP result.
+  - **Keys.** `quant-agent-os api-key new --principal alice --scope tools:call` prints a key
+    once and stores only its SHA-256 hash, in `~/.quant-agent-os/api-keys.toml` or
+    `QUANT_AGENT_OS_API_KEYS_FILE`. The scopes are `tools:list`, `tools:call`, and
+    `runs:read`. They narrow access and never widen the permission policy, which stays
+    read-only by default.
+  - **Audit.** Every REST call is a run with actor `rest` and the key's principal, on the run
+    and on every audit event (run-store schema 3; older stores upgrade in place).
+  - **Defaults.** The server does not start without an enabled key or a run store, offers no
+    route to approve calls, publishes no schema pages, caps request bodies at 5 MiB, and warns
+    when bound beyond loopback.
 - `analyze_risk` in Quant Analytics (B-21). From a portfolio's weights and its assets' returns,
   it returns annualised volatility and each asset's marginal, component, and percent
   contribution to it. The contributions are Euler's, so they add up exactly, and a negative

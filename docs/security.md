@@ -59,6 +59,31 @@ in memory unless it is given a run store. What each part of a record holds:
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
 
+## REST interface
+
+[Decision 0011](decisions/0011-rest-api-and-api-keys.md). `quant-research serve-api` serves the
+same tools as `serve-mcp` over HTTP, which other machines may reach, so:
+- **Every route but `/healthz` needs an API key.** Send it as `Authorization: Bearer <key>`.
+  `quant-agent-os api-key new` prints a key once. The keys file
+  (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256
+  hashes and is created with mode 0600. To revoke a key, delete its entry or set
+  `disabled = true`, then restart the server. The server does not start without an enabled key.
+- **Scopes narrow; they never widen.**
+  - `tools:list` lists the tools and `tools:call` calls them.
+  - `runs:read` reads every run in the store, including retrieved passages, so grant it like
+    access to the corpus.
+  - The permission policy is the same as `serve-mcp`'s, read-only by default.
+  - There is no approval route. A consequential call returns `approval_required`, and the
+    operator approves it through the SDK on the same run store.
+- **Every call is audited.** Each call is a run with actor `rest` and the key's principal, on
+  the run and on every audit event. The server does not start if the run store cannot be
+  opened.
+- **Exposure.**
+  - The server binds `127.0.0.1` by default and warns when bound anywhere else.
+  - Terminate TLS, and rate-limit, in a reverse proxy.
+  - There are no public schema pages, no CORS, and no server header.
+  - Request bodies are capped at 5 MiB, and error messages never echo the key.
+
 ## Approvals for consequential permissions
 
 [Decision 0005](decisions/0005-approval-gates.md) treats `write_local_data`, `execute_code`,
@@ -71,7 +96,7 @@ in memory unless it is given a run store. What each part of a record holds:
     `awaiting_approval`.
   - The operator approves through the SDK (`Platform.approve`, then `Platform.resume`) or by
     confirming `quant-factory create`.
-  - Models and MCP clients can never create approvals.
+  - Models, MCP clients, and REST clients can never create approvals.
 - **Standing approvals.** An operator can pre-approve a permission for every call with
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
   it records `standing:<permission>`.

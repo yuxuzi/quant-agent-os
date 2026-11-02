@@ -21,6 +21,7 @@ It has two products built on one core platform:
 | --- | --- |
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
+| Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
@@ -67,10 +68,21 @@ Claude Desktop uses the same command in `claude_desktop_config.json`. Give the f
 
 Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
 cites file, page, and line ranges. Ask for a strategy, and `generate_strategy` returns a spec
-whose every item cites its passages, with open questions for what the corpus leaves out. The server is read-only, writes nothing to the store, and
-sends nothing off the machine unless you choose a hosted `--embedder`. Each call is recorded
+whose every item cites its passages, with open questions for what the corpus leaves out. The
+server is read-only, writes nothing to the store, and sends nothing off the machine unless you
+choose a hosted `--embedder`. Each call is recorded
 in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
+
+Web apps and other languages can call the same tools over REST with an API key (install the
+`api` extra):
+
+```bash
+KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call)
+uv run quant-research serve-api --store ~/research/.kb.db &      # http://127.0.0.1:8000
+curl -H "Authorization: Bearer $KEY" -X POST http://127.0.0.1:8000/v1/tools/find_related_signals/call \
+  -H 'content-type: application/json' -d '{"arguments": {"query": "short-term reversal"}}'
+```
 
 ## Generate an app
 

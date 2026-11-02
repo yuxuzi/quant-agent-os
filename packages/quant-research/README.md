@@ -22,6 +22,14 @@ claude mcp add quant-research -- \
   uv run --directory /path/to/quant-agent-os quant-research serve-mcp --store /abs/path/kb.db
 ```
 
+Or serve them over REST to callers with an API key (the `api` extra; see
+[docs/security.md](../../docs/security.md#rest-interface)):
+
+```bash
+uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call
+uv run quant-research serve-api --store /abs/path/kb.db
+```
+
 Hosted embedders send chunk text (at ingestion) and query text (at search) to the provider.
 Ingest and search with the same `--embedder` and `--embedding-model`. To compare a hosted
 model with the baseline, run
