@@ -4,7 +4,7 @@ Keyword search uses FTS5, graph expansion a recursive CTE, and vector search bru
 similarity over float32 blobs. That is exact and fine for MVP-sized corpora (thousands of
 chunks); pgvector replaces it at scale behind the same `VectorIndex` port.
 
-The schema is the relational design shared with the planned PostgreSQL adapter (decision 0004).
+The schema is the relational design shared with `PostgresKnowledgeStore` (decision 0004).
 Use ``":memory:"`` for tests.
 
 The executor runs tools on worker threads (and a timed-out call may still be running), so one
@@ -35,6 +35,7 @@ from quant_research.domain.models import (
     Relation,
 )
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
+from quant_research.infrastructure.terms import matched, query_tokens
 
 SCHEMA_VERSION = 3
 
@@ -124,13 +125,7 @@ ORDER BY hops, confidence DESC, id
 """
 EDGES_PER_TRIPLE = 3
 
-_TOKEN = re.compile(r"[A-Za-z0-9]+")
-
-
-def _matched(tokens: Iterable[str], text: str) -> list[str]:
-    """Return the ``tokens`` that occur in ``text`` as whole words, case-insensitively."""
-    words = {word.lower() for word in _TOKEN.findall(text)}
-    return [token for token in tokens if token in words]
+_TOKEN = re.compile(r"[A-Za-z0-9]+")  # the term-overlap fallback's words
 
 
 P = ParamSpec("P")
@@ -397,7 +392,7 @@ class SqliteKnowledgeStore:
         rows = self._db.execute(
             "SELECT chunk_id, entity_id, MIN(start) AS first FROM mentions "
             "WHERE chunk_id IN (SELECT value FROM json_each(?)) "
-            "GROUP BY chunk_id, entity_id ORDER BY chunk_id, first",
+            "GROUP BY chunk_id, entity_id ORDER BY chunk_id, first, entity_id",
             (json.dumps(sorted(set(chunk_ids))),),
         )
         for row in rows:
@@ -418,7 +413,7 @@ class SqliteKnowledgeStore:
     @_locked
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
         """Return chunks ranked by BM25 (FTS5), or by term overlap when FTS5 is unavailable."""
-        tokens = sorted({token.lower() for token in _TOKEN.findall(query)})
+        tokens = query_tokens(query)
         if not tokens:
             return []
         if self.has_fts:
@@ -433,7 +428,7 @@ class SqliteKnowledgeStore:
                 KeywordHit(
                     chunk_id=row["chunk_id"],
                     score=row["score"],
-                    matched=_matched(tokens, row["text"]),
+                    matched=matched(tokens, row["text"]),
                 )
                 for row in rows
             ]
@@ -442,15 +437,15 @@ class SqliteKnowledgeStore:
             words = [word.lower() for word in _TOKEN.findall(row["text"])]
             score = sum(words.count(token) for token in tokens) / (1 + len(words)) ** 0.5
             if score > 0:
-                matched = [token for token in tokens if token in words]
-                scored.append(KeywordHit(chunk_id=row["id"], score=score, matched=matched))
+                found = [token for token in tokens if token in words]
+                scored.append(KeywordHit(chunk_id=row["id"], score=score, matched=found))
         scored.sort(key=lambda hit: (-hit.score, hit.chunk_id))
         return scored[:limit]
 
     @_locked
     def term_frequencies(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]:
         """Return the chunk count and, per term, the number of chunks containing it."""
-        tokens = sorted({token.lower() for term in terms for token in _TOKEN.findall(term)})
+        tokens = sorted({token for term in terms for token in query_tokens(term)})
         total = self._db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
         if self.has_fts:
             frequencies = {
@@ -462,7 +457,7 @@ class SqliteKnowledgeStore:
             return total, frequencies
         frequencies = dict.fromkeys(tokens, 0)
         for row in self._db.execute("SELECT text FROM chunks"):
-            for token in set(_matched(tokens, row["text"])):
+            for token in set(matched(tokens, row["text"])):
                 frequencies[token] += 1
         return total, frequencies
 

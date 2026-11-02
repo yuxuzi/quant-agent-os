@@ -11,8 +11,11 @@ What runs:
   the API-key hashes, and `runs` holds the run store and audit trail.
 - **The image holds code only.** It contains no corpus, keys, runs, or secrets.
 
-PostgreSQL arrives with the PostgreSQL knowledge store (B-14). SQLite is enough here, because
-serving only reads the store. The corpus changes only when the operator runs `ingest`.
+There are two variants, and they give the same answers for the same corpus:
+- **SQLite** (`deploy/compose.yaml`) is the simplest. It is enough for one team, because
+  serving only reads the store, and the corpus changes only when the operator runs `ingest`.
+- **PostgreSQL with pgvector** (`deploy/compose.postgres.yaml`) suits larger corpora, existing
+  database operations, and backups. See [PostgreSQL](#postgresql) below. The same steps apply.
 
 Everything below runs from the repository root. You need Docker with Compose v2.
 
@@ -107,17 +110,49 @@ hosted embedder) are refused unless the operator sets `QUANT_AGENT_OS_GRANTED_PE
 the `server` service. Consequential permissions also need a per-call approval, which no API
 key can give ([security](security.md)).
 
+## PostgreSQL
+
+Set three passwords, then use `compose.postgres.yaml` in every command above:
+
+```bash
+cp deploy/.env.example deploy/.env       # never committed; set each password (openssl rand -hex 24)
+docker compose -f deploy/compose.postgres.yaml build
+CORPUS=/path/to/notes docker compose -f deploy/compose.postgres.yaml run --rm ingest
+docker compose -f deploy/compose.postgres.yaml run --rm -T keys new --principal alice \
+  --scope tools:list --scope tools:call
+docker compose -f deploy/compose.postgres.yaml up -d server
+```
+
+What changes:
+- **PostgreSQL** runs from `pgvector/pgvector:0.8.6-pg17`, pinned by digest, on an internal
+  network with no published port and no internet access. Its data is in the `pgdata` volume.
+- **Two database roles.** On first start, `deploy/postgres/init-roles.sh` creates pgvector and
+  two roles:
+  - `qaos_ingest` owns the `quant_research` schema, and `ingest` connects as it;
+  - `qaos_reader` can only `SELECT`, and its transactions are read-only. The server connects
+    as this role, so even a compromised server cannot change the corpus.
+- **Passwords** reach the containers as `PGPASSWORD`, from `deploy/.env`. Anyone who can run
+  `docker inspect` on the host can read them, so restrict access to the Docker host.
+- **The run store** stays a SQLite file in the `runs` volume.
+
+To use an existing PostgreSQL server instead, give the server and `ingest` its URLs
+(`--store postgresql://user@host/db`) and passwords. Create an equivalent read-only role for
+the server.
+
 ## Check it yourself
 
-`deploy/smoke-test.sh` is what CI runs on every pull request. It:
+`deploy/smoke-test.sh` is what CI runs on every pull request, for both variants. It:
 - builds the image and checks that it runs as non-root and holds no data, keys, or
   secret-looking environment variables;
 - ingests the sample corpus, issues a key, and runs `docker compose up`;
 - checks health, a 401 without a key, a real call, the principal on the recorded run, and
   that the server cannot write its knowledge store.
 
-It uses its own compose project and port 18000, and it removes its volumes afterwards.
+It uses its own compose project and port 18000, and it removes its volumes afterwards. On
+PostgreSQL it also checks that the server's role is refused writes by permission, with
+throwaway passwords.
 
 ```bash
-deploy/smoke-test.sh
+deploy/smoke-test.sh            # SQLite
+deploy/smoke-test.sh postgres   # PostgreSQL with pgvector
 ```

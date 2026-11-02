@@ -1,4 +1,5 @@
-# Quant-Agent-OS team server: the Quant Research tools over REST (B-19, docs/deployment.md).
+# Quant-Agent-OS team server: the Quant Research tools over REST (B-19, docs/deployment.md),
+# over a SQLite file (compose.yaml) or PostgreSQL with pgvector (compose.postgres.yaml).
 #
 # Build from the repository root:  docker build -f deploy/Dockerfile -t quant-agent-os .
 # The image holds code only: no knowledge store, API keys, run store, or secrets. Those
@@ -24,12 +25,12 @@ COPY packages/quant-research/pyproject.toml packages/quant-research/
 COPY packages/quant-analytics/pyproject.toml packages/quant-analytics/
 COPY packages/quant-app-factory/pyproject.toml packages/quant-app-factory/
 RUN uv sync --locked --no-dev --no-install-workspace \
-        --package quant-agent-os-research --extra api --extra pdf
+        --package quant-agent-os-research --extra api --extra pdf --extra postgres
 COPY README.md LICENSE ./
 COPY src src
 COPY packages/quant-research packages/quant-research
 RUN uv sync --locked --no-dev --no-editable \
-        --package quant-agent-os-research --extra api --extra pdf
+        --package quant-agent-os-research --extra api --extra pdf --extra postgres
 
 FROM ${PYTHON_IMAGE}
 # A fixed non-root user. The data directories are created here, owned by that user, so named

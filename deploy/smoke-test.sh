@@ -1,18 +1,38 @@
 #!/usr/bin/env bash
 # Build the team-server image and prove it works end to end (B-19). CI runs this; so can you.
+#   deploy/smoke-test.sh            # the SQLite store (compose.yaml)
+#   deploy/smoke-test.sh postgres   # PostgreSQL with pgvector (compose.postgres.yaml)
 # It uses its own compose project and port, and removes its volumes when it finishes.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+variant="${1:-sqlite}"
 export QAOS_PORT="${QAOS_PORT:-18000}"
-compose=(docker compose -p qaos-smoke -f deploy/compose.yaml)
+case "$variant" in
+  sqlite) compose=(docker compose -p qaos-smoke-sqlite -f deploy/compose.yaml) ;;
+  postgres)
+    # Throwaway passwords for this run only, outside the repository.
+    env_file="$(mktemp)"
+    for name in QAOS_POSTGRES_PASSWORD QAOS_INGEST_PASSWORD QAOS_READER_PASSWORD; do
+      echo "$name=$(python3 -c 'import secrets; print(secrets.token_hex(16))')" >>"$env_file"
+    done
+    compose=(docker compose -p qaos-smoke-postgres -f deploy/compose.postgres.yaml
+             --env-file "$env_file")
+    ;;
+  *) echo "usage: $0 [sqlite|postgres]" >&2; exit 2 ;;
+esac
 base="http://127.0.0.1:${QAOS_PORT}"
-trap '"${compose[@]}" logs server || true; "${compose[@]}" down -v --remove-orphans' EXIT
+cleanup() {
+  "${compose[@]}" logs server || true
+  "${compose[@]}" down -v --remove-orphans
+  [[ -z "${env_file:-}" ]] || rm -f "$env_file"
+}
+trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 "${compose[@]}" build
-image="$("${compose[@]}" config --images | head -n 1)"
+image="${QAOS_IMAGE:-quant-agent-os:local}"  # the server's image, not the database's
 
 echo "== the image holds no data, keys, or secrets, and runs as a non-root user"
 [[ "$(docker run --rm --entrypoint id "$image" -u)" == "10001" ]] || fail "image runs as root"
@@ -53,8 +73,16 @@ curl -fsS "${auth[@]}" "$base/v1/runs/$run_id" | grep -q '"principal":"smoke"' \
   || fail "the run does not record the key's principal"
 
 echo "== the server cannot write its knowledge store"
-if "${compose[@]}" exec -T server sh -c 'touch /data/knowledge/x' 2>/dev/null; then
-  fail "the knowledge store is writable from the server"
+if [[ "$variant" == sqlite ]]; then
+  if "${compose[@]}" exec -T server sh -c 'touch /data/knowledge/x' 2>/dev/null; then
+    fail "the knowledge store is writable from the server"
+  fi
+else
+  # Refused by permission, not only by read-only transactions.
+  denied="$("${compose[@]}" exec -T postgres psql -U qaos_reader -d qaos \
+    -c "SET default_transaction_read_only = off" \
+    -c "DELETE FROM quant_research.chunks" 2>&1 || true)"
+  grep -q "permission denied" <<<"$denied" || fail "the server's role can write: $denied"
 fi
 
-echo "PASS: team server smoke test"
+echo "PASS: team server smoke test ($variant)"

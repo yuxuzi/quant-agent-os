@@ -55,6 +55,23 @@ research = open_research(".quant-research/knowledge.db")
 registry = ToolRegistry(research_tools(research.research))
 ```
 
-The design is in [docs/architecture.md §6–7](../../docs/architecture.md). Storage is SQLite
-(standard library) today, including an exact vector index. PostgreSQL with pgvector is
-planned behind the same `KnowledgeStore` and `VectorIndex` ports.
+The design is in [docs/architecture.md §6–7](../../docs/architecture.md).
+
+### Storage: SQLite or PostgreSQL
+
+Storage is SQLite (standard library) by default, including an exact vector index. For a team
+server or a larger corpus, use PostgreSQL with pgvector (the `postgres` extra). It gives the
+same answers, because it scores keywords with FTS5's BM25:
+
+```bash
+export PGPASSWORD=...          # or ~/.pgpass; never put the password in the URL
+uv run quant-research ingest ~/research --store postgresql://qaos@db.internal/qaos
+uv run quant-research serve-api --store postgresql://reader@db.internal/qaos
+```
+
+- The tables live in the `quant_research` schema; `open_research(..., schema=...)` picks
+  another.
+- pgvector is created when the role may create it. Otherwise the store works without the
+  vector channel.
+- Serving opens the store in read-only transactions. Give the server a role that can only
+  `SELECT`, as `deploy/compose.postgres.yaml` does.

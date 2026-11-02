@@ -110,6 +110,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A PostgreSQL knowledge store with pgvector (B-14, the `postgres` extra with
+  `psycopg[binary]`; [decision 0004](docs/decisions/0004-knowledge-store.md)).
+  - **Usage.** `--store postgresql://user@host/db` works with every `quant-research` command,
+    and `open_research` takes the URL too.
+  - **Same answers.** It gives SQLite's answers for the same corpus: keyword search is FTS5's
+    BM25 computed in SQL, and ties break in the same order.
+  - **Contract tests.** They run every case on both stores against an SQLite reference. CI
+    runs them against `pgvector/pgvector:0.8.6-pg17`.
+  - **Passwords** come from `PGPASSWORD` or `.pgpass` and are redacted from every message.
+  - **pgvector is optional.** Without it, the vector channel reports unavailable.
+- The team server runs on PostgreSQL too (`deploy/compose.postgres.yaml`).
+  - **Roles.** The server connects as a role that can only read, and ingestion connects as
+    the schema's owner.
+  - **Network.** PostgreSQL sits on an internal network.
+  - **Smoke test.** It covers both stores, and checks that the server's role is refused
+    writes by permission.
 - A Docker team server (B-19, [docs/deployment.md](docs/deployment.md)).
   - **The image.** `deploy/Dockerfile` builds an image that runs `quant-research serve-api`
     as a non-root user. It holds code only: the locked dependencies of Quant Research with the

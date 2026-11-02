@@ -219,8 +219,8 @@ and cannot choose tools.
 **Confirmed** for keyword, mention, graph, and mock-vector retrieval over SQLite, and for
 Markdown, text, and PDF ingestion (`packages/quant-research`; step plan in
 [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)). **Proposed** for a
-real embedding model, PostgreSQL with pgvector, the LLM extractor, OCR, and server-side
-synthesis.
+real embedding model, the LLM extractor, OCR, and server-side synthesis. PostgreSQL with
+pgvector is **confirmed** (B-14) and gives the same answers as SQLite.
 
 Graph RAG is the defining capability of Quant Research: answers are assembled from explicit,
 typed relationships between quantitative concepts, plus the passages that justify each
@@ -289,7 +289,7 @@ enabled by default.
 1. **Seed:** match vocabulary entities in the query. When the query names none, seed from at
    most 3 entities in the best keyword passage, report them as direct (`hops = 0`) results, and
    warn.
-2. **Keyword channel:** BM25 over chunks (SQLite FTS5; PostgreSQL full-text search later),
+2. **Keyword channel:** BM25 over chunks (SQLite FTS5; FTS5's BM25 computed in SQL on PostgreSQL),
    using the query's content terms with stopwords removed. Without FTS5, a term-overlap scorer
    is used.
 3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
@@ -327,7 +327,7 @@ enabled by default.
    (`voyage:voyage-finance-2:1024`) is part of the corpus snapshot. Searching with a model the
    store has no embeddings for warns instead of silently dropping the channel. The channel
    becomes a default only after it beats the evaluation baseline, which includes
-   `paraphrase_hit_rate`. pgvector replaces the SQLite index at scale.
+   `paraphrase_hit_rate`. On PostgreSQL the index is pgvector (exact search for now).
 6. **Fuse:** reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id
    for determinism, capped at `k` passages.
 7. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
@@ -431,8 +431,9 @@ are:
 - DuckDB was considered and not chosen for this store. It suits the later analytics and
   backtest service (columnar scans over factor and price data) better than this workload of
   point lookups and graph traversal.
-- `PostgresKnowledgeStore`, which uses SQLAlchemy, psycopg, and pgvector, ships as an optional
-  extra, and is planned for days 31–60.
+- `PostgresKnowledgeStore` (psycopg 3 and pgvector, the optional `postgres` extra) implements
+  the same ports and passes the shared contract tests against an SQLite reference
+  ([decision 0004](decisions/0004-knowledge-store.md), B-14).
 
 Run and audit tables are in [section 11](#11-workflow-state-audit-and-provenance).
 
@@ -681,7 +682,7 @@ See [security.md](security.md) for details.
 | --- | --- | --- |
 | Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
 | Local MCP server | `uv run --directory <repo> quant-research serve-mcp --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `quant-research ingest` | Confirmed |
-| Team server | Docker image running `serve-api` over the SQLite store, REST with API-key auth, smoke-tested in CI ([deployment.md](deployment.md)); PostgreSQL + pgvector with B-14; MCP over HTTP later | Confirmed on SQLite (B-19) |
+| Team server | Docker image running `serve-api` over SQLite or PostgreSQL + pgvector (a read-only role), REST with API-key auth, both smoke-tested in CI ([deployment.md](deployment.md)); MCP over HTTP later | Confirmed (B-19, B-14) |
 | Hosted | Managed, multi-tenant | Out of scope; commercial option later |
 
 Not planned without a concrete need: a message broker, a distributed workflow engine,

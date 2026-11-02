@@ -1,0 +1,104 @@
+# Quant-Agent-OS team server on PostgreSQL with pgvector (B-14, B-19). See docs/deployment.md.
+#
+#   cp deploy/.env.example deploy/.env      # then set three passwords
+#   docker compose -f deploy/compose.postgres.yaml build
+#   CORPUS=/path/to/notes docker compose -f deploy/compose.postgres.yaml run --rm ingest
+#   docker compose -f deploy/compose.postgres.yaml run --rm -T keys new --principal alice \
+#       --scope tools:list --scope tools:call
+#   docker compose -f deploy/compose.postgres.yaml up -d server
+#
+# PostgreSQL is on an internal network only. The server connects as qaos_reader, which can
+# only read; ingestion connects as qaos_ingest. Only the run store volume is writable.
+
+x-image: &image
+  image: ${QAOS_IMAGE:-quant-agent-os:local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qaos
+      POSTGRES_PASSWORD: ${QAOS_POSTGRES_PASSWORD:?set it in deploy/.env}
+      QAOS_INGEST_PASSWORD: ${QAOS_INGEST_PASSWORD:?set it in deploy/.env}
+      QAOS_READER_PASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "qaos"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  server:
+    <<: [*image, *hardened]
+    restart: unless-stopped
+    command: ["serve-api", "--store", "postgresql://qaos_reader@postgres:5432/qaos",
+              "--runs", "/data/runs/runs.db", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      PGPASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Loopback only. Put a TLS-terminating reverse proxy in front before exposing it.
+      - "127.0.0.1:${QAOS_PORT:-8000}:8000"
+    volumes:
+      - keys:/keys:ro
+      - runs:/data/runs
+    networks: [backend, frontend]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Operator commands: run them with `docker compose run --rm <name> ...`.
+  ingest:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["quant-research", "ingest"]
+    command: ["/corpus", "--store", "postgresql://qaos_ingest@postgres:5432/qaos"]
+    environment:
+      PGPASSWORD: ${QAOS_INGEST_PASSWORD:?set it in deploy/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
+    networks: [backend]  # internal: PostgreSQL only, no internet
+
+  keys:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["quant-agent-os", "api-key"]
+    command: ["--help"]
+    volumes:
+      - keys:/keys
+    network_mode: none
+
+  runs:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["quant-research", "runs", "--runs", "/data/runs/runs.db"]
+    command: []
+    volumes:
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+
+networks:
+  backend:
+    internal: true
+  frontend:
+
+volumes:
+  pgdata:
+  keys:
+  runs:
