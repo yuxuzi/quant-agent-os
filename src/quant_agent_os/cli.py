@@ -11,6 +11,7 @@ from rich.table import Table
 from quant_agent_os import __version__
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
+from quant_agent_os.data import DatasetError, DirectoryDatasetStore
 from quant_agent_os.runtime.plan import Plan
 
 app = typer.Typer(
@@ -21,6 +22,15 @@ console = Console()
 errors = Console(stderr=True, soft_wrap=True)
 api_key_app = typer.Typer(help="Manage API keys for the REST interface.", no_args_is_help=True)
 app.add_typer(api_key_app, name="api-key")
+dataset_app = typer.Typer(help="Add and list datasets that tools read by id.", no_args_is_help=True)
+app.add_typer(dataset_app, name="dataset")
+DatasetsOption = Annotated[
+    Path | None,
+    typer.Option(
+        "--dir",
+        help="Datasets directory (default: QUANT_AGENT_OS_DATASETS_DIR or ~/.quant-agent-os).",
+    ),
+]
 
 
 def _show_version(value: bool) -> None:
@@ -97,6 +107,47 @@ def api_key_new(
         "store it now. Restart the server to use it."
     )
     typer.echo(key)
+
+
+@dataset_app.command("push")
+def dataset_push(
+    source: Annotated[Path, typer.Argument(help="A CSV file: a header row, then one row each.")],
+    dataset_id: Annotated[str, typer.Option("--id", help="The id tools will use.")],
+    directory: DatasetsOption = None,
+) -> None:
+    """Validate a CSV file and add it as a dataset, replacing an earlier one with the same id.
+
+    The first column is an index (dates, say) when its values are not all numbers; every other
+    column must be numeric.
+    """
+    store = DirectoryDatasetStore(directory or get_settings().datasets_dir)
+    try:
+        info = store.put(dataset_id, source)
+    except (DatasetError, OSError) as error:
+        errors.print(f"[red]error:[/red] {error}")
+        raise typer.Exit(1) from error
+    console.print(
+        f"Added dataset {info.id}: {info.rows} rows, columns {', '.join(info.columns)} "
+        f"(sha256 {info.fingerprint[:16]})."
+    )
+
+
+@dataset_app.command("list")
+def dataset_list(directory: DatasetsOption = None) -> None:
+    """List the datasets with their rows, columns, and fingerprints."""
+    store = DirectoryDatasetStore(directory or get_settings().datasets_dir)
+    table = Table(title=f"Datasets in {store.root}")
+    for column in ("Id", "Rows", "Columns", "Index range", "sha256"):
+        table.add_column(column)
+    for dataset_id in store.ids():
+        try:
+            info = store.get(dataset_id).info()
+        except DatasetError as error:
+            errors.print(f"[yellow]warning:[/yellow] {error}")
+            continue
+        span = f"{info.first_index} to {info.last_index}" if info.first_index else ""
+        table.add_row(info.id, str(info.rows), ", ".join(info.columns), span, info.fingerprint[:16])
+    console.print(table)
 
 
 def main() -> None:

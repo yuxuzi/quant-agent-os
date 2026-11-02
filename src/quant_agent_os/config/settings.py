@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     preapproved_permissions: frozenset[Permission] = frozenset()
     log_level: str = "INFO"
     api_keys_file: Path = Path.home() / ".quant-agent-os" / "api-keys.toml"
+    datasets_dir: Path = Path.home() / ".quant-agent-os" / "datasets"
 
     def policy(self) -> PermissionPolicy:
         """Return the permission policy these settings configure."""
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
             or "(none)",
             "log_level": self.log_level,
             "api_keys_file": str(self.api_keys_file),
+            "datasets_dir": str(self.datasets_dir),
         }
 
 
