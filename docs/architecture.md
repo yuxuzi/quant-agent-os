@@ -82,7 +82,8 @@ product.
 | Providers | `providers/` | `ModelProvider` protocol, `FakeModelProvider` | Confirmed; no real adapter |
 | Configuration | `config/settings.py` | `QUANT_AGENT_OS_*` settings, `SecretStr` | Confirmed |
 | Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
-| MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool` over the executor | Confirmed; no transport |
+| MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool`, and resources (each read through its tool) and prompts (`tools/catalog.py`) over the executor | Confirmed |
+| Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `quant-agent-os dataset push` | Confirmed (B-31) |
 | CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
 | Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
@@ -140,10 +141,12 @@ Orchestrator┘                        validation·limits·record               
 | `quant_research` (`packages/quant-research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
 | `quant_app_factory` (`packages/quant-app-factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
 | `quant_analytics` (`packages/quant-analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `quant-agent-os-analytics` (name open) |
+| `quant_platform` (`apps/quant-platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `quant-agent-os-platform` (name open) |
 | `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | `pytemplate-uv` |
 
 Rules:
 - Core imports no product.
+- Only the platform server imports every product, and nothing imports it.
 - The products do not import each other. If they need to collaborate, they do it through a
   platform workflow (an orchestrated plan that uses both products' tools) or through documented
   models in Core.
@@ -572,7 +575,7 @@ Further rules:
 
 | Interface | Audience | Built on | Status |
 | --- | --- | --- | --- |
-| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter; `quant-research serve-mcp` | Confirmed |
+| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter: tools, resources, and prompts; `quant-platform serve-mcp` for every toolset, or a product's own `serve-mcp` | Confirmed |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
 | CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
 | REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `quant-research serve-api` | Confirmed (B-18) |
