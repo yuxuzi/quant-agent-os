@@ -1,35 +1,23 @@
 {
   "servers": {
-    "analytics": {
-      "client_only_bytes": 4695,
-      "definition_bytes": 2439,
-      "instruction_bytes": 133,
-      "tools": 2
-    },
-    "factory": {
-      "client_only_bytes": 10217,
-      "definition_bytes": 4116,
-      "instruction_bytes": 331,
-      "tools": 3
-    },
-    "research": {
-      "client_only_bytes": 9306,
-      "definition_bytes": 2257,
-      "instruction_bytes": 566,
-      "tools": 3
+    "platform": {
+      "client_only_bytes": 28499,
+      "definition_bytes": 10785,
+      "instruction_bytes": 1287,
+      "tools": 10
     }
   },
   "tasks": {
     "analyze_a_series": {
-      "argument_bytes": 3750,
-      "calls": 1,
-      "result_bytes": 4350,
+      "argument_bytes": 125,
+      "calls": 2,
+      "result_bytes": 5036,
       "success": true
     },
     "analyze_portfolio_risk": {
-      "argument_bytes": 5675,
-      "calls": 1,
-      "result_bytes": 2130,
+      "argument_bytes": 146,
+      "calls": 2,
+      "result_bytes": 2618,
       "success": true
     },
     "check_an_app_spec": {
@@ -44,6 +32,12 @@
       "result_bytes": 3723,
       "success": true
     },
+    "report_on_a_signal": {
+      "argument_bytes": 89,
+      "calls": 1,
+      "result_bytes": 4116,
+      "success": true
+    },
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
@@ -52,12 +46,12 @@
     }
   },
   "totals": {
-    "argument_bytes": 9696,
-    "calls": 7,
-    "definition_bytes": 8812,
-    "instruction_bytes": 1030,
-    "result_bytes": 23611,
+    "argument_bytes": 631,
+    "calls": 10,
+    "definition_bytes": 10785,
+    "instruction_bytes": 1287,
+    "result_bytes": 28901,
     "success_rate": 1.0,
-    "tools": 8
+    "tools": 10
   }
 }

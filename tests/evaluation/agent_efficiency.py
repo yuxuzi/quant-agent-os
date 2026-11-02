@@ -1,16 +1,18 @@
 """Agent-efficiency evaluation: what a client pays, in context and calls, to do typical tasks.
 
-A scripted client drives the MCP servers the products serve, over an in-memory MCP session, the
-way a well-behaved agent would. For each task it records the calls made, the bytes the model
-must write as arguments, the bytes returned into its context, and whether the task succeeded.
-For each server it records the bytes of tool definitions and instructions the model sees on
+A scripted client drives the platform server (every toolset, as `quant-platform serve-mcp`
+serves it) over an in-memory MCP session, the way a well-behaved agent would: it names
+datasets rather than copying series, and uses `research_report` for a report. For each task
+it records the calls made, the bytes the model must write as arguments, the bytes returned
+into its context, and whether the task succeeded.
+For the server it records the bytes of tool definitions and instructions the model sees on
 every turn: name, description, and input schema. The title, output schema, and annotations are
 for the client and are counted apart. Bytes stand in for tokens, so the numbers do not depend on
 a model. The client validates every result against its tool's output schema.
 
 Run ``uv run python tests/evaluation/agent_efficiency.py`` to print the metrics, and add
 ``--update`` to rewrite the recorded baseline after an intended change. Offline, deterministic,
-and no model involved (plan step P1.1 in docs/plans/agent-surface.md).
+and no model involved (plan steps P1.1 and P2 in docs/plans/agent-surface.md).
 """
 
 from __future__ import annotations
@@ -28,29 +30,25 @@ import anyio
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 
+from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server
 from quant_agent_os.runtime import ToolExecutor
-from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec
-from quant_analytics.tools import analytics_tools
+from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
-from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
-from quant_app_factory.cli import served_tools as factory_served_tools
+from quant_platform import Catalog, compose
 from quant_research import open_research
-from quant_research.cli import MCP_INSTRUCTIONS as RESEARCH_INSTRUCTIONS
-from quant_research.tools import research_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
 BASELINE = Path(__file__).parent / "agent_efficiency_baseline.json"
-ANALYTICS_INSTRUCTIONS = (
-    "Quant Analytics computes performance and risk metrics with stated conventions. "
-    "Report its numbers as computed; do not recompute them."
-)
 WORKDIR_PLACEHOLDER = "/work"
 # What a client sends the model for each tool (the Messages API tool format); the title is for
 # display and the output schema for validating results, so both are counted as client-only.
 MODEL_VISIBLE = ("name", "description", "inputSchema")
 CLIENT_ONLY = ("title", "outputSchema", "annotations")
+
+
+ASSETS = {"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}
 
 
 def daily_returns(seed: int, periods: int = 252) -> list[float]:
@@ -126,13 +124,15 @@ async def draft_strategy(client: Client) -> bool:
 
 
 async def analyze_a_series(client: Client) -> bool:
-    """Analyse a year of daily returns against a benchmark."""
+    """Find the dataset, then analyse a year of daily returns against a benchmark by reference."""
+    listed = await client.call("list_datasets", {})
+    if not listed.get("datasets"):
+        return False
     output = await client.call(
         "analyze_performance",
         {
-            "series_id": "fund",
-            "returns": daily_returns(1),
-            "benchmark": daily_returns(2),
+            "returns": {"dataset": "daily", "column": "fund"},
+            "benchmark": {"dataset": "daily", "column": "benchmark"},
             "periods_per_year": 252,
         },
     )
@@ -141,18 +141,34 @@ async def analyze_a_series(client: Client) -> bool:
 
 
 async def analyze_portfolio_risk(client: Client) -> bool:
-    """Decompose a three-asset portfolio's volatility over a year of daily returns."""
-    assets = {"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}
+    """Find the dataset, then decompose a three-asset portfolio's volatility by reference."""
+    listed = await client.call("list_datasets", {"dataset_id": "daily"})
+    if not listed.get("datasets"):
+        return False
     output = await client.call(
         "analyze_risk",
         {
             "portfolio_id": "book",
-            "weights": assets,
-            "asset_returns": {name: daily_returns(seed) for seed, name in enumerate(assets, 3)},
+            "weights": ASSETS,
+            "asset_returns": {"dataset": "daily"},
             "periods_per_year": 252,
         },
     )
-    return set(output.get("contributions", {})) == set(assets)
+    return set(output.get("contributions", {})) == set(ASSETS)
+
+
+async def report_on_a_signal(client: Client) -> bool:
+    """Get a cited report on a signal, with the metrics of a strategy's returns, in one call."""
+    report = await client.call(
+        "research_report",
+        {
+            "focus": "momentum",
+            "returns": {"dataset": "daily", "column": "fund"},
+            "periods_per_year": 252,
+        },
+    )
+    kinds = {item["kind"] for item in report.get("evidence", [])}
+    return kinds == {"retrieved", "computed"} and bool(report.get("metrics"))
 
 
 async def check_an_app_spec(client: Client) -> bool:
@@ -176,12 +192,13 @@ async def check_an_app_spec(client: Client) -> bool:
     return bool(checked.get("check", {}).get("ready"))
 
 
-TASKS: dict[str, tuple[str, Task]] = {
-    "search_and_cite": ("research", search_and_cite),
-    "draft_strategy": ("research", draft_strategy),
-    "analyze_a_series": ("analytics", analyze_a_series),
-    "analyze_portfolio_risk": ("analytics", analyze_portfolio_risk),
-    "check_an_app_spec": ("factory", check_an_app_spec),
+TASKS: dict[str, Task] = {
+    "search_and_cite": search_and_cite,
+    "draft_strategy": draft_strategy,
+    "analyze_a_series": analyze_a_series,
+    "analyze_portfolio_risk": analyze_portfolio_risk,
+    "report_on_a_signal": report_on_a_signal,
+    "check_an_app_spec": check_an_app_spec,
 }
 
 
@@ -189,70 +206,83 @@ def _size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
-async def _evaluate(
-    servers: dict[str, tuple[list[ToolSpec[Any, Any]], str]], workdir: str
-) -> dict[str, Any]:
-    definitions: dict[str, dict[str, int]] = {}
+async def _evaluate(catalog: Catalog, workdir: str) -> dict[str, Any]:
+    executor = ToolExecutor(ToolRegistry(catalog.tools), PermissionPolicy())
+    server = build_server(
+        executor,
+        name="quant-agent-os",
+        instructions=catalog.instructions,
+        resources=catalog.resources,
+        prompts=catalog.prompts,
+    )
     tasks: dict[str, dict[str, Any]] = {}
-    for name, (specs, instructions) in servers.items():
-        executor = ToolExecutor(ToolRegistry(specs), PermissionPolicy())
-        server = build_server(executor, name=name, instructions=instructions)
-        async with create_connected_server_and_client_session(server) as session:
-            listed = [
-                tool.model_dump(mode="json", exclude_none=True)
-                for tool in (await session.list_tools()).tools
-            ]
-            definitions[name] = {
-                "tools": len(listed),
-                "definition_bytes": sum(
-                    _size({key: tool[key] for key in MODEL_VISIBLE if key in tool})
-                    for tool in listed
-                ),
-                "instruction_bytes": len(instructions.encode("utf-8")),
-                "client_only_bytes": sum(
-                    _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
-                ),
+    async with create_connected_server_and_client_session(server) as session:
+        listed = [
+            tool.model_dump(mode="json", exclude_none=True)
+            for tool in (await session.list_tools()).tools
+        ]
+        definitions = {
+            "tools": len(listed),
+            "definition_bytes": sum(
+                _size({key: tool[key] for key in MODEL_VISIBLE if key in tool}) for tool in listed
+            ),
+            "instruction_bytes": len(catalog.instructions.encode("utf-8")),
+            "client_only_bytes": sum(
+                _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
+            ),
+        }
+        for task_name, task in TASKS.items():
+            result = TaskResult()
+            result.success = await task(Client(session, result, workdir))
+            tasks[task_name] = {
+                "calls": result.calls,
+                "argument_bytes": result.argument_bytes,
+                "result_bytes": result.result_bytes,
+                "success": result.success,
             }
-            for task_name, (server_name, task) in TASKS.items():
-                if server_name != name:
-                    continue
-                result = TaskResult()
-                result.success = await task(Client(session, result, workdir))
-                tasks[task_name] = {
-                    "calls": result.calls,
-                    "argument_bytes": result.argument_bytes,
-                    "result_bytes": result.result_bytes,
-                    "success": result.success,
-                }
-                if result.errors:
-                    tasks[task_name]["errors"] = result.errors
+            if result.errors:
+                tasks[task_name]["errors"] = result.errors
     totals = {
-        "definition_bytes": sum(item["definition_bytes"] for item in definitions.values()),
-        "instruction_bytes": sum(item["instruction_bytes"] for item in definitions.values()),
-        "tools": sum(item["tools"] for item in definitions.values()),
+        "definition_bytes": definitions["definition_bytes"],
+        "instruction_bytes": definitions["instruction_bytes"],
+        "tools": definitions["tools"],
         "calls": sum(item["calls"] for item in tasks.values()),
         "argument_bytes": sum(item["argument_bytes"] for item in tasks.values()),
         "result_bytes": sum(item["result_bytes"] for item in tasks.values()),
         "success_rate": sum(item["success"] for item in tasks.values()) / len(tasks),
     }
-    return {"servers": definitions, "tasks": tasks, "totals": totals}
+    return {"servers": {"platform": definitions}, "tasks": tasks, "totals": totals}
+
+
+def _datasets(workdir: Path) -> DirectoryDatasetStore:
+    """A year of daily returns for a fund, its benchmark, and three assets, as one dataset."""
+    columns = {"fund": daily_returns(1), "benchmark": daily_returns(2)}
+    columns |= {name: daily_returns(seed) for seed, name in enumerate(ASSETS, 3)}
+    lines = ["day," + ",".join(columns)]
+    lines += [
+        f"d{row + 1:03d}," + ",".join(str(values[row]) for values in columns.values())
+        for row in range(252)
+    ]
+    source = workdir / "daily.csv"
+    source.write_text("\n".join(lines) + "\n", "utf-8")
+    store = DirectoryDatasetStore(workdir / "datasets")
+    store.put("daily", source)
+    return store
 
 
 def run() -> dict[str, Any]:
-    """Build each product's MCP server as its CLI serves it, run every task, return metrics."""
+    """Compose every toolset as the platform server does, run every task, return the metrics."""
     research = open_research(":memory:")
     workdir = tempfile.TemporaryDirectory()
     try:
         research.ingest.ingest(CORPUS)
-        servers = {
-            "research": (research_tools(research.research), RESEARCH_INSTRUCTIONS),
-            "analytics": (analytics_tools().specs(), ANALYTICS_INSTRUCTIONS),
-            "factory": (
-                factory_served_tools(AppFactory(PytemplateUvScaffolder())),
-                FACTORY_INSTRUCTIONS,
-            ),
-        }
-        return anyio.run(_evaluate, servers, workdir.name)
+        catalog = compose(
+            policy=PermissionPolicy(),
+            research=research.research,
+            datasets=_datasets(Path(workdir.name)),
+            factory=AppFactory(PytemplateUvScaffolder()),
+        )
+        return anyio.run(_evaluate, catalog, workdir.name)
     finally:
         research.close()
         workdir.cleanup()
