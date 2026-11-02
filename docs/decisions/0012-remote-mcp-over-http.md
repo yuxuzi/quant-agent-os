@@ -1,6 +1,6 @@
 # 0012: Remote MCP over Streamable HTTP, authenticated like REST
 
-- Status: proposed (needs the user's approval before implementation, per AGENTS.md)
+- Status: accepted (approved by the user 2026-11-02)
 - Date: 2026-11-02
 - Plan: [agent-surface P4](../plans/agent-surface.md), backlog B-33
 
@@ -70,14 +70,13 @@ error. No new dependency is needed.
   error.
 - Rate limiting and quotas are not in this step (P7). Until then, an operator should put a
   rate-limiting proxy in front of any non-loopback deployment, and `deployment.md` will say so.
-- The platform package depends on App Factory, so the image grows by pytemplate-uv and its
-  dependencies. If that matters, the factory toolset can become an optional extra of the
-  platform package: open question Q-5 below.
+- The factory toolset becomes an optional extra of the platform package (Q-5), so the image
+  does not grow by pytemplate-uv.
 
-## Open questions
+## Resolved questions
 
-- **Q-5.** Should the platform's factory toolset be an optional extra, to keep the team image
-  small?
-- **Q-6.** Should `serve-http` keep the research-only REST routes' paths (`/v1/tools/...`)
-  unchanged? Proposed: yes. The tool names are the same, so existing REST clients keep
-  working.
+- **Q-5 (resolved).** The factory toolset is an optional extra:
+  `quant-agent-os-platform[factory]`. The team image installs the platform without it, so it
+  serves research and analytics and carries no pytemplate-uv.
+- **Q-6 (proposed, kept).** `serve-http` keeps decision 0011's REST paths (`/v1/tools/...`),
+  so existing REST clients keep working.
