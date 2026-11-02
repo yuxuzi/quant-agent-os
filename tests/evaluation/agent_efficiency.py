@@ -98,7 +98,10 @@ class Client:
         return reply.structuredContent or {}
 
     def _metered(self, text: str) -> int:
-        return len(text.replace(self.workdir, WORKDIR_PLACEHOLDER).encode("utf-8"))
+        # JSON escapes the backslashes of a Windows path, so replace the escaped form first.
+        escaped = json.dumps(self.workdir)[1:-1]
+        text = text.replace(escaped, WORKDIR_PLACEHOLDER).replace(self.workdir, WORKDIR_PLACEHOLDER)
+        return len(text.encode("utf-8"))
 
 
 Task = Callable[[Client], Awaitable[bool]]
