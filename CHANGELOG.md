@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The team Docker image serves the platform (`quant-platform serve-http`: research and
+  analytics over MCP and REST) instead of `quant-research serve-api`, with a read-only
+  `datasets` volume and an operator `datasets` service. The platform's App Factory toolset is
+  now an optional extra, `quant-agent-os-platform[factory]`, and is not in the image (B-33).
 - `apps/quant-ai-assistant`, a superseded placeholder, is removed; `quant-factory`'s
   settings-configured factory is public as `default_factory()` (B-31).
 - The agent surface costs clients less context (B-30, [plan](docs/plans/agent-surface.md) P1):
@@ -121,6 +125,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Remote MCP (B-33, [decision 0012](docs/decisions/0012-remote-mcp-over-http.md)):
+  - **`quant-platform serve-http`** serves MCP at `/mcp` and REST at `/v1` on one port, with
+    the same API keys, policy, and run store. Add it to Claude Code with
+    `claude mcp add --transport http <url>/mcp --header "Authorization: Bearer <key>"`.
+  - **Stateless Streamable HTTP** with JSON responses. A missing or unknown key gets 401; each
+    MCP method checks the key's scope (`tools:list` or `tools:call`); calls are recorded with
+    actor `mcp-http` and the key's principal; DNS-rebinding protection admits loopback and
+    `--allowed-host` names. `quant_agent_os.mcp.http.add_mcp_route` adds it to any app.
 - One MCP server for every toolset (B-31, [plan](docs/plans/agent-surface.md) P2):
   - **Platform server** (`apps/quant-platform`): `quant-platform serve-mcp` serves the
     research, analytics, and factory toolsets (`--toolsets` narrows them), and

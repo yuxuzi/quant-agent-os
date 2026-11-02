@@ -232,6 +232,13 @@ beats P2 on calls per task.
 **Done when** Claude Code connects with `claude mcp add --transport http` to the Docker team
 server and passes the efficiency suite.
 
+**Status: done (2026-11-02).** [Decision 0012](../decisions/0012-remote-mcp-over-http.md)
+accepted with the factory toolset as an optional extra. Deviations from the steps above:
+- **No progress notifications.** Stateless JSON responses carry no stream to report progress
+  on; long calls (`check_app`) are not served over HTTP. Revisit with P6.
+- **The image serves research and analytics.** App Factory needs local writes (principle 5)
+  and is left out.
+
 ### P5. Identity and tenancy (B-34; decision 0013; needs approval)
 
 1. **P5.1 Principal and tenant.** `Principal(tenant, subject, scopes)` flows through the

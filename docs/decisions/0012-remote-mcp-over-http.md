@@ -80,3 +80,16 @@ error. No new dependency is needed.
   serves research and analytics and carries no pytemplate-uv.
 - **Q-6 (proposed, kept).** `serve-http` keeps decision 0011's REST paths (`/v1/tools/...`),
   so existing REST clients keep working.
+
+## Implementation notes (2026-11-02)
+
+- **Where it lives.** `quant_agent_os.mcp.http.add_mcp_route` adds `/mcp` to an existing app
+  (`KeyVerifier`, `authorize_request`). `build_server` takes `authorize` and `recorder_for`.
+  `quant_platform.http.build_http_app` builds REST and MCP for a catalog, and
+  `quant-platform serve-http` serves it.
+- **The session manager** runs once per instance in the SDK, so each start of the app's
+  lifespan creates its own; a restart in the same process works.
+- **Scope failures** arrive as JSON-RPC errors (code −32003) or, for `tools/call`, as an error
+  result, after a 200. Authentication failures are HTTP 401.
+- **The image** installs the platform with research and analytics; `deploy/sample-data` holds
+  a small dataset that the smoke test adds.
