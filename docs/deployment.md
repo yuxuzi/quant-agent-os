@@ -180,6 +180,23 @@ there, so a client finds the provider by itself. In the provider, register the s
 resource with that audience. Its tokens must carry the scopes (`tools:list`, `tools:call`) and
 a `qaos_tenant` claim naming the tenant; `tenant_claim` in the file changes the claim name.
 
+## Approving in the client (decision 0014)
+
+Tools that need a consequential permission (for example, a tenant granted `network` for a
+hosted embedder) wait for an approval. To let people approve them without leaving their
+client, give the server its public base URL and issue approver keys:
+
+```bash
+quant-agent-os api-key new --principal lead --scope runs:approve --tenant acme
+quant-platform serve-http --tenants tenants.toml --approval-url https://qaos.example.com
+```
+
+The client then shows a link to `https://qaos.example.com/approve/<id>`. There, an approver
+enters their key, checks the tool, arguments, and permissions, and approves once. The client
+runs the same call again, and it runs once. An approver key cannot call tools, and outside the
+`local` tenant nobody approves their own request (set `separate_approver = false` on a tenant
+to allow it). Requests expire after 15 minutes.
+
 ## Permissions
 
 The server is read-only by default. The tools that need more (for example `network`, for a

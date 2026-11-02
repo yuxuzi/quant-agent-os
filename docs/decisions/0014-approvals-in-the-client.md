@@ -104,3 +104,23 @@ The MCP spec has two ways to involve the user:
 - **Q-11.** An approver key in a form post now; OAuth sign-in on the page later.
 - **Q-12.** Four eyes is required for every tenant but `local`, and configurable per tenant.
 - **Q-13 (as proposed).** An approval request lives 15 minutes.
+
+## Implementation notes (2026-11-02)
+
+- **Where it lives.**
+  - `quant_agent_os.approval_desk.ApprovalDesk` opens, decides, and resumes requests.
+  - `quant_agent_os.api.approval_page` serves the page.
+  - The run store keeps requests (schema 4, the `approval_requests` table).
+  - `build_server` takes an approval gate per request (HTTP) or `confirm_in_client` (stdio).
+  - `quant-platform serve-http --approval-url` and `quant-factory serve-mcp
+    --confirm-in-client` turn them on; both are off by default.
+- **Resuming with the real arguments.** Stored arguments are redacted, and resuming from them
+  would change the input hash of any call with a secret-named argument, so it could never
+  match its approval. `RunRecorder.resume` now takes the original steps, which the desk and
+  the stdio confirmation pass. The SDK's `Platform.resume` still resumes from the stored
+  arguments, so a call with a secret-named argument cannot be resumed there. That is a known
+  limitation, left for a follow-up.
+- **Messages.** A client without URL elicitation sees the error message, which carries the
+  approval URL.
+- **For decision 0013's Q-7.** PyJWT with the crypto extra already comes with the `mcp` extra,
+  so local JWT verification would not need a new dependency after all.

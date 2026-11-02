@@ -171,6 +171,24 @@ data files, key files, and secret-looking environment variables on every pull re
   - The operator approves through the SDK (`Platform.approve`, then `Platform.resume`) or by
     confirming `quant-factory create`.
   - Models, MCP clients, and REST clients can never create approvals.
+- **Approving without leaving the client** ([decision 0014](decisions/0014-approvals-in-the-client.md)):
+  - **Over HTTP** (`serve-http --approval-url`), a waiting call opens an approval request,
+    and the client is sent to `/approve/<id>` (MCP URL elicitation). The request is bound to
+    the tenant, run, tool, input hash, and requester; its id has 128 random bits; it expires
+    after 15 minutes and is decided once.
+  - **Only an approver key decides.** The key must have `runs:approve`, belong to the same
+    tenant, and (outside the `local` tenant, unless `separate_approver = false`) belong to a
+    principal other than the requester. A key can never hold both `runs:approve` and
+    `tools:call`, so the key an agent's client holds cannot approve, and OAuth tokens never
+    carry `runs:approve`.
+  - **The page** shows the tool, permissions, redacted arguments, and input hash. It runs no
+    scripts, forbids framing, caching, and referrers, checks a per-form token, and never
+    stores or echoes the key.
+  - **The retried, identical call** runs once, in the original run. A changed argument is a
+    new hash and needs a new approval.
+  - **Locally**, `quant-factory serve-mcp --confirm-in-client` (stdio, opt-in, with a run
+    store) asks the client to confirm each call instead. It is recorded as approved by
+    `client-confirmation`, and is never available over HTTP.
 - **Standing approvals.** An operator can pre-approve a permission for every call with
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
   it records `standing:<permission>`.

@@ -66,6 +66,7 @@ the real results.
 4. `runtime/orchestrator.py`: planning, validation, execution, report, and optional
    recording. Not re-exported from `runtime/__init__` to avoid an import cycle.
 5. `providers/`, `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
+   `approval_desk.py` (approval requests),
    `mcp/` (stdio, HTTP, OAuth), `sdk/`, `testing.py` (`check_tool`), `observability/`,
    `cli.py`.
 
