@@ -1,5 +1,8 @@
 """Package boundaries (decision 0003): Core imports no product; products stay independent.
 
+The platform server (`quant_platform`) is the composition root: it imports every product, and
+nothing imports it.
+
 pytemplate-uv is a third-party library of the App Factory only, and only its scaffolder adapter
 imports it, so another `ScaffoldProvider` can replace it.
 """
@@ -12,13 +15,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = {
     "quant_agent_os": ROOT / "src" / "quant_agent_os",
+    "quant_analytics": ROOT / "packages" / "quant-analytics" / "src" / "quant_analytics",
     "quant_research": ROOT / "packages" / "quant-research" / "src" / "quant_research",
     "quant_app_factory": ROOT / "packages" / "quant-app-factory" / "src" / "quant_app_factory",
+    "quant_platform": ROOT / "apps" / "quant-platform" / "src" / "quant_platform",
 }
+# quant_platform is the composition root: it may import every product, and nothing imports it.
+PRODUCTS = {"quant_analytics", "quant_research", "quant_app_factory"}
 FORBIDDEN = {
-    "quant_agent_os": {"quant_research", "quant_app_factory", "pytemplate"},
-    "quant_research": {"quant_app_factory", "pytemplate"},
-    "quant_app_factory": {"quant_research"},
+    "quant_agent_os": PRODUCTS | {"quant_platform", "pytemplate"},
+    "quant_analytics": PRODUCTS - {"quant_analytics"} | {"quant_platform", "pytemplate"},
+    "quant_research": PRODUCTS - {"quant_research"} | {"quant_platform", "pytemplate"},
+    "quant_app_factory": PRODUCTS - {"quant_app_factory"} | {"quant_platform"},
+    "quant_platform": {"pytemplate"},
 }
 PYTEMPLATE_ADAPTER = PACKAGES["quant_app_factory"] / "infrastructure" / "pytemplate_uv.py"
 
