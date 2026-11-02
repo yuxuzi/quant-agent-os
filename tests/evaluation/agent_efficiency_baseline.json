@@ -14,7 +14,7 @@
     },
     "research": {
       "client_only_bytes": 10669,
-      "definition_bytes": 2364,
+      "definition_bytes": 2523,
       "instruction_bytes": 479,
       "tools": 3
     }
@@ -47,16 +47,16 @@
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
-      "result_bytes": 6155,
+      "result_bytes": 5600,
       "success": true
     }
   },
   "totals": {
     "argument_bytes": 9696,
     "calls": 7,
-    "definition_bytes": 10905,
+    "definition_bytes": 11064,
     "instruction_bytes": 943,
-    "result_bytes": 24100,
+    "result_bytes": 23545,
     "success_rate": 1.0,
     "tools": 10
   }

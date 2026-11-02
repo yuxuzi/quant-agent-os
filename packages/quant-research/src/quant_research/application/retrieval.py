@@ -30,6 +30,8 @@ from quant_research.domain.vocabulary import EntityMatcher, Vocabulary
 
 RRF_K = 60
 PASSAGE_PREVIEW_CHARS = 700
+# Previews in a concise packet; the full text is one get_source_passage call away.
+CONCISE_PREVIEW_CHARS = 300
 SIGNAL_TYPES: tuple[EntityType, ...] = ("signal", "factor", "strategy")
 MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
@@ -110,6 +112,28 @@ class EvidencePacket(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
     data_versions: dict[str, str] = Field(default_factory=dict)
+
+    def concise(self) -> EvidencePacket:
+        """Return this packet with shorter previews and no edge repeated from an entity's path.
+
+        Rankings, entities, paths, and evidence are unchanged; only text a client can fetch
+        again (`get_source_passage`) and duplicated edges are dropped.
+        """
+        passages = [
+            passage
+            if len(passage.text) <= CONCISE_PREVIEW_CHARS
+            else passage.model_copy(
+                update={"text": passage.text[:CONCISE_PREVIEW_CHARS] + "…", "truncated": True}
+            )
+            for passage in self.passages
+        ]
+        related = [
+            entity.model_copy(
+                update={"links": [link for link in entity.links if link not in entity.path]}
+            )
+            for entity in self.related
+        ]
+        return self.model_copy(update={"passages": passages, "related": related})
 
 
 class SourcePassage(BaseModel):
