@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
     granted_permissions: frozenset[Permission] = READ_ONLY
     preapproved_permissions: frozenset[Permission] = frozenset()
     log_level: str = "INFO"
+    api_keys_file: Path = Path.home() / ".quant-agent-os" / "api-keys.toml"
 
     def policy(self) -> PermissionPolicy:
         """Return the permission policy these settings configure."""
@@ -49,6 +51,7 @@ class Settings(BaseSettings):
             )
             or "(none)",
             "log_level": self.log_level,
+            "api_keys_file": str(self.api_keys_file),
         }
 
 

@@ -14,16 +14,22 @@ from quant_research.domain.vocabulary import EntityMatcher, Vocabulary, load_voc
 from quant_research.infrastructure.embedding import HashingEmbedder
 from quant_research.infrastructure.files import TextFileLoader
 from quant_research.infrastructure.pdf import pdf_loader
+from quant_research.infrastructure.postgres_store import (
+    DEFAULT_SCHEMA,
+    PostgresKnowledgeStore,
+    is_postgres_url,
+)
 from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
 
 DEFAULT_STORE = Path(".quant-research") / "knowledge.db"
+Store = SqliteKnowledgeStore | PostgresKnowledgeStore
 
 
 @dataclass(frozen=True)
 class ResearchApp:
     """A store with its ingestion and retrieval services."""
 
-    store: SqliteKnowledgeStore
+    store: Store
     vocabulary: Vocabulary
     ingest: IngestService
     research: ResearchService
@@ -52,8 +58,14 @@ def open_research(
     vector: bool = False,
     embedder: Embedder | None = None,
     read_only: bool = False,
+    schema: str = DEFAULT_SCHEMA,
 ) -> ResearchApp:
-    """Open (or create) a SQLite store and build the services over it.
+    """Open (or create) a knowledge store and build the services over it.
+
+    ``store_path`` is a SQLite file, or a ``postgresql://`` URL for the PostgreSQL store (the
+    ``postgres`` extra); give the password through ``PGPASSWORD`` or ``.pgpass``, not the URL.
+    ``schema`` names the PostgreSQL schema that holds the store, so one database can hold
+    several corpora.
 
     ``vector`` enables the vector channel with the offline `HashingEmbedder`; the SQLite store
     doubles as the vector index. It is off by default because the mock embedder shows no
@@ -65,7 +77,11 @@ def open_research(
     load; PDFs load when the ``pdf`` extra is installed and are otherwise skipped with an
     installation hint.
     """
-    store = SqliteKnowledgeStore(store_path, read_only=read_only)
+    store: Store = (
+        PostgresKnowledgeStore(store_path, read_only=read_only, schema=schema)
+        if is_postgres_url(store_path)
+        else SqliteKnowledgeStore(store_path, read_only=read_only)
+    )
     vocabulary = load_vocabulary(vocabulary_path)
     if embedder is None and vector:
         embedder = HashingEmbedder(EntityMatcher(vocabulary))

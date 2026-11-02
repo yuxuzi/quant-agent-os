@@ -308,5 +308,43 @@ def test_a_version_1_run_store_is_upgraded_in_place(tmp_path: Path) -> None:
         version = db.execute("PRAGMA user_version").fetchone()[0]
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
     db.close()
-    assert version == 2
+    assert version == 3
     assert "approvals" in tables
+
+
+def test_a_version_2_run_store_gains_the_principal_column(tmp_path: Path) -> None:
+    path = tmp_path / "runs.db"
+    old = RunRecorder(SqliteRunStore(path), actor="mcp")
+    run = old.start("call", "lookup", registry_digest="d")
+    old.store.close()
+    with sqlite3.connect(path) as db:  # rebuild the table as version 2 had it
+        db.executescript(
+            "DROP TRIGGER audit_events_no_update; DROP TRIGGER audit_events_no_delete;"
+            "ALTER TABLE audit_events DROP COLUMN principal; PRAGMA user_version = 2;"
+        )
+    db.close()
+
+    with SqliteRunStore(path) as upgraded:
+        RunRecorder(upgraded, actor="rest", principal="alice").finish(run, "completed")
+        stored = upgraded.get_run(run.run_id)
+
+    assert stored is not None
+    assert [(event.actor, event.principal) for event in stored.events] == [
+        ("mcp", None),
+        ("rest", "alice"),
+    ]
+
+
+@pytest.mark.parametrize("make_store", [MemoryRunStore, lambda: SqliteRunStore(":memory:")])
+def test_the_principal_is_recorded_on_the_run_and_every_event(make_store: object) -> None:
+    store: RunStore = make_store()  # type: ignore[operator]
+    recorder = RunRecorder(store, actor="rest", principal="alice")
+    executor = ToolExecutor(ToolRegistry([lookup]), PermissionPolicy())
+
+    record = recorder.call(executor, PlanStep(tool="lookup", arguments={"query": "q"}))
+
+    stored = store.get_run(record.run_id or "")
+    assert stored is not None
+    assert (stored.run.actor, stored.run.principal) == ("rest", "alice")
+    assert stored.events and all(event.principal == "alice" for event in stored.events)
+    store.close()

@@ -188,6 +188,20 @@ with (
     run = platform.get_run(record.run_id)
 ```
 
+Or call the tools over REST, for a web app or another language. Create a key; it is printed
+once, and only its hash is stored:
+
+```bash
+KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call)
+uv run quant-research serve-api --store ~/qr-demo/kb.db &        # http://127.0.0.1:8000
+curl -s -H "Authorization: Bearer $KEY" -X POST \
+  http://127.0.0.1:8000/v1/tools/generate_strategy/call \
+  -H 'content-type: application/json' -d '{"arguments": {"focus": "short-term reversal"}}'
+```
+
+The result is the same as the MCP result. The call is recorded as a run with actor `rest` and
+principal `me` (`quant-research runs`).
+
 ## 10. Generate a tool package
 
 Quant App Factory creates a new, tested project from a small spec. Let it ask the questions

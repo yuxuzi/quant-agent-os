@@ -110,6 +110,49 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A PostgreSQL knowledge store with pgvector (B-14, the `postgres` extra with
+  `psycopg[binary]`; [decision 0004](docs/decisions/0004-knowledge-store.md)).
+  - **Usage.** `--store postgresql://user@host/db` works with every `quant-research` command,
+    and `open_research` takes the URL too.
+  - **Same answers.** It gives SQLite's answers for the same corpus: keyword search is FTS5's
+    BM25 computed in SQL, and ties break in the same order.
+  - **Contract tests.** They run every case on both stores against an SQLite reference. CI
+    runs them against `pgvector/pgvector:0.8.6-pg17`.
+  - **Passwords** come from `PGPASSWORD` or `.pgpass` and are redacted from every message.
+  - **pgvector is optional.** Without it, the vector channel reports unavailable.
+- The team server runs on PostgreSQL too (`deploy/compose.postgres.yaml`).
+  - **Roles.** The server connects as a role that can only read, and ingestion connects as
+    the schema's owner.
+  - **Network.** PostgreSQL sits on an internal network.
+  - **Smoke test.** It covers both stores, and checks that the server's role is refused
+    writes by permission.
+- A Docker team server (B-19, [docs/deployment.md](docs/deployment.md)).
+  - **The image.** `deploy/Dockerfile` builds an image that runs `quant-research serve-api`
+    as a non-root user. It holds code only: the locked dependencies of Quant Research with the
+    `api` and `pdf` extras, on Python and uv base images pinned by digest.
+  - **Compose.** `deploy/compose.yaml` mounts the knowledge store and API keys read-only and
+    the run store writable. It runs with a read-only root filesystem and no capabilities,
+    publishes on loopback only, and adds operator services for `ingest`, `keys`, and `runs`.
+  - **CI.** A new job runs `deploy/smoke-test.sh` on every pull request. It builds the image,
+    checks that the image holds no data or secrets, and brings the server up with `docker
+    compose up`. It then checks authentication, a real call, and the principal on the
+    recorded run.
+  - **Storage.** It uses the SQLite store for now; PostgreSQL follows with B-14.
+- A REST interface with scoped API keys (B-18, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md);
+  optional `api` extra with FastAPI and uvicorn):
+  - **Serving.** `quant-research serve-api` serves the research tools over HTTP on
+    `127.0.0.1:8000` by default. It lists tools, calls them, and reads runs, through the same
+    executor and run recorder as MCP, so a REST result equals the MCP result.
+  - **Keys.** `quant-agent-os api-key new --principal alice --scope tools:call` prints a key
+    once and stores only its SHA-256 hash, in `~/.quant-agent-os/api-keys.toml` or
+    `QUANT_AGENT_OS_API_KEYS_FILE`. The scopes are `tools:list`, `tools:call`, and
+    `runs:read`. They narrow access and never widen the permission policy, which stays
+    read-only by default.
+  - **Audit.** Every REST call is a run with actor `rest` and the key's principal, on the run
+    and on every audit event (run-store schema 3; older stores upgrade in place).
+  - **Defaults.** The server does not start without an enabled key or a run store, offers no
+    route to approve calls, publishes no schema pages, caps request bodies at 5 MiB, and warns
+    when bound beyond loopback.
 - `analyze_risk` in Quant Analytics (B-21). From a portfolio's weights and its assets' returns,
   it returns annualised volatility and each asset's marginal, component, and percent
   contribution to it. The contributions are Euler's, so they add up exactly, and a negative

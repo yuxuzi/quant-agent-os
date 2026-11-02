@@ -27,3 +27,38 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest
       - run: uv build
+
+  postgres:
+    # The shared store contract against PostgreSQL with pgvector (B-14).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+        env:
+          POSTGRES_PASSWORD: ci-only  # a disposable database that exists for this job only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s
+          --health-timeout 5s --health-retries 30
+    env:
+      QUANT_RESEARCH_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
+      QUANT_RESEARCH_REQUIRE_POSTGRES: "1"
+      PGPASSWORD: ci-only
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - run: uv run pytest packages/quant-research/tests -rs
+
+  docker:
+    # Builds the team-server image and runs it end to end with docker compose, on SQLite and on
+    # PostgreSQL with pgvector (B-19, B-14).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: deploy/smoke-test.sh sqlite
+      - run: deploy/smoke-test.sh postgres

@@ -20,7 +20,7 @@ from quant_agent_os.runs.models import AuditEvent, RunRecord, StoredRun
 from quant_agent_os.runtime.approvals import Approval, MemoryApprovalLedger
 from quant_agent_os.runtime.executor import ToolCallRecord
 
-SCHEMA_VERSION = 2  # 2 added approvals
+SCHEMA_VERSION = 3  # 2 added approvals, 3 the audit events' principal
 
 
 class RunStoreError(RuntimeError):
@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
     actor TEXT NOT NULL,
+    principal TEXT,
     event TEXT NOT NULL,
     subject TEXT NOT NULL,
     at TEXT NOT NULL,
@@ -189,6 +190,9 @@ class SqliteRunStore:
             if str(path) != ":memory:":
                 self._db.execute("PRAGMA journal_mode=WAL")  # readers never block the server
             with self._db:
+                columns = {row[1] for row in self._db.execute("PRAGMA table_info(audit_events)")}
+                if columns and "principal" not in columns:  # a version 1 or 2 store
+                    self._db.execute("ALTER TABLE audit_events ADD COLUMN principal TEXT")
                 self._db.executescript(_SCHEMA)
                 self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         except (sqlite3.Error, OSError) as error:
@@ -285,11 +289,12 @@ class SqliteRunStore:
     def append_event(self, event: AuditEvent) -> None:
         """Append an audit event."""
         self._write(
-            "INSERT INTO audit_events (run_id, actor, event, subject, at, details) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO audit_events (run_id, actor, principal, event, subject, at, details) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 event.run_id,
                 event.actor,
+                event.principal,
                 event.event,
                 event.subject,
                 event.at.isoformat(),
@@ -316,6 +321,7 @@ class SqliteRunStore:
                 AuditEvent(
                     run_id=event["run_id"],
                     actor=event["actor"],
+                    principal=event["principal"],
                     event=event["event"],
                     subject=event["subject"],
                     at=event["at"],

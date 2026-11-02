@@ -50,14 +50,20 @@ class RunRecorder:
     only ids, hashes, and statuses. A store failure is logged and never fails the call: losing
     an answer the tool already produced would not make the record more complete.
 
+    ``principal`` names the authenticated caller (for example an API key's principal) on the
+    run and on every audit event; a recorder is cheap, so an HTTP server makes one per request.
+
     A call that needs an approval leaves its run ``awaiting_approval``. The operator grants it
     with `approve` and runs the waiting calls with `resume`, in the same run, so the approval's
     run id, tool, and input hash all match.
     """
 
-    def __init__(self, store: RunStore, *, actor: str = "local") -> None:
+    def __init__(
+        self, store: RunStore, *, actor: str = "local", principal: str | None = None
+    ) -> None:
         self.store = store
         self.actor = actor
+        self.principal = principal
 
     def call(self, executor: ToolExecutor, step: PlanStep) -> ToolCallRecord:
         """Execute ``step`` as a one-call run and record it."""
@@ -153,6 +159,7 @@ class RunRecorder:
             status="running",
             goal=goal,
             actor=self.actor,
+            principal=self.principal,
             platform_version=__version__,
             provider=provider,
             registry_digest=registry_digest,
@@ -207,7 +214,12 @@ class RunRecorder:
         self._safely(
             self.store.append_event,
             AuditEvent(
-                run_id=run_id, actor=self.actor, event=event, subject=subject, details=details
+                run_id=run_id,
+                actor=self.actor,
+                principal=self.principal,
+                event=event,
+                subject=subject,
+                details=details,
             ),
         )
 

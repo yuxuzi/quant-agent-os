@@ -21,10 +21,12 @@ It has two products built on one core platform:
 | --- | --- |
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
+| Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
+| Team server in Docker | Implemented on SQLite or PostgreSQL + pgvector ([docs/deployment.md](docs/deployment.md)); both smoke-tested by `docker compose up` in CI |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
-| Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
+| Quant Research (Graph RAG) | Implemented over SQLite or PostgreSQL with pgvector (same answers; `quant-agent-os-research[postgres]`): ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
 | Quant App Factory | Foundation implemented: `quant-factory plan/create`, `plan_app`/`create_app` tools, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
 | Quant Analytics | Implemented: `analyze_performance` on empyrical-reloaded (Sharpe, Sortino, Calmar, drawdown, VaR, alpha/beta, tracking error, IR) and `analyze_risk` (volatility contributions, factor exposures, variance shares), with conventions pinned by known-answer tests ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)) |
 
@@ -67,10 +69,21 @@ Claude Desktop uses the same command in `claude_desktop_config.json`. Give the f
 
 Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
 cites file, page, and line ranges. Ask for a strategy, and `generate_strategy` returns a spec
-whose every item cites its passages, with open questions for what the corpus leaves out. The server is read-only, writes nothing to the store, and
-sends nothing off the machine unless you choose a hosted `--embedder`. Each call is recorded
+whose every item cites its passages, with open questions for what the corpus leaves out. The
+server is read-only, writes nothing to the store, and sends nothing off the machine unless you
+choose a hosted `--embedder`. Each call is recorded
 in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
+
+Web apps and other languages can call the same tools over REST with an API key (install the
+`api` extra):
+
+```bash
+KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call)
+uv run quant-research serve-api --store ~/research/.kb.db &      # http://127.0.0.1:8000
+curl -H "Authorization: Bearer $KEY" -X POST http://127.0.0.1:8000/v1/tools/find_related_signals/call \
+  -H 'content-type: application/json' -d '{"arguments": {"query": "short-term reversal"}}'
+```
 
 ## Generate an app
 
@@ -156,11 +169,14 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   evidence/       Evidence and SourceRef (facts vs interpretation)
   reporting/      Report models and Markdown rendering
   mcp/            MCP tool definitions and calls over the registry
+  api/            REST routes over the executor and scoped API keys (optional api extra)
   runs/           run store (memory, SQLite), recorder, append-only audit, redaction
   sdk/            Platform facade: call, run, get_run
   observability/  logging with secret redaction
 packages/quant-research/   Quant Research (Graph RAG) product
 packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
+packages/quant-analytics/  performance and risk metrics as tools
+deploy/   team-server Dockerfile, compose file, and smoke test
 apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
 examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
@@ -174,6 +190,7 @@ docs/   architecture, configuration, security, getting started, decisions, roadm
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Security](docs/security.md)
+- [Team server in Docker](docs/deployment.md)
 - [Architecture decisions](docs/decisions/)
 - [Contributing](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for AI coding agents
 
