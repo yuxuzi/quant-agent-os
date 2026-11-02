@@ -32,6 +32,10 @@ mcp = [
 api = [
     "quant-agent-os[api]",
 ]
+# PostgreSQL knowledge store (B-14); the binary build bundles libpq.
+postgres = [
+    "psycopg[binary]>=3.2,<4",
+]
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }
