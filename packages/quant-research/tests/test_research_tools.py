@@ -122,3 +122,17 @@ def test_concise_previews_are_short_and_say_they_are_truncated(research: Researc
     (cut,) = long.concise().passages
     assert cut.text == "x" * CONCISE_PREVIEW_CHARS + "…" and cut.truncated
     assert packet.concise().passages[0] == first  # already short: unchanged
+
+
+def test_every_result_with_corpus_text_is_marked_untrusted(executor: ToolExecutor) -> None:
+    found = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    assert found is not None
+    chunk_id = found["passages"][0]["chunk_id"]
+    passage = executor.execute(
+        PlanStep(tool="get_source_passage", arguments={"chunk_id": chunk_id})
+    )
+    draft = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": "momentum"}))
+
+    assert found["trust"] == "untrusted"
+    assert passage.output is not None and passage.output["trust"] == "untrusted"
+    assert draft.output is not None and draft.output["trust"] == "untrusted"

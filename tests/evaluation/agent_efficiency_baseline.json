@@ -13,9 +13,9 @@
       "tools": 3
     },
     "research": {
-      "client_only_bytes": 8853,
+      "client_only_bytes": 9306,
       "definition_bytes": 2257,
-      "instruction_bytes": 479,
+      "instruction_bytes": 566,
       "tools": 3
     }
   },
@@ -41,13 +41,13 @@
     "draft_strategy": {
       "argument_bytes": 20,
       "calls": 1,
-      "result_bytes": 3701,
+      "result_bytes": 3723,
       "success": true
     },
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
-      "result_bytes": 5600,
+      "result_bytes": 5644,
       "success": true
     }
   },
@@ -55,8 +55,8 @@
     "argument_bytes": 9696,
     "calls": 7,
     "definition_bytes": 8812,
-    "instruction_bytes": 943,
-    "result_bytes": 23545,
+    "instruction_bytes": 1030,
+    "result_bytes": 23611,
     "success_rate": 1.0,
     "tools": 8
   }

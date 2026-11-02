@@ -14,7 +14,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence import Evidence, SourceRef
-from quant_research.application.retrieval import PASSAGE_PREVIEW_CHARS, SIGNAL_TYPES, source_of
+from quant_research.application.retrieval import (
+    PASSAGE_PREVIEW_CHARS,
+    SIGNAL_TYPES,
+    TRUST_NOTE,
+    source_of,
+)
 from quant_research.domain.models import Entity, Predicate
 from quant_research.domain.ports import KnowledgeStore
 from quant_research.domain.vocabulary import EntityMatcher
@@ -137,6 +142,7 @@ class StrategyDraft(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
     data_versions: dict[str, str] = Field(default_factory=dict)
+    trust: Literal["untrusted"] = Field(default="untrusted", description=TRUST_NOTE)
 
 
 class UnknownFocusError(LookupError):
