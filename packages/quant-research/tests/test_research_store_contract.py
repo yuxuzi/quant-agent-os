@@ -1,9 +1,10 @@
 """The shared store contract (B-14): SQLite and PostgreSQL behave alike and answer alike.
 
-Every test runs against each store. The PostgreSQL runs need a database with pgvector, named by
-``QUANT_RESEARCH_TEST_POSTGRES_URL`` (CI provides one); each test gets its own schema and drops
-it afterwards. Answers are compared with an in-memory SQLite reference built from the same
-corpus, down to BM25 scores.
+Every test runs against each store. The PostgreSQL runs need a disposable database with
+pgvector, named by ``QUANT_RESEARCH_TEST_POSTGRES_URL``. CI provides one and sets
+``QUANT_RESEARCH_REQUIRE_POSTGRES``, so the runs cannot be skipped there. Each test gets its own
+schema and drops it afterwards. Answers are compared with an in-memory SQLite reference built
+from the same corpus, down to BM25 scores.
 """
 
 import os
@@ -52,6 +53,8 @@ def backend(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Backend]
         yield Backend("sqlite", str(tmp_path / "kb.db"), "unused")
         return
     if not POSTGRES_URL:
+        if os.environ.get("QUANT_RESEARCH_REQUIRE_POSTGRES"):  # CI must not skip silently
+            pytest.fail("QUANT_RESEARCH_REQUIRE_POSTGRES is set but no PostgreSQL URL is given")
         pytest.skip("set QUANT_RESEARCH_TEST_POSTGRES_URL to run the PostgreSQL store tests")
     import psycopg
     from psycopg import sql
