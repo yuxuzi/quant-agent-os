@@ -275,3 +275,18 @@ def test_a_newer_postgres_schema_version_is_refused(backend: Backend) -> None:
         backend.open()
     with pytest.raises(StoreError, match="schema version 99"):
         backend.open(read_only=True)
+
+
+def test_the_cli_takes_a_postgres_url_and_never_prints_its_password() -> None:
+    from typer.testing import CliRunner
+
+    from quant_research.cli import _runs_path
+    from quant_research.cli import app as cli
+
+    url = "postgresql://qa:s3cret@127.0.0.1:1/kb?connect_timeout=2"
+    result = CliRunner().invoke(cli, ["search", "carry", "--store", url])
+
+    assert result.exit_code != 0
+    assert "s3cret" not in result.output and "qa:***@127.0.0.1:1" in result.output
+    assert _runs_path(url, None) == Path(".quant-research") / "runs.db"
+    assert _runs_path("data/kb.db", None) == Path("data") / "runs.db"

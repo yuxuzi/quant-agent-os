@@ -36,6 +36,7 @@ from quant_research.application.strategy import (
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
+from quant_research.infrastructure.postgres_store import is_postgres_url, redact_url
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
 from quant_research.infrastructure.sqlite_store import StoreError
 from quant_research.tools import research_tools
@@ -56,18 +57,37 @@ MCP_INSTRUCTIONS = (
 )
 
 StoreOption = Annotated[
-    Path, typer.Option("--store", "-s", help="SQLite knowledge store to create or use.")
+    str,
+    typer.Option(
+        "--store",
+        "-s",
+        help="SQLite knowledge store file, or a postgresql:// URL (give the password through "
+        "PGPASSWORD or ~/.pgpass, not the URL).",
+    ),
 ]
+DEFAULT_STORE_OPTION = str(DEFAULT_STORE)
 
 
 RunsOption = Annotated[
     Path | None,
-    typer.Option("--runs", help="SQLite run store (default: runs.db beside the knowledge store)."),
+    typer.Option(
+        "--runs",
+        help="SQLite run store (default: runs.db beside a SQLite knowledge store, or in "
+        ".quant-research for PostgreSQL).",
+    ),
 ]
 
 
-def _runs_path(store: Path, runs: Path | None) -> Path:
-    return runs if runs is not None else store.parent / "runs.db"
+def _runs_path(store: str, runs: Path | None) -> Path:
+    if runs is not None:
+        return runs
+    base = DEFAULT_STORE.parent if is_postgres_url(store) else Path(store).parent
+    return base / "runs.db"
+
+
+def _shown(store: str) -> str:
+    """Return the store's location for messages, with any password hidden."""
+    return redact_url(store) if is_postgres_url(store) else store
 
 
 class EmbedderChoice(StrEnum):
@@ -93,7 +113,7 @@ ModelOption = Annotated[
 
 
 def _open(
-    store: Path, embedder: EmbedderChoice | None, model: str | None, *, read_only: bool = False
+    store: str, embedder: EmbedderChoice | None, model: str | None, *, read_only: bool = False
 ) -> ResearchApp:
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
@@ -111,7 +131,7 @@ def _fail(error: Exception | str) -> typer.Exit:
 @app.command()
 def ingest(
     corpus: Annotated[Path, typer.Argument(help="A corpus directory or a single file.")],
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
@@ -135,7 +155,7 @@ def ingest(
         f"skipped {len(result.skipped)}: {result.chunks} chunks, {result.mentions} mentions, "
         f"{result.relations} relations, {result.embedded} embeddings."
     )
-    console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {store}.")
+    console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {_shown(store)}.")
     for warning in result.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
@@ -143,7 +163,7 @@ def ingest(
 @app.command()
 def search(
     query: Annotated[str, typer.Argument(help="A research question.")],
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     k: Annotated[int, typer.Option(help="Maximum passages.")] = 6,
     hops: Annotated[int, typer.Option(help="Graph expansion depth (1-2).")] = 1,
     embedder: EmbedderOption = None,
@@ -183,7 +203,7 @@ def search(
 @app.command()
 def strategy(
     focus: Annotated[str, typer.Argument(help="A signal, factor, or strategy, or an entity id.")],
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     min_confidence: Annotated[float, typer.Option(help="Weakest relation to include.")] = 0.5,
     as_json: Annotated[bool, typer.Option("--json", help="Print the spec as JSON.")] = False,
 ) -> None:
@@ -221,7 +241,7 @@ def strategy(
 
 @app.command("serve-mcp")
 def serve_mcp(
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     runs: RunsOption = None,
@@ -264,7 +284,7 @@ def serve_mcp(
 
 @app.command("serve-api")
 def serve_api(
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     keys: Annotated[
         Path | None,
         typer.Option(help="API keys file (default: QUANT_AGENT_OS_API_KEYS_FILE)."),
@@ -325,7 +345,7 @@ def serve_api(
 @app.command("runs")
 def show_runs(
     run_id: Annotated[str | None, typer.Argument(help="A run id to show in full.")] = None,
-    store: StoreOption = DEFAULT_STORE,
+    store: StoreOption = DEFAULT_STORE_OPTION,
     runs: RunsOption = None,
     limit: Annotated[int, typer.Option(help="How many recent runs to list.")] = 20,
 ) -> None:
