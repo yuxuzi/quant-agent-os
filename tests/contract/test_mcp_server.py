@@ -1,25 +1,39 @@
 """The MCP stdio transport forwards to the adapter: same tools, same results, same errors."""
 
+import json
 import sys
 from typing import Any
 
 import anyio
 import pytest
 from mcp.client.session import ClientSession
+from mcp.shared.exceptions import McpError
 from mcp.shared.memory import create_connected_server_and_client_session
 from portfolio_tools import build_registry
 from pydantic import BaseModel
 
 from quant_agent_os.mcp import (
     MCPUnavailableError,
+    ResourceReadError,
     build_server,
     call_tool,
     compact_schema,
+    read_resource,
     run_stdio,
+    served_resources,
     tool_definitions,
 )
 from quant_agent_os.runtime import PlanStep, ToolExecutor
-from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
+from quant_agent_os.tools import (
+    Permission,
+    PermissionPolicy,
+    PromptArgument,
+    PromptSpec,
+    ResourceSpec,
+    ToolContractError,
+    ToolRegistry,
+    tool,
+)
 
 ARGUMENTS = {"series_id": "s", "returns": [0.01, -0.02, 0.03], "periods_per_year": 12}
 
@@ -148,3 +162,123 @@ def test_compact_schemas_drop_derived_titles_but_keep_a_property_named_title() -
         "required": ["title"],
         "type": "object",
     }
+
+
+class Key(BaseModel):
+    key: str
+
+
+class Entry(BaseModel):
+    key: str
+    length: int
+
+
+@tool(name="lookup", description="Look up an entry by key.")
+def lookup(params: Key) -> Entry:
+    if params.key == "missing":
+        raise LookupError("No entry 'missing'.")
+    return Entry(key=params.key, length=len(params.key))
+
+
+CATALOG_EXECUTOR = ToolExecutor(ToolRegistry([lookup, fetch_page]), PermissionPolicy())
+ENTRY = ResourceSpec(
+    uri_template="test://entry/{key}", name="entry", description="An entry.", tool="lookup"
+)
+PAGE = ResourceSpec(
+    uri_template="test://page/{url}", name="page", description="A page.", tool="fetch_page"
+)
+PROMPT = PromptSpec(
+    name="study",
+    description="Study an entry.",
+    template="Read test://entry/{key} and summarise it.",
+    arguments=(PromptArgument("key", "The entry key"),),
+)
+
+
+def _catalog_session(check: Any, **kwargs: Any) -> Any:
+    async def main() -> Any:
+        server = build_server(CATALOG_EXECUTOR, name="test", **kwargs)
+        async with create_connected_server_and_client_session(server) as session:
+            return await check(session)
+
+    return anyio.run(main)
+
+
+def test_resources_are_read_through_their_tool_with_the_same_output() -> None:
+    async def check(session: ClientSession) -> Any:
+        templates = (await session.list_resource_templates()).resourceTemplates
+        read = await session.read_resource("test://entry/abc")  # type: ignore[arg-type]
+        return templates, read
+
+    templates, read = _catalog_session(check, resources=[ENTRY, PAGE])
+    direct = CATALOG_EXECUTOR.execute(PlanStep(tool="lookup", arguments={"key": "abc"}))
+
+    assert [item.uriTemplate for item in templates] == ["test://entry/{key}", "test://page/{url}"]
+    assert read.contents[0].text == json.dumps(direct.output, sort_keys=True)
+    assert read.contents[0].mimeType == "application/json"
+
+
+def test_a_failed_or_unmatched_read_is_an_error_with_the_status_and_hint() -> None:
+    with pytest.raises(ResourceReadError, match=r"error: LookupError: No entry 'missing'\. Hint:"):
+        read_resource(CATALOG_EXECUTOR, [ENTRY], "test://entry/missing")
+    with pytest.raises(ResourceReadError, match="denied"):
+        read_resource(CATALOG_EXECUTOR, [PAGE], "test://page/example")
+    with pytest.raises(ResourceReadError, match="No resource matches"):
+        read_resource(CATALOG_EXECUTOR, [ENTRY], "test://other/abc")
+
+    async def check(session: ClientSession) -> Any:
+        try:
+            await session.read_resource("test://entry/missing")  # type: ignore[arg-type]
+        except McpError as error:
+            return error.error.message
+        return None
+
+    assert "LookupError" in _catalog_session(check, resources=[ENTRY])
+
+
+def test_resources_of_unserved_tools_are_not_listed_and_bad_templates_are_refused() -> None:
+    narrowed = ToolExecutor(
+        ToolRegistry([lookup, fetch_page]), PermissionPolicy(tool_allowlist=frozenset({"lookup"}))
+    )
+    assert served_resources(narrowed, [ENTRY, PAGE]) == [ENTRY]
+
+    wrong = ResourceSpec(
+        uri_template="test://entry/{name}", name="wrong", description="W.", tool="lookup"
+    )
+    with pytest.raises(ToolContractError, match="'lookup' does not take"):
+        build_server(CATALOG_EXECUTOR, name="test", resources=[wrong])
+
+
+def test_prompts_are_listed_and_rendered() -> None:
+    async def check(session: ClientSession) -> Any:
+        listed = (await session.list_prompts()).prompts
+        got = await session.get_prompt("study", {"key": "abc"})
+        return listed, got
+
+    listed, got = _catalog_session(check, prompts=[PROMPT])
+
+    assert [(item.name, [a.name for a in item.arguments or []]) for item in listed] == [
+        ("study", ["key"])
+    ]
+    assert got.messages[0].content.text == "Read test://entry/abc and summarise it."
+
+    async def missing(session: ClientSession) -> Any:
+        try:
+            await session.get_prompt("study", {})
+        except McpError as error:
+            return error.error.message
+        return None
+
+    assert _catalog_session(missing, prompts=[PROMPT]) == "Prompt 'study' needs key."
+
+
+def test_a_server_without_resources_or_prompts_does_not_advertise_them() -> None:
+    plain = build_server(EXECUTOR, name="test").create_initialization_options().capabilities
+    full = (
+        build_server(CATALOG_EXECUTOR, name="test", resources=[ENTRY], prompts=[PROMPT])
+        .create_initialization_options()
+        .capabilities
+    )
+
+    assert plain.resources is None and plain.prompts is None
+    assert full.resources is not None and full.prompts is not None

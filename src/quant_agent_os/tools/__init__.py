@@ -1,5 +1,12 @@
 """Tool contract, registry, and permissions."""
 
+from quant_agent_os.tools.catalog import (
+    PromptArgument,
+    PromptArgumentError,
+    PromptSpec,
+    ResourceSpec,
+    UnknownResourceError,
+)
 from quant_agent_os.tools.contracts import ToolContractError, ToolSpec, tool
 from quant_agent_os.tools.permissions import (
     CONSEQUENTIAL,
@@ -17,9 +24,14 @@ __all__ = [
     "Permission",
     "PermissionDeniedError",
     "PermissionPolicy",
+    "PromptArgument",
+    "PromptArgumentError",
+    "PromptSpec",
+    "ResourceSpec",
     "ToolContractError",
     "ToolRegistry",
     "ToolSpec",
+    "UnknownResourceError",
     "UnknownToolError",
     "tool",
 ]
