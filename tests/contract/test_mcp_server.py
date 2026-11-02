@@ -14,6 +14,7 @@ from quant_agent_os.mcp import (
     MCPUnavailableError,
     build_server,
     call_tool,
+    compact_schema,
     run_stdio,
     tool_definitions,
 )
@@ -55,14 +56,9 @@ def test_tools_list_mirrors_the_registry_with_behaviour_hints() -> None:
     assert tools["max_drawdown"].annotations.readOnlyHint is True
     assert tools["max_drawdown"].annotations.openWorldHint is False
     assert tools["fetch_page"].annotations.openWorldHint is True
-    assert (
-        tools["max_drawdown"].inputSchema
-        == REGISTRY.get("max_drawdown").descriptor()["input_schema"]
-    )
-    assert (
-        tools["max_drawdown"].outputSchema
-        == REGISTRY.get("max_drawdown").descriptor()["output_schema"]
-    )
+    descriptor = REGISTRY.get("max_drawdown").descriptor()
+    assert tools["max_drawdown"].inputSchema == compact_schema(descriptor["input_schema"])
+    assert tools["max_drawdown"].outputSchema == compact_schema(descriptor["output_schema"])
     assert tools["max_drawdown"].title == "Max drawdown"
 
 
@@ -133,3 +129,22 @@ def test_a_missing_extra_gives_the_install_hint(monkeypatch: pytest.MonkeyPatch)
 
     with pytest.raises(MCPUnavailableError, match="quant-agent-os\\[mcp\\]"):
         run_stdio(EXECUTOR, name="test")
+
+
+def test_compact_schemas_drop_derived_titles_but_keep_a_property_named_title() -> None:
+    class Source(BaseModel):
+        title: str
+
+    class Report(BaseModel):
+        name: str
+        sources: list[Source]
+
+    schema = compact_schema(Report.model_json_schema())
+
+    assert "title" not in schema
+    assert schema["properties"]["name"] == {"type": "string"}
+    assert schema["$defs"]["Source"] == {
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+        "type": "object",
+    }

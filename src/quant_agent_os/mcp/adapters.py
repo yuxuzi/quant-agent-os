@@ -19,6 +19,8 @@ _WRITES = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.EXTERNAL_ACTION}
 )
 _OUTSIDE = frozenset({Permission.NETWORK, Permission.EXTERNAL_ACTION})
+# Keywords whose keys are names (of properties or definitions), not schema keywords.
+_NAMED_SUBSCHEMAS = frozenset({"properties", "$defs", "definitions", "patternProperties"})
 
 
 def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
@@ -34,8 +36,8 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
             "name": spec.name,
             "title": spec.title,
             "description": spec.description,
-            "inputSchema": spec.input_model.model_json_schema(),
-            "outputSchema": spec.descriptor()["output_schema"],
+            "inputSchema": compact_schema(spec.input_model.model_json_schema()),
+            "outputSchema": compact_schema(spec.descriptor()["output_schema"]),
             "annotations": {
                 "readOnlyHint": not (spec.permissions & _WRITES),
                 "idempotentHint": spec.idempotent,
@@ -45,6 +47,27 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
         for spec in executor.registry.specs()
         if executor.policy.allows_tool(spec.name)
     ]
+
+
+def compact_schema(schema: Any) -> Any:
+    """Return ``schema`` without its ``title`` keywords, which pydantic derives from names.
+
+    Titles repeat the property or model name, so they cost every client context on every turn
+    and validate nothing. A property that is itself named ``title`` is kept.
+    """
+    if isinstance(schema, list):
+        return [compact_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    return {
+        key: (
+            {name: compact_schema(value) for name, value in child.items()}
+            if key in _NAMED_SUBSCHEMAS and isinstance(child, dict)
+            else compact_schema(child)
+        )
+        for key, child in schema.items()
+        if key != "title"
+    }
 
 
 def call_tool(

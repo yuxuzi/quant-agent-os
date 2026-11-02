@@ -1,20 +1,20 @@
 {
   "servers": {
     "analytics": {
-      "client_only_bytes": 8991,
-      "definition_bytes": 3958,
+      "client_only_bytes": 4695,
+      "definition_bytes": 2439,
       "instruction_bytes": 133,
-      "tools": 4
+      "tools": 2
     },
     "factory": {
-      "client_only_bytes": 12462,
-      "definition_bytes": 4583,
+      "client_only_bytes": 10217,
+      "definition_bytes": 4116,
       "instruction_bytes": 331,
       "tools": 3
     },
     "research": {
-      "client_only_bytes": 10669,
-      "definition_bytes": 2523,
+      "client_only_bytes": 8853,
+      "definition_bytes": 2257,
       "instruction_bytes": 479,
       "tools": 3
     }
@@ -54,10 +54,10 @@
   "totals": {
     "argument_bytes": 9696,
     "calls": 7,
-    "definition_bytes": 11064,
+    "definition_bytes": 8812,
     "instruction_bytes": 943,
     "result_bytes": 23545,
     "success_rate": 1.0,
-    "tools": 10
+    "tools": 8
   }
 }

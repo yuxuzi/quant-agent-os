@@ -406,16 +406,15 @@ def analyze_risk(params: RiskInput) -> RiskOutput:
     )
 
 
-TOOLS: list[ToolSpec[Any, Any]] = [
-    analyze_performance,
-    analyze_risk,
-    annualized_return,
-    max_drawdown,
-]
+# The tools a client is offered. analyze_performance already returns annualized_return and
+# max_drawdown, so the single-metric tools stay importable for code and examples but are not
+# served: each definition costs client context on every turn.
+TOOLS: list[ToolSpec[Any, Any]] = [analyze_performance, analyze_risk]
+SINGLE_METRIC_TOOLS: list[ToolSpec[Any, Any]] = [annualized_return, max_drawdown]
 
 
 def analytics_tools() -> ToolRegistry:
-    """Return a registry with every analytics tool."""
+    """Return a registry with the served analytics tools (`TOOLS`)."""
     return ToolRegistry(TOOLS)
 
 
