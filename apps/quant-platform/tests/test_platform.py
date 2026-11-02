@@ -1,8 +1,6 @@
 """The platform server (plan steps P2.1, P2.4, P2.5): one catalog, research_report, and prompts."""
 
 import json
-from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import anyio
@@ -19,30 +17,9 @@ from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
 from quant_platform import Catalog, compose
 from quant_platform.cli import app as cli
-from quant_research import ResearchApp, open_research
+from quant_research import ResearchApp
 
-ROOT = Path(__file__).resolve().parents[3]
-CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
 FUND = [0.012, -0.004, 0.021, -0.015, 0.008, 0.017, -0.006, 0.011, 0.002, -0.009, 0.014, 0.005]
-
-
-@pytest.fixture(scope="module")
-def research() -> Iterator[ResearchApp]:
-    app = open_research(":memory:")
-    app.ingest.ingest(CORPUS)
-    yield app
-    app.close()
-
-
-@pytest.fixture
-def datasets(tmp_path: Path) -> DirectoryDatasetStore:
-    source = tmp_path / "returns.csv"
-    source.write_text(
-        "month,fund\n" + "".join(f"2024-{m + 1:02d},{v}\n" for m, v in enumerate(FUND))
-    )
-    store = DirectoryDatasetStore(tmp_path / "datasets")
-    store.put("returns", source)
-    return store
 
 
 def _everything(research: ResearchApp, datasets: DirectoryDatasetStore) -> Catalog:
