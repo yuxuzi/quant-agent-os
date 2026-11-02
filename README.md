@@ -26,7 +26,7 @@ It has two products built on one core platform:
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
 | Quant Research (Graph RAG) | Implemented over SQLite: ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
 | Quant App Factory | Foundation implemented: `quant-factory plan/create`, `plan_app`/`create_app` tools, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
-| Quant Analytics | Implemented: `analyze_performance` on empyrical-reloaded (Sharpe, Sortino, Calmar, drawdown, VaR, alpha/beta, tracking error, IR), with conventions pinned by known-answer tests ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)) |
+| Quant Analytics | Implemented: `analyze_performance` on empyrical-reloaded (Sharpe, Sortino, Calmar, drawdown, VaR, alpha/beta, tracking error, IR) and `analyze_risk` (volatility contributions, factor exposures, variance shares), with conventions pinned by known-answer tests ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)) |
 
 The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
 

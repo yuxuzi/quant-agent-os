@@ -57,3 +57,10 @@ We measured both on Python 3.14, under the repository's two-week supply-chain cu
   until bottleneck ships cp315 wheels.
 - `peewee<3.17.4` arrives through empyrical, an unusual pin for a metrics library. It is locked
   under the same cut-off as everything else.
+- **Risk (B-21, 2026-11-01).** empyrical has no portfolio risk decomposition, so
+  `quant_analytics.risk` uses numpy's sample covariance and least squares. These are not new
+  formulas to defend in the sense above. Euler contributions summing to volatility, and factor
+  plus specific variance shares summing to one, are identities that the known-answer tests
+  check. The single-factor beta is also checked against empyrical's. The module follows the
+  same rules as `metrics.py`: it imports numerical libraries only, and its conventions are
+  stated and pinned by tests.
