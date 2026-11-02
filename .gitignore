@@ -73,6 +73,8 @@ docs/_build/
 # IDE and editor settings
 .idea/
 .vscode/
+# ...except the VS Code client bundle, which is generated and committed (clients/README.md).
+!clients/vscode/.vscode/
 *.swp
 *.swo
 
