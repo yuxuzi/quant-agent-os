@@ -84,6 +84,18 @@ same tools as `serve-mcp` over HTTP, which other machines may reach, so:
   - There are no public schema pages, no CORS, and no server header.
   - Request bodies are capped at 5 MiB, and error messages never echo the key.
 
+## PostgreSQL knowledge store
+
+[Decision 0004](decisions/0004-knowledge-store.md).
+- **Passwords.** Give the password through `PGPASSWORD` or `~/.pgpass`, not in the
+  `postgresql://` URL. A URL is easy to log, and it shows in process lists. Every message
+  shows the URL with any password replaced by `***`.
+- **Read-only serving.** Serving opens the store in read-only transactions. Defend in depth
+  with a role that can only `SELECT`; `deploy/compose.postgres.yaml` creates one, and CI checks
+  that it is refused writes by permission.
+- **Its own schema.** The store keeps to its own schema. It creates pgvector only when the
+  role is allowed to; otherwise the vector channel is unavailable.
+
 ## Docker team server
 
 [docs/deployment.md](deployment.md). The image holds code only. The knowledge store, API-key
