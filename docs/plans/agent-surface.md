@@ -136,6 +136,27 @@ decision record and needs the user's approval before work begins.
 **Done when** the evaluation shows lower definition bytes and lower bytes per task at equal
 success, and all contract tests pass.
 
+**Status: done (2026-11-02).** Measured with the evaluation, before P1.2 and after P1.6:
+
+| Metric | Before | After | Change |
+| --- | --- | --- | --- |
+| Tools served (research, analytics, factory) | 10 | 8 | −2 |
+| Definition bytes the model sees per turn | 10,905 | 8,812 | −19% |
+| Instruction bytes | 943 | 1,030 | +87 (untrusted-text rule) |
+| Result bytes, five tasks | 24,100 | 23,611 | −2% |
+| Argument bytes, five tasks | 9,696 | 9,696 | 0 (P2 moves series to datasets) |
+| Calls, five tasks / success | 7 / 100% | 7 / 100% | — |
+
+The fixture corpus has short chunks, so concise search saves little here (6,155 to 5,644 bytes
+for search and cite); on real papers each passage preview shrinks by up to 400 characters.
+Deviations from the steps above:
+- **No cursor paging.** `k` (at most 25) already bounds a search, and paging a fused ranking
+  would rerun every channel per page. Revisit when a client needs more than 25 passages.
+- **Titles are derived** from tool names, so `ToolSpec` gained no field.
+- **Output limits are unchanged.** `max_output_bytes` is a ceiling that fails a call, not a
+  target, so lowering it would turn large `full` results into errors.
+- **REST got the failure hints too**, because the branch now sits on the REST interface.
+
 ### P2. One composed server, resources, prompts, and data by reference (B-31)
 
 1. **P2.1 Composition root.** `apps/quant-platform` (it replaces the superseded

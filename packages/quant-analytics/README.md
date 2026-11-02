@@ -19,7 +19,8 @@ are empyrical-reloaded's ([decision 0010](../../docs/decisions/0010-analytics-on
   - `analyze_performance` returns every metric of a series.
   - `analyze_risk` returns a portfolio's volatility, its contributions, and, with factor
     returns, its exposures.
-  - `annualized_return` and `max_drawdown` are single-metric tools.
+  - `annualized_return` and `max_drawdown` are single-metric tools for code and examples.
+    `analytics_tools()` does not serve them, since `analyze_performance` returns both.
 
 ```python
 from quant_agent_os.sdk import Platform
