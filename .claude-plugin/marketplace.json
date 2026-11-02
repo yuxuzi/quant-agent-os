@@ -1,0 +1,14 @@
+{
+  "name": "quant-agent-os",
+  "description": "Quant-Agent-OS for Claude Code: the platform MCP server with its research, analytics, strategy, and App Factory skills.",
+  "owner": {
+    "name": "Leo Liu"
+  },
+  "plugins": [
+    {
+      "name": "quant-agent-os",
+      "source": "./",
+      "description": "The Quant-Agent-OS MCP server and its four skills (research, analytics, strategy, App Factory)."
+    }
+  ]
+}

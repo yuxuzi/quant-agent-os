@@ -1,0 +1,30 @@
+{
+  "name": "quant-agent-os",
+  "version": "0.1.0",
+  "description": "Quantitative research tools with cited, computed evidence: search your own research corpus, compute performance and risk metrics by dataset reference, draft cited strategy specs and reports, and check App Factory specs. One MCP server plus four skills.",
+  "author": {
+    "name": "Leo Liu"
+  },
+  "repository": "https://github.com/yuxuzi/quant-agent-os",
+  "license": "MIT",
+  "keywords": ["quant", "research", "mcp", "skills", "finance"],
+  "mcpServers": {
+    "quant-agent-os": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "--locked",
+        "--no-dev",
+        "--python",
+        "3.13",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "--package",
+        "quant-agent-os-platform",
+        "quant-platform",
+        "serve-mcp"
+      ]
+    }
+  }
+}

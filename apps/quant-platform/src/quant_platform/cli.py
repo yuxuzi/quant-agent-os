@@ -61,6 +61,7 @@ console = Console()
 errors = Console(stderr=True, soft_wrap=True)
 DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "runs.db"
 DEFAULT_TENANTS = Path.home() / ".quant-agent-os" / "tenants.toml"
+DEFAULT_STORE = Path.home() / ".quant-agent-os" / "knowledge.db"
 
 ToolsetsOption = Annotated[
     str | None,
@@ -71,7 +72,11 @@ ToolsetsOption = Annotated[
 ]
 StoreOption = Annotated[
     str | None,
-    typer.Option(help="Research knowledge store (a SQLite path or postgresql:// URL)."),
+    typer.Option(
+        envvar="QUANT_AGENT_OS_STORE",
+        help="Research knowledge store: a SQLite path or postgresql:// URL (default "
+        "~/.quant-agent-os/knowledge.db when it exists).",
+    ),
 ]
 TenantsOption = Annotated[
     Path | None,
@@ -110,14 +115,32 @@ def _factory() -> AppFactory:
 
 
 def _catalog(
-    toolsets: list[Toolset], store: str | None, datasets: Path | None
+    toolsets: list[Toolset], store: str | None, datasets: Path | None, *, chosen: bool = True
 ) -> tuple[Catalog, ResearchApp | None]:
-    """Open what the toolsets need and compose them, or exit with an actionable message."""
+    """Open what the toolsets need and compose them, or exit with an actionable message.
+
+    Without a store, the research toolset uses ``~/.quant-agent-os/knowledge.db`` if it exists.
+    Otherwise it is an error when the toolsets were ``chosen``, and skipped with a warning when
+    they are the default, so a client configured once (a plugin) still starts.
+    """
     research: ResearchApp | None = None
-    if "research" in toolsets:
-        if store is None:
-            errors.print("[red]error:[/red] the research toolset needs --store (ingest first).")
+    if "research" in toolsets and store is None:
+        if DEFAULT_STORE.is_file():
+            store = str(DEFAULT_STORE)
+        elif chosen:
+            errors.print(
+                "[red]error:[/red] the research toolset needs --store or QUANT_AGENT_OS_STORE "
+                "(ingest first)."
+            )
             raise typer.Exit(2)
+        else:
+            errors.print(
+                "[yellow]warning:[/yellow] no knowledge store, so the research toolset is not "
+                "served. Ingest with `quant-research ingest DIR --store "
+                f"{DEFAULT_STORE}`, or set QUANT_AGENT_OS_STORE."
+            )
+            toolsets = [item for item in toolsets if item != "research"]
+    if "research" in toolsets and store is not None:
         try:
             research = open_research(store, read_only=True)
         except StoreError as error:
@@ -155,7 +178,9 @@ def serve_mcp(
     QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr because
     stdout carries the protocol.
     """
-    catalog, research = _catalog(_toolsets(toolsets), store, datasets)
+    catalog, research = _catalog(
+        _toolsets(toolsets), store, datasets, chosen=toolsets is not None
+    )
     run_store: SqliteRunStore | None = None
     try:
         if record:
@@ -257,7 +282,9 @@ def serve_http(
             errors.print(f"[red]error:[/red] {error}")
             raise typer.Exit(1) from error
         if configured is None:
-            catalog, research = _catalog(_toolsets(toolsets), store, datasets)
+            catalog, research = _catalog(
+                _toolsets(toolsets), store, datasets, chosen=toolsets is not None
+            )
             tenancy: Tenancy = single_tenant(catalog, run_store, settings.policy())
             instructions, served = catalog.instructions, f"{len(catalog.tools)} tools"
         else:
@@ -445,7 +472,9 @@ def catalog_command(
     datasets: DatasetsOption = None,
 ) -> None:
     """List what `serve-mcp` would offer: tools, resource templates, and prompts."""
-    catalog, research = _catalog(_toolsets(toolsets), store, datasets)
+    catalog, research = _catalog(
+        _toolsets(toolsets), store, datasets, chosen=toolsets is not None
+    )
     try:
         table = Table(title="Quant-Agent-OS catalog")
         for column in ("Kind", "Name", "Description"):
