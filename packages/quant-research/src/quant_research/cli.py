@@ -36,7 +36,11 @@ from quant_research.application.strategy import (
 from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
-from quant_research.infrastructure.postgres_store import is_postgres_url, redact_url
+from quant_research.infrastructure.postgres_store import (
+    DEFAULT_SCHEMA,
+    is_postgres_url,
+    redact_url,
+)
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
 from quant_research.infrastructure.sqlite_store import StoreError
 from quant_research.tools import research_tools
@@ -67,6 +71,16 @@ StoreOption = Annotated[
     ),
 ]
 DEFAULT_STORE_OPTION = str(DEFAULT_STORE)
+
+
+SchemaOption = Annotated[
+    str,
+    typer.Option(
+        "--schema",
+        envvar="QUANT_RESEARCH_SCHEMA",
+        help="PostgreSQL schema of the store; one per tenant on a shared server (decision 0013).",
+    ),
+]
 
 
 RunsOption = Annotated[
@@ -114,12 +128,17 @@ ModelOption = Annotated[
 
 
 def _open(
-    store: str, embedder: EmbedderChoice | None, model: str | None, *, read_only: bool = False
+    store: str,
+    embedder: EmbedderChoice | None,
+    model: str | None,
+    *,
+    read_only: bool = False,
+    schema: str = DEFAULT_SCHEMA,
 ) -> ResearchApp:
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
         chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
-        return open_research(store, embedder=chosen, read_only=read_only)
+        return open_research(store, embedder=chosen, read_only=read_only, schema=schema)
     except (EmbeddingServiceError, StoreError) as error:
         raise _fail(error) from error
 
@@ -136,12 +155,13 @@ def ingest(
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
+    schema: SchemaOption = DEFAULT_SCHEMA,
 ) -> None:
     """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash.
 
     With a hosted --embedder, chunk text is sent to that provider to be embedded.
     """
-    research = _open(store, embedder, embedding_model)
+    research = _open(store, embedder, embedding_model, schema=schema)
     try:
         result = research.ingest.ingest(corpus)
     except (FileNotFoundError, EmbeddingServiceError) as error:
@@ -170,12 +190,13 @@ def search(
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the evidence packet.")] = False,
+    schema: SchemaOption = DEFAULT_SCHEMA,
 ) -> None:
     """Run `find_related_signals` locally (read-only) and show the evidence.
 
     Use the same --embedder and --embedding-model as at ingestion to search by vector.
     """
-    research = _open(store, embedder, embedding_model, read_only=True)
+    research = _open(store, embedder, embedding_model, read_only=True, schema=schema)
     try:
         packet = research.research.find_related(ResearchQuery(query=query, k=k, hops=hops))
     except EmbeddingServiceError as error:
