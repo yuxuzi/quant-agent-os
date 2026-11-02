@@ -54,9 +54,11 @@ jobs:
       - run: uv run pytest packages/quant-research/tests -rs
 
   docker:
-    # Builds the team-server image and runs it end to end with docker compose (B-19).
+    # Builds the team-server image and runs it end to end with docker compose, on SQLite and on
+    # PostgreSQL with pgvector (B-19, B-14).
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - run: deploy/smoke-test.sh
+      - run: deploy/smoke-test.sh sqlite
+      - run: deploy/smoke-test.sh postgres

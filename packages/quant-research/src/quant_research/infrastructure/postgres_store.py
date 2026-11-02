@@ -240,6 +240,12 @@ class PostgresKnowledgeStore:
             else:
                 self._create()
             self.has_vector = self._table_exists("embeddings")
+        except psycopg.Error as error:
+            self._db.close()
+            raise StoreError(
+                f"Cannot open the knowledge store in schema {schema} at {self.location}: "
+                f"{str(error).strip()}"
+            ) from None
         except BaseException:
             self._db.close()
             raise
