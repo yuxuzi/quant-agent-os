@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runtime.executor import ToolExecutor
+from quant_agent_os.runtime.executor import ToolExecutor, failure_details
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.permissions import Permission
 
@@ -54,7 +54,11 @@ def call_tool(
     *,
     recorder: RunRecorder | None = None,
 ) -> dict[str, Any]:
-    """Return an MCP ``tools/call`` result for one invocation, recorded as a run if asked."""
+    """Return an MCP ``tools/call`` result for one invocation, recorded as a run if asked.
+
+    A failure is an error result whose text leads with the status and whose structured content
+    adds a hint on what to do next and whether retrying can help (`failure_details`).
+    """
     step = PlanStep(tool=name, arguments=arguments)
     record = recorder.call(executor, step) if recorder else executor.execute(step)
     if record.status == "ok":
@@ -63,7 +67,14 @@ def call_tool(
             "structuredContent": record.output,
             "isError": False,
         }
+    available = [
+        spec.name for spec in executor.registry.specs() if executor.policy.allows_tool(spec.name)
+    ]
+    details = failure_details(record, available)
     return {
-        "content": [{"type": "text", "text": f"{record.status}: {record.error}"}],
+        "content": [
+            {"type": "text", "text": f"{record.status}: {record.error}\nHint: {details['hint']}"}
+        ],
+        "structuredContent": details,
         "isError": True,
     }

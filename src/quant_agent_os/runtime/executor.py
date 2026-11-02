@@ -26,6 +26,34 @@ CallStatus = Literal[
     "ok", "invalid_input", "denied", "approval_required", "unknown_tool", "timeout", "error"
 ]
 
+# What a caller (usually a model) should do after each failure, and whether retrying can help.
+FAILURE_HINTS: dict[CallStatus, tuple[str, bool]] = {
+    "invalid_input": (
+        "Fix the arguments named in the error to match the tool's input schema, then call again.",
+        True,
+    ),
+    "unknown_tool": ("Call one of the available tools: {tools}.", True),
+    "denied": (
+        "The server's operator has not granted this tool's permissions. Do not retry; tell the "
+        "user which permission it needs.",
+        False,
+    ),
+    "approval_required": (
+        "This call waits for an operator's approval. Do not retry or try to approve it; tell "
+        "the user it needs their approval.",
+        False,
+    ),
+    "timeout": (
+        "The tool ran out of time. Retry once with a narrower request, such as fewer results.",
+        True,
+    ),
+    "error": (
+        "The tool failed. The same arguments will fail the same way; change them or report the "
+        "error to the user.",
+        False,
+    ),
+}
+
 
 class ToolCallRecord(BaseModel):
     """Provenance for one tool call; recorded whether it succeeded or not.
@@ -176,3 +204,20 @@ def _brief(error: ValidationError) -> str:
         f"{'.'.join(str(part) for part in item['loc']) or 'value'}: {item['msg']}"
         for item in error.errors()
     )
+
+
+def failure_details(record: ToolCallRecord, tools: list[str]) -> dict[str, Any]:
+    """Return a failed call as ``status``, ``error``, ``hint``, and ``retryable``.
+
+    The hint tells the caller what to do next; ``tools`` names the available tools for an
+    unknown-tool hint. Every interface (MCP, REST) reports failures this way.
+    """
+    if record.status == "ok":
+        raise ValueError("failure_details needs a failed call record")
+    hint, retryable = FAILURE_HINTS[record.status]
+    return {
+        "status": record.status,
+        "error": record.error,
+        "hint": hint.format(tools=", ".join(tools) or "none"),
+        "retryable": retryable,
+    }

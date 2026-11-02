@@ -1,10 +1,13 @@
 """Unit tests for bounded tool execution."""
 
 import time
+from typing import get_args
 
+import pytest
 from pydantic import BaseModel
 
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import PlanStep, ToolExecutor, failure_details
+from quant_agent_os.runtime.executor import FAILURE_HINTS, CallStatus
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
 
@@ -88,3 +91,31 @@ def test_invalid_input_is_hashed_from_the_raw_arguments() -> None:
 
     assert record.status == "invalid_input"
     assert record.input_sha256 is not None
+
+
+def test_every_failure_status_has_a_hint() -> None:
+    assert set(FAILURE_HINTS) == set(get_args(CallStatus)) - {"ok"}
+
+
+def test_failure_details_say_what_to_do_next() -> None:
+    def details(tool_name: str, **arguments: object) -> dict[str, object]:
+        record = EXECUTOR.execute(PlanStep(tool=tool_name, arguments=arguments))
+        return failure_details(record, ["double", "slow"])
+
+    assert details("missing")["hint"] == "Call one of the available tools: double, slow."
+    assert details("double", value="x")["retryable"] is True
+    assert details("slow", value=1)["retryable"] is True
+    assert details("fetch", value=1)["retryable"] is False
+    assert details("broken", value=1) == {
+        "status": "error",
+        "error": "RuntimeError: boom",
+        "hint": FAILURE_HINTS["error"][0],
+        "retryable": False,
+    }
+
+
+def test_failure_details_refuse_a_successful_call() -> None:
+    record = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 1}))
+
+    with pytest.raises(ValueError, match="failed call"):
+        failure_details(record, [])

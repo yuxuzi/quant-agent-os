@@ -93,6 +93,13 @@ def test_invalid_input_and_denied_calls_report_executor_errors() -> None:
     assert invalid.isError and invalid.content[0].text.startswith("invalid_input:")
     assert denied.isError and denied.content[0].text.startswith("denied:")
     assert unknown.isError and unknown.content[0].text.startswith("unknown_tool:")
+    assert invalid.structuredContent["retryable"] is True
+    assert "returns" in invalid.structuredContent["error"]
+    assert denied.structuredContent["retryable"] is False
+    assert unknown.structuredContent["hint"] == (
+        "Call one of the available tools: annualized_return, fetch_page, max_drawdown."
+    )
+    assert "Hint: Call one of the available tools" in unknown.content[0].text
 
 
 def test_the_server_announces_its_name_version_and_instructions() -> None:
