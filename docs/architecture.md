@@ -681,7 +681,7 @@ See [security.md](security.md) for details.
 | --- | --- | --- |
 | Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
 | Local MCP server | `uv run --directory <repo> quant-research serve-mcp --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `quant-research ingest` | Confirmed |
-| Team server | Docker image, PostgreSQL + pgvector, MCP over HTTP and REST, API-key auth | Proposed, days 61–90 |
+| Team server | Docker image running `serve-api` over the SQLite store, REST with API-key auth, smoke-tested in CI ([deployment.md](deployment.md)); PostgreSQL + pgvector with B-14; MCP over HTTP later | Confirmed on SQLite (B-19) |
 | Hosted | Managed, multi-tenant | Out of scope; commercial option later |
 
 Not planned without a concrete need: a message broker, a distributed workflow engine,

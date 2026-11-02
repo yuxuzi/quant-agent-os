@@ -110,6 +110,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A Docker team server (B-19, [docs/deployment.md](docs/deployment.md)).
+  - **The image.** `deploy/Dockerfile` builds an image that runs `quant-research serve-api`
+    as a non-root user. It holds code only: the locked dependencies of Quant Research with the
+    `api` and `pdf` extras, on Python and uv base images pinned by digest.
+  - **Compose.** `deploy/compose.yaml` mounts the knowledge store and API keys read-only and
+    the run store writable. It runs with a read-only root filesystem and no capabilities,
+    publishes on loopback only, and adds operator services for `ingest`, `keys`, and `runs`.
+  - **CI.** A new job runs `deploy/smoke-test.sh` on every pull request. It builds the image,
+    checks that the image holds no data or secrets, and brings the server up with `docker
+    compose up`. It then checks authentication, a real call, and the principal on the
+    recorded run.
+  - **Storage.** It uses the SQLite store for now; PostgreSQL follows with B-14.
 - A REST interface with scoped API keys (B-18, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md);
   optional `api` extra with FastAPI and uvicorn):
   - **Serving.** `quant-research serve-api` serves the research tools over HTTP on

@@ -22,6 +22,7 @@ It has two products built on one core platform:
 | Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
+| Team server in Docker | Implemented on SQLite ([docs/deployment.md](docs/deployment.md)); smoke-tested by `docker compose up` in CI; PostgreSQL with B-14 |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
@@ -168,11 +169,14 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   evidence/       Evidence and SourceRef (facts vs interpretation)
   reporting/      Report models and Markdown rendering
   mcp/            MCP tool definitions and calls over the registry
+  api/            REST routes over the executor and scoped API keys (optional api extra)
   runs/           run store (memory, SQLite), recorder, append-only audit, redaction
   sdk/            Platform facade: call, run, get_run
   observability/  logging with secret redaction
 packages/quant-research/   Quant Research (Graph RAG) product
 packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
+packages/quant-analytics/  performance and risk metrics as tools
+deploy/   team-server Dockerfile, compose file, and smoke test
 apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
 examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
@@ -186,6 +190,7 @@ docs/   architecture, configuration, security, getting started, decisions, roadm
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Security](docs/security.md)
+- [Team server in Docker](docs/deployment.md)
 - [Architecture decisions](docs/decisions/)
 - [Contributing](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for AI coding agents
 

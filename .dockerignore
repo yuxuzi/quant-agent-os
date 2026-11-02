@@ -1,0 +1,16 @@
+# Only what deploy/Dockerfile copies; never local data, keys, or environment files.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/
+!packages/quant-research/
+!packages/quant-analytics/pyproject.toml
+!packages/quant-app-factory/pyproject.toml
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/.env.*
+**/*.db
+**/.quant-research
