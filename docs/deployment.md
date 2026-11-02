@@ -1,14 +1,17 @@
-# Team server: the research tools over REST, in Docker
+# Team server: the research and analytics toolsets over MCP and REST, in Docker
 
-This guide runs the Quant Research tools as a small team server. Each teammate, or each
-application, calls them over REST with an API key. Every call is recorded with the caller's
-name, and nobody but the operator can change the corpus.
+This guide runs the Quant-Agent-OS platform as a small team server. Each teammate adds it to
+Claude, Cursor, or Copilot as a remote MCP server; applications call the same tools over REST.
+Both need an API key. Every call is recorded with the caller's name, and nobody but the
+operator can change the corpus or the datasets.
 
 What runs:
-- **One container** runs `quant-research serve-api`
-  ([decision 0011](decisions/0011-rest-api-and-api-keys.md)).
-- **Three volumes** hold the data. `knowledge` holds the SQLite knowledge store, `keys` holds
-  the API-key hashes, and `runs` holds the run store and audit trail.
+- **One container** runs `quant-platform serve-http`: MCP at `/mcp` and REST at `/v1`, on one
+  port, with one set of keys ([decisions 0011](decisions/0011-rest-api-and-api-keys.md) and
+  [0012](decisions/0012-remote-mcp-over-http.md)).
+- **Four volumes** hold the data. `knowledge` holds the SQLite knowledge store, `datasets` the
+  CSV datasets the analytics tools read by id, `keys` the API-key hashes, and `runs` the run
+  store and audit trail.
 - **The image holds code only.** It contains no corpus, keys, runs, or secrets.
 
 There are two variants, and they give the same answers for the same corpus:
@@ -25,9 +28,10 @@ Everything below runs from the repository root. You need Docker with Compose v2.
 docker compose -f deploy/compose.yaml build
 ```
 
-The build installs the locked dependencies (`uv sync --locked`) for Quant Research with the
-`api` and `pdf` extras, and nothing else: no dev tools, App Factory, or analytics. It uses a
-pinned Python 3.13 base image and a pinned uv, both by digest.
+The build installs the locked dependencies (`uv sync --locked`) for the platform server with
+its research and analytics toolsets and the `pdf` and `postgres` extras, and nothing else: no
+dev tools, and no App Factory, which is an optional extra (`quant-agent-os-platform[factory]`).
+It uses a pinned Python 3.13 base image and a pinned uv, both by digest.
 
 ## 2. Ingest your corpus (operator)
 
@@ -58,7 +62,21 @@ docker compose -f deploy/compose.yaml run --rm -T keys new --principal alice \
 - **New keys** are read when the server starts, so restart it after issuing one:
   `docker compose -f deploy/compose.yaml restart server`.
 
-## 4. Start the server
+## 4. Add datasets (operator)
+
+```bash
+DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm datasets \
+  push /import/returns.csv --id returns
+```
+
+A dataset is a CSV file: a header row, an optional text index column (dates), then numeric
+columns. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
+values, so the numbers never pass through a model. Without `DATASETS_SOURCE`, the import
+directory is `deploy/sample-data`. Pushing the same id again replaces the dataset; its new
+fingerprint shows in each result's data versions. The server reads datasets per request, so no
+restart is needed.
+
+## 5. Start the server
 
 ```bash
 docker compose -f deploy/compose.yaml up -d server
@@ -72,7 +90,14 @@ The container runs as an unprivileged user (uid 10001):
 - the port is published on `127.0.0.1` only. The server's warning about binding `0.0.0.0`
   refers to its address inside the container.
 
-Call a tool:
+Add it to Claude Code as a remote MCP server:
+
+```bash
+claude mcp add --transport http quant-agent-os http://127.0.0.1:8000/mcp \
+  --header "Authorization: Bearer $KEY"
+```
+
+Or call a tool over REST:
 
 ```bash
 curl -s -H "Authorization: Bearer $KEY" -X POST \
@@ -80,24 +105,30 @@ curl -s -H "Authorization: Bearer $KEY" -X POST \
   -H 'content-type: application/json' -d '{"arguments": {"query": "short-term reversal"}}'
 ```
 
-The routes, status codes, and scopes are in [decision 0011](decisions/0011-rest-api-and-api-keys.md).
-REST results equal MCP results for the same arguments.
+MCP is stateless with JSON responses; each MCP method checks the key's scope (`tools:list` to
+list, `tools:call` to call a tool or read a resource). The REST routes, status codes, and scopes
+are in [decision 0011](decisions/0011-rest-api-and-api-keys.md). MCP, REST, and stdio results
+are equal for the same arguments.
 
-## 5. See who called what (operator)
+## 6. See who called what (operator)
 
 ```bash
 docker compose -f deploy/compose.yaml run --rm runs            # recent runs
 docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its calls, its audit
 ```
 
-REST runs show actor `rest` and the key's principal. Audit events are append-only.
+REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
+events are append-only.
 
-## 6. Expose it to your team
+## 7. Expose it to your team
 
 Keep the published port on loopback, and put a reverse proxy in front. The proxy should:
 - terminate TLS;
-- apply rate limits;
+- apply rate limits (the server has none yet; quotas come with plan step P7);
 - forward the `Authorization` header unchanged.
+
+MCP refuses a `Host` or `Origin` it does not know (DNS-rebinding protection). Add the public
+name clients use to the server's command: `--allowed-host research.example.com`.
 
 The server sends no CORS headers, so browsers on other origins cannot call it directly. Back
 up the `knowledge`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
@@ -144,9 +175,12 @@ the server.
 `deploy/smoke-test.sh` is what CI runs on every pull request, for both variants. It:
 - builds the image and checks that it runs as non-root and holds no data, keys, or
   secret-looking environment variables;
-- ingests the sample corpus, issues a key, and runs `docker compose up`;
-- checks health, a 401 without a key, a real call, the principal on the recorded run, and
-  that the server cannot write its knowledge store.
+- ingests the sample corpus, issues a key, adds the sample dataset, and runs
+  `docker compose up`;
+- checks health, a 401 without a key, a real REST call, and the principal on the recorded run;
+- checks MCP at `/mcp`: a 401 without a key, a foreign `Host` refused, the tool list, a
+  `research_report` call with metrics from the dataset, and the call recorded as `mcp-http`;
+- checks that the server cannot write its knowledge store.
 
 It uses its own compose project and port 18000, and it removes its volumes afterwards. On
 PostgreSQL it also checks that the server's role is refused writes by permission, with

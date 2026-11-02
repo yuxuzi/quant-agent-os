@@ -89,6 +89,25 @@ same tools as `serve-mcp` over HTTP, which other machines may reach, so:
   - There are no public schema pages, no CORS, and no server header.
   - Request bodies are capped at 5 MiB, and error messages never echo the key.
 
+## MCP over HTTP
+
+[Decision 0012](decisions/0012-remote-mcp-over-http.md). `quant-platform serve-http` serves MCP
+at `/mcp` beside the REST routes, with the same keys, policy, and run store:
+- **Every MCP request needs an API key.** A missing or unknown key gets 401 with
+  `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, where
+  OAuth tokens will plug in (plan step P5).
+- **Each method checks the key's scope.** Listing tools, resource templates, and prompts, and
+  getting a prompt, need `tools:list`; calling a tool and reading a resource (which calls a
+  tool) need `tools:call`. There are no new scopes, and no MCP method can approve a call.
+- **Stateless.** Each request stands alone: no session ids to steal, and nothing lost on a
+  restart.
+- **DNS-rebinding protection.** Only loopback and the `--allowed-host` names are accepted as
+  `Host` or `Origin`; browsers on other origins are refused.
+- **Audited.** Each call or read is a run with actor `mcp-http` and the key's principal.
+- **Same limits as REST.** It binds loopback by default, caps bodies at 5 MiB, has no CORS, and
+  never logs or echoes a key (contract test). It has no rate limiting yet, so put a
+  rate-limiting proxy in front of any non-loopback deployment.
+
 ## PostgreSQL knowledge store
 
 [Decision 0004](decisions/0004-knowledge-store.md).

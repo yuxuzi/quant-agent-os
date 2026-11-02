@@ -48,7 +48,7 @@ dev = [
     "ruff>=0.6",
     "quant-agent-os-analytics",
     "quant-agent-os-factory",
-    "quant-agent-os-platform",
+    "quant-agent-os-platform[factory]",
     "quant-agent-os-research[pdf,postgres]",
     "quant-agent-os[api,mcp]",
 ]

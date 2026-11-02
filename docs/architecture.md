@@ -87,7 +87,7 @@ product.
 | CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
 | Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
-| MCP server | `mcp/server.py` | stdio transport over the adapter (optional `mcp` extra); tool annotations from declared permissions | Confirmed |
+| MCP server | `mcp/server.py`, `mcp/http.py` | stdio transport, and stateless Streamable HTTP with API-key auth and per-method scopes ([0012](decisions/0012-remote-mcp-over-http.md)); tool annotations from declared permissions | Confirmed |
 | SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Confirmed |
 | REST API | `api/` | FastAPI over the same executor and recorder (optional `api` extra); scoped API keys stored as hashes ([0011](decisions/0011-rest-api-and-api-keys.md)) | Confirmed (B-18) |
 | Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
@@ -576,6 +576,7 @@ Further rules:
 | Interface | Audience | Built on | Status |
 | --- | --- | --- | --- |
 | MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter: tools, resources, and prompts; `quant-platform serve-mcp` for every toolset, or a product's own `serve-mcp` | Confirmed |
+| MCP (HTTP) | Remote clients of a team or hosted server | `quant_agent_os.mcp.http` (stateless Streamable HTTP, API keys, per-method scopes) beside REST: `quant-platform serve-http` serves `/mcp` and `/v1` on one port | Confirmed (B-33) |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
 | CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
 | REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `quant-research serve-api` | Confirmed (B-18) |

@@ -1,6 +1,7 @@
 """MCP boundary: adapters over the tool registry and a stdio transport (no business logic).
 
-The transport needs the optional ``mcp`` extra; importing this package does not.
+The transport needs the optional ``mcp`` extra; importing this package does not. MCP over HTTP
+(`quant_agent_os.mcp.http`) also needs the ``api`` extra.
 """
 
 from quant_agent_os.mcp.adapters import (
@@ -14,9 +15,16 @@ from quant_agent_os.mcp.adapters import (
     served_resources,
     tool_definitions,
 )
-from quant_agent_os.mcp.server import MCPUnavailableError, build_server, run_stdio, serve_stdio
+from quant_agent_os.mcp.server import (
+    AccessDeniedError,
+    MCPUnavailableError,
+    build_server,
+    run_stdio,
+    serve_stdio,
+)
 
 __all__ = [
+    "AccessDeniedError",
     "MCPUnavailableError",
     "ResourceReadError",
     "build_server",

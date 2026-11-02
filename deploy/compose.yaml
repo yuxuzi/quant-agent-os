@@ -4,9 +4,14 @@
 #   CORPUS=/path/to/notes docker compose -f deploy/compose.yaml run --rm ingest
 #   docker compose -f deploy/compose.yaml run --rm keys new --principal alice \
 #       --scope tools:list --scope tools:call
+#   DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm datasets \
+#       push /import/returns.csv --id returns
 #   docker compose -f deploy/compose.yaml up -d server
 #
-# The server reaches the knowledge store and keys read-only. Only the run store is writable.
+# The server answers MCP at /mcp and REST at /v1 (decision 0012).
+#
+# The server reaches the knowledge store, datasets, and keys read-only. Only the run store is
+# writable.
 
 x-image: &image
   image: ${QAOS_IMAGE:-quant-agent-os:local}
@@ -26,6 +31,7 @@ services:
     volumes:
       - knowledge:/data/knowledge:ro
       - keys:/keys:ro
+      - datasets:/data/datasets:ro
       - runs:/data/runs
     read_only: true
     tmpfs:
@@ -42,6 +48,18 @@ services:
     volumes:
       - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
       - knowledge:/data/knowledge
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  datasets:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["quant-agent-os", "dataset"]
+    command: ["--help"]
+    volumes:
+      - datasets:/data/datasets
+      - ${DATASETS_SOURCE:-./sample-data}:/import:ro
     network_mode: none
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -70,5 +88,6 @@ services:
 
 volumes:
   knowledge:
+  datasets:
   keys:
   runs:

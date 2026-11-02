@@ -1,8 +1,6 @@
 """The platform server (plan steps P2.1, P2.4, P2.5): one catalog, research_report, and prompts."""
 
 import json
-from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import anyio
@@ -19,30 +17,9 @@ from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
 from quant_platform import Catalog, compose
 from quant_platform.cli import app as cli
-from quant_research import ResearchApp, open_research
+from quant_research import ResearchApp
 
-ROOT = Path(__file__).resolve().parents[3]
-CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
 FUND = [0.012, -0.004, 0.021, -0.015, 0.008, 0.017, -0.006, 0.011, 0.002, -0.009, 0.014, 0.005]
-
-
-@pytest.fixture(scope="module")
-def research() -> Iterator[ResearchApp]:
-    app = open_research(":memory:")
-    app.ingest.ingest(CORPUS)
-    yield app
-    app.close()
-
-
-@pytest.fixture
-def datasets(tmp_path: Path) -> DirectoryDatasetStore:
-    source = tmp_path / "returns.csv"
-    source.write_text(
-        "month,fund\n" + "".join(f"2024-{m + 1:02d},{v}\n" for m, v in enumerate(FUND))
-    )
-    store = DirectoryDatasetStore(tmp_path / "datasets")
-    store.put("returns", source)
-    return store
 
 
 def _everything(research: ResearchApp, datasets: DirectoryDatasetStore) -> Catalog:
@@ -190,3 +167,23 @@ def test_the_cli_lists_the_catalog_and_refuses_bad_choices(
     assert "qaos://dataset/{dataset_id}" in listed.output
     assert no_store.exit_code == 2
     assert unknown.exit_code == 2
+
+
+def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib.util
+
+    from quant_platform import composition
+
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        composition.importlib.util,
+        "find_spec",
+        lambda name, *args: None if name == "quant_app_factory" else real(name, *args),
+    )
+
+    asked = CliRunner().invoke(cli, ["catalog", "--toolsets", "factory"])
+
+    assert composition.available_toolsets() == ["research", "analytics"]
+    assert asked.exit_code == 2 and "quant-agent-os-platform[factory]" in asked.output
