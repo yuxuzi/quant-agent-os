@@ -35,6 +35,10 @@ quant-agent-os = "quant_agent_os.cli:main"
 mcp = [
     "mcp>=1.20,<2",
 ]
+api = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+]
 
 [dependency-groups]
 dev = [
@@ -45,16 +49,17 @@ dev = [
     "quant-agent-os-analytics",
     "quant-agent-os-factory",
     "quant-agent-os-research[pdf]",
-    "quant-agent-os[mcp]",
+    "quant-agent-os[api,mcp]",
 ]
 
 [tool.uv]
 # Supply-chain cool-off: dependencies added by this project (and their new transitive
 # dependencies) lock only releases at least two weeks old. Move the date forward deliberately
-# when upgrading. Quant Analytics' empyrical-reloaded stack (B-13) uses 2026-10-18.
+# when upgrading. Quant Analytics' empyrical-reloaded stack (B-13) and the api extra's
+# fastapi and opentelemetry-api (B-18) use 2026-10-18.
 # pytemplate-uv is exempt: it is first-party (same author), and the App Factory
 # needs its 3.0 API.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z" }
 
 [tool.uv.workspace]
 # Core stays at the root; each product is a member with its own version (decision 0003).

@@ -26,6 +26,9 @@ class RunRecord(BaseModel):
     status: RunStatus
     goal: str = Field(description="The request for a plan run, or the tool name for a call run")
     actor: str = Field(description="Who started the run, e.g. 'mcp' or 'sdk'")
+    principal: str | None = Field(
+        default=None, description="The authenticated caller, e.g. an API key's principal"
+    )
     tenant: str = "local"
     platform_version: str
     provider: str | None = None
@@ -37,10 +40,15 @@ class RunRecord(BaseModel):
 
 
 class AuditEvent(BaseModel):
-    """An append-only audit entry. ``details`` holds ids, hashes, and statuses, never inputs."""
+    """An append-only audit entry. ``details`` holds ids, hashes, and statuses, never inputs.
+
+    ``actor`` is the interface (``mcp``, ``sdk``, ``rest``); ``principal`` is who authenticated
+    through it, when the interface authenticates callers.
+    """
 
     run_id: str
     actor: str
+    principal: str | None = None
     event: str
     subject: str
     at: datetime = Field(default_factory=lambda: datetime.now(UTC))
