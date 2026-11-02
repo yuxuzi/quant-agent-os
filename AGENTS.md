@@ -57,7 +57,7 @@ the real results.
 ## Layout and layering
 
 `src/quant_agent_os/`, importing downward only:
-1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions.
+1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions; `tenancy.py` (tenant ids).
 2. `runtime/plan.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: plan
    models, approvals, the subprocess runner, and bounded execution.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
@@ -65,7 +65,8 @@ the real results.
    `observability/logging.py`.
 4. `runtime/orchestrator.py`: planning, validation, execution, report, and optional
    recording. Not re-exported from `runtime/__init__` to avoid an import cycle.
-5. `providers/`, `config/`, `data/` (datasets read by id), `mcp/`, `sdk/`, `testing.py` (`check_tool`), `observability/`,
+5. `providers/`, `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
+   `mcp/` (stdio, HTTP, OAuth), `sdk/`, `testing.py` (`check_tool`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a

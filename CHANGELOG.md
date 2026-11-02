@@ -125,6 +125,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Tenants and OAuth (B-34, [decision 0013](docs/decisions/0013-identity-and-tenancy.md)):
+  - **Many tenants on one server.** `quant-platform serve-http --tenants FILE` serves each
+    caller its own tenant: its knowledge store (a PostgreSQL schema or SQLite file), datasets,
+    toolsets, and permissions. `quant-platform tenant add/list/disable` manage the file.
+  - **The tenant comes from the credential.** `api-key new --tenant`, an OAuth token's tenant
+    claim; runs record the tenant, and `/v1/runs` shows only the caller's.
+  - **OAuth 2.1 for MCP connectors.** Tokens from the identity providers listed in the tenants
+    file are checked by introspection: active, audience, pinned issuer, and tenant. The server
+    publishes the Protected Resource Metadata, and its 401s point to it (`--resource-url`).
+  - **Operator commands per tenant.** `quant-research ingest/search --schema` and
+    `quant-agent-os dataset push/list --tenant`.
 - Remote MCP (B-33, [decision 0012](docs/decisions/0012-remote-mcp-over-http.md)):
   - **`quant-platform serve-http`** serves MCP at `/mcp` and REST at `/v1` on one port, with
     the same API keys, policy, and run store. Add it to Claude Code with

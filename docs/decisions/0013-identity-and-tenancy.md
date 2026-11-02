@@ -108,3 +108,22 @@ What already helps:
 - **Q-9.** The HTTP tenant-admin API is a later decision; P5 ships operator commands.
 - **Q-10 (as proposed).** A configurable claim, `qaos_tenant` by default, with the issuer
   pinned per tenant.
+
+## Implementation notes (2026-11-02)
+
+- **The default tenant is `local`.** The run store already recorded that value, so existing
+  stores need no migration and no schema bump; an index on (tenant, started_at) was added.
+- **Where it lives.** `quant_agent_os.tenancy` and `quant_agent_os.serving` (`Surface`,
+  `Tenancy`, `SingleTenant`) are in Core. REST's `build_app` and HTTP MCP's `add_mcp_route`
+  take a tenancy, and `build_server`'s `route` hook returns the caller's surface and recorder.
+  The platform's `TenantCatalogs` composes each tenant's catalog from the tenants file.
+- **OAuth configuration** is in the tenants file. `[[authorization_servers]]` lists issuers,
+  their introspection endpoints, and a client id, and names the environment variable that
+  holds the secret. With several providers and opaque tokens the server could not know whom to
+  ask without leaking the token, so a JWT's unverified `iss` chooses the server and an opaque
+  token needs exactly one.
+- **Ingestion** uses the one `qaos_ingest` role for every tenant's schema, not a role per
+  tenant. The operator runs ingestion, and the server's role stays read-only everywhere.
+- **Not built.** REST stays API keys only, since OAuth is for MCP connectors. A Keycloak test
+  compose is documented, not shipped, because there is no Docker in this environment to
+  verify it. The HTTP admin API is a later decision (Q-9).
