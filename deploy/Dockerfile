@@ -24,6 +24,7 @@ COPY pyproject.toml uv.lock ./
 COPY packages/quant-research/pyproject.toml packages/quant-research/
 COPY packages/quant-analytics/pyproject.toml packages/quant-analytics/
 COPY packages/quant-app-factory/pyproject.toml packages/quant-app-factory/
+COPY apps/quant-platform/pyproject.toml apps/quant-platform/
 RUN uv sync --locked --no-dev --no-install-workspace \
         --package quant-agent-os-research --extra api --extra pdf --extra postgres
 COPY README.md LICENSE ./

@@ -182,7 +182,7 @@ def test_cli_check_reruns_and_records_the_approval(
 ) -> None:
     checks = FakeChecks()
     monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(tmp_path / "home" / "factory.toml"))
-    monkeypatch.setattr(factory_cli, "_factory", lambda: _factory(checks))
+    monkeypatch.setattr(factory_cli, "default_factory", lambda: _factory(checks))
     spec = _spec(tmp_path, connection=None)
     spec_file = tmp_path / "app.toml"
     spec_file.write_text(

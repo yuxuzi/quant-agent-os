@@ -89,8 +89,8 @@ Windows with Python 3.11–3.15. A release workflow uses PyPI Trusted Publishing
 - Brand drift: "QuantAgentOS" appeared in the CLI help, docstrings, README, and CONTRIBUTING,
   and "QuantFoundry" in the README and `../quantfoundry.code-workspace`. The docs now follow
   decision 0003. Code-facing strings remain (B-04).
-- `apps/quant-ai-assistant/` is a README-only placeholder for a chat app that the baseline
-  replaces with external clients. It is now marked as superseded.
+- ~~`apps/quant-ai-assistant/` is a README-only placeholder for a chat app that the baseline
+  replaces with external clients.~~ Removed by B-31; `apps/quant-platform` took its place.
 - The uv-template plan sections duplicated `pytemplate-uv`'s own plan. They have been removed
   here (see History).
 
@@ -280,7 +280,7 @@ onto the days below, so there is still only one timeline.
 | B-28 | **Done.** Quant review, phase 2: one `quant-research` project (study, backtest, walk-forward, and report subcommands), experiment folders with data fingerprints, out-of-sample walk-forward, exposure modes, run comparisons in reports, and tools that read the project's data (S1–S6) | B-27 | Test windows never influence chosen parameters; known-answer beta, IR, and TE; old kinds alias the new profile |
 | B-29 | **Done.** Quant review, phase 3: a one-command start, questions that apply, quiet output, one way to name a target, and one approval path for operator commands, keeping the prompt (U1–U5) | B-24, B-28 | Scripted CLI tests per path; every doc example validates; agent approvals unchanged |
 | B-30 | **Done.** Agent surface, phase 1: output schemas, failure hints (MCP and REST), concise search, compact schemas and two served analytics tools, untrusted-text marking, and an offline agent-efficiency evaluation with an enforced baseline. Plan: [plans/agent-surface.md](plans/agent-surface.md) (P1) | — | Definition bytes −19%, result bytes −2% on the fixture, success 100% |
-| B-31 | Agent surface, phase 2: one composed server (`apps/quant-platform`) with toolsets, resources, prompts, datasets by reference, and a deterministic `research_report` (P2) | B-30 | Analytics on a large dataset costs constant input tokens |
+| B-31 | **Done.** Agent surface, phase 2: one platform server (`apps/quant-platform`, `quant-platform serve-mcp`) with toolsets, resources read through tools, prompts, datasets by reference (`quant-agent-os dataset push`, `list_datasets`), and a deterministic `research_report` (P2) | B-30 | Argument bytes −94% on the shared tasks; analytics argument cost no longer grows with the series |
 | B-32 | Agent surface, phase 3: instruction-only skills, skill and tool consistency tests, Claude Code plugin, Cursor and Copilot config (P3) | B-31 | Every served tool is covered by a skill |
 | B-33 | Remote MCP over Streamable HTTP with bearer keys (decision 0012, needs approval) (P4) | B-18, B-19, B-31 | HTTP equals stdio, REST, and direct calls; Docker team server works as a remote MCP server |
 | B-34 | Identity and tenancy: tenant-scoped stores, OAuth 2.1 resource server, tenant admin API (decision 0013, needs approval) (P5) | B-14, B-33 | Cross-tenant isolation tests pass |

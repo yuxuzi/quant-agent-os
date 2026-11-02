@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from quant_research.application.retrieval import EvidencePacket, ResearchQuery, ResearchService
 from quant_research.bootstrap import ResearchApp, open_research
-from quant_research.tools import research_tools
+from quant_research.tools import research_resources, research_tools
 
 try:
     __version__ = version("quant-agent-os-research")
@@ -17,5 +17,6 @@ __all__ = [
     "ResearchQuery",
     "ResearchService",
     "open_research",
+    "research_resources",
     "research_tools",
 ]

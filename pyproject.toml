@@ -48,6 +48,7 @@ dev = [
     "ruff>=0.6",
     "quant-agent-os-analytics",
     "quant-agent-os-factory",
+    "quant-agent-os-platform",
     "quant-agent-os-research[pdf,postgres]",
     "quant-agent-os[api,mcp]",
 ]
@@ -63,12 +64,13 @@ exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:0
 
 [tool.uv.workspace]
 # Core stays at the root; each product is a member with its own version (decision 0003).
-members = ["packages/*"]
+members = ["packages/*", "apps/quant-platform"]
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }
 quant-agent-os-analytics = { workspace = true }
 quant-agent-os-factory = { workspace = true }
+quant-agent-os-platform = { workspace = true }
 quant-agent-os-research = { workspace = true }
 
 [build-system]
@@ -83,7 +85,13 @@ target-version = "py311"
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["quant_agent_os", "quant_analytics", "quant_research", "quant_app_factory"]
+known-first-party = [
+    "quant_agent_os",
+    "quant_analytics",
+    "quant_research",
+    "quant_app_factory",
+    "quant_platform",
+]
 
 [tool.mypy]
 python_version = "3.11"
@@ -95,6 +103,7 @@ files = [
     "packages/quant-analytics/src",
     "packages/quant-research/src",
     "packages/quant-app-factory/src",
+    "apps/quant-platform/src",
 ]
 # Template packs hold code for generated projects, which type-check it themselves.
 exclude = ["packages/quant-app-factory/src/quant_app_factory/packs/"]
@@ -109,6 +118,7 @@ testpaths = [
     "packages/quant-analytics/tests",
     "packages/quant-research/tests",
     "packages/quant-app-factory/tests",
+    "apps/quant-platform/tests",
 ]
 pythonpath = ["examples/portfolio-research"]
 filterwarnings = [
@@ -117,7 +127,7 @@ filterwarnings = [
     # starlette 1.8's TestClient prefers httpx2; httpx (already locked via mcp) still works.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
-addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
+addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov=quant_platform --cov-report=term-missing"
 
 [tool.coverage.run]
 branch = true

@@ -179,6 +179,29 @@ Deviations from the steps above:
 **Done when** a single server lists all toolsets, and analytics on a 2,500-point dataset costs
 the client a constant number of input tokens.
 
+**Status: done (2026-11-02).** Measured over the one platform server, against P1's three:
+
+| Metric | P1 | P2 |
+| --- | --- | --- |
+| Servers a client adds | 3 | 1 |
+| Tools / definition bytes per turn | 8 / 8,812 | 10 / 10,785 |
+| Instruction bytes | 1,030 | 1,287 |
+| Argument bytes, the five shared tasks | 9,696 | 542 (−94%) |
+| Calls, the five shared tasks | 7 | 9 (two `list_datasets` lookups) |
+| Result bytes, the five shared tasks | 23,611 | 24,785 |
+| `research_report` (new task): calls / argument bytes | — | 1 / 89 |
+
+Deviations from the steps above:
+- **No inline cap.** Inline arrays stay accepted at any length: programmatic SDK and REST
+  callers pay nothing for them, and the instructions, prompts, and (P3) skills steer models to
+  references instead.
+- **Run records are not resources yet.** A run store holds every caller's arguments, so run
+  resources wait for tenancy (P5).
+- **Dataset upload is a CLI command only.** An HTTP upload route is a new write scope, so it
+  waits for P4's decision record.
+- **Next to trim:** `plan_app`'s input schema (the full `AppSpec`, 2.9 KB) is now the largest
+  definition.
+
 ### P3. Skills and client packaging (B-32)
 
 1. **P3.1 Skills.** `skills/` holds the four skills in the table above, in the Agent Skills

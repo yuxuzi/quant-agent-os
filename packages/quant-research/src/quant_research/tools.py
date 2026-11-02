@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from quant_agent_os.tools import Permission, ToolSpec, tool
+from quant_agent_os.tools import Permission, ResourceSpec, ToolSpec, tool
 from quant_research.application.retrieval import (
     QUERY_EMBEDDING_SECONDS,
     EvidencePacket,
@@ -86,3 +86,21 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
         return strategies.generate(params)
 
     return [find_related_signals, get_source_passage, generate_strategy]
+
+
+def research_resources() -> list[ResourceSpec]:
+    """Return the research resources: a passage in full, and a strategy specification."""
+    return [
+        ResourceSpec(
+            uri_template="qaos://passage/{chunk_id}",
+            name="passage",
+            description="One passage in full, with its source location (get_source_passage).",
+            tool="get_source_passage",
+        ),
+        ResourceSpec(
+            uri_template="qaos://strategy/{focus}",
+            name="strategy",
+            description="A cited strategy specification for one signal (generate_strategy).",
+            tool="generate_strategy",
+        ),
+    ]

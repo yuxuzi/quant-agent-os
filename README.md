@@ -168,7 +168,8 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   config/         settings from QUANT_AGENT_OS_* environment variables
   evidence/       Evidence and SourceRef (facts vs interpretation)
   reporting/      Report models and Markdown rendering
-  mcp/            MCP tool definitions and calls over the registry
+  mcp/            MCP tools, resources, and prompts over the registry
+  data/           datasets tools read by id, and list_datasets
   api/            REST routes over the executor and scoped API keys (optional api extra)
   runs/           run store (memory, SQLite), recorder, append-only audit, redaction
   sdk/            Platform facade: call, run, get_run
@@ -177,7 +178,7 @@ packages/quant-research/   Quant Research (Graph RAG) product
 packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
 packages/quant-analytics/  performance and risk metrics as tools
 deploy/   team-server Dockerfile, compose file, and smoke test
-apps/quant-ai-assistant/   superseded placeholder (see decision 0003)
+apps/quant-platform/   platform server: every toolset, resource, and prompt behind one MCP server
 examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
 docs/   architecture, configuration, security, getting started, decisions, roadmap

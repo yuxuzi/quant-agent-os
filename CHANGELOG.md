@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `apps/quant-ai-assistant`, a superseded placeholder, is removed; `quant-factory`'s
+  settings-configured factory is public as `default_factory()` (B-31).
 - The agent surface costs clients less context (B-30, [plan](docs/plans/agent-surface.md) P1):
   - **Leaner definitions.** `tools/list` and `GET /v1/tools` drop the `title` keywords pydantic
     derives from names, and Quant Analytics serves only `analyze_performance` and
@@ -119,6 +121,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- One MCP server for every toolset (B-31, [plan](docs/plans/agent-surface.md) P2):
+  - **Platform server** (`apps/quant-platform`): `quant-platform serve-mcp` serves the
+    research, analytics, and factory toolsets (`--toolsets` narrows them), and
+    `quant-platform catalog` lists what a client will see.
+  - **Resources and prompts.** `ResourceSpec` (a URI template read through a tool, with that
+    tool's permissions, limits, and run record) and `PromptSpec`. Resources:
+    `qaos://passage/{chunk_id}`, `qaos://strategy/{focus}`, `qaos://dataset/{dataset_id}`,
+    and `qaos://template/{template}[/{profile}]`. Prompts: `research_signal`,
+    `report_on_signal`, `analyze_returns`, and `draft_app_spec`.
+  - **Datasets by reference.** `quant-agent-os dataset push FILE --id ID` adds a CSV table to
+    `QUANT_AGENT_OS_DATASETS_DIR`; `list_datasets` describes them; with a dataset store,
+    `analyze_performance` and `analyze_risk` take `{dataset, column}` references, and each
+    dataset's fingerprint becomes a data version. Analysing a year of daily returns now costs
+    the model about 125 argument bytes instead of 3,750.
+  - **`research_report`**: a cited, evidence-linked report on a signal, with metrics of a named
+    series, in one call. A fixed plan, no model.
 - Typed, actionable results for agents (B-30 P1):
   - **Output schemas.** Every MCP tool definition carries `outputSchema` and a `title`; clients
     validate `structuredContent` against it, and `check_tool` does too.

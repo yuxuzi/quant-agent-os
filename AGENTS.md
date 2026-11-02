@@ -19,8 +19,12 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Quant Analytics** (`packages/quant-analytics`): performance metrics from empyrical-reloaded
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
+- **Platform server** (`apps/quant-platform`): the composition root. `compose()` assembles the
+  chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
+  `quant-platform serve-mcp` serves them as one MCP server.
 
-Core must never import a product, and the products must not import each other. Quantitative
+Core must never import a product, and the products must not import each other. Only the
+platform server imports every product, and nothing imports it. Quantitative
 analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
 third-party library of App Factory ([decision 0006](docs/decisions/0006-pytemplate-uv-as-a-library.md)):
 - Import only its public `pytemplate.api`, and only in
@@ -61,7 +65,7 @@ the real results.
    `observability/logging.py`.
 4. `runtime/orchestrator.py`: planning, validation, execution, report, and optional
    recording. Not re-exported from `runtime/__init__` to avoid an import cycle.
-5. `providers/`, `config/`, `mcp/`, `sdk/`, `testing.py` (`check_tool`), `observability/`,
+5. `providers/`, `config/`, `data/` (datasets read by id), `mcp/`, `sdk/`, `testing.py` (`check_tool`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a

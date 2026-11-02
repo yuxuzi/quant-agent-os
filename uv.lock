@@ -54,6 +54,7 @@ members = [
     "quant-agent-os",
     "quant-agent-os-analytics",
     "quant-agent-os-factory",
+    "quant-agent-os-platform",
     "quant-agent-os-research",
 ]
 
@@ -1877,6 +1878,7 @@ dev = [
     { name = "quant-agent-os", extra = ["api", "mcp"] },
     { name = "quant-agent-os-analytics" },
     { name = "quant-agent-os-factory" },
+    { name = "quant-agent-os-platform" },
     { name = "quant-agent-os-research", extra = ["pdf", "postgres"] },
     { name = "ruff" },
 ]
@@ -1901,6 +1903,7 @@ dev = [
     { name = "quant-agent-os", extras = ["api", "mcp"], editable = "." },
     { name = "quant-agent-os-analytics", editable = "packages/quant-analytics" },
     { name = "quant-agent-os-factory", editable = "packages/quant-app-factory" },
+    { name = "quant-agent-os-platform", editable = "apps/quant-platform" },
     { name = "quant-agent-os-research", extras = ["pdf", "postgres"], editable = "packages/quant-research" },
     { name = "ruff", specifier = ">=0.6" },
 ]
@@ -1949,6 +1952,31 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["mcp"]
+
+[[package]]
+name = "quant-agent-os-platform"
+version = "0.1.0"
+source = { editable = "apps/quant-platform" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "quant-agent-os", extra = ["mcp"] },
+    { name = "quant-agent-os-analytics" },
+    { name = "quant-agent-os-factory" },
+    { name = "quant-agent-os-research" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "quant-agent-os", extras = ["mcp"], editable = "." },
+    { name = "quant-agent-os-analytics", editable = "packages/quant-analytics" },
+    { name = "quant-agent-os-factory", editable = "packages/quant-app-factory" },
+    { name = "quant-agent-os-research", editable = "packages/quant-research" },
+    { name = "rich", specifier = ">=13.7" },
+    { name = "typer", specifier = ">=0.12" },
+]
 
 [[package]]
 name = "quant-agent-os-research"
