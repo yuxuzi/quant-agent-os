@@ -32,7 +32,7 @@ trap cleanup EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 "${compose[@]}" build
-image="$("${compose[@]}" config --images | head -n 1)"
+image="${QAOS_IMAGE:-quant-agent-os:local}"  # the server's image, not the database's
 
 echo "== the image holds no data, keys, or secrets, and runs as a non-root user"
 [[ "$(docker run --rm --entrypoint id "$image" -u)" == "10001" ]] || fail "image runs as root"
