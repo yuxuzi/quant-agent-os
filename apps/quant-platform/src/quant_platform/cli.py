@@ -12,6 +12,7 @@ from rich.table import Table
 
 from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing, load_keys
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
+from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
@@ -40,6 +41,7 @@ from quant_platform.tenants import (
     describe,
     load_tenants_file,
     save_tenants,
+    separate_approver,
 )
 from quant_research import ResearchApp, open_research
 from quant_research.infrastructure.sqlite_store import StoreError
@@ -199,6 +201,14 @@ def serve_http(
     runs: Annotated[
         Path | None, typer.Option(help="Run store (default ~/.quant-agent-os).")
     ] = None,
+    approval_url: Annotated[
+        str | None,
+        typer.Option(
+            envvar="QUANT_AGENT_OS_APPROVAL_URL",
+            help="The server's public base URL; turns on the approval page at "
+            "/approve/<id>, where an approver key approves a waiting call (decision 0014).",
+        ),
+    ] = None,
     resource_url: Annotated[
         str | None,
         typer.Option(
@@ -219,6 +229,8 @@ def serve_http(
     default). Put TLS and rate limiting in a reverse proxy before binding anything but loopback
     (decision 0012). When the tenants file lists authorization_servers, MCP also accepts their
     OAuth tokens, checked by introspection, and publishes the Protected Resource Metadata.
+    With --approval-url, a call that waits for an approval sends the client to the approval
+    page; issue approver keys with `api-key new --scope runs:approve`.
     """
     settings = get_settings()
     try:
@@ -264,11 +276,22 @@ def serve_http(
                 f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
                 "serve it behind a reverse proxy that terminates TLS and limits request rates."
             )
+        desk = (
+            ApprovalDesk(
+                run_store,
+                ring,
+                base_url=approval_url,
+                separate_approver=separate_approver(configured or {}),
+            )
+            if approval_url is not None
+            else None
+        )
         http_app = build_http_app(
             tenancy,
             ring,
             instructions=instructions,
             extra_hosts=allowed_host or [],
+            desk=desk,
             **(oauth or {}),
         )
         plural = "" if len(ring) == 1 else "s"

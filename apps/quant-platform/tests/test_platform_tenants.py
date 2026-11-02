@@ -33,6 +33,7 @@ from quant_platform.tenants import (
     load_tenants,
     load_tenants_file,
     save_tenants,
+    separate_approver,
 )
 from quant_research import open_research
 
@@ -301,3 +302,19 @@ def test_serve_http_needs_the_resource_url_and_the_secret_for_oauth(
 
     assert no_url.exit_code == 2 and "--resource-url" in no_url.output
     assert no_secret.exit_code == 1 and "QAOS_TEST_ACME_SECRET" in no_secret.output
+
+
+def test_four_eyes_follows_each_tenants_setting() -> None:
+    needs = separate_approver(
+        {
+            "acme": TenantConfig(),
+            "solo": TenantConfig(separate_approver=False),
+            "local": TenantConfig(separate_approver=True),
+        }
+    )
+
+    assert needs("acme") and not needs("solo") and needs("local")
+    assert needs("unlisted") and not separate_approver({})("local")
+    assert "separate_approver = false" in dump_tenants(
+        {"solo": TenantConfig(separate_approver=False)}
+    )
