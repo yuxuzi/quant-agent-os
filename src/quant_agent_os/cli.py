@@ -13,7 +13,7 @@ from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
 from quant_agent_os.runtime.plan import Plan
-from quant_agent_os.tenancy import DEFAULT_TENANT
+from quant_agent_os.tenancy import DEFAULT_TENANT, TenantError, check_tenant
 
 app = typer.Typer(
     help="QuantAgentOS: typed tools, a bounded orchestrator, and evidence-linked reports.",
@@ -25,6 +25,13 @@ api_key_app = typer.Typer(help="Manage API keys for the REST interface.", no_arg
 app.add_typer(api_key_app, name="api-key")
 dataset_app = typer.Typer(help="Add and list datasets that tools read by id.", no_args_is_help=True)
 app.add_typer(dataset_app, name="dataset")
+DatasetTenantOption = Annotated[
+    str | None,
+    typer.Option(
+        "--tenant",
+        help="A tenant on a multi-tenant server: its datasets are in <dir>/<tenant>.",
+    ),
+]
 DatasetsOption = Annotated[
     Path | None,
     typer.Option(
@@ -114,21 +121,27 @@ def api_key_new(
     typer.echo(key)
 
 
+def _datasets_dir(directory: Path | None, tenant: str | None) -> Path:
+    root = directory or get_settings().datasets_dir
+    return root / check_tenant(tenant) if tenant is not None else root
+
+
 @dataset_app.command("push")
 def dataset_push(
     source: Annotated[Path, typer.Argument(help="A CSV file: a header row, then one row each.")],
     dataset_id: Annotated[str, typer.Option("--id", help="The id tools will use.")],
     directory: DatasetsOption = None,
+    tenant: DatasetTenantOption = None,
 ) -> None:
     """Validate a CSV file and add it as a dataset, replacing an earlier one with the same id.
 
     The first column is an index (dates, say) when its values are not all numbers; every other
     column must be numeric.
     """
-    store = DirectoryDatasetStore(directory or get_settings().datasets_dir)
     try:
+        store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
         info = store.put(dataset_id, source)
-    except (DatasetError, OSError) as error:
+    except (DatasetError, TenantError, OSError) as error:
         errors.print(f"[red]error:[/red] {error}")
         raise typer.Exit(1) from error
     console.print(
@@ -138,9 +151,13 @@ def dataset_push(
 
 
 @dataset_app.command("list")
-def dataset_list(directory: DatasetsOption = None) -> None:
+def dataset_list(directory: DatasetsOption = None, tenant: DatasetTenantOption = None) -> None:
     """List the datasets with their rows, columns, and fingerprints."""
-    store = DirectoryDatasetStore(directory or get_settings().datasets_dir)
+    try:
+        store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
+    except TenantError as error:
+        errors.print(f"[red]error:[/red] {error}")
+        raise typer.Exit(1) from error
     table = Table(title=f"Datasets in {store.root}")
     for column in ("Id", "Rows", "Columns", "Index range", "sha256"):
         table.add_column(column)
