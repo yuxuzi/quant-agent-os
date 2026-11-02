@@ -1,10 +1,9 @@
 """What a client pays per task must not grow past the recorded baseline (plan step P1.1)."""
 
 import json
-
-import pytest
 import re
 
+import pytest
 from agent_efficiency import BASELINE, SKILLS, TASKS, run
 
 # Floats in outputs can differ in their last digits across platforms and library versions.
