@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from quant_agent_os.api import KeyRing, build_app
-from quant_agent_os.mcp.http import add_mcp_route
+from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.runs import RunStore
 from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_platform.composition import Catalog
 
@@ -29,16 +30,15 @@ def build_http_app(
     ledger. Raises `ValueError` without an enabled key.
     """
     registry = ToolRegistry(catalog.tools)
-    app = build_app(registry, keys, run_store, policy=policy, title="quant-agent-os")
+    executor = ToolExecutor(registry, policy, approvals=run_store)
+    tenancy = SingleTenant(Surface(executor, catalog.resources, catalog.prompts, run_store))
+    app = build_app(None, keys, None, title="quant-agent-os", tenancy=tenancy)
     add_mcp_route(
         app,
-        ToolExecutor(registry, policy, approvals=run_store),
+        tenancy,
         name="quant-agent-os",
-        keys=keys,
-        run_store=run_store,
+        verifier=KeyVerifier(keys),
         instructions=catalog.instructions,
-        resources=catalog.resources,
-        prompts=catalog.prompts,
         extra_hosts=extra_hosts,
     )
     return app

@@ -1,4 +1,4 @@
-"""MCP over Streamable HTTP (B-33, decision 0012): same results as stdio and REST, behind keys."""
+"""MCP over Streamable HTTP (B-33, B-34): same results as stdio and REST, per credential tenant."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -11,14 +11,16 @@ import httpx
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.server.auth.provider import AccessToken
 from portfolio_tools import build_registry
 from starlette.applications import Starlette
 
 from quant_agent_os.api import KeyRing, add_key, build_app, load_keys
 from quant_agent_os.mcp import call_tool
-from quant_agent_os.mcp.http import add_mcp_route
+from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import PermissionPolicy, ResourceSpec
 
 ARGUMENTS = {"series_id": "s", "returns": [0.01, -0.02, 0.03], "periods_per_year": 12}
@@ -33,24 +35,43 @@ DRAWDOWN = ResourceSpec(
 BASE = "http://127.0.0.1:8000"
 
 
+class Tenants:
+    """local serves both tools and the drawdown resource; acme serves only annualized_return."""
+
+    def __init__(self, store: MemoryRunStore) -> None:
+        self.surfaces = {
+            "local": Surface(
+                ToolExecutor(REGISTRY, PermissionPolicy(), approvals=store),
+                resources=[DRAWDOWN],
+                run_store=store,
+            ),
+            "acme": Surface(
+                ToolExecutor(
+                    REGISTRY, PermissionPolicy(tool_allowlist=frozenset({"annualized_return"}))
+                ),
+                resources=[DRAWDOWN],  # its tool is not served to acme, so neither is this
+                run_store=store,
+            ),
+        }
+
+    def surface(self, tenant: str) -> Surface | None:
+        return self.surfaces.get(tenant)
+
+
 @pytest.fixture
 def server(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore]:
     path = tmp_path / "keys.toml"
     issued = {
         "alice": add_key(path, "alice", ["tools:list", "tools:call"]),
         "lister": add_key(path, "lister", ["tools:list"]),
+        "acme": add_key(path, "bo", ["tools:list", "tools:call"], tenant="acme"),
+        "globex": add_key(path, "cy", ["tools:list", "tools:call"], tenant="globex"),
     }
     keys = KeyRing(load_keys(path))
     store = MemoryRunStore()
-    app = build_app(REGISTRY, keys, store)
-    add_mcp_route(
-        app,
-        ToolExecutor(REGISTRY, PermissionPolicy(), approvals=store),
-        name="test",
-        keys=keys,
-        run_store=store,
-        resources=[DRAWDOWN],
-    )
+    tenancy = Tenants(store)
+    app = build_app(None, keys, None, tenancy=tenancy)
+    add_mcp_route(app, tenancy, name="test", verifier=KeyVerifier(keys))
     return app, issued, store
 
 
@@ -191,8 +212,54 @@ def test_keys_never_reach_the_logs(server: Any, caplog: pytest.LogCaptureFixture
     assert "qaos_wrong-key-value" not in caplog.text
 
 
-def test_mcp_over_http_needs_an_enabled_key() -> None:
-    with pytest.raises(ValueError, match="at least one enabled API key"):
-        add_mcp_route(
-            Starlette(), EXECUTOR, name="test", keys=KeyRing([]), run_store=MemoryRunStore()
-        )
+def test_each_caller_is_served_its_own_tenant(server: Any) -> None:
+    app, issued, store = server
+
+    async def check(session: ClientSession) -> Any:
+        tools = [tool.name for tool in (await session.list_tools()).tools]
+        templates = (await session.list_resource_templates()).resourceTemplates
+        hidden = await session.call_tool("max_drawdown", ARGUMENTS)
+        shown = await session.call_tool("annualized_return", ARGUMENTS)
+        return tools, templates, hidden, shown
+
+    tools, templates, hidden, shown = _session(app, issued["acme"], check)
+
+    assert tools == ["annualized_return"]
+    assert templates == []
+    assert hidden.isError and "denied" in hidden.content[0].text
+    assert shown.isError is False
+    assert [(run.principal, run.tenant) for run in store.list_runs(5)] == [
+        ("bo", "acme"),
+        ("bo", "acme"),
+    ]
+
+
+def test_a_tenant_not_served_here_reaches_nothing(server: Any) -> None:
+    app, issued, _ = server
+
+    async def check(session: ClientSession) -> Any:
+        try:
+            await session.list_tools()
+        except Exception as error:  # McpError, possibly wrapped by the task group
+            return str(error)
+        return None
+
+    assert "Tenant 'globex' is not served here" in _session(app, issued["globex"], check)
+
+
+def test_a_credential_without_a_tenant_is_refused() -> None:
+    class NoTenant:
+        async def verify_token(self, token: str) -> AccessToken | None:
+            return AccessToken(token=token, client_id="x", scopes=["tools:list"])
+
+    app = Starlette()
+    add_mcp_route(app, SingleTenant(Surface(EXECUTOR)), name="test", verifier=NoTenant())
+
+    async def check(session: ClientSession) -> Any:
+        try:
+            await session.list_tools()
+        except Exception as error:
+            return str(error)
+        return None
+
+    assert "names no tenant" in _session(app, "any-token", check)
