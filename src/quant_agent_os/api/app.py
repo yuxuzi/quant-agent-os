@@ -132,7 +132,7 @@ def build_app(
             raise HTTPException(
                 422, 'The body must be a JSON object: {"arguments": {...}}.'
             ) from None
-        recorder = RunRecorder(run_store, actor="rest", principal=key.principal)
+        recorder = RunRecorder(run_store, actor="rest", principal=key.principal, tenant=key.tenant)
         record = await run_in_threadpool(
             recorder.call, executor, PlanStep(tool=name, arguments=arguments)
         )
@@ -153,11 +153,11 @@ def build_app(
     def list_runs(
         key: Annotated[ApiKey, requires("runs:read")], limit: int = 20
     ) -> list[RunRecord]:
-        return run_store.list_runs(max(1, min(limit, MAX_RUNS)))
+        return run_store.list_runs(max(1, min(limit, MAX_RUNS)), tenant=key.tenant)
 
     @app.get("/v1/runs/{run_id}")
     def get_run(run_id: str, key: Annotated[ApiKey, requires("runs:read")]) -> StoredRun:
-        stored = run_store.get_run(run_id)
+        stored = run_store.get_run(run_id, tenant=key.tenant)
         if stored is None:
             raise HTTPException(404, f"No run {run_id}.")
         return stored

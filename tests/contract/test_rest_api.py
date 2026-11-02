@@ -182,6 +182,32 @@ def test_runs_record_the_rest_actor_and_the_keys_principal(
     assert client.get("/v1/runs/nope", headers=headers).status_code == 404
 
 
+def test_a_key_sees_only_its_own_tenants_runs(store: MemoryRunStore, tmp_path: Path) -> None:
+    path = tmp_path / "tenants.toml"
+    scopes: list[Any] = ["tools:list", "tools:call", "runs:read"]
+    local, acme = add_key(path, "ann", scopes), add_key(path, "bo", scopes, tenant="acme")
+    client = TestClient(build_app(REGISTRY, KeyRing(load_keys(path)), store))
+    call = {"arguments": ARGUMENTS}
+    local_run = client.post("/v1/tools/max_drawdown/call", headers=_auth(local), json=call).json()[
+        "run_id"
+    ]
+    acme_run = client.post("/v1/tools/max_drawdown/call", headers=_auth(acme), json=call).json()[
+        "run_id"
+    ]
+
+    seen = [run["run_id"] for run in client.get("/v1/runs", headers=_auth(acme)).json()]
+
+    assert seen == [acme_run]
+    assert client.get(f"/v1/runs/{local_run}", headers=_auth(acme)).status_code == 404
+    assert client.get(f"/v1/runs/{acme_run}", headers=_auth(local)).status_code == 404
+    assert 'tenant = "acme"' in path.read_text() and path.read_text().count("tenant") == 1
+
+
+def test_a_malformed_tenant_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="tenant"):
+        add_key(tmp_path / "keys.toml", "eve", ["tools:list"], tenant="Acme Corp")
+
+
 def test_consequential_calls_wait_for_an_operator_approval_no_key_can_give(
     keys_file: tuple[Path, dict[str, str]], store: MemoryRunStore
 ) -> None:

@@ -14,6 +14,7 @@ from quant_agent_os.runs.store import RunStore, RunStoreError
 from quant_agent_os.runtime.approvals import Approval
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.runtime.plan import PlanStep
+from quant_agent_os.tenancy import DEFAULT_TENANT
 
 logger = logging.getLogger("quant_agent_os.runs")
 
@@ -51,7 +52,8 @@ class RunRecorder:
     an answer the tool already produced would not make the record more complete.
 
     ``principal`` names the authenticated caller (for example an API key's principal) on the
-    run and on every audit event; a recorder is cheap, so an HTTP server makes one per request.
+    run and on every audit event, and ``tenant`` the caller's tenant (decision 0013); a recorder
+    is cheap, so an HTTP server makes one per request.
 
     A call that needs an approval leaves its run ``awaiting_approval``. The operator grants it
     with `approve` and runs the waiting calls with `resume`, in the same run, so the approval's
@@ -59,11 +61,17 @@ class RunRecorder:
     """
 
     def __init__(
-        self, store: RunStore, *, actor: str = "local", principal: str | None = None
+        self,
+        store: RunStore,
+        *,
+        actor: str = "local",
+        principal: str | None = None,
+        tenant: str = DEFAULT_TENANT,
     ) -> None:
         self.store = store
         self.actor = actor
         self.principal = principal
+        self.tenant = tenant
 
     def call(self, executor: ToolExecutor, step: PlanStep) -> ToolCallRecord:
         """Execute ``step`` as a one-call run and record it."""
@@ -160,6 +168,7 @@ class RunRecorder:
             goal=goal,
             actor=self.actor,
             principal=self.principal,
+            tenant=self.tenant,
             platform_version=__version__,
             provider=provider,
             registry_digest=registry_digest,

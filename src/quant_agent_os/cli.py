@@ -13,6 +13,7 @@ from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
 from quant_agent_os.runtime.plan import Plan
+from quant_agent_os.tenancy import DEFAULT_TENANT
 
 app = typer.Typer(
     help="QuantAgentOS: typed tools, a bounded orchestrator, and evidence-linked reports.",
@@ -87,6 +88,9 @@ def api_key_new(
             help="Keys file (default: QUANT_AGENT_OS_API_KEYS_FILE or ~/.quant-agent-os)."
         ),
     ] = None,
+    tenant: Annotated[
+        str, typer.Option(help="The tenant the key acts in; its data only (decision 0013).")
+    ] = DEFAULT_TENANT,
 ) -> None:
     """Create an API key: print it once and append only its hash to the keys file."""
     unknown = sorted(set(scope) - set(SCOPES))
@@ -98,12 +102,13 @@ def api_key_new(
     path = keys or get_settings().api_keys_file
     scopes: list[Scope] = [item for item in SCOPES if item in scope]
     try:
-        key = add_key(path, principal, scopes)
+        key = add_key(path, principal, scopes, tenant=tenant)
     except (ApiKeyError, ValueError) as error:
         errors.print(f"[red]error:[/red] {error}")
         raise typer.Exit(1) from error
     errors.print(
-        f"Added a key for {principal} ({', '.join(scopes)}) to {path}. It is shown once; "
+        f"Added a key for {principal} in tenant {tenant} ({', '.join(scopes)}) to {path}. "
+        "It is shown once; "
         "store it now. Restart the server to use it."
     )
     typer.echo(key)

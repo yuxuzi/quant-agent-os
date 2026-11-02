@@ -116,6 +116,20 @@ def test_runs_are_listed_newest_first_and_unknown_runs_are_none(store: RunStore)
     assert store.get_run("missing") is None
 
 
+def test_reads_filtered_by_tenant_see_only_that_tenants_runs(store: RunStore) -> None:
+    local = RunRecorder(store).call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "a"}))
+    acme = RunRecorder(store, tenant="acme").call(
+        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "b"})
+    )
+
+    assert [run.run_id for run in store.list_runs(tenant="acme")] == [acme.run_id]
+    assert [run.run_id for run in store.list_runs(tenant="local")] == [local.run_id]
+    assert len(store.list_runs()) == 2
+    assert store.get_run(acme.run_id or "", tenant="local") is None
+    stored = store.get_run(acme.run_id or "", tenant="acme")
+    assert stored is not None and stored.run.tenant == "acme"
+
+
 def test_audit_events_hold_ids_and_statuses_never_inputs(store: RunStore) -> None:
     record = RunRecorder(store).call(
         EXECUTOR, PlanStep(tool="lookup", arguments={"query": "confidential thesis"})
