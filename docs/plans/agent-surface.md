@@ -217,6 +217,34 @@ Deviations from the steps above:
 **Done when** the efficiency evaluation, run with the skills loaded as context, matches or
 beats P2 on calls per task.
 
+**Status: done (2026-11-02).** Measured with the evaluation, against P2:
+
+| Metric | P2 | P3 |
+| --- | --- | --- |
+| Calls, the six tasks | 10 | 10 |
+| Success | 100% | 100% |
+| Definition / argument / result bytes | 10,785 / 631 / 28,901 | unchanged |
+| Skill descriptions, every turn | — | 1,114 bytes (four skills) |
+| One skill loaded per task | — | 2,415 to 2,642 bytes |
+
+The evaluation's client is scripted, so the skills cannot change its calls. It checks instead
+that every task calls only tools its skill teaches.
+
+Deviations from the steps above:
+- **The repository root is the plugin.** `.claude-plugin/plugin.json` declares the server
+  inline, not in a `.mcp.json`, so the repository's own Claude Code setup is unchanged.
+  `.claude-plugin/marketplace.json` lists it with `source: "./"`, so
+  `claude plugin marketplace add yuxuzi/quant-agent-os` installs it.
+- **The server finds its store.** `quant-platform` reads `QUANT_AGENT_OS_STORE` or
+  `~/.quant-agent-os/knowledge.db`, and the default toolsets start without research when
+  there is no store. A plugin cannot ask for a path, so it has to start anyway.
+- **Python 3.13 is pinned in the plugin's command,** because bottleneck has no 3.15 wheels
+  (decision 0010).
+- **Cursor and VS Code bundles are generated** from the skills and the plugin
+  (`client_bundles.py`), and a test fails while they are stale.
+- **Skills name what they use in backticks.** The consistency test reads those names; there
+  is no separate list to keep in step.
+
 ### P4. Remote MCP transport (B-33; decision 0012; needs approval)
 
 1. **P4.1 Streamable HTTP.** `serve-mcp --http` uses the SDK's stateless Streamable HTTP

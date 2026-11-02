@@ -23,6 +23,7 @@ It has two products built on one core platform:
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
 | Team server in Docker | Implemented on SQLite or PostgreSQL + pgvector ([docs/deployment.md](docs/deployment.md)); both smoke-tested by `docker compose up` in CI |
+| Skills and client packaging | Implemented: four instruction-only skills kept in step with the server by tests, a Claude Code plugin, and Cursor and VS Code bundles ([getting started](docs/getting-started.md)) |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
@@ -46,6 +47,18 @@ uv run pytest
 ```
 
 ## Use it from Claude
+
+The quickest way is the Claude Code plugin. It installs the platform MCP server and the four
+skills that teach Claude how to use it ([getting started](docs/getting-started.md)):
+
+```bash
+claude plugin marketplace add yuxuzi/quant-agent-os
+claude plugin install quant-agent-os@quant-agent-os
+```
+
+Inside a session (Claude Code 2.1.275 or later):
+`/plugin install quant-agent-os --marketplace yuxuzi/quant-agent-os`. For Cursor and VS Code
+(Copilot), copy a bundle from [clients/](clients/README.md).
 
 The [walkthrough](docs/walkthrough.md) goes from a clean checkout to cited answers in Claude
 Code or Claude Desktop, with the recorded runs and known limitations. In short: ingest your
@@ -179,6 +192,8 @@ packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplat
 packages/quant-analytics/  performance and risk metrics as tools
 deploy/   team-server Dockerfile, compose file, and smoke test
 apps/quant-platform/   platform server: every toolset, resource, and prompt behind one MCP server
+skills/   instruction-only skills (research, analytics, strategy, App Factory)
+.claude-plugin/   Claude Code plugin and marketplace manifests; clients/: Cursor and VS Code bundles
 examples/portfolio-research/  examples/quant-research/
 tests/  unit/  contract/  integration/  evaluation/
 docs/   architecture, configuration, security, getting started, decisions, roadmap
