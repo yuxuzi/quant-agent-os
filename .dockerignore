@@ -8,6 +8,7 @@
 !packages/quant-research/
 !packages/quant-analytics/pyproject.toml
 !packages/quant-app-factory/pyproject.toml
+!apps/quant-platform/pyproject.toml
 **/__pycache__
 **/*.py[cod]
 **/.env
