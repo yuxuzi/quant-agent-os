@@ -3,7 +3,9 @@
 import json
 
 import pytest
-from agent_efficiency import BASELINE, TASKS, run
+import re
+
+from agent_efficiency import BASELINE, SKILLS, TASKS, run
 
 # Floats in outputs can differ in their last digits across platforms and library versions.
 TOLERANCE = 1.02
@@ -40,3 +42,23 @@ def test_what_the_model_sees_every_turn_does_not_regress(server: str) -> None:
         assert now[metric] <= before[metric] * TOLERANCE, (
             f"{server} {metric} grew from {before[metric]} to {now[metric]}"
         )
+
+
+def test_what_every_turn_carries_for_the_skills_does_not_regress() -> None:
+    now = METRICS["totals"]["skill_description_bytes"]
+    before = BASELINE_METRICS["totals"]["skill_description_bytes"]
+
+    assert now <= before * TOLERANCE, f"skill descriptions grew from {before} to {now}"
+
+
+@pytest.mark.parametrize("task", sorted(TASKS))
+def test_each_task_loads_one_skill_that_teaches_its_calls(task: str) -> None:
+    measured = METRICS["tasks"][task]
+    text = (SKILLS / measured["skill"] / "SKILL.md").read_text("utf-8")
+    taught = set(re.findall(r"`([a-z_]+)`", text))
+
+    assert set(measured["tools"]) <= taught, f"{measured['skill']} does not teach {task}'s calls"
+    before = BASELINE_METRICS["tasks"][task]["skill_bytes"]
+    assert measured["skill_bytes"] <= before * TOLERANCE, (
+        f"{measured['skill']} grew from {before} to {measured['skill_bytes']} bytes"
+    )
