@@ -29,6 +29,9 @@ pdf = [
 mcp = [
     "quant-agent-os[mcp]",
 ]
+api = [
+    "quant-agent-os[api]",
+]
 
 [tool.uv.sources]
 quant-agent-os = { workspace = true }

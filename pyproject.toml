@@ -111,7 +111,12 @@ testpaths = [
     "packages/quant-app-factory/tests",
 ]
 pythonpath = ["examples/portfolio-research"]
-filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    # starlette 1.8's TestClient prefers httpx2; httpx (already locked via mcp) still works.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov-report=term-missing"
 
 [tool.coverage.run]

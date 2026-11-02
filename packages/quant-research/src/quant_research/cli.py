@@ -4,17 +4,28 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from quant_agent_os.api import (
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    ApiKeyError,
+    ApiUnavailableError,
+    KeyRing,
+    build_app,
+    is_loopback,
+    load_keys,
+    run_http,
+)
 from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
-from quant_agent_os.tools import ToolRegistry
+from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec
 from quant_research.application.retrieval import RelatedEntity, ResearchQuery
 from quant_research.application.strategy import (
     NoEvidenceError,
@@ -236,22 +247,7 @@ def serve_mcp(
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         policy = get_settings().policy()
         tools = research_tools(research.research)
-        for spec in tools:
-            missing = sorted(p.value for p in spec.permissions - policy.granted)
-            unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions))
-            if missing:
-                errors.print(
-                    f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
-                    "not granted, so calls will be denied. Grant it with "
-                    "QUANT_AGENT_OS_GRANTED_PERMISSIONS, or serve without a hosted embedder."
-                )
-            elif unapproved:
-                errors.print(
-                    f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(unapproved)}, which "
-                    "needs an approval for every call, so MCP calls will return "
-                    "approval_required. Pre-approve it with "
-                    "QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS, or serve without a hosted embedder."
-                )
+        _warn_about_permissions(tools, policy, "MCP")
         run_stdio(
             ToolExecutor(ToolRegistry(tools), policy),
             name="quant-research",
@@ -259,6 +255,66 @@ def serve_mcp(
             recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
         )
     except MCPUnavailableError as error:
+        raise _fail(error) from error
+    finally:
+        if run_store is not None:
+            run_store.close()
+        research.close()
+
+
+@app.command("serve-api")
+def serve_api(
+    store: StoreOption = DEFAULT_STORE,
+    keys: Annotated[
+        Path | None,
+        typer.Option(help="API keys file (default: QUANT_AGENT_OS_API_KEYS_FILE)."),
+    ] = None,
+    host: Annotated[str, typer.Option(help="Address to bind; loopback by default.")] = (
+        DEFAULT_HOST
+    ),
+    port: Annotated[int, typer.Option(help="Port to listen on.")] = DEFAULT_PORT,
+    embedder: EmbedderOption = None,
+    embedding_model: ModelOption = None,
+    runs: RunsOption = None,
+) -> None:
+    """Serve the read-only research tools over REST, for callers with an API key.
+
+    Create keys with `quant-agent-os api-key new`. Every call is recorded in the run store with
+    the key's principal; unlike serve-mcp, the server does not start if the run store cannot
+    be opened. Permissions come from QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by
+    default). Put TLS in a reverse proxy before binding anything but loopback.
+    """
+    settings = get_settings()
+    try:
+        ring = KeyRing(load_keys(keys or settings.api_keys_file))
+    except ApiKeyError as error:
+        raise _fail(error) from error
+    if not len(ring):
+        raise _fail("The keys file has no enabled key; add one with `quant-agent-os api-key new`.")
+    research = _open(store, embedder, embedding_model, read_only=True)
+    run_store: SqliteRunStore | None = None
+    try:
+        try:
+            run_store = SqliteRunStore(_runs_path(store, runs))
+        except RunStoreError as error:
+            raise _fail(error) from error
+        tools = research_tools(research.research)
+        policy = settings.policy()
+        _warn_about_permissions(tools, policy, "REST")
+        if not is_loopback(host):
+            errors.print(
+                f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
+                "serve it behind a reverse proxy that terminates TLS."
+            )
+        app_ = build_app(
+            ToolRegistry(tools), ring, run_store, policy=policy, title="quant-research"
+        )
+        plural = "" if len(ring) == 1 else "s"
+        errors.print(
+            f"Serving {len(tools)} tools at http://{host}:{port} to {len(ring)} key{plural}."
+        )
+        run_http(app_, host=host, port=port)
+    except ApiUnavailableError as error:
         raise _fail(error) from error
     finally:
         if run_store is not None:
@@ -297,7 +353,8 @@ def show_runs(
             raise _fail(f"No run {run_id} in {path}.")
         run = stored.run
         console.print(
-            f"Run {run.run_id} ({run.kind}, {run.status}) by {run.actor}: {run.goal}\n"
+            f"Run {run.run_id} ({run.kind}, {run.status}) by {run.actor}"
+            f"{f' ({run.principal})' if run.principal else ''}: {run.goal}\n"
             f"Platform {run.platform_version}, registry {run.registry_digest[:16]}, "
             f"data {run.data_versions or 'none'}.",
             soft_wrap=True,
@@ -315,6 +372,28 @@ def show_runs(
             )
     finally:
         run_store.close()
+
+
+def _warn_about_permissions(
+    tools: list[ToolSpec[Any, Any]], policy: PermissionPolicy, interface: str
+) -> None:
+    """Warn about tools the policy will deny, or will hold for an approval on every call."""
+    for spec in tools:
+        missing = sorted(p.value for p in spec.permissions - policy.granted)
+        unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions))
+        if missing:
+            errors.print(
+                f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
+                "not granted, so calls will be denied. Grant it with "
+                "QUANT_AGENT_OS_GRANTED_PERMISSIONS, or serve without a hosted embedder."
+            )
+        elif unapproved:
+            errors.print(
+                f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(unapproved)}, which "
+                f"needs an approval for every call, so {interface} calls will return "
+                "approval_required. Pre-approve it with "
+                "QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS, or serve without a hosted embedder."
+            )
 
 
 def _describe_path(entity: RelatedEntity) -> str:

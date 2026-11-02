@@ -1881,6 +1881,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+api = [
+    { name = "quant-agent-os", extra = ["api"] },
+]
 mcp = [
     { name = "quant-agent-os", extra = ["mcp"] },
 ]
@@ -1894,11 +1897,12 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
     { name = "quant-agent-os", editable = "." },
+    { name = "quant-agent-os", extras = ["api"], marker = "extra == 'api'", editable = "." },
     { name = "quant-agent-os", extras = ["mcp"], marker = "extra == 'mcp'", editable = "." },
     { name = "rich", specifier = ">=13.7" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["pdf", "mcp"]
+provides-extras = ["pdf", "mcp", "api"]
 
 [[package]]
 name = "questionary"
