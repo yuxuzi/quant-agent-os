@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from quant_agent_os.tools import Permission, ToolSpec, tool
+from quant_agent_os.tools import Permission, ResourceSpec, ToolSpec, tool
 from quant_app_factory.application.factory import AppFactory, FactoryReport, SpecCheck
 from quant_app_factory.domain.planner import AppPlan
 from quant_app_factory.domain.ports import ScaffoldPlan, TemplateDescription
@@ -194,3 +194,21 @@ def factory_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
         return factory.recheck(params.spec, check_connection=params.check_connection)
 
     return [*guide_tools(factory), plan_app, create_app, check_app]
+
+
+def factory_resources() -> list[ResourceSpec]:
+    """Return the template resources, read through `describe_template`."""
+    return [
+        ResourceSpec(
+            uri_template="qaos://template/{template}",
+            name="template",
+            description="What an App Factory template asks: profiles, components, questions.",
+            tool="describe_template",
+        ),
+        ResourceSpec(
+            uri_template="qaos://template/{template}/{profile}",
+            name="template-profile",
+            description="What one profile of an App Factory template asks.",
+            tool="describe_template",
+        ),
+    ]

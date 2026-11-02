@@ -31,7 +31,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(tmp_path / "factory.toml"))
     monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
     factory = AppFactory(PytemplateUvScaffolder(), runner=_PassingChecks())
-    monkeypatch.setattr(factory_cli, "_factory", lambda: factory)
+    monkeypatch.setattr(factory_cli, "default_factory", lambda: factory)
     return tmp_path
 
 

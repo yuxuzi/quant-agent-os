@@ -38,6 +38,7 @@ PROMPT = PromptSpec(
 def test_a_template_matches_one_segment_per_variable_and_decodes_it() -> None:
     assert PASSAGE.variables == ["chunk_id"]
     assert PASSAGE.match("qaos://passage/doc%3Aab12%231") == {"chunk_id": "doc:ab12#1"}
+    assert PASSAGE.match("qaos://passage/doc:ab12#1") == {"chunk_id": "doc:ab12#1"}
     assert TEMPLATE.match("qaos://template/quant-baseline/quant-research") == {
         "template": "quant-baseline",
         "profile": "quant-research",

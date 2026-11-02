@@ -28,7 +28,7 @@ from quant_app_factory.domain.ports import (
 )
 from quant_app_factory.domain.spec import AppSpec, Identity, SpecError, dump_spec, load_spec
 from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
-from quant_app_factory.tools import factory_tools, guide_tools
+from quant_app_factory.tools import factory_resources, factory_tools, guide_tools
 
 try:
     __version__ = version("quant-agent-os-factory")
@@ -58,6 +58,7 @@ __all__ = [
     "SpecProblem",
     "TemplateCheck",
     "dump_spec",
+    "factory_resources",
     "factory_tools",
     "guide_tools",
     "load_spec",

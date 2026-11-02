@@ -310,7 +310,7 @@ def test_create_app_is_denied_unless_its_permissions_are_granted(tmp_path: Path)
 @pytest.fixture
 def fake_checks(monkeypatch: pytest.MonkeyPatch) -> FakeChecks:
     checks = FakeChecks()
-    monkeypatch.setattr(factory_cli, "_factory", lambda: _factory(checks))
+    monkeypatch.setattr(factory_cli, "default_factory", lambda: _factory(checks))
     return checks
 
 

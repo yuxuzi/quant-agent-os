@@ -71,7 +71,8 @@ def _fail(error: Exception | str) -> typer.Exit:
     return typer.Exit(code=1)
 
 
-def _factory() -> AppFactory:
+def default_factory() -> AppFactory:
+    """Return the factory configured by the settings file, or exit with the settings error."""
     try:
         settings = load_settings()
     except SettingsError as error:
@@ -149,7 +150,7 @@ def plan(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help=VERBOSE_HELP)] = False,
 ) -> None:
     """Preview the project: what it builds, its components, and its checks. Writes nothing."""
-    if _preview(_factory(), _load(spec), verbose=verbose):
+    if _preview(default_factory(), _load(spec), verbose=verbose):
         raise typer.Exit(code=1)
 
 
@@ -176,7 +177,7 @@ def create(
     With --check-connection, the app's own connection check runs too, receiving only the
     environment variables the spec's settings reference.
     """
-    factory = _factory()
+    factory = default_factory()
     app_spec = _load(spec)
     if _preview(factory, app_spec, verbose=verbose):
         raise typer.Exit(code=1)
@@ -209,7 +210,7 @@ def check_project(
     ] = False,
 ) -> None:
     """Re-run the checks of the project a spec created, for example after a failed check."""
-    factory = _factory()
+    factory = default_factory()
     app_spec = _load(spec)
     _confirm(
         "Re-run this project's checks? It runs uv and may download packages",
@@ -385,7 +386,7 @@ def new(
     questions come from the template itself, only those that apply are asked, and
     pytemplate-uv checks the result. Secrets are asked for as variable names, never values.
     """
-    factory = _factory()
+    factory = default_factory()
     template, profile = _resolve_target(target, template, profile)
     if template is None:
         template = (
@@ -647,7 +648,7 @@ def _print_check(factory: AppFactory, template: str) -> bool:
 @template_app.command("list")
 def template_list() -> None:
     """List the built-in templates and the ones registered in factory.toml."""
-    factory = _factory()
+    factory = default_factory()
     for name in [*sorted(BUILT_IN_PACKS), "bundled"]:
         profiles = ", ".join(p.id for p in factory.describe_template(name).profiles)
         console.print(f"[bold]{name}[/bold] (built-in): {profiles}", soft_wrap=True)
@@ -690,7 +691,7 @@ def template_fork(
     except PackError as error:
         raise _fail(error) from error
     console.print(f"Forked {source} into {forked}.", soft_wrap=True)
-    factory = _factory()
+    factory = default_factory()
     if not _print_check(factory, forked.resolve().as_posix()):
         raise typer.Exit(code=1)
     if register:
@@ -707,7 +708,7 @@ def template_check(
     """Load a pack and plan each of its profiles with default answers. Writes nothing."""
     if is_template_path(template) or Path(template).is_dir():
         template = Path(template).expanduser().resolve().as_posix()
-    if not _print_check(_factory(), template):
+    if not _print_check(default_factory(), template):
         raise typer.Exit(code=1)
 
 
@@ -733,7 +734,7 @@ def template_add(
         except PackError as error:
             raise _fail(error) from error
         cached = True
-    factory = _factory()
+    factory = default_factory()
     if not _print_check(factory, path.as_posix()):
         if cached:
             shutil.rmtree(path, ignore_errors=True)
@@ -766,7 +767,7 @@ def serve_mcp(
     create_app is not served: MCP clients cannot approve it yet, so people create from the
     terminal. Messages go to stderr because stdout carries the protocol.
     """
-    tools = served_tools(_factory())
+    tools = served_tools(default_factory())
     run_store: SqliteRunStore | None = None
     try:
         if record:

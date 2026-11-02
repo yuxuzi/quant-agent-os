@@ -55,11 +55,13 @@ class ResourceSpec:
     def match(self, uri: str) -> dict[str, str] | None:
         """Return the arguments ``uri`` gives this template, or None when it does not match.
 
-        A variable matches one URI path segment and is percent-decoded.
+        A variable matches one path segment, percent-encoded or not: ids such as
+        ``doc:ab12#1`` arrive raw from clients that do not encode them, so ``?`` and ``#`` are
+        taken as part of the value rather than as a query or fragment.
         """
         parts = _VARIABLE.split(self.uri_template)
         pattern = "".join(
-            re.escape(part) if index % 2 == 0 else f"(?P<{part}>[^/?#]+)"
+            re.escape(part) if index % 2 == 0 else f"(?P<{part}>[^/]+)"
             for index, part in enumerate(parts)
         )
         found = re.fullmatch(pattern, uri)
