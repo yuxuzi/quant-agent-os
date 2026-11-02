@@ -22,6 +22,8 @@
         "${CLAUDE_PLUGIN_ROOT}",
         "--package",
         "quant-agent-os-platform",
+        "--extra",
+        "factory",
         "quant-platform",
         "serve-mcp"
       ]

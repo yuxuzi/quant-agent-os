@@ -66,7 +66,7 @@ run `uv run quant-platform catalog`.
 - **Claude Code without the plugin.** Run from the clone:
 
   ```bash
-  claude mcp add quant-agent-os -- uv run --directory "$PWD" --package quant-agent-os-platform quant-platform serve-mcp
+  claude mcp add quant-agent-os -- uv run --directory "$PWD" --package quant-agent-os-platform --extra factory quant-platform serve-mcp
   ```
 
 - **A team server over REST,** in Docker, with API keys: see [deployment.md](deployment.md).

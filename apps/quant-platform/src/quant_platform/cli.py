@@ -178,9 +178,7 @@ def serve_mcp(
     QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default). Messages go to stderr because
     stdout carries the protocol.
     """
-    catalog, research = _catalog(
-        _toolsets(toolsets), store, datasets, chosen=toolsets is not None
-    )
+    catalog, research = _catalog(_toolsets(toolsets), store, datasets, chosen=toolsets is not None)
     run_store: SqliteRunStore | None = None
     try:
         if record:
@@ -472,9 +470,7 @@ def catalog_command(
     datasets: DatasetsOption = None,
 ) -> None:
     """List what `serve-mcp` would offer: tools, resource templates, and prompts."""
-    catalog, research = _catalog(
-        _toolsets(toolsets), store, datasets, chosen=toolsets is not None
-    )
+    catalog, research = _catalog(_toolsets(toolsets), store, datasets, chosen=toolsets is not None)
     try:
         table = Table(title="Quant-Agent-OS catalog")
         for column in ("Kind", "Name", "Description"):
