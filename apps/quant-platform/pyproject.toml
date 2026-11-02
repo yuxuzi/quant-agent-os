@@ -12,13 +12,19 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os[mcp]",
+    "quant-agent-os[api,mcp]",
     "quant-agent-os-analytics",
-    "quant-agent-os-factory",
     "quant-agent-os-research",
     "pydantic>=2.7",
     "rich>=13.7",
     "typer>=0.12",
+]
+
+[project.optional-dependencies]
+# The App Factory toolset (decision 0012): optional, so a team image need not carry
+# pytemplate-uv.
+factory = [
+    "quant-agent-os-factory",
 ]
 
 [project.scripts]

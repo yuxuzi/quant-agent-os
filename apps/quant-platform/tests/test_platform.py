@@ -190,3 +190,23 @@ def test_the_cli_lists_the_catalog_and_refuses_bad_choices(
     assert "qaos://dataset/{dataset_id}" in listed.output
     assert no_store.exit_code == 2
     assert unknown.exit_code == 2
+
+
+def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib.util
+
+    from quant_platform import composition
+
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        composition.importlib.util,
+        "find_spec",
+        lambda name, *args: None if name == "quant_app_factory" else real(name, *args),
+    )
+
+    asked = CliRunner().invoke(cli, ["catalog", "--toolsets", "factory"])
+
+    assert composition.available_toolsets() == ["research", "analytics"]
+    assert asked.exit_code == 2 and "quant-agent-os-platform[factory]" in asked.output

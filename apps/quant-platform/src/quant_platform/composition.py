@@ -2,20 +2,20 @@
 
 This is the only place that imports every product (decision 0003 keeps them independent of
 each other). Each toolset contributes its own tools, resources, prompts, and a paragraph of
-server instructions; `research_report` is added when the research toolset is served.
+server instructions; `research_report` is added when the research toolset is served. The
+factory toolset is an optional extra (``quant-agent-os-platform[factory]``, decision 0012), so
+App Factory is imported only when it is served.
 """
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
 from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
 from quant_analytics.tools import analytics_tools
-from quant_app_factory import AppFactory, factory_resources
-from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
-from quant_app_factory.cli import served_tools as factory_served_tools
 from quant_platform.prompts import (
     ANALYZE_RETURNS,
     DRAFT_APP_SPEC,
@@ -27,6 +27,9 @@ from quant_research import research_resources, research_tools
 from quant_research.application.retrieval import ResearchService
 from quant_research.cli import MCP_INSTRUCTIONS as RESEARCH_INSTRUCTIONS
 
+if TYPE_CHECKING:
+    from quant_app_factory import AppFactory
+
 Toolset = Literal["research", "analytics", "factory"]
 TOOLSETS: tuple[Toolset, ...] = ("research", "analytics", "factory")
 ANALYTICS_INSTRUCTIONS = (
@@ -35,10 +38,17 @@ ANALYTICS_INSTRUCTIONS = (
     "the numbers as computed, never recomputed."
 )
 PLATFORM_INSTRUCTIONS = "Quant-Agent-OS: quantitative research tools with cited, computed evidence."
+FACTORY_EXTRA = "install the factory extra: uv add 'quant-agent-os-platform[factory]'"
 REPORT_INSTRUCTIONS = (
     "research_report gives a cited report on one signal, with metrics of a named series, in "
     "one call."
 )
+
+
+def available_toolsets() -> list[Toolset]:
+    """Return the toolsets this installation can serve (factory only with its extra)."""
+    has_factory = importlib.util.find_spec("quant_app_factory") is not None
+    return [name for name in TOOLSETS if name != "factory" or has_factory]
 
 
 @dataclass(frozen=True)
@@ -83,6 +93,10 @@ def compose(
         prompts.append(REPORT_ON_SIGNAL)
         paragraphs.append(REPORT_INSTRUCTIONS)
     if factory is not None:
+        from quant_app_factory import factory_resources
+        from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
+        from quant_app_factory.cli import served_tools as factory_served_tools
+
         tools += factory_served_tools(factory)
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)

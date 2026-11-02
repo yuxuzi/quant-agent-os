@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os.config import get_settings
@@ -15,10 +16,19 @@ from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import ToolRegistry
-from quant_app_factory.cli import default_factory
-from quant_platform.composition import TOOLSETS, Catalog, Toolset, compose
+from quant_platform.composition import (
+    FACTORY_EXTRA,
+    TOOLSETS,
+    Catalog,
+    Toolset,
+    available_toolsets,
+    compose,
+)
 from quant_research import ResearchApp, open_research
 from quant_research.infrastructure.sqlite_store import StoreError
+
+if TYPE_CHECKING:
+    from quant_app_factory import AppFactory
 
 app = typer.Typer(
     help="Quant-Agent-OS platform: every toolset behind one MCP server.", no_args_is_help=True
@@ -26,10 +36,13 @@ app = typer.Typer(
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
 DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "runs.db"
-ALL_TOOLSETS = ",".join(TOOLSETS)
 
 ToolsetsOption = Annotated[
-    str, typer.Option(help=f"Comma-separated toolsets to serve: {', '.join(TOOLSETS)}.")
+    str | None,
+    typer.Option(
+        help=f"Comma-separated toolsets to serve: {', '.join(TOOLSETS)} (default: every "
+        "installed one)."
+    ),
 ]
 StoreOption = Annotated[
     str | None,
@@ -41,13 +54,26 @@ DatasetsOption = Annotated[
 ]
 
 
-def _toolsets(value: str) -> list[Toolset]:
+def _toolsets(value: str | None) -> list[Toolset]:
+    if value is None:
+        return available_toolsets()
     chosen = [item.strip() for item in value.split(",") if item.strip()]
     unknown = sorted(set(chosen) - set(TOOLSETS))
     if unknown or not chosen:
         errors.print(f"[red]error:[/red] choose toolsets from {', '.join(TOOLSETS)}.")
         raise typer.Exit(2)
+    if "factory" in chosen and "factory" not in available_toolsets():
+        errors.print(
+            f"[red]error:[/red] the factory toolset is not installed; {escape(FACTORY_EXTRA)}."
+        )
+        raise typer.Exit(2)
     return [item for item in TOOLSETS if item in chosen]
+
+
+def _factory() -> AppFactory:
+    from quant_app_factory.cli import default_factory
+
+    return default_factory()
 
 
 def _catalog(
@@ -73,14 +99,14 @@ def _catalog(
             if "analytics" in toolsets
             else None
         ),
-        factory=default_factory() if "factory" in toolsets else None,
+        factory=_factory() if "factory" in toolsets else None,
     )
     return catalog, research
 
 
 @app.command("serve-mcp")
 def serve_mcp(
-    toolsets: ToolsetsOption = ALL_TOOLSETS,
+    toolsets: ToolsetsOption = None,
     store: StoreOption = None,
     datasets: DatasetsOption = None,
     runs: Annotated[
@@ -124,7 +150,7 @@ def serve_mcp(
 
 @app.command("catalog")
 def catalog_command(
-    toolsets: ToolsetsOption = ALL_TOOLSETS,
+    toolsets: ToolsetsOption = None,
     store: StoreOption = None,
     datasets: DatasetsOption = None,
 ) -> None:
