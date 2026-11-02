@@ -19,6 +19,7 @@ tenant's surface: each has its own stores, and the run store filters reads by te
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -26,7 +27,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
@@ -64,13 +65,6 @@ class TenantConfig(BaseModel):
     issuer: str | None = None
     disabled: bool = False
 
-    @field_validator("store", "issuer")
-    @classmethod
-    def _plain(cls, value: str | None) -> str | None:
-        if value is not None and any(char in value for char in '"\\\n'):
-            raise ValueError("must not contain quotes, backslashes, or newlines")
-        return value
-
 
 class ServerEntry(BaseModel):
     """An authorization server in the tenants file; its secret is read from the environment."""
@@ -81,13 +75,6 @@ class ServerEntry(BaseModel):
     introspection_url: str
     client_id: str
     client_secret_env: str = Field(pattern=r"^[A-Z_][A-Z0-9_]*$")
-
-    @field_validator("issuer", "introspection_url", "client_id")
-    @classmethod
-    def _plain(cls, value: str) -> str:
-        if any(char in value for char in '"\\\n'):
-            raise ValueError("must not contain quotes, backslashes, or newlines")
-        return value
 
     def resolve(self) -> AuthorizationServer:
         """Return the server with its secret, or raise `TenantsFileError` if it is unset."""
@@ -155,15 +142,16 @@ def load_tenants(path: Path) -> dict[str, TenantConfig]:
 
 
 def dump_tenants(tenants: dict[str, TenantConfig] | TenantsFile) -> str:
-    """Return a tenants file (values are validated, so none need escaping)."""
+    """Return a tenants file. Strings are written as JSON strings, which are valid TOML basic
+    strings, so Windows paths and any other characters round-trip."""
     whole = tenants if isinstance(tenants, TenantsFile) else TenantsFile(tenants=tenants)
     lines: list[str] = []
     if whole.tenant_claim != DEFAULT_TENANT_CLAIM:
-        lines += [f'tenant_claim = "{whole.tenant_claim}"', ""]
+        lines += [f"tenant_claim = {_string(whole.tenant_claim)}", ""]
     for server in whole.authorization_servers:
         lines.append("[[authorization_servers]]")
         for key, value in server.model_dump().items():
-            lines.append(f'{key} = "{value}"')
+            lines.append(f"{key} = {_string(value)}")
         lines.append("")
     for name in sorted(whole.tenants):
         config = whole.tenants[name]
@@ -171,15 +159,19 @@ def dump_tenants(tenants: dict[str, TenantConfig] | TenantsFile) -> str:
         data = config.model_dump(mode="json", by_alias=True, exclude_defaults=True)
         for key in ("store", "schema", "datasets", "issuer"):
             if key in data:
-                lines.append(f'{key} = "{data[key]}"')
+                lines.append(f"{key} = {_string(data[key])}")
         for key in ("toolsets", "granted_permissions", "preapproved_permissions"):
             if key in data:
-                values = ", ".join(f'"{value}"' for value in sorted(data[key]))
+                values = ", ".join(_string(value) for value in sorted(data[key]))
                 lines.append(f"{key} = [{values}]")
         if config.disabled:
             lines.append("disabled = true")
         lines.append("")
     return "\n".join(lines)
+
+
+def _string(value: str) -> str:
+    return json.dumps(value)
 
 
 def save_tenants(path: Path, tenants: dict[str, TenantConfig] | TenantsFile) -> None:

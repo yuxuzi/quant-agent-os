@@ -6,6 +6,7 @@ of the other tenant, guessed ones), REST runs, and a disabled tenant.
 """
 
 import json
+import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -209,11 +210,13 @@ def test_the_tenants_file_round_trips_and_refuses_bad_entries(tmp_path: Path) ->
             issuer="https://login.acme.example",
         ),
         "beta-co": TenantConfig(disabled=True),
+        "win": TenantConfig(store='C:\\data\\kb "q".db', datasets=Path("C:\\data\\sets")),
     }
     save_tenants(path, tenants)
 
     assert load_tenants(path) == tenants
-    assert oct(path.stat().st_mode & 0o777) == "0o600"
+    if os.name == "posix":
+        assert path.stat().st_mode & 0o777 == 0o600
     assert "[tenants.acme]" in dump_tenants(tenants)
     path.write_text('[tenants."Acme Corp"]\n')
     with pytest.raises(TenantsFileError, match="Tenant id"):
