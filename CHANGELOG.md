@@ -8,8 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- The run store is at schema 4 (approval requests); older stores upgrade in place.
-  `RunRecorder.resume` takes the original steps (B-35).
+- The run store is at schema 5 (usage events, B-36); older stores upgrade in place.
+  `RunRecorder.resume` takes the original steps (B-35). `RunStore.add_call` takes the call's
+  usage event, and `RunRecorder` takes `toolsets` (tool name to toolset).
 - The team Docker image serves the platform (`quant-platform serve-http`: research and
   analytics over MCP and REST) instead of `quant-research serve-api`, with a read-only
   `datasets` volume and an operator `datasets` service. The platform's App Factory toolset is
@@ -127,6 +128,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Metering (B-36, [decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)
+  P7.1):
+  - **A usage event per call.** Every recorded call gets one, in the same transaction: tenant,
+    principal, interface, tool and version, toolset, status, duration, and input and output
+    bytes, never arguments or outputs. `ok`, `error`, and `timeout` are billable.
+  - **Usage export.** `quant-platform usage export [--tenant T] [--from D] [--to D]
+    [--by day|tool] [--format csv|jsonl]`, an operator command; the team compose file has a
+    `usage` service for it.
 - Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,

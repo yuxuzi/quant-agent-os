@@ -60,6 +60,10 @@ in memory unless it is given a run store. What each part of a record holds:
   name a secret (`api_key`, `token`, `password`, ...) are replaced with `[REDACTED]`.
 - **Audit events.** These hold only ids, hashes, and statuses, and the database rejects any
   update or deletion of them.
+- **Usage events.** One per recorded call, written in the same transaction
+  ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
+  principal, tool, status, duration, and the sizes of the arguments and output, never their
+  content. `quant-platform usage export` reads them; it is an operator command, not a tool.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.

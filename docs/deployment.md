@@ -120,6 +120,19 @@ docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its ca
 REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
 events are append-only.
 
+Every recorded call also has a usage event ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)):
+its tenant, tool, toolset, status, duration, and input and output sizes, never its arguments or
+output. Export it per call or as totals:
+
+```bash
+docker compose -f deploy/compose.yaml run --rm usage --tenant acme --by day   # this month, CSV
+docker compose -f deploy/compose.yaml run --rm usage --from 2026-11-01 --to 2026-12-01 \
+    --by tool --format jsonl
+```
+
+Calls that ended `ok`, `error`, or `timeout` are billable; refusals and invalid input are
+recorded but not billable. Without a run store (`serve-mcp --no-record`) nothing is metered.
+
 ## 7. Expose it to your team
 
 Keep the published port on loopback, and put a reverse proxy in front. The proxy should:
