@@ -29,9 +29,12 @@ class NotAwaitingApprovalError(RuntimeError):
 
 
 def outcome(records: list[ToolCallRecord]) -> RunStatus:
-    """Return a run's status from its calls; a later call for the same input supersedes."""
-    latest = {(record.tool, record.input_sha256): record for record in records}
-    statuses = {record.status for record in latest.values()}
+    """Return a run's status from its calls; a later call for the same input supersedes.
+
+    A quota refusal of a call that was already waiting for an approval leaves it waiting: the
+    call never started and its approval was not used (decision 0015).
+    """
+    statuses = {record.status for record in _latest(records).values()}
     if "approval_required" in statuses:
         return "awaiting_approval"
     return "completed" if statuses <= {"ok"} else "failed"
@@ -256,7 +259,19 @@ class RunRecorder:
             logger.warning("Run not fully recorded: %s", error)
 
 
+def _latest(records: list[ToolCallRecord]) -> dict[tuple[str, str | None], ToolCallRecord]:
+    """Return each call's latest attempt (same tool and input); a quota refusal does not
+    supersede an attempt that is waiting for an approval."""
+    latest: dict[tuple[str, str | None], ToolCallRecord] = {}
+    for record in records:
+        key = (record.tool, record.input_sha256)
+        earlier = latest.get(key)
+        waiting = earlier is not None and earlier.status == "approval_required"
+        if not (record.status == "quota_exceeded" and waiting):
+            latest[key] = record
+    return latest
+
+
 def _waiting(calls: list[ToolCallRecord]) -> list[ToolCallRecord]:
     """Return the calls whose latest attempt (same tool and input) needs an approval."""
-    latest = {(call.tool, call.input_sha256): call for call in calls}
-    return [call for call in latest.values() if call.status == "approval_required"]
+    return [call for call in _latest(calls).values() if call.status == "approval_required"]

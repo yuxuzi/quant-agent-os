@@ -4,21 +4,31 @@
 requester, and expiry. ``POST /approve/{id}`` takes an approver key, the form token, and the
 decision. The page has no scripts, escapes everything it shows, and sends headers that forbid
 framing, caching, referrers, and loading anything; the key is never stored or echoed.
+
+Each client address may submit 30 forms a minute (decision 0015), counted in this process.
+Behind a reverse proxy, run the server so it sees the client's address (for example uvicorn's
+``--proxy-headers``), or every client shares the proxy's allowance.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import math
+import threading
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os.approval_desk import ApprovalDesk, DecisionError
 from quant_agent_os.runs.models import ApprovalRequest
+from quant_agent_os.runtime.quotas import TokenBucket
 
 if TYPE_CHECKING:
     from starlette.routing import Route
 
 MAX_FORM_BYTES = 8 * 1024
+SUBMISSIONS_PER_MINUTE = 30
+MAX_TRACKED_ADDRESSES = 10_000
 HEADERS = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": (
@@ -37,19 +47,44 @@ STYLE = (
 )
 
 
-def approval_routes(desk: ApprovalDesk) -> list[Route]:
+class AddressLimits:
+    """A token bucket per client address, forgetting the least recently seen beyond a cap."""
+
+    def __init__(self, rate: int, *, cap: int = MAX_TRACKED_ADDRESSES) -> None:
+        self.rate = rate
+        self.cap = cap
+        self._buckets: OrderedDict[str, TokenBucket] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def take(self, address: str) -> float:
+        """Take one submission for ``address``: 0, or the seconds until it may submit again."""
+        with self._lock:
+            bucket = self._buckets.pop(address, None) or TokenBucket(self.rate)
+            self._buckets[address] = bucket
+            while len(self._buckets) > self.cap:
+                self._buckets.popitem(last=False)
+        return bucket.take()
+
+
+def approval_routes(
+    desk: ApprovalDesk, *, submissions_per_minute: int = SUBMISSIONS_PER_MINUTE
+) -> list[Route]:
     """Return the page's routes, served beside the REST and MCP routes."""
     from starlette.requests import Request
     from starlette.responses import HTMLResponse
     from starlette.routing import Route
 
-    def page(title: str, body: str, status: int = 200) -> HTMLResponse:
+    limits = AddressLimits(submissions_per_minute)
+
+    def page(
+        title: str, body: str, status: int = 200, headers: dict[str, str] | None = None
+    ) -> HTMLResponse:
         document = (
             f"<!doctype html><html lang=en><head><meta charset=utf-8><title>{html.escape(title)}"
             f"</title><style>{STYLE}</style></head><body><h1>{html.escape(title)}</h1>{body}"
             "</body></html>"
         )
-        return HTMLResponse(document, status_code=status, headers=HEADERS)
+        return HTMLResponse(document, status_code=status, headers=HEADERS | (headers or {}))
 
     async def show(request: Request) -> HTMLResponse:
         request_id = request.path_params["request_id"]
@@ -60,6 +95,15 @@ def approval_routes(desk: ApprovalDesk) -> list[Route]:
 
     async def decide(request: Request) -> HTMLResponse:
         request_id = request.path_params["request_id"]
+        wait = limits.take(request.client.host if request.client else "unknown")
+        if wait > 0:
+            seconds = math.ceil(wait)
+            return page(
+                "Too many attempts",
+                f"<p>Wait {seconds} seconds, then submit the form again.</p>",
+                429,
+                {"Retry-After": str(seconds)},
+            )
         declared = request.headers.get("content-length", "")
         if not declared.isdigit() or int(declared) > MAX_FORM_BYTES:
             return page("Refused", "<p>The form is too large.</p>", 413)

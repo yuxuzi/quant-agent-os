@@ -8,6 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 from quant_agent_os.runs import MemoryRunStore, RunRecorder, RunStore, SqliteRunStore
+from quant_agent_os.runs.recorder import outcome
 from quant_agent_os.runtime import (
     Approval,
     MemoryApprovalLedger,
@@ -15,6 +16,7 @@ from quant_agent_os.runtime import (
     PlanStep,
     Refusal,
     TokenBucket,
+    ToolCallRecord,
     ToolExecutor,
     failure_details,
 )
@@ -235,3 +237,15 @@ def test_stores_count_a_tenants_billable_calls_in_a_window(store: RunStore) -> N
     assert store.count_billable("acme", start, end) == 2  # invalid input is not billable
     assert store.count_billable("beta", start, end) == 1
     assert store.count_billable("acme", end, end + timedelta(days=31)) == 0
+
+
+def test_a_quota_refusal_leaves_a_waiting_call_waiting_and_fails_any_other() -> None:
+    waiting = ToolCallRecord(
+        tool="fetch", tool_version="1", arguments={}, status="approval_required", input_sha256="h"
+    )
+    refused = waiting.model_copy(update={"status": "quota_exceeded"})
+    done = waiting.model_copy(update={"status": "ok"})
+
+    assert outcome([waiting, refused]) == "awaiting_approval"
+    assert outcome([done, refused]) == "failed"
+    assert outcome([refused]) == "failed"

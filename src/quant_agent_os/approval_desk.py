@@ -6,6 +6,9 @@ decides it on the approval page with an approver key (scope ``runs:approve``, wh
 come with ``tools:call``). When the client retries the identical call, the desk resumes the
 original run, so the approval's run, tool, and hash match (decision 0005), and the call runs
 once. Neither a model nor the agent's own key can approve.
+
+Five failed submissions for one request deny it (decision 0015). The count is kept in this
+process, so with several replicas a request can take up to five failures on each.
 """
 
 from __future__ import annotations
@@ -13,8 +16,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
 from pydantic import ValidationError
 
@@ -30,6 +35,7 @@ from quant_agent_os.tools.registry import UnknownToolError
 
 REQUEST_LIFETIME = timedelta(minutes=15)
 APPROVE_SCOPE = "runs:approve"
+MAX_FAILED_ATTEMPTS = 5
 
 
 class DecisionError(PermissionError):
@@ -52,13 +58,17 @@ class ApprovalDesk:
         base_url: str,
         lifetime: timedelta = REQUEST_LIFETIME,
         separate_approver: Callable[[str], bool] = four_eyes_except_local,
+        max_failed_attempts: int = MAX_FAILED_ATTEMPTS,
     ) -> None:
         self.run_store = run_store
         self.keys = keys
         self.base_url = base_url.rstrip("/")
         self.lifetime = lifetime
         self.separate_approver = separate_approver
+        self.max_failed_attempts = max_failed_attempts
         self._secret = secrets.token_bytes(32)  # form tokens; a restart invalidates open forms
+        self._failures: dict[str, int] = {}
+        self._lock = threading.Lock()
 
     def call(
         self,
@@ -80,6 +90,9 @@ class ApprovalDesk:
                         records = recorder.resume(executor, found.run_id, [step])
                     except NotAwaitingApprovalError:
                         records = []
+                    if records and records[-1].status == "quota_exceeded":
+                        # Refused before it started: the approval stays for the next retry.
+                        self.run_store.move_request(found.request_id, "approved", source="used")
                     if records:
                         return records[-1], None
         record = recorder.call(executor, step)
@@ -115,9 +128,11 @@ class ApprovalDesk:
     def decide(
         self, request_id: str, presented_key: str, *, approve: bool, form_token: str
     ) -> ApprovalRequest:
-        """Approve or deny a pending request with an approver key; raise `DecisionError`."""
-        if not hmac.compare_digest(form_token, self.form_token(request_id)):
-            raise DecisionError("This form has expired; reload the page and try again.")
+        """Approve or deny a pending request with an approver key; raise `DecisionError`.
+
+        A wrong form token, a key that cannot decide the request, or a requester deciding their
+        own request is a failed attempt; the last allowed one denies the request.
+        """
         request = self.run_store.get_request(request_id)
         if request is None:
             raise DecisionError("There is no such approval request.")
@@ -125,11 +140,14 @@ class ApprovalDesk:
             raise DecisionError(f"This request is already {request.status}.")
         if request.expired():
             raise DecisionError("This request has expired; ask for the call again.")
+        if not hmac.compare_digest(form_token, self.form_token(request_id)):
+            self._failed(request, "This form has expired; reload the page and try again.")
         key = self.keys.authenticate(presented_key)
         if key is None or APPROVE_SCOPE not in key.scopes or key.tenant != request.tenant:
-            raise DecisionError("This key cannot approve this request.")
+            self._failed(request, "This key cannot approve this request.")
+        assert key is not None
         if self.separate_approver(request.tenant) and key.principal == request.requested_by:
-            raise DecisionError("You cannot decide your own request; ask another approver.")
+            self._failed(request, "You cannot decide your own request; ask another approver.")
         recorder = RunRecorder(
             self.run_store, actor="approval-page", principal=key.principal, tenant=request.tenant
         )
@@ -146,9 +164,32 @@ class ApprovalDesk:
         )
         if decided is None:
             raise DecisionError("This request was decided by someone else.")
+        with self._lock:
+            self._failures.pop(request_id, None)
         if not approve:
             self._event(request, "approval.denied", key.principal, {"request_id": request_id})
         return decided
+
+    def _failed(self, request: ApprovalRequest, message: str) -> NoReturn:
+        """Count a failed attempt on ``request``; deny it at the limit; raise `DecisionError`."""
+        with self._lock:
+            failures = self._failures.get(request.request_id, 0) + 1
+            self._failures[request.request_id] = failures
+        if failures < self.max_failed_attempts:
+            raise DecisionError(message)
+        with self._lock:
+            self._failures.pop(request.request_id, None)
+        if self.run_store.move_request(request.request_id, "denied", source="pending") is not None:
+            self._event(
+                request,
+                "approval.denied",
+                None,
+                {"request_id": request.request_id, "reason": "too_many_attempts"},
+            )
+        raise DecisionError(
+            f"{message} After {failures} failed attempts this request is denied; ask for the "
+            "call again."
+        )
 
     def _event(
         self, request: ApprovalRequest, event: str, principal: str | None, details: dict[str, str]

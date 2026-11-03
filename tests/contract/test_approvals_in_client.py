@@ -28,7 +28,7 @@ from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.mcp import build_server
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.runs import MemoryRunStore, RunRecorder
-from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.runtime import Refusal, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -53,9 +53,25 @@ ELIGIBLE = PermissionPolicy(
 )
 
 
+class Switch:
+    """A usage gate that admits every call until ``refusing`` is set."""
+
+    refusing = False
+
+    def admit(self, tool: str) -> Refusal | None:
+        return (
+            Refusal("Tenant acme is over its 1 calls a minute; retry in 9 s.", 9)
+            if (self.refusing)
+            else None
+        )
+
+
+GATE = Switch()
+
+
 class Tenants:
     def __init__(self, store: MemoryRunStore) -> None:
-        executor = ToolExecutor(REGISTRY, ELIGIBLE, approvals=store)
+        executor = ToolExecutor(REGISTRY, ELIGIBLE, approvals=store, usage=GATE)
         self.surfaces = {name: Surface(executor, run_store=store) for name in ("local", "acme")}
 
     def surface(self, tenant: str) -> Surface | None:
@@ -65,6 +81,7 @@ class Tenants:
 @pytest.fixture
 def server(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore, ApprovalDesk]:
     WRITES.clear()
+    GATE.refusing = False
     path = tmp_path / "keys.toml"
     issued = {
         "agent": add_key(path, "ann", ["tools:list", "tools:call"], tenant="acme"),
@@ -178,9 +195,61 @@ def test_only_an_approver_of_the_same_tenant_and_not_the_requester_can_approve(
     assert decide(issued["outsider"]).status_code == 403  # another tenant's approver
     assert "your own request" in decide(issued["self"]).text  # four eyes outside local
     assert decide(issued["approver"], form_token="0" * 64).status_code == 403  # CSRF
-    assert decide("qaos_unknown").status_code == 403
-    assert decide(issued["approver"]).status_code == 200
+    assert decide(issued["approver"]).status_code == 200  # after four failed attempts
     assert "already approved" in decide(issued["approver"]).text
+    other = _call(app, issued["agent"], "other").data["elicitations"][0]["url"]
+    unknown = _page(app, other, {"token": _token(_page(app, other)), "key": "qaos_unknown"})
+    assert unknown.status_code == 403
+
+
+def test_five_failed_attempts_deny_a_request(server: Any) -> None:
+    app, issued, store, _ = server
+    url = _call(app, issued["agent"]).data["elicitations"][0]["url"]
+    token = _token(_page(app, url))
+    form = {"token": token, "key": "qaos_guess", "decision": "approve"}
+
+    answers = [_page(app, url, form) for _ in range(5)]
+    late = _page(app, url, form | {"key": issued["approver"]})
+
+    assert [answer.status_code for answer in answers] == [403] * 5
+    assert "this request is denied" in answers[-1].text
+    assert "already denied" in late.text
+    request_id = url.rsplit("/", 1)[-1]
+    found = store.get_request(request_id)
+    assert found is not None and found.status == "denied"
+    events = store.get_run(found.run_id).events  # type: ignore[union-attr]
+    assert [e.details.get("reason") for e in events if e.event == "approval.denied"] == [
+        "too_many_attempts"
+    ]
+    assert _call(app, issued["agent"]).code == types.URL_ELICITATION_REQUIRED
+    assert WRITES == []
+
+
+def test_an_approved_call_refused_by_its_plan_keeps_its_approval(server: Any) -> None:
+    app, issued, _, _ = server
+    url = _call(app, issued["agent"]).data["elicitations"][0]["url"]
+    token = _token(_page(app, url))
+    _page(app, url, {"token": token, "key": issued["approver"], "decision": "approve"})
+
+    GATE.refusing = True
+    refused = _call(app, issued["agent"])
+    GATE.refusing = False
+    retried = _call(app, issued["agent"])
+
+    assert refused.isError and refused.structuredContent["status"] == "quota_exceeded"
+    assert retried.isError is False and WRITES == ["hello"]
+
+
+def test_the_page_limits_submissions_per_client_address(server: Any) -> None:
+    app, issued, _, _ = server
+    url = _call(app, issued["agent"]).data["elicitations"][0]["url"]
+    form = {"token": "0" * 64, "key": "qaos_guess", "decision": "approve"}
+
+    answers = [_page(app, url, form) for _ in range(31)]
+
+    assert [answer.status_code for answer in answers[:30]] == [403] * 30
+    assert answers[30].status_code == 429 and int(answers[30].headers["Retry-After"]) >= 1
+    assert answers[30].headers["Content-Security-Policy"].startswith("default-src 'none'")
 
 
 def test_the_local_tenant_may_approve_its_own_request(server: Any) -> None:
