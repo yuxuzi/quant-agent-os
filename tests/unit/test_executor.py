@@ -40,12 +40,29 @@ def broken(params: Value) -> Value:
     raise RuntimeError("boom")
 
 
+RAISED: list[Exception] = [
+    ValueError("returns must be finite"),
+    LookupError("no dataset 'fund'"),
+    RuntimeError("cannot open /srv/data/kb.db"),
+    OSError("disk I/O error at /srv/data"),
+    KeyError("internal_field"),
+    IndexError("list index out of range"),
+]
+
+
+@tool(name="raising", description="Raise the error numbered by value.")
+def raising(params: Value) -> Value:
+    raise RAISED[params.value]
+
+
 @tool(name="fetch", description="Needs the network.", permissions=[Permission.NETWORK])
 def fetch(params: Value) -> Value:
     return params
 
 
-EXECUTOR = ToolExecutor(ToolRegistry([double, slow, huge, broken, fetch]), PermissionPolicy())
+EXECUTOR = ToolExecutor(
+    ToolRegistry([double, slow, huge, broken, raising, fetch]), PermissionPolicy()
+)
 
 
 def run(tool_name: str, **arguments: object) -> str:
@@ -70,10 +87,27 @@ def test_failures_are_recorded_not_raised() -> None:
     assert run("broken", value=1) == "error"
 
 
-def test_error_messages_are_actionable() -> None:
-    record = EXECUTOR.execute(PlanStep(tool="broken", arguments={"value": 1}))
+@pytest.mark.parametrize("index", [0, 1])
+def test_a_caller_error_returns_its_message(index: int) -> None:
+    record = EXECUTOR.execute(PlanStep(tool="raising", arguments={"value": index}))
 
-    assert record.error == "RuntimeError: boom"
+    raised = RAISED[index]
+    assert record.error == f"{type(raised).__name__}: {raised}"
+    assert record.error_detail is None
+
+
+@pytest.mark.parametrize("index", [2, 3, 4, 5])
+def test_an_internal_error_returns_a_generic_message_and_keeps_the_detail(index: int) -> None:
+    record = EXECUTOR.execute(PlanStep(tool="raising", arguments={"value": index}))
+
+    raised = RAISED[index]
+    assert record.status == "error"
+    assert record.error == (
+        f"Tool 'raising' failed with an internal error (call {record.call_id}). The operator "
+        "can find the details in the run record."
+    )
+    assert str(raised) not in record.error and "/srv" not in record.error
+    assert record.error_detail == f"{type(raised).__name__}: {raised}"
 
 
 def test_records_carry_provenance_ids_and_a_stable_input_hash() -> None:
@@ -106,9 +140,9 @@ def test_failure_details_say_what_to_do_next() -> None:
     assert details("double", value="x")["retryable"] is True
     assert details("slow", value=1)["retryable"] is True
     assert details("fetch", value=1)["retryable"] is False
-    assert details("broken", value=1) == {
+    assert details("raising", value=0) == {
         "status": "error",
-        "error": "RuntimeError: boom",
+        "error": "ValueError: returns must be finite",
         "hint": FAILURE_HINTS["error"][0],
         "retryable": False,
     }

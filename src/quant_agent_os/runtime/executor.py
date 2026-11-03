@@ -76,7 +76,8 @@ class ToolCallRecord(BaseModel):
     ``input_sha256`` hashes the validated input (or the raw arguments when validation failed),
     so identical calls can be recognised across runs. ``approval`` names what allowed a
     consequential call: an approval id, or ``standing:<permission>,...`` for permissions the
-    operator pre-approved.
+    operator pre-approved. ``error_detail`` keeps the exception text of an internal failure for
+    the operator; interfaces never return it to a caller (security review F-5).
     """
 
     tool: str
@@ -93,6 +94,13 @@ class ToolCallRecord(BaseModel):
     data_versions: dict[str, str] = Field(default_factory=dict)
     approval: str | None = None
     retry_after_seconds: int | None = None
+    error_detail: str | None = None
+
+
+# Errors a caller can act on: tools raise these for bad requests, with a message meant for the
+# caller. KeyError and IndexError are lookups too, but they almost always mean a bug.
+CALLER_ERRORS: tuple[type[Exception], ...] = (ValueError, LookupError)
+INTERNAL_ERRORS: tuple[type[Exception], ...] = (KeyError, IndexError)
 
 
 class ToolExecutor:
@@ -100,9 +108,11 @@ class ToolExecutor:
 
     Timeouts stop waiting for a tool but cannot kill a running Python thread, so tools must
     not perform unbounded work; tools that run programs use `runner.run_command`, which kills
-    them. A tool with a consequential permission (decision 0005) runs only with a matching,
-    unused approval from ``approvals`` for this run, tool, and input hash, or when the policy
-    pre-approves those permissions; otherwise the call records ``approval_required``.
+    them. A tool that raises a `ValueError` or `LookupError` returns its message to the caller;
+    any other exception returns a generic message with the call id, and its text is kept in
+    ``error_detail``. A tool with a consequential permission (decision 0005) runs only with a
+    matching, unused approval from ``approvals`` for this run, tool, and input hash, or when the
+    policy pre-approves those permissions; otherwise the call records ``approval_required``.
 
     With ``usage`` (a tenant's plan limits, decision 0015), a call whose permissions and input
     are valid must be admitted before any approval is used or the tool starts; a refusal
@@ -212,8 +222,17 @@ class ToolExecutor:
                 error=f"Tool '{spec.name}' exceeded {spec.timeout_seconds}s.",
             )
         except Exception as error:
-            return record(
-                "error", tool_version=spec.version, error=f"{type(error).__name__}: {error}"
+            detail = f"{type(error).__name__}: {error}"
+            if isinstance(error, CALLER_ERRORS) and not isinstance(error, INTERNAL_ERRORS):
+                return record("error", tool_version=spec.version, error=detail)
+            failed = record("error", tool_version=spec.version, error_detail=detail)
+            return failed.model_copy(
+                update={
+                    "error": (
+                        f"Tool '{spec.name}' failed with an internal error (call "
+                        f"{failed.call_id}). The operator can find the details in the run record."
+                    )
+                }
             )
         finally:
             pool.shutdown(wait=False, cancel_futures=True)

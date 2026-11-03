@@ -206,7 +206,9 @@ def build_app(
         stored = runs_of(key).get_run(run_id, tenant=key.tenant)
         if stored is None:
             raise HTTPException(404, f"No run {run_id}.")
-        return stored
+        # Internal error text is for the operator, not the tenant (security review F-5).
+        calls = [call.model_copy(update={"error_detail": None}) for call in stored.calls]
+        return stored.model_copy(update={"calls": calls})
 
     return app
 

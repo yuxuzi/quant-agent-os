@@ -48,7 +48,12 @@ def save_note(params: Note) -> Note:
     return params
 
 
-REGISTRY = ToolRegistry([*build_registry().specs(), fetch_page, save_note])
+@tool(name="crash", description="Fails inside.")
+def crash(params: Note) -> Note:
+    raise RuntimeError("cannot open /srv/tenants/acme/kb.db")
+
+
+REGISTRY = ToolRegistry([*build_registry().specs(), fetch_page, save_note, crash])
 EXECUTOR = ToolExecutor(REGISTRY, PermissionPolicy())
 
 
@@ -181,6 +186,23 @@ def test_runs_record_the_rest_actor_and_the_keys_principal(
     assert [(run["actor"], run["principal"]) for run in runs] == [("rest", "alice")]
     assert stored["events"] and {event["principal"] for event in stored["events"]} == {"alice"}
     assert client.get("/v1/runs/nope", headers=headers).status_code == 404
+
+
+def test_internal_error_text_reaches_neither_rest_nor_mcp_callers(
+    client: TestClient, keys_file: tuple[Path, dict[str, str]], store: MemoryRunStore
+) -> None:
+    _, issued = keys_file
+    headers = _auth(issued["alice"])
+
+    called = client.post("/v1/tools/crash/call", headers=headers, json={"arguments": {"text": "x"}})
+    run = client.get(f"/v1/runs/{called.json()['run_id']}", headers=headers)
+    via_mcp = call_tool(EXECUTOR, "crash", {"text": "x"})
+
+    assert called.json()["status"] == "error"
+    assert "/srv" not in called.text and "/srv" not in run.text and "/srv" not in str(via_mcp)
+    assert "internal error" in called.json()["error"]
+    stored = store.get_run(called.json()["run_id"])
+    assert stored is not None and "/srv/tenants" in (stored.calls[0].error_detail or "")
 
 
 class TwoTenants:
