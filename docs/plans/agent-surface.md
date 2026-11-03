@@ -332,7 +332,8 @@ steps above:
    `tool-versions.lock`, `qaos://server/info`, [tools changelog](../tools-changelog.md).
 4. **P7.4 Operations.** SLO dashboards from OpenTelemetry, and a security review of the remote
    surface (OWASP and MCP security best practices) before any public endpoint, folded into
-   B-22.
+   B-22. Done: telemetry and SLOs in [deployment](../deployment.md), and the
+   [security review](../security-review.md), whose findings F-1 to F-5 are open.
 
 Billing-provider integration, the licence for the hosted parts, and listings in MCP
 registries wait for the open questions below.

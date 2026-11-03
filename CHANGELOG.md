@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
+The first release (MVP), for local use and self-hosted team servers. All five packages ship at
+0.1.0, and every tool at 1.0.0 ([tools changelog](docs/tools-changelog.md)). Known
+limitations: a public, multi-tenant endpoint needs the steps in
+[docs/security-review.md](docs/security-review.md) first (open findings F-1 to F-5), and the
+model-provider features (B-12, B-15, B-16, B-20) are not in this release.
+
 ### Changed
 
 - The run store is at schema 5 (usage events, B-36); older stores upgrade in place.
@@ -472,7 +480,7 @@ All notable changes to this project are documented here. The format follows
 - Added proposed decision records 0003 (brand and product structure), 0004 (knowledge store),
   and 0005 (approval gates). Marked the Quant AI Assistant placeholder as superseded.
 
-## [0.1.0] — Unreleased
+## Foundations (developed before 0.1.0, and part of it)
 
 ### Changed
 

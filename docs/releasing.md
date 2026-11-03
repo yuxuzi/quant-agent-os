@@ -6,6 +6,14 @@ Every workspace package is released together at one version: `quant-agent-os` (c
 `tests/contract/test_release.py` checks this, so an installation never mixes versions and the
 server's `serverInfo.version` is the platform version.
 
+## 0.1.0 scope
+
+0.1.0 is for local use (stdio, the Claude Code plugin) and for self-hosted team servers behind
+a reverse proxy. A public, multi-tenant endpoint is not in scope until the steps in
+[security-review.md](security-review.md#before-a-public-endpoint) are done: a rate limit on
+unauthenticated requests (F-1), a plan for every tenant (F-2), and F-1 and F-5 fixed or
+accepted in writing.
+
 ## One-time setup
 
 Publishing registers the package names on PyPI. The names are provisional (see AGENTS.md),
@@ -24,9 +32,9 @@ No API token is stored in the repository.
 2. **Set the version** (for a release after 0.1.0) in all five `pyproject.toml` files, in the
    sibling pins, and in `.claude-plugin/plugin.json`. Then run `uv lock` and
    `uv run pytest tests/contract/test_release.py apps/quant-platform/tests/test_client_bundles.py`.
-3. **Changelogs.** Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`,
-   add a new empty `## [Unreleased]` above it, and add the release's section to
-   `docs/tools-changelog.md`.
+3. **Changelogs.** Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`
+   (0.1.0's is already dated; correct the date if the tag is later), add a new empty
+   `## [Unreleased]` above it, and add the release's section to `docs/tools-changelog.md`.
 4. **Merge, then tag main.** `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow
    checks that the tag matches the version, runs the tests, builds all five packages, checks
    them with `twine check --strict`, and publishes them.
