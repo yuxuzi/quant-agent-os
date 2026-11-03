@@ -107,6 +107,7 @@ def tenant_route(tenancy: Tenancy, desk: ApprovalDesk | None = None) -> Route:
                 actor="mcp-http",
                 principal=caller.principal,
                 tenant=caller.tenant,
+                toolsets=surface.toolsets,
             )
             if surface.run_store is not None
             else None

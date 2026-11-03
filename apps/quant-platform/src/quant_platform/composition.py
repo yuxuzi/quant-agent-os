@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
 from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
+from quant_agent_os.tools.server_info import server_info_resource, server_info_tool
 from quant_analytics.tools import analytics_tools
 from quant_platform.prompts import (
     ANALYZE_RETURNS,
@@ -45,6 +46,13 @@ REPORT_INSTRUCTIONS = (
 )
 
 
+def platform_version() -> str:
+    """Return the installed platform version; every package is released at this version."""
+    from importlib.metadata import version
+
+    return version("quant-agent-os-platform")
+
+
 def available_toolsets() -> list[Toolset]:
     """Return the toolsets this installation can serve (factory only with its extra)."""
     has_factory = importlib.util.find_spec("quant_app_factory") is not None
@@ -53,12 +61,16 @@ def available_toolsets() -> list[Toolset]:
 
 @dataclass(frozen=True)
 class Catalog:
-    """Everything one server offers: tools, resources, prompts, and its instructions."""
+    """Everything one server offers: tools, resources, prompts, and its instructions.
+
+    ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015).
+    """
 
     tools: list[ToolSpec[Any, Any]] = field(default_factory=list)
     resources: list[ResourceSpec] = field(default_factory=list)
     prompts: list[PromptSpec] = field(default_factory=list)
     instructions: str = PLATFORM_INSTRUCTIONS
+    toolsets: dict[str, str] = field(default_factory=dict)
 
 
 def compose(
@@ -73,33 +85,42 @@ def compose(
     ``research`` serves the research toolset and `research_report`; ``datasets`` serves
     analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
+    Every catalog also serves `server_info` (``qaos://server/info``, decision 0015).
     """
     tools: list[ToolSpec[Any, Any]] = []
     resources: list[ResourceSpec] = []
     prompts: list[PromptSpec] = []
     served: list[Toolset] = []
+    toolsets: dict[str, str] = {}
+
+    def add(toolset: Toolset | Literal["platform"], specs: list[ToolSpec[Any, Any]]) -> None:
+        tools.extend(specs)
+        toolsets.update((spec.name, toolset) for spec in specs)
+
     if research is not None:
-        tools += research_tools(research)
+        add("research", research_tools(research))
         resources += research_resources()
         prompts.append(RESEARCH_SIGNAL)
         served.append("research")
     if datasets is not None:
-        tools += [*analytics_tools(datasets).specs(), *dataset_tools(datasets)]
+        add("analytics", [*analytics_tools(datasets).specs(), *dataset_tools(datasets)])
         resources += dataset_resources()
         prompts.append(ANALYZE_RETURNS)
         served.append("analytics")
     if research is not None:
-        tools.append(research_report_tool(list(tools), policy))
+        add("research", [research_report_tool(list(tools), policy)])
         prompts.append(REPORT_ON_SIGNAL)
     if factory is not None:
         from quant_app_factory import factory_resources
         from quant_app_factory.cli import served_tools as factory_served_tools
 
-        tools += factory_served_tools(factory)
+        add("factory", factory_served_tools(factory))
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
-    return Catalog(tools, resources, prompts, instructions_for(served))
+    add("platform", [server_info_tool(platform_version(), list(tools))])
+    resources.append(server_info_resource())
+    return Catalog(tools, resources, prompts, instructions_for(served), toolsets)
 
 
 def instructions_for(toolsets: list[Toolset]) -> str:

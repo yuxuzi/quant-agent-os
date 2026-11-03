@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import json
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -18,7 +22,13 @@ from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.mcp.http import KeyVerifier
 from quant_agent_os.mcp.oauth import FirstOf, IntrospectionVerifier, protected_resource_routes
-from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
+from quant_agent_os.runs import (
+    RunRecorder,
+    RunStoreError,
+    SqliteRunStore,
+    UsageGrouping,
+    summarize,
+)
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import Tenancy
 from quant_agent_os.tenancy import check_tenant
@@ -39,6 +49,7 @@ from quant_platform.tenants import (
     TenantsFile,
     TenantsFileError,
     describe,
+    entitled_toolsets,
     load_tenants_file,
     save_tenants,
     separate_approver,
@@ -57,6 +68,10 @@ tenant_app = typer.Typer(
     help="Manage the tenants a multi-tenant server serves.", no_args_is_help=True
 )
 app.add_typer(tenant_app, name="tenant")
+usage_app = typer.Typer(
+    help="Read what each tenant used from the run store (decision 0015).", no_args_is_help=True
+)
+app.add_typer(usage_app, name="usage")
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
 DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "runs.db"
@@ -190,7 +205,11 @@ def serve_mcp(
             ToolExecutor(ToolRegistry(catalog.tools), get_settings().policy()),
             name="quant-agent-os",
             instructions=catalog.instructions,
-            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
+            recorder=(
+                RunRecorder(run_store, actor="mcp", toolsets=catalog.toolsets)
+                if run_store
+                else None
+            ),
             resources=catalog.resources,
             prompts=catalog.prompts,
         )
@@ -286,12 +305,16 @@ def serve_http(
             tenancy: Tenancy = single_tenant(catalog, run_store, settings.policy())
             instructions, served = catalog.instructions, f"{len(catalog.tools)} tools"
         else:
-            wants_factory = any("factory" in (c.toolsets or []) for c in configured.values())
+            assert whole is not None
+            wants_factory = any(
+                "factory" in (entitled_toolsets(c, whole.plans) or []) for c in configured.values()
+            )
             catalogs = TenantCatalogs(
                 configured,
                 run_store=run_store,
                 datasets_root=datasets or settings.datasets_dir,
                 factory=_factory() if wants_factory else None,
+                plans=whole.plans,
             )
             tenancy = catalogs
             instructions = instructions_for(available_toolsets())
@@ -402,6 +425,9 @@ def tenant_add(
     issuer: Annotated[
         str | None, typer.Option(help="The OAuth issuer pinned for this tenant's tokens.")
     ] = None,
+    plan: Annotated[
+        str | None, typer.Option(help="A plan in the tenants file (no limits if unset).")
+    ] = None,
     file: TenantsOption = None,
 ) -> None:
     """Add a tenant to the tenants file, or replace its settings.
@@ -419,9 +445,11 @@ def tenant_add(
             schema_name=schema,
             datasets=datasets,
             toolsets=_toolsets(toolsets) if toolsets else None,
+            plan=plan,
             granted_permissions=READ_ONLY | frozenset(grant or []),
             issuer=issuer,
         )
+        whole.check_plans()
         save_tenants(path, whole)
     except (TenantsFileError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
@@ -438,12 +466,12 @@ def tenant_add(
 @tenant_app.command("list")
 def tenant_list(file: TenantsOption = None) -> None:
     """List the tenants with their stores, toolsets, and issuers (passwords hidden)."""
-    configured = _load_tenants(_tenants_path(file))
+    whole = _load_tenants_file(_tenants_path(file))
     table = Table(title="Tenants")
-    for column in ("Tenant", "Store", "Schema", "Toolsets", "Issuer", "Disabled"):
+    for column in ("Tenant", "Store", "Schema", "Toolsets", "Plan", "Issuer", "Disabled"):
         table.add_column(column)
-    for name, config in sorted(configured.items()):
-        table.add_row(*describe(name, config).values())
+    for name, config in sorted(whole.tenants.items()):
+        table.add_row(*describe(name, config, whole.plans).values())
     console.print(table)
 
 
@@ -461,6 +489,81 @@ def tenant_disable(
     whole.tenants[name] = whole.tenants[name].model_copy(update={"disabled": True})
     save_tenants(path, whole)
     errors.print(f"Tenant {name} disabled in {path}; restart serve-http to apply it.")
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+@usage_app.command("export")
+def usage_export(
+    tenant: Annotated[
+        str | None, typer.Option(help="Only this tenant's usage (default: every tenant).")
+    ] = None,
+    start: Annotated[
+        datetime | None,
+        typer.Option(
+            "--from",
+            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+            help="First instant, UTC (default: the start of this month).",
+        ),
+    ] = None,
+    end: Annotated[
+        datetime | None,
+        typer.Option(
+            "--to",
+            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+            help="End instant, UTC and not included (default: now).",
+        ),
+    ] = None,
+    by: Annotated[
+        str | None,
+        typer.Option(help="Total the calls per tenant and 'day' or 'tool' (default: each call)."),
+    ] = None,
+    output_format: Annotated[
+        str, typer.Option("--format", help="Output format: 'csv' or 'jsonl'.")
+    ] = "csv",
+    runs: Annotated[
+        Path | None, typer.Option(help="Run store (default ~/.quant-agent-os/runs.db).")
+    ] = None,
+) -> None:
+    """Write usage events, or their totals, to stdout: an operator command, not an agent tool.
+
+    Usage holds sizes and statuses, never arguments or outputs. A call is billable when it
+    ended ok, error, or timeout (decision 0015).
+    """
+    if by not in (None, "day", "tool"):
+        errors.print(f"[red]error:[/red] --by is 'day' or 'tool', not {by!r}.")
+        raise typer.Exit(2)
+    if output_format not in ("csv", "jsonl"):
+        errors.print(f"[red]error:[/red] --format is 'csv' or 'jsonl', not {output_format!r}.")
+        raise typer.Exit(2)
+    now = datetime.now(UTC)
+    first = _utc(start) if start else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last = _utc(end) if end else now
+    path = runs or DEFAULT_RUNS
+    if not path.is_file():
+        errors.print(f"[red]error:[/red] no run store at {path}.")
+        raise typer.Exit(1)
+    try:
+        with SqliteRunStore(path) as store:
+            events = store.list_usage(first, last, tenant=tenant)
+    except RunStoreError as error:
+        errors.print(f"[red]error:[/red] {error}")
+        raise typer.Exit(1) from error
+    grouping: UsageGrouping | None = "day" if by == "day" else "tool" if by == "tool" else None
+    rows = [
+        item.model_dump(mode="json")
+        for item in (summarize(events, grouping) if grouping else events)
+    ]
+    if output_format == "jsonl":
+        for row in rows:
+            sys.stdout.write(json.dumps(row, sort_keys=True) + "\n")
+    elif rows:
+        writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    errors.print(f"{len(events)} calls from {first.isoformat()} to {last.isoformat()}.")
 
 
 @app.command("catalog")

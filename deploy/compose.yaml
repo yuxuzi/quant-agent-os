@@ -86,6 +86,17 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
 
+  usage:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["quant-platform", "usage", "export", "--runs", "/data/runs/runs.db"]
+    command: []
+    volumes:
+      - runs:/data/runs
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
 volumes:
   knowledge:
   datasets:

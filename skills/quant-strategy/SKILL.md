@@ -47,3 +47,8 @@ To build a project from the spec, the user can draft an App Factory spec with th
 `quant-app-factory` skill.
 
 The `report_on_signal` prompt runs this workflow in clients without skills.
+
+## Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.

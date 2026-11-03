@@ -48,6 +48,11 @@ tool call.
 Failures carry `hint` and `retryable`. An `invalid_input` error names the field to fix. On
 `denied` or `approval_required`, tell the user and do not retry.
 
+## Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+
 ## Related
 
 The `analyze_returns` prompt runs the performance workflow in clients without skills. For a

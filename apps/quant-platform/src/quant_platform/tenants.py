@@ -5,9 +5,15 @@ permissions. `TenantCatalogs` composes a tenant's catalog the first time one of 
 arrives, and serves it as that tenant's `Surface`. A tenant's data never reaches another
 tenant's surface: each has its own stores, and the run store filters reads by tenant.
 
+    [plans.team]                                 # what a plan allows (decision 0015)
+    toolsets = ["research", "analytics"]
+    calls_per_minute = 120
+    monthly_calls = 50_000
+
     [tenants.acme]
     store = "postgresql://qaos_reader@db/qaos"   # schema qr_acme by default
-    toolsets = ["research", "analytics"]
+    plan = "team"
+    toolsets = ["research"]                      # narrows the plan, never widens it
     issuer = "https://login.acme.example"        # the identity provider pinned for its tokens
 
     [[authorization_servers]]                    # OAuth for remote MCP clients (optional)
@@ -19,22 +25,24 @@ tenant's surface: each has its own stores, and the run store filters reads by te
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
+import re
 import threading
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
 from quant_agent_os.approval_desk import four_eyes_except_local
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_agent_os.runs import RunStore
-from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.runtime import PlanLimits, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tenancy import check_tenant
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry
@@ -47,10 +55,33 @@ if TYPE_CHECKING:
     from quant_app_factory import AppFactory
 
 logger = logging.getLogger(__name__)
+PLAN_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 
 
 class TenantsFileError(ValueError):
     """Raised when a tenants file is missing or invalid."""
+
+
+class Plan(BaseModel):
+    """What a plan allows its tenants (decision 0015); an unset limit is no limit.
+
+    ``toolsets`` bounds what a tenant may be served. ``calls_per_minute`` and ``monthly_calls``
+    are checked before a call starts; ``max_output_bytes`` caps every tool's output limit.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    toolsets: list[Toolset] | None = None
+    calls_per_minute: int | None = Field(default=None, gt=0)
+    monthly_calls: int | None = Field(default=None, gt=0)
+    max_output_bytes: int | None = Field(default=None, gt=0)
+    packs: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _no_packs_yet(self) -> Plan:
+        if self.packs is not None:
+            raise ValueError("Knowledge packs are not available yet; remove 'packs' from the plan.")
+        return self
 
 
 class TenantConfig(BaseModel):
@@ -62,6 +93,7 @@ class TenantConfig(BaseModel):
     schema_name: str | None = Field(default=None, alias="schema")
     datasets: Path | None = None
     toolsets: list[Toolset] | None = None
+    plan: str | None = None
     granted_permissions: frozenset[Permission] = READ_ONLY
     preapproved_permissions: frozenset[Permission] = frozenset()
     issuer: str | None = None
@@ -99,9 +131,32 @@ class TenantsFile(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    plans: dict[str, Plan] = Field(default_factory=dict)
     tenants: dict[str, TenantConfig] = Field(default_factory=dict)
     authorization_servers: list[ServerEntry] = Field(default_factory=list)
     tenant_claim: str = Field(default=DEFAULT_TENANT_CLAIM, pattern=r"^[A-Za-z_][\w:./-]{0,63}$")
+
+    def check_plans(self) -> None:
+        """Raise `ValueError` for a bad plan name, an unknown plan, or a tenant widening one."""
+        for name in self.plans:
+            if not PLAN_NAME.fullmatch(name):
+                raise ValueError(
+                    f"Plan name '{name}' must be lowercase letters, digits, '-', or '_'."
+                )
+        for tenant, config in self.tenants.items():
+            if config.plan is None:
+                continue
+            plan = self.plans.get(config.plan)
+            if plan is None:
+                raise ValueError(f"Tenant {tenant}'s plan '{config.plan}' is not among the plans.")
+            if config.toolsets is not None and plan.toolsets is not None:
+                extra = sorted(set(config.toolsets) - set(plan.toolsets))
+                if extra:
+                    raise ValueError(
+                        f"Tenant {tenant} lists {', '.join(extra)}, which its plan "
+                        f"'{config.plan}' does not include; a tenant narrows its plan, never "
+                        "widens it."
+                    )
 
     def tenants_by_issuer(self) -> dict[str, set[str]]:
         """Return each issuer's pinned tenants (enabled ones only)."""
@@ -123,6 +178,7 @@ def load_tenants_file(path: Path) -> TenantsFile:
         loaded = TenantsFile.model_validate(tomllib.loads(path.read_text("utf-8")))
         for name in loaded.tenants:
             check_tenant(name)
+        loaded.check_plans()
     except FileNotFoundError as error:
         raise TenantsFileError(
             f"No tenants file at {path}; add a tenant with `quant-platform tenant add`."
@@ -156,11 +212,20 @@ def dump_tenants(tenants: dict[str, TenantConfig] | TenantsFile) -> str:
         for key, value in server.model_dump().items():
             lines.append(f"{key} = {_string(value)}")
         lines.append("")
+    for name in sorted(whole.plans):
+        lines.append(f"[plans.{name}]")
+        plan = whole.plans[name].model_dump(mode="json", exclude_none=True)
+        if "toolsets" in plan:
+            lines.append(f"toolsets = [{', '.join(_string(value) for value in plan['toolsets'])}]")
+        for key in ("calls_per_minute", "monthly_calls", "max_output_bytes"):
+            if key in plan:
+                lines.append(f"{key} = {plan[key]}")
+        lines.append("")
     for name in sorted(whole.tenants):
         config = whole.tenants[name]
         lines.append(f"[tenants.{name}]")
         data = config.model_dump(mode="json", by_alias=True, exclude_defaults=True)
-        for key in ("store", "schema", "datasets", "issuer"):
+        for key in ("store", "schema", "datasets", "plan", "issuer"):
             if key in data:
                 lines.append(f"{key} = {_string(data[key])}")
         for key in ("toolsets", "granted_permissions", "preapproved_permissions"):
@@ -199,8 +264,10 @@ class TenantCatalogs:
         run_store: RunStore,
         datasets_root: Path,
         factory: AppFactory | None = None,
+        plans: dict[str, Plan] | None = None,
     ) -> None:
         self.tenants = tenants
+        self.plans = plans or {}
         self.run_store = run_store
         self.datasets_root = datasets_root
         self.factory = factory
@@ -223,7 +290,7 @@ class TenantCatalogs:
             return self._surfaces[tenant]
 
     def _compose(self, tenant: str, config: TenantConfig) -> Surface:
-        toolsets = config.toolsets or available_toolsets()
+        toolsets = entitled_toolsets(config, self.plans) or available_toolsets()
         research: ResearchApp | None = None
         if "research" in toolsets and config.store is not None:
             schema = config.schema_name or schema_for(tenant)
@@ -244,8 +311,18 @@ class TenantCatalogs:
             ),
             factory=self.factory if "factory" in toolsets else None,
         )
-        executor = ToolExecutor(ToolRegistry(catalog.tools), policy, approvals=self.run_store)
-        return Surface(executor, catalog.resources, catalog.prompts, self.run_store)
+        plan = self.plans.get(config.plan) if config.plan else None
+        executor = ToolExecutor(
+            ToolRegistry(catalog.tools),
+            policy,
+            approvals=self.run_store,
+            usage=plan_limits(tenant, plan, self.run_store) if plan else None,
+            max_output_bytes=plan.max_output_bytes if plan else None,
+            tenant=tenant,
+        )
+        return Surface(
+            executor, catalog.resources, catalog.prompts, self.run_store, catalog.toolsets
+        )
 
     def close(self) -> None:
         """Close every tenant's knowledge store."""
@@ -256,7 +333,33 @@ class TenantCatalogs:
             self._surfaces.clear()
 
 
-def describe(tenant: str, config: TenantConfig) -> dict[str, Any]:
+def plan_limits(tenant: str, plan: Plan, run_store: RunStore) -> PlanLimits | None:
+    """Return ``tenant``'s rate limit and monthly quota under ``plan``, or None if it sets none.
+
+    The monthly quota counts billable usage events in ``run_store``.
+    """
+    if plan.calls_per_minute is None and plan.monthly_calls is None:
+        return None
+    return PlanLimits(
+        tenant,
+        calls_per_minute=plan.calls_per_minute,
+        monthly_calls=plan.monthly_calls,
+        count_billable=functools.partial(run_store.count_billable, tenant),
+    )
+
+
+def entitled_toolsets(config: TenantConfig, plans: dict[str, Plan]) -> list[Toolset] | None:
+    """Return the toolsets a tenant names, else its plan's, else None (every available one).
+
+    `TenantsFile.check_plans` has already refused a tenant that widens its plan.
+    """
+    plan = plans.get(config.plan) if config.plan else None
+    return config.toolsets or (plan.toolsets if plan else None)
+
+
+def describe(
+    tenant: str, config: TenantConfig, plans: dict[str, Plan] | None = None
+) -> dict[str, Any]:
     """Return a tenant's settings for display, with any password in its store URL hidden."""
     from quant_research.infrastructure.postgres_store import redact_url
 
@@ -266,7 +369,8 @@ def describe(tenant: str, config: TenantConfig) -> dict[str, Any]:
         "tenant": tenant,
         "store": shown or "(none)",
         "schema": (config.schema_name or schema_for(tenant)) if is_postgres_url(store) else "",
-        "toolsets": ", ".join(config.toolsets or available_toolsets()),
+        "toolsets": ", ".join(entitled_toolsets(config, plans or {}) or available_toolsets()),
+        "plan": config.plan or "",
         "issuer": config.issuer or "",
         "disabled": "yes" if config.disabled else "",
     }

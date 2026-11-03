@@ -1,6 +1,8 @@
 # Security model
 
 Quant-Agent-OS assumes that model output, retrieved documents, and tool output are untrusted.
+The [security review](security-review.md) checks the remote surface against this model and
+lists the open findings.
 
 ## Defaults
 
@@ -60,6 +62,10 @@ in memory unless it is given a run store. What each part of a record holds:
   name a secret (`api_key`, `token`, `password`, ...) are replaced with `[REDACTED]`.
 - **Audit events.** These hold only ids, hashes, and statuses, and the database rejects any
   update or deletion of them.
+- **Usage events.** One per recorded call, written in the same transaction
+  ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
+  principal, tool, status, duration, and the sizes of the arguments and output, never their
+  content. `quant-platform usage export` reads them; it is an operator command, not a tool.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
@@ -105,8 +111,9 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   `Host` or `Origin`; browsers on other origins are refused.
 - **Audited.** Each call or read is a run with actor `mcp-http` and the key's principal.
 - **Same limits as REST.** It binds loopback by default, caps bodies at 5 MiB, has no CORS, and
-  never logs or echoes a key (contract test). It has no rate limiting yet, so put a
-  rate-limiting proxy in front of any non-loopback deployment.
+  never logs or echoes a key (contract test). A tenant's plan can limit its calls (see
+  below), but nothing limits unauthenticated requests, so still put a rate-limiting proxy in
+  front of any non-loopback deployment.
 
 ## Tenants and OAuth
 
@@ -158,6 +165,22 @@ The compose file applies these settings to the server:
 The operator's `ingest` and `keys` commands run with no network. CI checks the image for
 data files, key files, and secret-looking environment variables on every pull request.
 
+## Plans and limits
+
+[Decision 0015](decisions/0015-metering-quotas-and-entitlements.md). A tenant's plan bounds its
+toolsets, calls a minute, billable calls a month, and output size:
+- **Entitlement is composition.** Out-of-plan tools are never registered for the tenant, so
+  they are neither listed nor callable (`unknown_tool`). A tenant can narrow its plan, never
+  widen it; the server refuses such a tenants file at start-up.
+- **Checked before the call.** The executor admits a call only after its permissions and input
+  are valid, and before an approval is used or the tool runs. A refusal (`quota_exceeded`)
+  starts nothing and uses no approval; an approved call refused this way stays approved.
+- **Approximate by design.** The rate limit is per server process. The monthly count is read
+  from the run store every 30 seconds and counted locally in between, so concurrent calls can
+  overshoot by the calls in flight.
+- **Unauthenticated traffic is not covered.** Plans limit tenants, not anonymous requests;
+  keep a rate-limiting proxy in front of a public endpoint.
+
 ## Approvals for consequential permissions
 
 [Decision 0005](decisions/0005-approval-gates.md) treats `write_local_data`, `execute_code`,
@@ -184,6 +207,10 @@ data files, key files, and secret-looking environment variables on every pull re
   - **The page** shows the tool, permissions, redacted arguments, and input hash. It runs no
     scripts, forbids framing, caching, and referrers, checks a per-form token, and never
     stores or echoes the key.
+  - **Guessing is limited** (decision 0015). Five failed submissions (a wrong form token, a
+    key that cannot decide, or the requester's own key) deny the request, audited as
+    `approval.denied` with reason `too_many_attempts`. Each client address may submit 30
+    forms a minute (429 after that). Both counts are kept per server process.
   - **The retried, identical call** runs once, in the original run. A changed argument is a
     new hash and needs a new approval.
   - **Locally**, `quant-factory serve-mcp --confirm-in-client` (stdio, opt-in, with a run

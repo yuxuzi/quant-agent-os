@@ -3,7 +3,8 @@
 Runs and tool calls are written as they happen. Audit events are append-only: the stores offer
 no way to change or remove one, and the SQLite store's triggers reject any UPDATE or DELETE.
 Both stores are also the `ApprovalLedger` for their runs, so an approval is consumed in the same
-place its run is recorded.
+place its run is recorded. A call's usage event (decision 0015) is written with the call, in one
+transaction, so a recorded call always has one.
 """
 
 from __future__ import annotations
@@ -22,11 +23,13 @@ from quant_agent_os.runs.models import (
     RequestStatus,
     RunRecord,
     StoredRun,
+    UsageEvent,
 )
 from quant_agent_os.runtime.approvals import Approval, MemoryApprovalLedger
 from quant_agent_os.runtime.executor import ToolCallRecord
 
-SCHEMA_VERSION = 4  # 2 added approvals, 3 the audit events' principal, 4 approval requests
+# 2 added approvals, 3 the audit events' principal, 4 approval requests, 5 usage events
+SCHEMA_VERSION = 5
 
 
 class RunStoreError(RuntimeError):
@@ -48,8 +51,8 @@ class RunStore(Protocol):
         """Insert ``run``, or replace the stored run with the same id (to record its end)."""
         ...
 
-    def add_call(self, record: ToolCallRecord) -> None:
-        """Store one tool call under its ``run_id``."""
+    def add_call(self, record: ToolCallRecord, usage: UsageEvent | None = None) -> None:
+        """Store one tool call under its ``run_id``, and its ``usage`` in the same transaction."""
         ...
 
     def append_event(self, event: AuditEvent) -> None:
@@ -65,6 +68,19 @@ class RunStore(Protocol):
 
     def list_runs(self, limit: int = 20, *, tenant: str | None = None) -> list[RunRecord]:
         """Return the most recently started runs, newest first; only ``tenant``'s when given."""
+        ...
+
+    def list_usage(
+        self, start: datetime, end: datetime, *, tenant: str | None = None
+    ) -> list[UsageEvent]:
+        """Return the usage events from ``start`` up to ``end``, oldest first (decision 0015).
+
+        Only ``tenant``'s when given; reading every tenant's usage is for operators only.
+        """
+        ...
+
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls from ``start`` up to ``end`` were billable."""
         ...
 
     def save_request(self, request: ApprovalRequest) -> None:
@@ -104,6 +120,7 @@ class MemoryRunStore:
         self._runs: dict[str, RunRecord] = {}
         self._calls: dict[str, list[ToolCallRecord]] = {}
         self._events: list[AuditEvent] = []
+        self._usage: list[UsageEvent] = []
         self._lock = threading.Lock()
         self._approvals = MemoryApprovalLedger()
         self._requests: dict[str, ApprovalRequest] = {}
@@ -121,10 +138,32 @@ class MemoryRunStore:
         with self._lock:
             self._runs[run.run_id] = run.model_copy(deep=True)
 
-    def add_call(self, record: ToolCallRecord) -> None:
-        """Store one tool call."""
+    def add_call(self, record: ToolCallRecord, usage: UsageEvent | None = None) -> None:
+        """Store one tool call and its usage event."""
         with self._lock:
             self._calls.setdefault(record.run_id or "", []).append(record.model_copy(deep=True))
+            if usage is not None:
+                self._usage.append(usage.model_copy())
+
+    def list_usage(
+        self, start: datetime, end: datetime, *, tenant: str | None = None
+    ) -> list[UsageEvent]:
+        """Return the usage events from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            found = [
+                event
+                for event in self._usage
+                if start <= event.at < end and tenant in (None, event.tenant)
+            ]
+        return sorted(found, key=lambda event: event.at)
+
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls in the window were billable."""
+        with self._lock:
+            return sum(
+                event.billable and event.tenant == tenant and start <= event.at < end
+                for event in self._usage
+            )
 
     def append_event(self, event: AuditEvent) -> None:
         """Append an audit event."""
@@ -255,6 +294,16 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 );
 CREATE INDEX IF NOT EXISTS approval_requests_call
     ON approval_requests (tenant, tool, input_sha256, status);
+CREATE TABLE IF NOT EXISTS usage_events (
+    call_id TEXT PRIMARY KEY,
+    tenant TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    status TEXT NOT NULL,
+    billable INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    record TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS usage_events_tenant_at ON usage_events (tenant, at);
 """
 
 
@@ -362,21 +411,65 @@ class SqliteRunStore:
             ),
         )
 
-    def add_call(self, record: ToolCallRecord) -> None:
-        """Store one tool call, ordered after the run's earlier calls."""
-        self._write(
-            "INSERT INTO tool_calls (call_id, run_id, ordinal, tool, status, input_sha256, record) "
-            "VALUES (?, ?, (SELECT COUNT(*) FROM tool_calls WHERE run_id = ?), ?, ?, ?, ?)",
-            (
-                record.call_id,
-                record.run_id or "",
-                record.run_id or "",
-                record.tool,
-                record.status,
-                record.input_sha256,
-                record.model_dump_json(),
-            ),
-        )
+    def add_call(self, record: ToolCallRecord, usage: UsageEvent | None = None) -> None:
+        """Store one tool call, ordered after the run's earlier calls, with its usage event."""
+        with self._lock:
+            try:
+                with self._db:
+                    self._db.execute(
+                        "INSERT INTO tool_calls (call_id, run_id, ordinal, tool, status, "
+                        "input_sha256, record) VALUES "
+                        "(?, ?, (SELECT COUNT(*) FROM tool_calls WHERE run_id = ?), ?, ?, ?, ?)",
+                        (
+                            record.call_id,
+                            record.run_id or "",
+                            record.run_id or "",
+                            record.tool,
+                            record.status,
+                            record.input_sha256,
+                            record.model_dump_json(),
+                        ),
+                    )
+                    if usage is not None:
+                        self._db.execute(
+                            "INSERT INTO usage_events (call_id, tenant, tool, status, billable, "
+                            "at, record) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                usage.call_id,
+                                usage.tenant,
+                                usage.tool,
+                                usage.status,
+                                int(usage.billable),
+                                _instant(usage.at),
+                                usage.model_dump_json(),
+                            ),
+                        )
+            except sqlite3.Error as error:
+                raise RunStoreError(
+                    f"Cannot write to the run store at {self.path}: {error}"
+                ) from error
+
+    def list_usage(
+        self, start: datetime, end: datetime, *, tenant: str | None = None
+    ) -> list[UsageEvent]:
+        """Return the usage events from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT record FROM usage_events WHERE at >= ? AND at < ? "
+                "AND (? IS NULL OR tenant = ?) ORDER BY at, call_id",
+                (_instant(start), _instant(end), tenant, tenant),
+            ).fetchall()
+        return [UsageEvent.model_validate_json(row["record"]) for row in rows]
+
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls in the window were billable."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) AS n FROM usage_events "
+                "WHERE tenant = ? AND at >= ? AND at < ? AND billable = 1",
+                (tenant, _instant(start), _instant(end)),
+            ).fetchone()
+        return int(row["n"])
 
     def append_event(self, event: AuditEvent) -> None:
         """Append an audit event."""
@@ -519,6 +612,11 @@ class SqliteRunStore:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def _instant(at: datetime) -> str:
+    """Return ``at`` in UTC with microseconds, so stored instants sort as text."""
+    return at.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def _decision(to: RequestStatus, decided_by: str | None) -> dict[str, object]:

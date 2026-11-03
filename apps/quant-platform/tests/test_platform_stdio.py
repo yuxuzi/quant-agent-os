@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -57,11 +58,16 @@ def test_one_server_offers_every_toolset_and_records_each_call(tmp_path: Path) -
                     {"focus": "momentum", "returns": {"dataset": "monthly", "column": "fund"}},
                 )
                 dataset = await session.read_resource("qaos://dataset/monthly")  # type: ignore[arg-type]
-                return initialised, tools, templates, prompts, report, dataset
+                fixed = (await session.list_resources()).resources
+                info = await session.read_resource("qaos://server/info")  # type: ignore[arg-type]
+                return initialised, tools, templates, prompts, report, dataset, fixed, info
 
-    initialised, tools, templates, prompts, report, dataset = anyio.run(main)
+    initialised, tools, templates, prompts, report, dataset, fixed, info = anyio.run(main)
 
     assert initialised.serverInfo.name == "quant-agent-os"
+    assert initialised.serverInfo.version == version("quant-agent-os-platform")
+    assert [str(resource.uri) for resource in fixed] == ["qaos://server/info"]
+    assert json.loads(info.contents[0].text)["platform_version"] == initialised.serverInfo.version
     assert {"research_report", "analyze_performance", "check_spec"} <= {t.name for t in tools}
     assert "qaos://passage/{chunk_id}" in {t.uriTemplate for t in templates}
     assert "report_on_signal" in {p.name for p in prompts}
@@ -73,4 +79,4 @@ def test_one_server_offers_every_toolset_and_records_each_call(tmp_path: Path) -
         recorded = [run.actor for run in run_store.list_runs(10)]
     finally:
         run_store.close()
-    assert recorded == ["mcp", "mcp"]
+    assert recorded == ["mcp", "mcp", "mcp"]  # the report and the two resource reads

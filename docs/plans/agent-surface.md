@@ -320,7 +320,7 @@ steps above:
 - **SDK resume.** `Platform.resume` cannot yet resume a call with a secret-named argument;
   see the decision's notes.
 
-### P7. Commercial readiness (B-36; decision 0015; needs approval)
+### P7. Commercial readiness (B-36; [decision 0015](../decisions/0015-metering-quotas-and-entitlements.md), accepted)
 
 1. **P7.1 Metering.** A usage event per call (tenant, tool, duration, bytes, status), written
    with the run, plus a usage export.
@@ -328,10 +328,12 @@ steps above:
    toolset or knowledge pack outside the plan is not listed. Tenants get a clear error on
    quota and are never cut off mid-call.
 3. **P7.3 Compatibility.** Tool versions follow semver, with a deprecation window and a
-   changelog for tools. The server advertises its version, and skills check it.
+   changelog for tools. The server advertises its version, and skills check it. Done:
+   `tool-versions.lock`, `qaos://server/info`, [tools changelog](../tools-changelog.md).
 4. **P7.4 Operations.** SLO dashboards from OpenTelemetry, and a security review of the remote
    surface (OWASP and MCP security best practices) before any public endpoint, folded into
-   B-22.
+   B-22. Done: telemetry and SLOs in [deployment](../deployment.md), and the
+   [security review](../security-review.md), whose findings F-1 to F-5 are open.
 
 Billing-provider integration, the licence for the hosted parts, and listings in MCP
 registries wait for the open questions below.

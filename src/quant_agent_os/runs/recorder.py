@@ -1,14 +1,15 @@
-"""Record runs as they happen: the run, each tool call, and the audit trail."""
+"""Record runs as they happen: the run, each tool call and its usage, and the audit trail."""
 
 from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
 from quant_agent_os import __version__
-from quant_agent_os.runs.models import AuditEvent, RunKind, RunRecord, RunStatus
+from quant_agent_os.runs.models import AuditEvent, RunKind, RunRecord, RunStatus, UsageEvent
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import RunStore, RunStoreError
 from quant_agent_os.runtime.approvals import Approval
@@ -28,9 +29,12 @@ class NotAwaitingApprovalError(RuntimeError):
 
 
 def outcome(records: list[ToolCallRecord]) -> RunStatus:
-    """Return a run's status from its calls; a later call for the same input supersedes."""
-    latest = {(record.tool, record.input_sha256): record for record in records}
-    statuses = {record.status for record in latest.values()}
+    """Return a run's status from its calls; a later call for the same input supersedes.
+
+    A quota refusal of a call that was already waiting for an approval leaves it waiting: the
+    call never started and its approval was not used (decision 0015).
+    """
+    statuses = {record.status for record in _latest(records).values()}
     if "approval_required" in statuses:
         return "awaiting_approval"
     return "completed" if statuses <= {"ok"} else "failed"
@@ -55,6 +59,9 @@ class RunRecorder:
     run and on every audit event, and ``tenant`` the caller's tenant (decision 0013); a recorder
     is cheap, so an HTTP server makes one per request.
 
+    Every recorded call also gets a usage event (decision 0015), sized before redaction, with
+    the toolset that ``toolsets`` (tool name to toolset) names for its tool.
+
     A call that needs an approval leaves its run ``awaiting_approval``. The operator grants it
     with `approve` and runs the waiting calls with `resume`, in the same run, so the approval's
     run id, tool, and input hash all match.
@@ -67,11 +74,13 @@ class RunRecorder:
         actor: str = "local",
         principal: str | None = None,
         tenant: str = DEFAULT_TENANT,
+        toolsets: Mapping[str, str] | None = None,
     ) -> None:
         self.store = store
         self.actor = actor
         self.principal = principal
         self.tenant = tenant
+        self.toolsets = toolsets or {}
 
     def call(self, executor: ToolExecutor, step: PlanStep) -> ToolCallRecord:
         """Execute ``step`` as a one-call run and record it."""
@@ -182,11 +191,18 @@ class RunRecorder:
         return run
 
     def record_call(self, record: ToolCallRecord) -> None:
-        """Record one tool call (redacted) and its audit event."""
+        """Record one tool call (redacted) with its usage event, and its audit event."""
+        usage = UsageEvent.of(
+            record,
+            interface=self.actor,
+            tenant=self.tenant,
+            principal=self.principal,
+            toolset=self.toolsets.get(record.tool),
+        )
         stored = record.model_copy(
             update={"arguments": redact(record.arguments), "output": redact(record.output)}
         )
-        self._safely(self.store.add_call, stored)
+        self._safely(lambda call: self.store.add_call(call, usage), stored)
         self._event(
             record.run_id or "",
             "tool.called",
@@ -243,7 +259,19 @@ class RunRecorder:
             logger.warning("Run not fully recorded: %s", error)
 
 
+def _latest(records: list[ToolCallRecord]) -> dict[tuple[str, str | None], ToolCallRecord]:
+    """Return each call's latest attempt (same tool and input); a quota refusal does not
+    supersede an attempt that is waiting for an approval."""
+    latest: dict[tuple[str, str | None], ToolCallRecord] = {}
+    for record in records:
+        key = (record.tool, record.input_sha256)
+        earlier = latest.get(key)
+        waiting = earlier is not None and earlier.status == "approval_required"
+        if not (record.status == "quota_exceeded" and waiting):
+            latest[key] = record
+    return latest
+
+
 def _waiting(calls: list[ToolCallRecord]) -> list[ToolCallRecord]:
     """Return the calls whose latest attempt (same tool and input) needs an approval."""
-    latest = {(call.tool, call.input_sha256): call for call in calls}
-    return [call for call in latest.values() if call.status == "approval_required"]
+    return [call for call in _latest(calls).values() if call.status == "approval_required"]

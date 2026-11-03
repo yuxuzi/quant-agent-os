@@ -7,12 +7,12 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os",
+    "quant-agent-os==0.1.0",
     "pydantic>=2.7",
     "pytemplate-uv>=3.0,<4",
     "rich>=13.7",
@@ -24,7 +24,7 @@ quant-factory = "quant_app_factory.cli:main"
 
 [project.optional-dependencies]
 mcp = [
-    "quant-agent-os[mcp]",
+    "quant-agent-os[mcp]==0.1.0",
 ]
 
 [tool.uv.sources]

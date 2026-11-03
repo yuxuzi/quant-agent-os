@@ -44,13 +44,14 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
     rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
     contract: read-only unless the tool may write, run code, or act externally; open-world when
-    it reaches outside the machine (network access or external actions).
+    it reaches outside the machine (network access or external actions). ``_meta`` carries the
+    tool's version and, for a deprecated tool, its replacement and removal date.
     """
     return [
         {
             "name": spec.name,
             "title": spec.title,
-            "description": spec.description,
+            "description": spec.full_description,
             "inputSchema": compact_schema(spec.input_model.model_json_schema()),
             "outputSchema": compact_schema(spec.descriptor()["output_schema"]),
             "annotations": {
@@ -58,6 +59,8 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
                 "idempotentHint": spec.idempotent,
                 "openWorldHint": bool(spec.permissions & _OUTSIDE),
             },
+            "_meta": {"qaos/version": spec.version}
+            | ({"qaos/deprecated": spec.descriptor()["deprecated"]} if spec.deprecated else {}),
         }
         for spec in executor.registry.specs()
         if executor.policy.allows_tool(spec.name)
@@ -146,7 +149,7 @@ def served_resources(executor: ToolExecutor, resources: list[ResourceSpec]) -> l
 def resource_templates(
     executor: ToolExecutor, resources: list[ResourceSpec]
 ) -> list[dict[str, Any]]:
-    """Return MCP ``resources/templates/list`` entries for the served resources."""
+    """Return MCP ``resources/templates/list`` entries for the served resources with variables."""
     return [
         {
             "uriTemplate": resource.uri_template,
@@ -155,6 +158,21 @@ def resource_templates(
             "mimeType": resource.mime_type,
         }
         for resource in served_resources(executor, resources)
+        if resource.variables
+    ]
+
+
+def fixed_resources(executor: ToolExecutor, resources: list[ResourceSpec]) -> list[dict[str, Any]]:
+    """Return MCP ``resources/list`` entries: the served resources without variables."""
+    return [
+        {
+            "uri": resource.uri_template,
+            "name": resource.name,
+            "description": resource.description,
+            "mimeType": resource.mime_type,
+        }
+        for resource in served_resources(executor, resources)
+        if not resource.variables
     ]
 
 

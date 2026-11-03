@@ -1,6 +1,7 @@
 """The platform server (plan steps P2.1, P2.4, P2.5): one catalog, research_report, and prompts."""
 
 import json
+from importlib.metadata import version
 from typing import Any
 
 import anyio
@@ -47,6 +48,7 @@ def test_one_catalog_serves_every_toolset(
         "describe_template",
         "check_spec",
         "plan_app",
+        "server_info",
     ]
     assert [r.uri_template for r in catalog.resources] == [
         "qaos://passage/{chunk_id}",
@@ -54,6 +56,7 @@ def test_one_catalog_serves_every_toolset(
         "qaos://dataset/{dataset_id}",
         "qaos://template/{template}",
         "qaos://template/{template}/{profile}",
+        "qaos://server/info",
     ]
     assert [p.name for p in catalog.prompts] == [
         "research_signal",
@@ -62,6 +65,19 @@ def test_one_catalog_serves_every_toolset(
         "draft_app_spec",
     ]
     assert "list_datasets" in catalog.instructions and "check_spec" in catalog.instructions
+    assert catalog.toolsets == {
+        "find_related_signals": "research",
+        "get_source_passage": "research",
+        "generate_strategy": "research",
+        "analyze_performance": "analytics",
+        "analyze_risk": "analytics",
+        "list_datasets": "analytics",
+        "research_report": "research",
+        "describe_template": "factory",
+        "check_spec": "factory",
+        "plan_app": "factory",
+        "server_info": "platform",
+    }
 
 
 def test_a_toolset_alone_brings_only_its_own_parts(datasets: DirectoryDatasetStore) -> None:
@@ -71,8 +87,24 @@ def test_a_toolset_alone_brings_only_its_own_parts(datasets: DirectoryDatasetSto
         "analyze_performance",
         "analyze_risk",
         "list_datasets",
+        "server_info",
     ]
     assert [p.name for p in catalog.prompts] == ["analyze_returns"]
+
+
+def test_server_info_reports_the_platform_and_every_tool(datasets: DirectoryDatasetStore) -> None:
+    catalog = compose(policy=PermissionPolicy(), datasets=datasets)
+    registry = ToolRegistry(catalog.tools)
+    executor = ToolExecutor(registry, PermissionPolicy())
+
+    record = executor.execute(PlanStep(tool="server_info", arguments={}))
+
+    assert record.status == "ok" and record.output is not None
+    assert record.output["platform_version"] == version("quant-agent-os-platform")
+    assert record.output["registry_digest"] == registry.digest()
+    assert [(t["name"], t["version"]) for t in record.output["tools"]] == [
+        (spec.name, spec.version) for spec in registry.specs()
+    ]
 
 
 def test_research_report_is_cited_deterministic_and_honours_the_contract(

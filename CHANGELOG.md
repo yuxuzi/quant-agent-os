@@ -6,10 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
+The first release (MVP), for local use and self-hosted team servers. All five packages ship at
+0.1.0, and every tool at 1.0.0 ([tools changelog](docs/tools-changelog.md)). Known
+limitations: a public, multi-tenant endpoint needs the steps in
+[docs/security-review.md](docs/security-review.md) first (open findings F-1 to F-5), and the
+model-provider features (B-12, B-15, B-16, B-20) are not in this release.
+
 ### Changed
 
-- The run store is at schema 4 (approval requests); older stores upgrade in place.
-  `RunRecorder.resume` takes the original steps (B-35).
+- The run store is at schema 5 (usage events, B-36); older stores upgrade in place.
+  `RunRecorder.resume` takes the original steps (B-35). `RunStore.add_call` takes the call's
+  usage event, and `RunRecorder` takes `toolsets` (tool name to toolset).
+- Calls have a new status, `quota_exceeded`, with `retry_after_seconds` on the record, in
+  `failure_details`, and in the REST response (B-36). `ToolExecutor` takes `usage` (a
+  `UsageGate`) and `max_output_bytes`; `RunStore` has `count_billable`.
 - The team Docker image serves the platform (`quant-platform serve-http`: research and
   analytics over MCP and REST) instead of `quant-research serve-api`, with a read-only
   `datasets` volume and an operator `datasets` service. The platform's App Factory toolset is
@@ -127,6 +139,46 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Metering (B-36, [decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)
+  P7.1):
+  - **A usage event per call.** Every recorded call gets one, in the same transaction: tenant,
+    principal, interface, tool and version, toolset, status, duration, and input and output
+    bytes, never arguments or outputs. `ok`, `error`, and `timeout` are billable.
+  - **Usage export.** `quant-platform usage export [--tenant T] [--from D] [--to D]
+    [--by day|tool] [--format csv|jsonl]`, an operator command; the team compose file has a
+    `usage` service for it.
+- Plans and limits (B-36, decision 0015 P7.2):
+  - **Plans in the tenants file.** `[plans.<name>]` sets `toolsets`, `calls_per_minute`,
+    `monthly_calls`, and `max_output_bytes`; a tenant names its `plan`
+    (`quant-platform tenant add --plan`). Out-of-plan tools are not listed.
+  - **Checked before a call starts.** A refused call records `quota_exceeded` and is not
+    billable; REST answers 429 with `Retry-After`. The rate limit is per process; the monthly
+    quota counts billable usage events.
+  - **Approval page limits.** Five failed submissions deny a request; each client address may
+    submit 30 forms a minute.
+- Tool compatibility (B-36, decision 0015 P7.3; [tools changelog](docs/tools-changelog.md)):
+  - **Semver tool versions.** Every tool is `1.0.0` (was `"1"`); `@tool(version=...)` must be
+    `MAJOR.MINOR.PATCH`. `Deprecation` marks a tool's replacement and removal date, shown in
+    its description and in MCP `_meta` (`qaos/version`, `qaos/deprecated`).
+  - **A tool lock.** `tool-versions.lock` records each served tool's version, permissions, and
+    schemas; the tests fail when a schema changes without a big enough bump
+    (`quant_agent_os.tools.compatibility`).
+  - **Server info.** The `server_info` tool and the `qaos://server/info` resource give the
+    platform version, every tool's version and deprecation, and the registry digest. MCP
+    `resources/list` lists resources without variables. Each skill checks the major.
+  - **One version.** Every package is released at the same version.
+- Operations (B-36, decision 0015 P7.4):
+  - **OpenTelemetry per call.** A span `execute_tool <tool>`, the counter `qaos.tool.calls`,
+    and the histogram `qaos.tool.duration`, labelled by tenant, tool, and status, never
+    arguments, outputs, callers, or keys. Only the API is used, so it does nothing until an
+    operator configures an SDK; `opentelemetry-api` is now a direct dependency of the `mcp`
+    and `api` extras. `ToolExecutor` takes the `tenant` it serves.
+  - **Service levels.** Availability and p95 latency per tool in
+    [deployment](docs/deployment.md), with an example Grafana dashboard in
+    `deploy/observability/`.
+  - **Security review.** [docs/security-review.md](docs/security-review.md) checks the remote
+    surface against the OWASP API Top 10 and the MCP security best practices, with five open
+    findings and the steps before a public endpoint.
 - Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,
@@ -428,7 +480,7 @@ All notable changes to this project are documented here. The format follows
 - Added proposed decision records 0003 (brand and product structure), 0004 (knowledge store),
   and 0005 (approval gates). Marked the Quant AI Assistant placeholder as superseded.
 
-## [0.1.0] — Unreleased
+## Foundations (developed before 0.1.0, and part of it)
 
 ### Changed
 

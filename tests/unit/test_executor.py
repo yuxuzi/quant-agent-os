@@ -57,7 +57,7 @@ def test_successful_call_records_output_and_version() -> None:
 
     assert record.status == "ok"
     assert record.output == {"value": 42}
-    assert record.tool_version == "1"
+    assert record.tool_version == "1.0.0"
     assert record.duration_ms >= 0
 
 

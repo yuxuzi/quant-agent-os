@@ -21,6 +21,7 @@ from quant_agent_os.mcp.adapters import (
     ResourceReadError,
     call_result,
     call_tool,
+    fixed_resources,
     get_prompt,
     prompt_definitions,
     read_resource,
@@ -177,6 +178,7 @@ def build_server(
                 inputSchema=definition["inputSchema"],
                 outputSchema=definition["outputSchema"],
                 annotations=types.ToolAnnotations(**definition["annotations"]),
+                _meta=definition["_meta"],
             )
             for definition in tool_definitions(served.surface.executor)
         ]
@@ -225,8 +227,11 @@ def build_server(
 
         @server.list_resources()  # type: ignore[no-untyped-call, untyped-decorator]
         async def list_resources() -> list[types.Resource]:
-            serve("tools:list")
-            return []  # every resource is a template; registering this advertises them
+            surface = serve("tools:list").surface
+            return [
+                types.Resource(**definition)
+                for definition in fixed_resources(surface.executor, surface.resources)
+            ]
 
         @server.list_resource_templates()  # type: ignore[no-untyped-call, untyped-decorator]
         async def list_templates() -> list[types.ResourceTemplate]:

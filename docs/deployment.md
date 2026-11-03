@@ -120,6 +120,19 @@ docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its ca
 REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
 events are append-only.
 
+Every recorded call also has a usage event ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)):
+its tenant, tool, toolset, status, duration, and input and output sizes, never its arguments or
+output. Export it per call or as totals:
+
+```bash
+docker compose -f deploy/compose.yaml run --rm usage --tenant acme --by day   # this month, CSV
+docker compose -f deploy/compose.yaml run --rm usage --from 2026-11-01 --to 2026-12-01 \
+    --by tool --format jsonl
+```
+
+Calls that ended `ok`, `error`, or `timeout` are billable; refusals and invalid input are
+recorded but not billable. Without a run store (`serve-mcp --no-record`) nothing is metered.
+
 ## 7. Expose it to your team
 
 Keep the published port on loopback, and put a reverse proxy in front. The proxy should:
@@ -180,6 +193,39 @@ there, so a client finds the provider by itself. In the provider, register the s
 resource with that audience. Its tokens must carry the scopes (`tools:list`, `tools:call`) and
 a `qaos_tenant` claim naming the tenant; `tenant_claim` in the file changes the claim name.
 
+## Plans and limits (decision 0015)
+
+A plan bounds what its tenants get: the toolsets they may be served, a rate limit, a monthly
+quota, and an output cap. Plans live in the tenants file, and a tenant names its plan:
+
+```toml
+[plans.team]
+toolsets = ["research", "analytics"]
+calls_per_minute = 120        # per tenant, per server process
+monthly_calls = 50_000        # billable calls per UTC calendar month
+max_output_bytes = 200_000    # lowers any tool's own output limit
+
+[tenants.acme]
+plan = "team"
+toolsets = ["research"]       # optional: narrows the plan, never widens it
+```
+
+```bash
+quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos --plan team
+```
+
+- **No plan, no limits.** A tenant without a plan is served as before.
+- **Out-of-plan toolsets are not listed.** A tenant's tools, resources, and prompts come only
+  from its entitled toolsets, so a client never sees a tool it may not call.
+- **Limits are checked before a call starts.** A call that starts always finishes, even if it
+  takes the tenant over its quota. A refused call records `quota_exceeded`, which is not
+  billable, with `retry_after_seconds`; REST answers it 429 with `Retry-After`.
+- **The monthly count** comes from the usage events in the run store, re-read every 30
+  seconds. The rate limit is a token bucket in the server process, so N replicas would admit
+  up to N times the rate.
+- **The start-up check** refuses an unknown plan, a tenant that widens its plan, and the
+  reserved `packs` key (knowledge packs are later work).
+
 ## Approving in the client (decision 0014)
 
 Tools that need a consequential permission (for example, a tenant granted `network` for a
@@ -195,7 +241,46 @@ The client then shows a link to `https://qaos.example.com/approve/<id>`. There, 
 enters their key, checks the tool, arguments, and permissions, and approves once. The client
 runs the same call again, and it runs once. An approver key cannot call tools, and outside the
 `local` tenant nobody approves their own request (set `separate_approver = false` on a tenant
-to allow it). Requests expire after 15 minutes.
+to allow it). Requests expire after 15 minutes. Five failed submissions deny a request, and
+each client address may submit 30 forms a minute. The server trusts `X-Forwarded-For` only from
+`127.0.0.1`; behind a reverse proxy on another address, set `FORWARDED_ALLOW_IPS` to the
+proxy's address, or every client shares the proxy's allowance. Never set it to `*`, which lets
+any client choose its own address.
+
+## Telemetry and service levels (decision 0015)
+
+Every tool call emits an OpenTelemetry span and two metrics, labelled with the tenant, the
+tool, and the call's status, never its arguments, output, caller, or key:
+
+| Signal | Name | Prometheus name |
+| --- | --- | --- |
+| Span | `execute_tool <tool>` (ERROR for `error` and `timeout`) | — |
+| Counter | `qaos.tool.calls` | `qaos_tool_calls_total` |
+| Histogram, seconds | `qaos.tool.duration` | `qaos_tool_duration_seconds` |
+
+The server uses only the OpenTelemetry API, which does nothing until an SDK is configured. To
+export, add the SDK and an exporter and start the server under `opentelemetry-instrument`:
+
+```bash
+OTEL_SERVICE_NAME=quant-agent-os OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 \
+  uv run --with opentelemetry-distro --with opentelemetry-exporter-otlp \
+  opentelemetry-instrument quant-platform serve-http --tenants tenants.toml
+```
+
+`opentelemetry-instrument` also traces the HTTP libraries it finds, and those spans record
+request paths, including approval-page request ids. Send telemetry only to a collector you
+trust with that, or turn those libraries off with `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS`.
+
+Two service-level indicators, per tenant and tool:
+- **Availability.** The share of calls that did not end `error` or `timeout`. Refusals
+  (`denied`, `approval_required`, `quota_exceeded`, `invalid_input`) are the server working as
+  intended, so they count as good.
+- **Latency.** The 95th percentile of `qaos.tool.duration` per tool. Search with a hosted
+  embedder is bounded by its 15-second timeout; analytics calls take milliseconds.
+
+[deploy/observability/qaos-slo-dashboard.json](../deploy/observability/qaos-slo-dashboard.json)
+is an example Grafana dashboard over Prometheus with these indicators, a 99.5% availability
+objective over 30 days, calls by status, and refusals by tenant. Choose your own objectives.
 
 ## Permissions
 

@@ -47,7 +47,9 @@ class CallRequest(BaseModel):
 class CallResponse(BaseModel):
     """The record of one call: ``output`` is set when ``status`` is ``ok``, else ``error``.
 
-    A failure also carries ``hint`` (what to do next) and ``retryable``, as MCP reports it.
+    A failure also carries ``hint`` (what to do next) and ``retryable``, as MCP reports it. A
+    call refused by its tenant's plan limits (``quota_exceeded``) is answered 429, with
+    ``retry_after_seconds`` here and in the ``Retry-After`` header (decision 0015).
     """
 
     run_id: str | None
@@ -58,6 +60,7 @@ class CallResponse(BaseModel):
     error: str | None
     hint: str | None = None
     retryable: bool | None = None
+    retry_after_seconds: int | None = None
     data_versions: dict[str, str]
 
 
@@ -164,11 +167,15 @@ def build_app(
             record = await run_in_threadpool(executor.execute, step)
         else:
             recorder = RunRecorder(
-                surface.run_store, actor="rest", principal=key.principal, tenant=key.tenant
+                surface.run_store,
+                actor="rest",
+                principal=key.principal,
+                tenant=key.tenant,
+                toolsets=surface.toolsets,
             )
             record = await run_in_threadpool(recorder.call, executor, step)
         failure = failure_details(record, served) if record.status != "ok" else {}
-        return CallResponse(
+        response = CallResponse(
             run_id=record.run_id,
             call_id=record.call_id,
             tool=record.tool,
@@ -177,8 +184,16 @@ def build_app(
             error=record.error,
             hint=failure.get("hint"),
             retryable=failure.get("retryable"),
+            retry_after_seconds=record.retry_after_seconds,
             data_versions=record.data_versions,
         )
+        if record.status == "quota_exceeded":
+            return JSONResponse(
+                response.model_dump(mode="json"),
+                status_code=429,
+                headers={"Retry-After": str(record.retry_after_seconds or 1)},
+            )
+        return response
 
     @app.get("/v1/runs")
     def list_runs(
