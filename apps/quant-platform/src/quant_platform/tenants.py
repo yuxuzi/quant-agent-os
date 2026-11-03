@@ -245,7 +245,9 @@ class TenantCatalogs:
             factory=self.factory if "factory" in toolsets else None,
         )
         executor = ToolExecutor(ToolRegistry(catalog.tools), policy, approvals=self.run_store)
-        return Surface(executor, catalog.resources, catalog.prompts, self.run_store)
+        return Surface(
+            executor, catalog.resources, catalog.prompts, self.run_store, catalog.toolsets
+        )
 
     def close(self) -> None:
         """Close every tenant's knowledge store."""

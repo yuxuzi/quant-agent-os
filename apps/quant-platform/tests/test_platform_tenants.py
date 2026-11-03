@@ -9,6 +9,7 @@ import json
 import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -188,6 +189,10 @@ def test_runs_are_recorded_and_read_per_tenant(platform: Any) -> None:
     alpha_runs = anyio.run(runs, issued["alpha"])
     assert [(run["tenant"], run["principal"]) for run in alpha_runs] == [("alpha", "alpha-user")]
     assert {run.tenant for run in store.list_runs(10)} == {"alpha", "beta"}
+    ever = (datetime(2000, 1, 1, tzinfo=UTC), datetime(2100, 1, 1, tzinfo=UTC))
+    [alpha_usage] = store.list_usage(*ever, tenant="alpha")
+    assert (alpha_usage.tool, alpha_usage.toolset) == ("list_datasets", "analytics")
+    assert {event.tenant for event in store.list_usage(*ever)} == {"alpha", "beta"}
 
 
 def test_a_disabled_tenant_reaches_nothing(platform: Any) -> None:

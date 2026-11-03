@@ -210,7 +210,7 @@ def test_a_newer_run_store_schema_is_refused(tmp_path: Path) -> None:
 
 
 class _FailingStore(MemoryRunStore):
-    def add_call(self, record: object) -> None:
+    def add_call(self, record: object, usage: object = None) -> None:
         raise RunStoreError("disk full")
 
 
@@ -323,7 +323,7 @@ def test_a_version_1_run_store_is_upgraded_in_place(tmp_path: Path) -> None:
         version = db.execute("PRAGMA user_version").fetchone()[0]
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
     db.close()
-    assert version == SCHEMA_VERSION == 4
+    assert version == SCHEMA_VERSION == 5
     assert "approvals" in tables
 
 

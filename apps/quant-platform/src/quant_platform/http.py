@@ -24,7 +24,9 @@ def single_tenant(catalog: Catalog, run_store: RunStore, policy: PermissionPolic
     """Return a one-tenant server for ``catalog`` (the default tenant), recording in
     ``run_store``, which is also its approval ledger."""
     executor = ToolExecutor(ToolRegistry(catalog.tools), policy, approvals=run_store)
-    return SingleTenant(Surface(executor, catalog.resources, catalog.prompts, run_store))
+    return SingleTenant(
+        Surface(executor, catalog.resources, catalog.prompts, run_store, catalog.toolsets)
+    )
 
 
 def build_http_app(

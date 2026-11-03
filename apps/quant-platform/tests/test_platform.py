@@ -62,6 +62,18 @@ def test_one_catalog_serves_every_toolset(
         "draft_app_spec",
     ]
     assert "list_datasets" in catalog.instructions and "check_spec" in catalog.instructions
+    assert catalog.toolsets == {
+        "find_related_signals": "research",
+        "get_source_passage": "research",
+        "generate_strategy": "research",
+        "analyze_performance": "analytics",
+        "analyze_risk": "analytics",
+        "list_datasets": "analytics",
+        "research_report": "research",
+        "describe_template": "factory",
+        "check_spec": "factory",
+        "plan_app": "factory",
+    }
 
 
 def test_a_toolset_alone_brings_only_its_own_parts(datasets: DirectoryDatasetStore) -> None:

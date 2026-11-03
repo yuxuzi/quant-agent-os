@@ -190,7 +190,11 @@ def serve_mcp(
             ToolExecutor(ToolRegistry(catalog.tools), get_settings().policy()),
             name="quant-agent-os",
             instructions=catalog.instructions,
-            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
+            recorder=(
+                RunRecorder(run_store, actor="mcp", toolsets=catalog.toolsets)
+                if run_store
+                else None
+            ),
             resources=catalog.resources,
             prompts=catalog.prompts,
         )

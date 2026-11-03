@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,13 @@ def test_one_port_serves_every_toolset_as_mcp_and_rest(
     assert report.isError is False and report.structuredContent["metrics"]["sharpe_ratio"]
     (run,) = store.list_runs(5)
     assert (run.actor, run.principal) == ("mcp-http", "team")
+    [usage] = store.list_usage(run.started_at, run.started_at + timedelta(hours=1))
+    assert (usage.tool, usage.toolset, usage.interface) == (
+        "research_report",
+        "research",
+        "mcp-http",
+    )
+    assert usage.billable and usage.output_bytes > 0
 
 
 def test_serve_http_refuses_to_start_without_a_key(tmp_path: Path) -> None:

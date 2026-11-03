@@ -164,7 +164,11 @@ def build_app(
             record = await run_in_threadpool(executor.execute, step)
         else:
             recorder = RunRecorder(
-                surface.run_store, actor="rest", principal=key.principal, tenant=key.tenant
+                surface.run_store,
+                actor="rest",
+                principal=key.principal,
+                tenant=key.tenant,
+                toolsets=surface.toolsets,
             )
             record = await run_in_threadpool(recorder.call, executor, step)
         failure = failure_details(record, served) if record.status != "ok" else {}

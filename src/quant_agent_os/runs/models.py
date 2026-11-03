@@ -1,14 +1,15 @@
-"""What a persisted run looks like: the run, its tool calls, and its audit trail."""
+"""What a persisted run looks like: the run, its tool calls, its audit trail, and its usage."""
 
 from __future__ import annotations
 
+import json
 import secrets
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from quant_agent_os.runtime.executor import ToolCallRecord
+from quant_agent_os.runtime.executor import CallStatus, ToolCallRecord
 from quant_agent_os.tenancy import DEFAULT_TENANT
 
 RunKind = Literal["call", "plan"]
@@ -92,3 +93,65 @@ class ApprovalRequest(BaseModel):
     def expired(self, now: datetime | None = None) -> bool:
         """Return whether the request can no longer be decided or used."""
         return (now or datetime.now(UTC)) >= self.expires_at
+
+
+# Calls that used the server (decision 0015, Q-14). Refusals and invalid input are recorded
+# with a usage event but are not billable.
+BILLABLE: frozenset[CallStatus] = frozenset({"ok", "error", "timeout"})
+
+
+def _size(value: Any) -> int:
+    if value is None:
+        return 0
+    return len(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode())
+
+
+class UsageEvent(BaseModel):
+    """What one executed call used (decision 0015): never its arguments or output, only sizes.
+
+    ``interface`` is the recorder's actor (``mcp``, ``mcp-http``, ``rest``, ``sdk``, ...), and
+    ``toolset`` the toolset that served the tool, when the server knows it.
+    """
+
+    call_id: str
+    run_id: str
+    tenant: str = DEFAULT_TENANT
+    principal: str | None = None
+    interface: str
+    tool: str
+    tool_version: str | None = None
+    toolset: str | None = None
+    status: CallStatus
+    billable: bool
+    duration_ms: float
+    input_bytes: int
+    output_bytes: int
+    at: datetime
+
+    @classmethod
+    def of(
+        cls,
+        record: ToolCallRecord,
+        *,
+        interface: str,
+        tenant: str = DEFAULT_TENANT,
+        principal: str | None = None,
+        toolset: str | None = None,
+    ) -> UsageEvent:
+        """Return the usage of ``record``, sized before redaction, as canonical JSON."""
+        return cls(
+            call_id=record.call_id,
+            run_id=record.run_id or "",
+            tenant=tenant,
+            principal=principal,
+            interface=interface,
+            tool=record.tool,
+            tool_version=record.tool_version,
+            toolset=toolset,
+            status=record.status,
+            billable=record.status in BILLABLE,
+            duration_ms=record.duration_ms,
+            input_bytes=_size(record.arguments),
+            output_bytes=_size(record.output),
+            at=record.started_at.astimezone(UTC),
+        )

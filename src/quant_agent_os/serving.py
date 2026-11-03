@@ -1,12 +1,14 @@
 """What a server offers each tenant (decision 0013), shared by the REST and HTTP MCP interfaces.
 
-A `Surface` is one tenant's executor (its registry and policy), resources, prompts, and run
-store. A `Tenancy` returns the surface for a caller's tenant, or None when that tenant is not
-served here. The tenant always comes from the caller's credential, never from the request.
+A `Surface` is one tenant's executor (its registry and policy), resources, prompts, run
+store, and the toolset of each tool (for usage events, decision 0015). A `Tenancy` returns the
+surface for a caller's tenant, or None when that tenant is not served here. The tenant always
+comes from the caller's credential, never from the request.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -24,6 +26,7 @@ class Surface:
     resources: list[ResourceSpec] = field(default_factory=list)
     prompts: list[PromptSpec] = field(default_factory=list)
     run_store: RunStore | None = None
+    toolsets: Mapping[str, str] = field(default_factory=dict)
 
 
 class Tenancy(Protocol):

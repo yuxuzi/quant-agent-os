@@ -53,12 +53,16 @@ def available_toolsets() -> list[Toolset]:
 
 @dataclass(frozen=True)
 class Catalog:
-    """Everything one server offers: tools, resources, prompts, and its instructions."""
+    """Everything one server offers: tools, resources, prompts, and its instructions.
+
+    ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015).
+    """
 
     tools: list[ToolSpec[Any, Any]] = field(default_factory=list)
     resources: list[ResourceSpec] = field(default_factory=list)
     prompts: list[PromptSpec] = field(default_factory=list)
     instructions: str = PLATFORM_INSTRUCTIONS
+    toolsets: dict[str, str] = field(default_factory=dict)
 
 
 def compose(
@@ -78,28 +82,34 @@ def compose(
     resources: list[ResourceSpec] = []
     prompts: list[PromptSpec] = []
     served: list[Toolset] = []
+    toolsets: dict[str, str] = {}
+
+    def add(toolset: Toolset, specs: list[ToolSpec[Any, Any]]) -> None:
+        tools.extend(specs)
+        toolsets.update((spec.name, toolset) for spec in specs)
+
     if research is not None:
-        tools += research_tools(research)
+        add("research", research_tools(research))
         resources += research_resources()
         prompts.append(RESEARCH_SIGNAL)
         served.append("research")
     if datasets is not None:
-        tools += [*analytics_tools(datasets).specs(), *dataset_tools(datasets)]
+        add("analytics", [*analytics_tools(datasets).specs(), *dataset_tools(datasets)])
         resources += dataset_resources()
         prompts.append(ANALYZE_RETURNS)
         served.append("analytics")
     if research is not None:
-        tools.append(research_report_tool(list(tools), policy))
+        add("research", [research_report_tool(list(tools), policy)])
         prompts.append(REPORT_ON_SIGNAL)
     if factory is not None:
         from quant_app_factory import factory_resources
         from quant_app_factory.cli import served_tools as factory_served_tools
 
-        tools += factory_served_tools(factory)
+        add("factory", factory_served_tools(factory))
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
-    return Catalog(tools, resources, prompts, instructions_for(served))
+    return Catalog(tools, resources, prompts, instructions_for(served), toolsets)
 
 
 def instructions_for(toolsets: list[Toolset]) -> str:
