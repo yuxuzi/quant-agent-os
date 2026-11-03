@@ -1,14 +1,18 @@
 """OpenTelemetry per call (B-36 P7.4, decision 0015): a span and two metrics, and nothing else."""
 
+import json
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from pathlib import Path
+from typing import Any, get_args
 
 import pytest
 from pydantic import BaseModel
 
 from quant_agent_os.runtime import PlanStep, ToolExecutor, telemetry
+from quant_agent_os.runtime.executor import CallStatus
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
 
@@ -149,3 +153,28 @@ def test_without_the_api_installed_nothing_is_traced(
 
     assert call("lookup", query="q") == "ok"
     assert seen.spans == [] and seen.counted == []
+
+
+DASHBOARD = Path(__file__).resolve().parents[2] / "deploy/observability/qaos-slo-dashboard.json"
+
+
+def test_the_example_dashboard_uses_only_what_the_server_emits() -> None:
+    exprs = [
+        target["expr"]
+        for panel in json.loads(DASHBOARD.read_text())["panels"]
+        for target in panel["targets"]
+    ]
+    text = " ".join(exprs)
+
+    metrics = set(re.findall(r"\b(qaos_[a-z_]+)\{", text))  # every metric has a selector
+    labels = set(re.findall(r"\b(qaos_[a-z_]+)", text)) - metrics
+    statuses = {
+        status
+        for alternatives in re.findall(r'qaos_call_status=~\\?"([a-z_|]+)', text)
+        for status in alternatives.split("|")
+    }
+
+    assert metrics == {"qaos_tool_calls_total", "qaos_tool_duration_seconds_bucket"}
+    assert labels <= {"qaos_tenant", "qaos_tool", "qaos_call_status"}
+    assert statuses and statuses <= set(get_args(CallStatus))
+    assert telemetry.CALLS == "qaos.tool.calls" and telemetry.DURATION == "qaos.tool.duration"

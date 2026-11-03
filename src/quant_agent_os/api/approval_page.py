@@ -6,8 +6,8 @@ decision. The page has no scripts, escapes everything it shows, and sends header
 framing, caching, referrers, and loading anything; the key is never stored or echoed.
 
 Each client address may submit 30 forms a minute (decision 0015), counted in this process.
-Behind a reverse proxy, run the server so it sees the client's address (for example uvicorn's
-``--proxy-headers``), or every client shares the proxy's allowance.
+Uvicorn trusts ``X-Forwarded-For`` only from 127.0.0.1; behind a proxy elsewhere, set
+``FORWARDED_ALLOW_IPS`` to its address, or every client shares the proxy's allowance.
 """
 
 from __future__ import annotations

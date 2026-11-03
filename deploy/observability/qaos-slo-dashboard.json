@@ -1,0 +1,88 @@
+{
+  "title": "Quant-Agent-OS tool calls",
+  "description": "SLIs from qaos.tool.calls and qaos.tool.duration (decision 0015), as exported to Prometheus.",
+  "uid": "qaos-slo",
+  "schemaVersion": 39,
+  "tags": ["quant-agent-os"],
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus"
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(qaos_tool_calls_total, qaos_tenant)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Availability, 30 days (objective 99.5%)",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 3 } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\", qaos_call_status=~\"error|timeout\"}[30d])) / sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\"}[30d]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Calls per second by status",
+      "gridPos": { "x": 8, "y": 0, "w": 16, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{qaos_call_status}}",
+          "expr": "sum by (qaos_call_status) (rate(qaos_tool_calls_total{qaos_tenant=~\"$tenant\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 latency by tool",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{qaos_tool}}",
+          "expr": "histogram_quantile(0.95, sum by (le, qaos_tool) (rate(qaos_tool_duration_seconds_bucket{qaos_tenant=~\"$tenant\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Refusals by status (denied, approval_required, quota_exceeded)",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{qaos_tenant}} {{qaos_call_status}}",
+          "expr": "sum by (qaos_tenant, qaos_call_status) (rate(qaos_tool_calls_total{qaos_tenant=~\"$tenant\", qaos_call_status=~\"denied|approval_required|quota_exceeded\"}[5m]))"
+        }
+      ]
+    }
+  ]
+}
