@@ -67,6 +67,60 @@ names remain provisional until availability checks are done.
 Arrows into Core mean registration: products hand Core `ToolSpec`s. Core never imports a
 product.
 
+### 2.1 Target picture by layer
+
+The same system seen from the people who use it, top to bottom. Orchestration (planning, tool
+selection, and conversation state) happens in the client, not on the server. The platform
+enforces policy, controls the workflow, and keeps the audit trail for every call, whichever
+client makes it. Workflows the platform owns are deterministic composite tools, not
+server-side agents ([decision 0001](decisions/0001-one-orchestrator-first.md),
+[agent-surface plan](plans/agent-surface.md), principle 2).
+
+```text
+            Portfolio manager · Trader · Researcher
+                              │
+ ┌────────────────────────────▼─────────────────────────────────────────┐
+ │ AI client: Claude · Cursor · VS Code · Copilot · SDK scripts         │
+ │ Agent orchestration: planning · tool selection · conversation state  │
+ │ Skills (instruction-only) guide each workflow                        │
+ └────────────────────────────┬─────────────────────────────────────────┘
+                              │ MCP (stdio · Streamable HTTP) · REST · SDK
+ ┌────────────────────────────▼─────────────────────────────────────────┐
+ │ Identity and API gateway                                             │
+ │ OAuth 2.1 / API keys · tenant from the credential · rate limits      │
+ │ request context (tenant, principal)                                  │
+ ├──────────────────────────────────────────────────────────────────────┤
+ │ Policy and workflow control (Core)                                   │
+ │ tool registry · permissions · approvals · bounded executor ·         │
+ │ composite tools · quotas · run store, audit, and metering            │
+ └──────────────┬───────────────────────┬───────────────────────┬───────┘
+                │                       │                       │
+ ┌──────────────▼──────────┐ ┌──────────▼──────────┐ ┌──────────▼──────────┐
+ │ RAG service             │ │ Quant analytics     │ │ Quant App Factory   │
+ │ (Quant Research)        │ │ performance and     │ │ specs checked on    │
+ │ hybrid graph, keyword,  │ │ risk metrics        │ │ the server; files   │
+ │ vector · fusion ·       │ │                     │ │ written locally     │
+ │ citations · per-tenant  │ │                     │ │                     │
+ │ corpus                  │ │                     │ │                     │
+ └──────────────┬──────────┘ └─────────────────────┘ └─────────────────────┘
+                │
+   Research documents, reports, model documentation (ingested by the operator)
+```
+
+| Layer | Status | Where |
+| --- | --- | --- |
+| Agent orchestration in the client, skills | Confirmed for clients; skills proposed | B-32 (P3) |
+| Identity: OAuth 2.1 introspection, API keys, tenants | Confirmed | [0011](decisions/0011-rest-api-and-api-keys.md), [0013](decisions/0013-identity-and-tenancy.md) |
+| Gateway: rate limits and quotas | Proposed | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
+| Policy, approvals, executor, audit | Confirmed | [0005](decisions/0005-approval-gates.md), [0014](decisions/0014-approvals-in-the-client.md) |
+| RAG: hybrid retrieval, fusion, citations, tenant isolation | Confirmed | [section 6](#6-quant-research-graph-rag-architecture) |
+| RAG: reranking model, per-document or per-role filters | Open | Not planned; would need its own decision |
+| Quant analytics | Confirmed | [0010](decisions/0010-analytics-on-empyrical.md) |
+
+The user roles in the picture are audiences, not access roles. Identity has scopes
+(`tools:call`, `runs:approve`) but no PM, trader, or researcher roles, so everyone in a tenant
+sees the same corpus. A team that needs separation within a firm uses separate tenants today.
+
 ## 3. Core platform components
 
 | Component | Module | Responsibility | Status |
