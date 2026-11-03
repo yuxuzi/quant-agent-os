@@ -214,3 +214,19 @@ listings (Q-4), and a self-service admin API for plans.
   request, or the requester's own key) are counted per request, in the process. The form
   token is now checked after the request is found, so failures count against it; request ids
   have 128 random bits, so this reveals nothing the `GET` page does not.
+
+## Implementation notes (2026-11-03, P7.3)
+
+- **Where it lives.** `parse_version` and `Deprecation` in `quant_agent_os.tools.contracts`;
+  `classify`, `bump`, and `check_lock` in `quant_agent_os.tools.compatibility`; `server_info_tool`
+  and `server_info_resource` in `quant_agent_os.tools.server_info`. The platform's `compose`
+  adds `server_info` to every catalog, toolset `platform`, so a tenant's `server_info` lists only
+  that tenant's tools.
+- **The lock.** `tool-versions.lock` holds full schemas, not hashes, so the test can say what
+  kind of change was made. `apps/quant-platform/tests/tool_lock.py --update` refuses to write
+  while a bump is smaller than the change. The classifier is conservative: any structural
+  change it does not recognise is major.
+- **One platform version.** Every workspace package is released at one version, which a test
+  enforces, so MCP `serverInfo.version` (the core version) is the platform version.
+- **Fixed resources.** A resource without variables (`qaos://server/info`) is listed by MCP
+  `resources/list` rather than as a template.

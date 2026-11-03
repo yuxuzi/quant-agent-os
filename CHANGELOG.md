@@ -148,6 +148,17 @@ All notable changes to this project are documented here. The format follows
     quota counts billable usage events.
   - **Approval page limits.** Five failed submissions deny a request; each client address may
     submit 30 forms a minute.
+- Tool compatibility (B-36, decision 0015 P7.3; [tools changelog](docs/tools-changelog.md)):
+  - **Semver tool versions.** Every tool is `1.0.0` (was `"1"`); `@tool(version=...)` must be
+    `MAJOR.MINOR.PATCH`. `Deprecation` marks a tool's replacement and removal date, shown in
+    its description and in MCP `_meta` (`qaos/version`, `qaos/deprecated`).
+  - **A tool lock.** `tool-versions.lock` records each served tool's version, permissions, and
+    schemas; the tests fail when a schema changes without a big enough bump
+    (`quant_agent_os.tools.compatibility`).
+  - **Server info.** The `server_info` tool and the `qaos://server/info` resource give the
+    platform version, every tool's version and deprecation, and the registry digest. MCP
+    `resources/list` lists resources without variables. Each skill checks the major.
+  - **One version.** Every package is released at the same version.
 - Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,

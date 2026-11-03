@@ -53,6 +53,7 @@ Read [docs/architecture.md](docs/architecture.md) and the plan in
 | Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
 | Regenerate client bundles (after changing a skill) | `uv run python apps/quant-platform/tests/client_bundles.py` |
+| Update the tool lock (after a tool version bump) | `uv run python apps/quant-platform/tests/tool_lock.py --update` |
 | Research evaluation | `uv run python packages/quant-research/tests/research_eval.py` (add `--update` to rebaseline) |
 | App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest packages/quant-app-factory/tests/test_factory_smoke.py` |
 | Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python packages/quant-research/tests/real_corpus.py fetch`, then `... real_corpus.py eval` |
