@@ -17,6 +17,7 @@ from quant_agent_os.runs import (
     RunStoreError,
     SqliteRunStore,
     UsageEvent,
+    summarize,
 )
 from quant_agent_os.runs.store import SCHEMA_VERSION
 from quant_agent_os.runtime import PlanStep, ToolExecutor
@@ -185,3 +186,56 @@ def test_a_usage_event_round_trips_as_json() -> None:
     )
 
     assert UsageEvent.model_validate_json(event.model_dump_json()) == event
+
+
+# Usage totals (the export's --by)
+
+
+def _event(
+    call_id: str, tenant: str, tool: str, at: datetime, *, billable: bool = True
+) -> UsageEvent:
+    return UsageEvent(
+        call_id=call_id,
+        run_id="r",
+        tenant=tenant,
+        interface="rest",
+        tool=tool,
+        toolset="research",
+        status="ok" if billable else "denied",
+        billable=billable,
+        duration_ms=1.25,
+        input_bytes=10,
+        output_bytes=100,
+        at=at,
+    )
+
+
+def test_usage_is_totalled_per_tenant_by_utc_day_and_by_tool() -> None:
+    late = datetime(2026, 11, 1, 23, 30, tzinfo=UTC)
+    events = [
+        _event("a", "acme", "search", late),
+        _event("b", "acme", "search", late + timedelta(hours=1)),  # 2 November, UTC
+        _event("c", "acme", "report", late, billable=False),
+        _event("d", "beta", "search", late),
+    ]
+
+    by_day = [(t.tenant, t.group, t.calls, t.billable_calls) for t in summarize(events, "day")]
+    by_tool = summarize(events, "tool")
+
+    assert by_day == [
+        ("acme", "2026-11-01", 2, 1),
+        ("acme", "2026-11-02", 1, 1),
+        ("beta", "2026-11-01", 1, 1),
+    ]
+    assert [(t.tenant, t.group, t.toolset, t.calls) for t in by_tool] == [
+        ("acme", "report", "research", 1),
+        ("acme", "search", "research", 2),
+        ("beta", "search", "research", 1),
+    ]
+    acme_search = by_tool[1]
+    assert (acme_search.duration_ms, acme_search.input_bytes, acme_search.output_bytes) == (
+        2.5,
+        20,
+        200,
+    )
+    assert summarize([], "day") == []

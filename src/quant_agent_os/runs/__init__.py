@@ -14,6 +14,7 @@ from quant_agent_os.runs.models import (
 from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunNotFoundError, RunRecorder
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import MemoryRunStore, RunStore, RunStoreError, SqliteRunStore
+from quant_agent_os.runs.usage import UsageGrouping, UsageTotal, summarize
 
 __all__ = [
     "BILLABLE",
@@ -32,5 +33,8 @@ __all__ = [
     "SqliteRunStore",
     "StoredRun",
     "UsageEvent",
+    "UsageGrouping",
+    "UsageTotal",
     "redact",
+    "summarize",
 ]
