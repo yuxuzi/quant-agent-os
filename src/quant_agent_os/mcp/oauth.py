@@ -9,8 +9,12 @@ that issuer. The token is never sent anywhere else:
 - an opaque token is accepted only when exactly one server is configured.
 
 Results are cached by the token's SHA-256 for at most `CACHE_SECONDS`, never past the token's
-expiry. `protected_resource_routes` publishes the RFC 9728 metadata that points clients to the
-authorization servers. Needs the ``mcp`` and ``api`` extras (httpx comes with them).
+expiry, and a provider's refusal for `REFUSAL_CACHE_SECONDS`. So that unauthenticated requests
+cannot make the server flood an identity provider (security review F-1), each provider gets at
+most `INTROSPECTIONS_PER_MINUTE` introspections and `MAX_CONCURRENT_INTROSPECTIONS` at once;
+beyond that a token is refused without asking. `protected_resource_routes` publishes the RFC
+9728 metadata that points clients to the authorization servers. Needs the ``mcp`` and ``api``
+extras (httpx comes with them).
 """
 
 from __future__ import annotations
@@ -22,12 +26,13 @@ import json
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from quant_agent_os.api.keys import KEY_PREFIX, SCOPES
 from quant_agent_os.mcp.http import TENANT_CLAIM
+from quant_agent_os.runtime.quotas import TokenBucket
 
 if TYPE_CHECKING:
     import httpx
@@ -35,7 +40,13 @@ if TYPE_CHECKING:
     from starlette.routing import Route
 
 logger = logging.getLogger(__name__)
+V = TypeVar("V")
 CACHE_SECONDS = 60.0
+REFUSAL_CACHE_SECONDS = 30.0
+INTROSPECTIONS_PER_MINUTE = 600
+MAX_CONCURRENT_INTROSPECTIONS = 8
+MAX_CACHED_TOKENS = 10_000
+WARN_EVERY_SECONDS = 60.0
 DEFAULT_TENANT_CLAIM = "qaos_tenant"
 
 
@@ -61,6 +72,8 @@ class IntrospectionVerifier:
         tenants_by_issuer: dict[str, set[str]],
         tenant_claim: str = DEFAULT_TENANT_CLAIM,
         http: httpx.AsyncClient | None = None,
+        introspections_per_minute: int = INTROSPECTIONS_PER_MINUTE,
+        max_concurrent: int = MAX_CONCURRENT_INTROSPECTIONS,
     ) -> None:
         if not servers:
             raise ValueError("OAuth needs at least one authorization server.")
@@ -70,6 +83,11 @@ class IntrospectionVerifier:
         self.tenant_claim = tenant_claim
         self.http = http
         self._cache: dict[str, tuple[float, AccessToken]] = {}
+        self._refused: dict[str, float] = {}
+        self._budget = {issuer: TokenBucket(introspections_per_minute) for issuer in self.servers}
+        self._in_flight = dict.fromkeys(self.servers, 0)
+        self._max_concurrent = max_concurrent
+        self._warned: dict[str, float] = {}
         self._lock = threading.Lock()
 
     async def verify_token(self, token: str) -> AccessToken | None:
@@ -82,17 +100,42 @@ class IntrospectionVerifier:
             cached = self._cache.get(digest)
             if cached is not None and cached[0] > now:
                 return cached[1]
+            if self._refused.get(digest, 0.0) > now:
+                return None
         server = self._server_for(token)
-        if server is None:
+        if server is None or not self._admit(server.issuer, now):
             return None
-        claims = await self._introspect(server, token)
-        access = self._access(server, token, claims, now) if claims is not None else None
-        if access is not None:
-            until = min(now + CACHE_SECONDS, float(access.expires_at or now + CACHE_SECONDS))
+        try:
+            claims = await self._introspect(server, token)
+        finally:
             with self._lock:
-                self._cache = {k: v for k, v in self._cache.items() if v[0] > now}
+                self._in_flight[server.issuer] -= 1
+        access = self._access(server, token, claims, now) if claims is not None else None
+        with self._lock:
+            if access is not None:
+                until = min(now + CACHE_SECONDS, float(access.expires_at or now + CACHE_SECONDS))
+                self._cache = _bounded({k: v for k, v in self._cache.items() if v[0] > now})
                 self._cache[digest] = (until, access)
+            elif claims is not None:  # the provider's verdict; a failed request is not one
+                self._refused = _bounded({k: v for k, v in self._refused.items() if v > now})
+                self._refused[digest] = now + REFUSAL_CACHE_SECONDS
         return access
+
+    def _admit(self, issuer: str, now: float) -> bool:
+        """Reserve one introspection at ``issuer`` within its budget, or return False."""
+        with self._lock:
+            busy = self._in_flight[issuer] >= self._max_concurrent
+            if not busy and self._budget[issuer].take() == 0.0:
+                self._in_flight[issuer] += 1
+                return True
+            if now - self._warned.get(issuer, 0.0) >= WARN_EVERY_SECONDS:
+                self._warned[issuer] = now
+                logger.warning(
+                    "Refusing tokens for %s without introspection: its budget is used up "
+                    "(security review F-1). Rate-limit unauthenticated requests in the proxy.",
+                    issuer,
+                )
+            return False
 
     def _server_for(self, token: str) -> AuthorizationServer | None:
         """Choose the one configured server that may see ``token``, or None."""
@@ -162,6 +205,13 @@ class IntrospectionVerifier:
             subject=subject if isinstance(subject, str) else None,
             claims={TENANT_CLAIM: tenant, "iss": server.issuer},
         )
+
+
+def _bounded(cache: dict[str, V]) -> dict[str, V]:
+    """Return ``cache`` with room for one more entry, dropping the oldest entries first."""
+    while len(cache) >= MAX_CACHED_TOKENS:
+        del cache[next(iter(cache))]
+    return cache
 
 
 class FirstOf:

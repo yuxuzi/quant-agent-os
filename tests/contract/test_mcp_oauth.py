@@ -165,6 +165,89 @@ def test_a_provider_failure_refuses_the_token_without_logging_it(
     assert "introspection" in caplog.text and token not in caplog.text
 
 
+# Bounded introspection (security review F-1)
+
+
+def test_a_refusal_is_cached_but_a_provider_failure_is_not(provider: FakeProvider) -> None:
+    verifier = _verifier(provider, ACME)
+    refused = _jwt(ACME, "refused")
+
+    assert _verify(verifier, refused) is None
+    assert _verify(verifier, refused) is None
+    assert provider.asked == [("login.acme.example", refused)]
+
+    calls: list[str] = []
+
+    def down(request: httpx.Request) -> httpx.Response:
+        calls.append("asked")
+        raise httpx.ConnectError("down", request=request)
+
+    flaky = IntrospectionVerifier(
+        [_server(ACME)],
+        resource=RESOURCE,
+        tenants_by_issuer={ACME: {"acme"}},
+        http=httpx.AsyncClient(transport=httpx.MockTransport(down)),
+    )
+    _verify(flaky, refused)
+    _verify(flaky, refused)
+    assert calls == ["asked", "asked"]
+
+
+def test_each_provider_is_asked_at_most_its_budget_and_a_flood_warns_once(
+    provider: FakeProvider, caplog: pytest.LogCaptureFixture
+) -> None:
+    verifier = IntrospectionVerifier(
+        [_server(ACME), _server(GLOBEX)],
+        resource=RESOURCE,
+        tenants_by_issuer={ACME: {"acme"}, GLOBEX: {"globex"}},
+        http=httpx.AsyncClient(transport=httpx.MockTransport(provider.handler)),
+        introspections_per_minute=3,
+    )
+    valid = _jwt(GLOBEX, "valid")
+    provider.tokens[valid] = provider.claims(GLOBEX, "globex")
+
+    for marker in range(10):  # a flood of different made-up tokens naming acme
+        assert _verify(verifier, _jwt(ACME, f"made-up-{marker}")) is None
+
+    assert [host for host, _ in provider.asked] == ["login.acme.example"] * 3
+    assert caplog.text.count("budget is used up") == 1
+    assert _verify(verifier, valid) is not None  # globex has its own budget
+
+
+def test_introspections_in_flight_per_provider_are_bounded(provider: FakeProvider) -> None:
+    release = anyio.Event()
+    asked: list[str] = []
+
+    async def slow(request: httpx.Request) -> httpx.Response:
+        asked.append("asked")
+        await release.wait()
+        return httpx.Response(200, json={"active": False})
+
+    verifier = IntrospectionVerifier(
+        [_server(ACME)],
+        resource=RESOURCE,
+        tenants_by_issuer={ACME: {"acme"}},
+        http=httpx.AsyncClient(transport=httpx.MockTransport(slow)),
+        max_concurrent=1,
+    )
+    results: list[Any] = []
+
+    async def main() -> None:
+        async with anyio.create_task_group() as group:
+            group.start_soon(lambda: _collect(verifier, _jwt(ACME, "first"), results))
+            await anyio.wait_all_tasks_blocked()
+            results.append(await verifier.verify_token(_jwt(ACME, "second")))  # refused at once
+            release.set()
+
+    anyio.run(main)
+
+    assert asked == ["asked"] and results == [None, None]
+
+
+async def _collect(verifier: IntrospectionVerifier, token: str, into: list[Any]) -> None:
+    into.append(await verifier.verify_token(token))
+
+
 def test_mcp_clients_use_tokens_or_keys_and_401s_point_to_the_metadata(
     provider: FakeProvider, tmp_path: Path
 ) -> None:
