@@ -241,7 +241,11 @@ def test_stores_count_a_tenants_billable_calls_in_a_window(store: RunStore) -> N
 
 def test_a_quota_refusal_leaves_a_waiting_call_waiting_and_fails_any_other() -> None:
     waiting = ToolCallRecord(
-        tool="fetch", tool_version="1", arguments={}, status="approval_required", input_sha256="h"
+        tool="fetch",
+        tool_version="1.0.0",
+        arguments={},
+        status="approval_required",
+        input_sha256="h",
     )
     refused = waiting.model_copy(update={"status": "quota_exceeded"})
     done = waiting.model_copy(update={"status": "ok"})

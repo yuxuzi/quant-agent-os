@@ -76,7 +76,7 @@ def test_a_recorded_call_has_one_usage_event(store: RunStore) -> None:
 
     assert (usage.call_id, usage.run_id) == (record.call_id, record.run_id)
     assert (usage.tenant, usage.principal, usage.interface) == ("acme", "alice", "rest")
-    assert (usage.tool, usage.tool_version, usage.toolset) == ("lookup", "1", "research")
+    assert (usage.tool, usage.tool_version, usage.toolset) == ("lookup", "1.0.0", "research")
     assert (usage.status, usage.billable) == ("ok", True)
     assert usage.duration_ms == record.duration_ms
     assert usage.input_bytes == len('{"query":"abc"}')

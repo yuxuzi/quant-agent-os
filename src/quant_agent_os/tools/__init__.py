@@ -7,7 +7,13 @@ from quant_agent_os.tools.catalog import (
     ResourceSpec,
     UnknownResourceError,
 )
-from quant_agent_os.tools.contracts import ToolContractError, ToolSpec, tool
+from quant_agent_os.tools.contracts import (
+    Deprecation,
+    ToolContractError,
+    ToolSpec,
+    parse_version,
+    tool,
+)
 from quant_agent_os.tools.permissions import (
     CONSEQUENTIAL,
     READ_ONLY,
@@ -20,6 +26,7 @@ from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry, Unkn
 __all__ = [
     "CONSEQUENTIAL",
     "READ_ONLY",
+    "Deprecation",
     "DuplicateToolError",
     "Permission",
     "PermissionDeniedError",
@@ -33,5 +40,6 @@ __all__ = [
     "ToolSpec",
     "UnknownResourceError",
     "UnknownToolError",
+    "parse_version",
     "tool",
 ]

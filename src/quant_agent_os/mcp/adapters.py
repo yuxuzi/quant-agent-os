@@ -44,13 +44,14 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
     ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
     rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
     contract: read-only unless the tool may write, run code, or act externally; open-world when
-    it reaches outside the machine (network access or external actions).
+    it reaches outside the machine (network access or external actions). ``_meta`` carries the
+    tool's version and, for a deprecated tool, its replacement and removal date.
     """
     return [
         {
             "name": spec.name,
             "title": spec.title,
-            "description": spec.description,
+            "description": spec.full_description,
             "inputSchema": compact_schema(spec.input_model.model_json_schema()),
             "outputSchema": compact_schema(spec.descriptor()["output_schema"]),
             "annotations": {
@@ -58,6 +59,8 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
                 "idempotentHint": spec.idempotent,
                 "openWorldHint": bool(spec.permissions & _OUTSIDE),
             },
+            "_meta": {"qaos/version": spec.version}
+            | ({"qaos/deprecated": spec.descriptor()["deprecated"]} if spec.deprecated else {}),
         }
         for spec in executor.registry.specs()
         if executor.policy.allows_tool(spec.name)

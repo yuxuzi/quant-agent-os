@@ -16,7 +16,7 @@ from quant_platform.cli import app as cli
 def _record(store: SqliteRunStore, call_id: str, tenant: str, tool: str, at: datetime) -> None:
     record = ToolCallRecord(
         tool=tool,
-        tool_version="1",
+        tool_version="1.0.0",
         arguments={"query": "secret thesis"},
         status="ok",
         output={"answer": "x"},

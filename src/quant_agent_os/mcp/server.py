@@ -177,6 +177,7 @@ def build_server(
                 inputSchema=definition["inputSchema"],
                 outputSchema=definition["outputSchema"],
                 annotations=types.ToolAnnotations(**definition["annotations"]),
+                _meta=definition["_meta"],
             )
             for definition in tool_definitions(served.surface.executor)
         ]

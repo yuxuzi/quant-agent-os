@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -15,10 +16,36 @@ InputT = TypeVar("InputT", bound=BaseModel)
 OutputT = TypeVar("OutputT", bound=BaseModel)
 
 _TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 class ToolContractError(ValueError):
     """Raised when a tool definition violates the contract."""
+
+
+def parse_version(version: str) -> tuple[int, int, int]:
+    """Return ``(major, minor, patch)`` of a ``MAJOR.MINOR.PATCH`` tool version (decision 0015)."""
+    found = _SEMVER.fullmatch(version)
+    if found is None:
+        raise ToolContractError(f"Tool version '{version}' must be MAJOR.MINOR.PATCH, like 1.0.0.")
+    major, minor, patch = (int(part) for part in found.groups())
+    return major, minor, patch
+
+
+@dataclass(frozen=True)
+class Deprecation:
+    """A deprecated tool's replacement and the date it may be removed (decision 0015, Q-16).
+
+    A breaking change ships as a new tool name; the old one stays, deprecated, for at least 90
+    days and one minor platform release.
+    """
+
+    replacement: str
+    removal: dt.date
+
+    def notice(self) -> str:
+        """Return the sentence appended to the deprecated tool's description."""
+        return f"Deprecated: use {self.replacement}; removed after {self.removal.isoformat()}."
 
 
 @dataclass(frozen=True)
@@ -30,7 +57,9 @@ class ToolSpec(Generic[InputT, OutputT]):
     the result depends on, such as a corpus snapshot); reports collect all three.
 
     ``deterministic`` means the same input and data versions give the same output;
-    ``idempotent`` means a call can be repeated without additional side effects.
+    ``idempotent`` means a call can be repeated without additional side effects. ``version``
+    is ``MAJOR.MINOR.PATCH``: major for a breaking schema or meaning change, minor for
+    additions, patch for fixes (decision 0015).
     """
 
     name: str
@@ -44,6 +73,7 @@ class ToolSpec(Generic[InputT, OutputT]):
     max_output_bytes: int = 100_000
     deterministic: bool = True
     idempotent: bool = True
+    deprecated: Deprecation | None = None
 
     def __post_init__(self) -> None:
         if not _TOOL_NAME.fullmatch(self.name):
@@ -55,11 +85,19 @@ class ToolSpec(Generic[InputT, OutputT]):
             raise ToolContractError(f"Tool '{self.name}' needs a description.")
         if self.timeout_seconds <= 0 or self.max_output_bytes <= 0:
             raise ToolContractError(f"Tool '{self.name}' limits must be positive.")
+        parse_version(self.version)
 
     @property
     def title(self) -> str:
         """A human-readable display name derived from ``name``, such as "Analyze performance"."""
         return self.name.replace("_", " ").capitalize()
+
+    @property
+    def full_description(self) -> str:
+        """The description clients see, with the deprecation notice when there is one."""
+        if self.deprecated is None:
+            return self.description
+        return f"{self.description} {self.deprecated.notice()}"
 
     def descriptor(self) -> dict[str, Any]:
         """Return a JSON-serializable description for planners, MCP, and documentation.
@@ -78,6 +116,14 @@ class ToolSpec(Generic[InputT, OutputT]):
             "max_output_bytes": self.max_output_bytes,
             "deterministic": self.deterministic,
             "idempotent": self.idempotent,
+            "deprecated": (
+                None
+                if self.deprecated is None
+                else {
+                    "replacement": self.deprecated.replacement,
+                    "removal": self.deprecated.removal.isoformat(),
+                }
+            ),
         }
 
 
@@ -85,12 +131,13 @@ def tool(
     *,
     name: str,
     description: str,
-    version: str = "1",
+    version: str = "1.0.0",
     permissions: Iterable[Permission] = (),
     timeout_seconds: float = 10.0,
     max_output_bytes: int = 100_000,
     deterministic: bool = True,
     idempotent: bool = True,
+    deprecated: Deprecation | None = None,
 ) -> Callable[[Callable[[InputT], OutputT]], ToolSpec[InputT, OutputT]]:
     """Turn ``def fn(params: InputModel) -> OutputModel`` into a `ToolSpec`.
 
@@ -122,6 +169,7 @@ def tool(
             max_output_bytes=max_output_bytes,
             deterministic=deterministic,
             idempotent=idempotent,
+            deprecated=deprecated,
         )
 
     return decorate
