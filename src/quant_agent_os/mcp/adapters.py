@@ -149,7 +149,7 @@ def served_resources(executor: ToolExecutor, resources: list[ResourceSpec]) -> l
 def resource_templates(
     executor: ToolExecutor, resources: list[ResourceSpec]
 ) -> list[dict[str, Any]]:
-    """Return MCP ``resources/templates/list`` entries for the served resources."""
+    """Return MCP ``resources/templates/list`` entries for the served resources with variables."""
     return [
         {
             "uriTemplate": resource.uri_template,
@@ -158,6 +158,21 @@ def resource_templates(
             "mimeType": resource.mime_type,
         }
         for resource in served_resources(executor, resources)
+        if resource.variables
+    ]
+
+
+def fixed_resources(executor: ToolExecutor, resources: list[ResourceSpec]) -> list[dict[str, Any]]:
+    """Return MCP ``resources/list`` entries: the served resources without variables."""
+    return [
+        {
+            "uri": resource.uri_template,
+            "name": resource.name,
+            "description": resource.description,
+            "mimeType": resource.mime_type,
+        }
+        for resource in served_resources(executor, resources)
+        if not resource.variables
     ]
 
 

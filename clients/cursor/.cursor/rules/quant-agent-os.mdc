@@ -50,6 +50,11 @@ tool call.
 Failures carry `hint` and `retryable`. An `invalid_input` error names the field to fix. On
 `denied` or `approval_required`, tell the user and do not retry.
 
+### Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+
 ### Related
 
 The `analyze_returns` prompt runs the performance workflow in clients without skills. For a
@@ -88,6 +93,11 @@ writes files, runs code, or touches the network.
   invent options.
 - **Follow the errors.** Failures carry `hint` and `retryable`; on `denied` or
   `approval_required`, tell the user and do not retry.
+
+### Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
 
 ### Related
 
@@ -136,6 +146,11 @@ claim, and say plainly when it holds nothing on the question.
 Failures carry `hint` and `retryable`. Follow the hint. On `denied` or `approval_required`,
 tell the user what is needed and do not retry.
 
+### Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+
 ### Related
 
 - For a strategy specification or a report on one signal, use the `quant-strategy` skill.
@@ -183,3 +198,8 @@ To build a project from the spec, the user can draft an App Factory spec with th
 `quant-app-factory` skill.
 
 The `report_on_signal` prompt runs this workflow in clients without skills.
+
+### Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.

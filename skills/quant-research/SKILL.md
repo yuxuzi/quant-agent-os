@@ -46,6 +46,11 @@ claim, and say plainly when it holds nothing on the question.
 Failures carry `hint` and `retryable`. Follow the hint. On `denied` or `approval_required`,
 tell the user what is needed and do not retry.
 
+## Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+
 ## Related
 
 - For a strategy specification or a report on one signal, use the `quant-strategy` skill.

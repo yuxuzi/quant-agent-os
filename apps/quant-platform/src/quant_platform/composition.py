@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
 from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
+from quant_agent_os.tools.server_info import server_info_resource, server_info_tool
 from quant_analytics.tools import analytics_tools
 from quant_platform.prompts import (
     ANALYZE_RETURNS,
@@ -43,6 +44,13 @@ REPORT_INSTRUCTIONS = (
     "research_report gives a cited report on one signal, with metrics of a named series, in "
     "one call."
 )
+
+
+def platform_version() -> str:
+    """Return the installed platform version; every package is released at this version."""
+    from importlib.metadata import version
+
+    return version("quant-agent-os-platform")
 
 
 def available_toolsets() -> list[Toolset]:
@@ -77,6 +85,7 @@ def compose(
     ``research`` serves the research toolset and `research_report`; ``datasets`` serves
     analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
+    Every catalog also serves `server_info` (``qaos://server/info``, decision 0015).
     """
     tools: list[ToolSpec[Any, Any]] = []
     resources: list[ResourceSpec] = []
@@ -84,7 +93,7 @@ def compose(
     served: list[Toolset] = []
     toolsets: dict[str, str] = {}
 
-    def add(toolset: Toolset, specs: list[ToolSpec[Any, Any]]) -> None:
+    def add(toolset: Toolset | Literal["platform"], specs: list[ToolSpec[Any, Any]]) -> None:
         tools.extend(specs)
         toolsets.update((spec.name, toolset) for spec in specs)
 
@@ -109,6 +118,8 @@ def compose(
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
+    add("platform", [server_info_tool(platform_version(), list(tools))])
+    resources.append(server_info_resource())
     return Catalog(tools, resources, prompts, instructions_for(served), toolsets)
 
 

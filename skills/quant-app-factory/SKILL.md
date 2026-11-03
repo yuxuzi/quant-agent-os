@@ -38,6 +38,11 @@ writes files, runs code, or touches the network.
 - **Follow the errors.** Failures carry `hint` and `retryable`; on `denied` or
   `approval_required`, tell the user and do not retry.
 
+## Server version
+
+Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
+warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+
 ## Related
 
 The `draft_app_spec` prompt runs this workflow in clients without skills. A strategy

@@ -104,7 +104,7 @@ def test_a_tenant_is_served_only_its_plans_toolsets(tmp_path: Path) -> None:
     try:
         planned, unplanned = catalogs.surface("acme"), catalogs.surface("open")
         assert planned is not None and unplanned is not None
-        assert set(planned.toolsets.values()) == {"analytics"}
+        assert set(planned.toolsets.values()) == {"analytics", "platform"}
         assert {"research", "analytics"} <= set(unplanned.toolsets.values())
         assert "find_related_signals" not in _names(planned.executor)
         assert not any(resource.tool == "get_source_passage" for resource in planned.resources)

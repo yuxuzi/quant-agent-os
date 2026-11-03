@@ -3135,6 +3135,95 @@
         "read_local_data"
       ],
       "version": "1.0.0"
+    },
+    "server_info": {
+      "input_schema": {
+        "description": "No arguments.",
+        "properties": {},
+        "title": "ServerInfoRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "ToolVersion": {
+            "description": "One served tool's version, and its replacement and removal date if deprecated.",
+            "properties": {
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "removal": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "ISO date after which it may go.",
+                "title": "Removal"
+              },
+              "replacement": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Replacement"
+              },
+              "version": {
+                "title": "Version",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "version"
+            ],
+            "title": "ToolVersion",
+            "type": "object"
+          }
+        },
+        "description": "What a client needs to check that its skills match this server.",
+        "properties": {
+          "platform_major": {
+            "title": "Platform Major",
+            "type": "integer"
+          },
+          "platform_version": {
+            "title": "Platform Version",
+            "type": "string"
+          },
+          "registry_digest": {
+            "description": "SHA-256 of the served tool contracts.",
+            "title": "Registry Digest",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/$defs/ToolVersion"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "platform_version",
+          "platform_major",
+          "tools",
+          "registry_digest"
+        ],
+        "title": "ServerInfo",
+        "type": "object"
+      },
+      "permissions": [],
+      "version": "1.0.0"
     }
   }
 }
