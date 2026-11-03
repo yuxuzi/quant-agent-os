@@ -230,3 +230,22 @@ listings (Q-4), and a self-service admin API for plans.
   enforces, so MCP `serverInfo.version` (the core version) is the platform version.
 - **Fixed resources.** A resource without variables (`qaos://server/info`) is listed by MCP
   `resources/list` rather than as a template.
+
+## Implementation notes (2026-11-03, P7.4)
+
+- **Where it lives.** `quant_agent_os.runtime.telemetry.call_span` wraps every
+  `ToolExecutor.execute`. It sits in `runtime/`, not `observability/`, because the executor
+  may only import downward. It does nothing when `opentelemetry-api` is not installed (a core
+  install without the `mcp` or `api` extra).
+- **Labels.** `qaos.tenant` comes from the executor (`ToolExecutor(tenant=)`; `TenantCatalogs`
+  passes it, every other executor serves `local`). A tool name the registry does not know is
+  labelled `unknown`, because it comes from the caller and would otherwise mint labels.
+- **Span name.** `execute_tool <tool>`, after the OpenTelemetry GenAI convention for tool
+  execution; the attributes use the `qaos.` prefix.
+- **No SDK in the tests.** The unit tests replace the instruments with fakes, so no SDK
+  becomes a dependency. The example dashboard is checked against the emitted metric names,
+  labels, and statuses.
+- **The security review** ([security-review.md](../security-review.md)) found nothing that
+  allows a cross-tenant read, an approval without an approver key, or a call outside a
+  tenant's permissions. Its five findings are open; F-1 (introspection amplification before
+  authentication) and F-2 (timed-out tool threads) matter for a public endpoint.

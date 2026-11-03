@@ -1,6 +1,8 @@
 # Security model
 
 Quant-Agent-OS assumes that model output, retrieved documents, and tool output are untrusted.
+The [security review](security-review.md) checks the remote surface against this model and
+lists the open findings.
 
 ## Defaults
 

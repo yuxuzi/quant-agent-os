@@ -159,6 +159,18 @@ All notable changes to this project are documented here. The format follows
     platform version, every tool's version and deprecation, and the registry digest. MCP
     `resources/list` lists resources without variables. Each skill checks the major.
   - **One version.** Every package is released at the same version.
+- Operations (B-36, decision 0015 P7.4):
+  - **OpenTelemetry per call.** A span `execute_tool <tool>`, the counter `qaos.tool.calls`,
+    and the histogram `qaos.tool.duration`, labelled by tenant, tool, and status, never
+    arguments, outputs, callers, or keys. Only the API is used, so it does nothing until an
+    operator configures an SDK; `opentelemetry-api` is now a direct dependency of the `mcp`
+    and `api` extras. `ToolExecutor` takes the `tenant` it serves.
+  - **Service levels.** Availability and p95 latency per tool in
+    [deployment](docs/deployment.md), with an example Grafana dashboard in
+    `deploy/observability/`.
+  - **Security review.** [docs/security-review.md](docs/security-review.md) checks the remote
+    surface against the OWASP API Top 10 and the MCP security best practices, with five open
+    findings and the steps before a public endpoint.
 - Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,
