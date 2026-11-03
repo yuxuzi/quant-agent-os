@@ -49,6 +49,7 @@ from quant_platform.tenants import (
     TenantsFile,
     TenantsFileError,
     describe,
+    entitled_toolsets,
     load_tenants_file,
     save_tenants,
     separate_approver,
@@ -304,12 +305,16 @@ def serve_http(
             tenancy: Tenancy = single_tenant(catalog, run_store, settings.policy())
             instructions, served = catalog.instructions, f"{len(catalog.tools)} tools"
         else:
-            wants_factory = any("factory" in (c.toolsets or []) for c in configured.values())
+            assert whole is not None
+            wants_factory = any(
+                "factory" in (entitled_toolsets(c, whole.plans) or []) for c in configured.values()
+            )
             catalogs = TenantCatalogs(
                 configured,
                 run_store=run_store,
                 datasets_root=datasets or settings.datasets_dir,
                 factory=_factory() if wants_factory else None,
+                plans=whole.plans,
             )
             tenancy = catalogs
             instructions = instructions_for(available_toolsets())
@@ -420,6 +425,9 @@ def tenant_add(
     issuer: Annotated[
         str | None, typer.Option(help="The OAuth issuer pinned for this tenant's tokens.")
     ] = None,
+    plan: Annotated[
+        str | None, typer.Option(help="A plan in the tenants file (no limits if unset).")
+    ] = None,
     file: TenantsOption = None,
 ) -> None:
     """Add a tenant to the tenants file, or replace its settings.
@@ -437,9 +445,11 @@ def tenant_add(
             schema_name=schema,
             datasets=datasets,
             toolsets=_toolsets(toolsets) if toolsets else None,
+            plan=plan,
             granted_permissions=READ_ONLY | frozenset(grant or []),
             issuer=issuer,
         )
+        whole.check_plans()
         save_tenants(path, whole)
     except (TenantsFileError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
@@ -456,12 +466,12 @@ def tenant_add(
 @tenant_app.command("list")
 def tenant_list(file: TenantsOption = None) -> None:
     """List the tenants with their stores, toolsets, and issuers (passwords hidden)."""
-    configured = _load_tenants(_tenants_path(file))
+    whole = _load_tenants_file(_tenants_path(file))
     table = Table(title="Tenants")
-    for column in ("Tenant", "Store", "Schema", "Toolsets", "Issuer", "Disabled"):
+    for column in ("Tenant", "Store", "Schema", "Toolsets", "Plan", "Issuer", "Disabled"):
         table.add_column(column)
-    for name, config in sorted(configured.items()):
-        table.add_row(*describe(name, config).values())
+    for name, config in sorted(whole.tenants.items()):
+        table.add_row(*describe(name, config, whole.plans).values())
     console.print(table)
 
 
