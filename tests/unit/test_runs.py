@@ -104,7 +104,8 @@ def test_a_failed_call_is_a_failed_run(store: RunStore) -> None:
 
     assert stored is not None
     assert (stored.run.status, record.status) == ("failed", "error")
-    assert stored.run.error == "RuntimeError: boom"
+    assert stored.run.error == record.error and "boom" not in (record.error or "")
+    assert stored.calls[0].error_detail == "RuntimeError: boom"  # kept for the operator
 
 
 def test_runs_are_listed_newest_first_and_unknown_runs_are_none(store: RunStore) -> None:

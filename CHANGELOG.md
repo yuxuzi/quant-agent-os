@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Internal errors no longer reach callers** (security review F-5). A tool that raises
+  `ValueError` or `LookupError` still returns its message, because tools raise those for
+  requests the caller can fix. Any other exception, and `KeyError` or `IndexError`, returns
+  "failed with an internal error" with the call id. The exception text is kept in the run
+  record's `error_detail` for the operator; `GET /v1/runs/{id}` leaves it out.
+- **Introspection is bounded** (security review F-1), so unauthenticated requests cannot make
+  the server flood a tenant's identity provider. A provider's refusal is cached for 30 seconds,
+  and each provider gets at most 600 introspections a minute and 8 at once
+  (`IntrospectionVerifier(introspections_per_minute=, max_concurrent=)`); beyond that a token
+  is refused without asking.
+
 ## [0.1.0] - 2026-11-03
 
 The first release (MVP), for local use and self-hosted team servers. All five packages ship at

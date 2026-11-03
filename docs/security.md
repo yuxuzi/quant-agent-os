@@ -134,6 +134,10 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   server. API keys are never introspected. Introspection secrets come from environment
   variables that the file names; results are cached for at most 60 seconds, and a failed check
   refuses the token without logging it.
+- **Introspection is bounded**, because anyone can send a token. A provider's refusal is
+  cached for 30 seconds, and each provider is asked at most 600 times a minute and 8 times at
+  once; beyond that tokens are refused without asking, with one warning a minute. The
+  reverse proxy's limit on unauthenticated requests stays the first defence.
 - **Isolation is a release gate.** `apps/quant-platform/tests/test_platform_tenants.py` runs
   two tenants with different corpora and datasets on one server and checks that neither can
   reach the other's passages, datasets, or runs by any tool, URI, or route.
