@@ -25,6 +25,7 @@ tenant's surface: each has its own stores, and the run store filters reads by te
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -41,7 +42,7 @@ from quant_agent_os.approval_desk import four_eyes_except_local
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_agent_os.runs import RunStore
-from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.runtime import PlanLimits, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tenancy import check_tenant
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry
@@ -310,7 +311,14 @@ class TenantCatalogs:
             ),
             factory=self.factory if "factory" in toolsets else None,
         )
-        executor = ToolExecutor(ToolRegistry(catalog.tools), policy, approvals=self.run_store)
+        plan = self.plans.get(config.plan) if config.plan else None
+        executor = ToolExecutor(
+            ToolRegistry(catalog.tools),
+            policy,
+            approvals=self.run_store,
+            usage=plan_limits(tenant, plan, self.run_store) if plan else None,
+            max_output_bytes=plan.max_output_bytes if plan else None,
+        )
         return Surface(
             executor, catalog.resources, catalog.prompts, self.run_store, catalog.toolsets
         )
@@ -322,6 +330,21 @@ class TenantCatalogs:
                 research.close()
             self._open.clear()
             self._surfaces.clear()
+
+
+def plan_limits(tenant: str, plan: Plan, run_store: RunStore) -> PlanLimits | None:
+    """Return ``tenant``'s rate limit and monthly quota under ``plan``, or None if it sets none.
+
+    The monthly quota counts billable usage events in ``run_store``.
+    """
+    if plan.calls_per_minute is None and plan.monthly_calls is None:
+        return None
+    return PlanLimits(
+        tenant,
+        calls_per_minute=plan.calls_per_minute,
+        monthly_calls=plan.monthly_calls,
+        count_billable=functools.partial(run_store.count_billable, tenant),
+    )
 
 
 def entitled_toolsets(config: TenantConfig, plans: dict[str, Plan]) -> list[Toolset] | None:

@@ -79,6 +79,10 @@ class RunStore(Protocol):
         """
         ...
 
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls from ``start`` up to ``end`` were billable."""
+        ...
+
     def save_request(self, request: ApprovalRequest) -> None:
         """Store a new approval request (decision 0014)."""
         ...
@@ -152,6 +156,14 @@ class MemoryRunStore:
                 if start <= event.at < end and tenant in (None, event.tenant)
             ]
         return sorted(found, key=lambda event: event.at)
+
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls in the window were billable."""
+        with self._lock:
+            return sum(
+                event.billable and event.tenant == tenant and start <= event.at < end
+                for event in self._usage
+            )
 
     def append_event(self, event: AuditEvent) -> None:
         """Append an audit event."""
@@ -448,6 +460,16 @@ class SqliteRunStore:
                 (_instant(start), _instant(end), tenant, tenant),
             ).fetchall()
         return [UsageEvent.model_validate_json(row["record"]) for row in rows]
+
+    def count_billable(self, tenant: str, start: datetime, end: datetime) -> int:
+        """Return how many of ``tenant``'s calls in the window were billable."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) AS n FROM usage_events "
+                "WHERE tenant = ? AND at >= ? AND at < ? AND billable = 1",
+                (tenant, _instant(start), _instant(end)),
+            ).fetchone()
+        return int(row["n"])
 
     def append_event(self, event: AuditEvent) -> None:
         """Append an audit event."""

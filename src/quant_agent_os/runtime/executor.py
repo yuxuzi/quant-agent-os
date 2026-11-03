@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.approvals import ApprovalLedger
 from quant_agent_os.runtime.plan import PlanStep
+from quant_agent_os.runtime.quotas import UsageGate
 from quant_agent_os.tools.permissions import (
     CONSEQUENTIAL,
     PermissionDeniedError,
@@ -23,7 +24,14 @@ from quant_agent_os.tools.permissions import (
 from quant_agent_os.tools.registry import ToolRegistry, UnknownToolError
 
 CallStatus = Literal[
-    "ok", "invalid_input", "denied", "approval_required", "unknown_tool", "timeout", "error"
+    "ok",
+    "invalid_input",
+    "denied",
+    "approval_required",
+    "quota_exceeded",
+    "unknown_tool",
+    "timeout",
+    "error",
 ]
 
 # What a caller (usually a model) should do after each failure, and whether retrying can help.
@@ -42,6 +50,11 @@ FAILURE_HINTS: dict[CallStatus, tuple[str, bool]] = {
         "This call waits for an operator's approval. Do not retry or try to approve it; tell "
         "the user it needs their approval.",
         False,
+    ),
+    "quota_exceeded": (
+        "The tenant reached a limit of its plan. Wait retry_after_seconds before calling again, "
+        "and tell the user which limit was reached.",
+        True,
     ),
     "timeout": (
         "The tool ran out of time. Retry once with a narrower request, such as fewer results.",
@@ -77,6 +90,7 @@ class ToolCallRecord(BaseModel):
     input_sha256: str | None = None
     data_versions: dict[str, str] = Field(default_factory=dict)
     approval: str | None = None
+    retry_after_seconds: int | None = None
 
 
 class ToolExecutor:
@@ -87,6 +101,10 @@ class ToolExecutor:
     them. A tool with a consequential permission (decision 0005) runs only with a matching,
     unused approval from ``approvals`` for this run, tool, and input hash, or when the policy
     pre-approves those permissions; otherwise the call records ``approval_required``.
+
+    With ``usage`` (a tenant's plan limits, decision 0015), a call whose permissions and input
+    are valid must be admitted before any approval is used or the tool starts; a refusal
+    records ``quota_exceeded``. ``max_output_bytes`` caps every tool's own output limit.
     """
 
     def __init__(
@@ -94,10 +112,15 @@ class ToolExecutor:
         registry: ToolRegistry,
         policy: PermissionPolicy,
         approvals: ApprovalLedger | None = None,
+        *,
+        usage: UsageGate | None = None,
+        max_output_bytes: int | None = None,
     ) -> None:
         self.registry = registry
         self.policy = policy
         self.approvals = approvals
+        self.usage = usage
+        self.max_output_bytes = max_output_bytes
 
     def execute(self, step: PlanStep, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
@@ -134,6 +157,14 @@ class ToolExecutor:
         except ValidationError as error:
             return record("invalid_input", tool_version=spec.version, error=_brief(error))
         input_sha256 = canonical_sha256(params.model_dump(mode="json"))
+        refusal = self.usage.admit(spec.name) if self.usage is not None else None
+        if refusal is not None:
+            return record(
+                "quota_exceeded",
+                tool_version=spec.version,
+                error=refusal.message,
+                retry_after_seconds=refusal.retry_after_seconds,
+            )
         pending = self.policy.needs_approval(spec.permissions)
         if pending:
             granted = (
@@ -178,11 +209,12 @@ class ToolExecutor:
             return record("error", tool_version=spec.version, error=_brief(error))
         payload = output.model_dump(mode="json")
         size = len(output.model_dump_json().encode("utf-8"))
-        if size > spec.max_output_bytes:
+        limit = min(spec.max_output_bytes, self.max_output_bytes or spec.max_output_bytes)
+        if size > limit:
             return record(
                 "error",
                 tool_version=spec.version,
-                error=f"Output of {size} bytes exceeds the {spec.max_output_bytes}-byte limit.",
+                error=f"Output of {size} bytes exceeds the {limit}-byte limit.",
             )
         versions = payload.get("data_versions")
         data_versions = (
@@ -215,9 +247,12 @@ def failure_details(record: ToolCallRecord, tools: list[str]) -> dict[str, Any]:
     if record.status == "ok":
         raise ValueError("failure_details needs a failed call record")
     hint, retryable = FAILURE_HINTS[record.status]
-    return {
+    details: dict[str, Any] = {
         "status": record.status,
         "error": record.error,
         "hint": hint.format(tools=", ".join(tools) or "none"),
         "retryable": retryable,
     }
+    if record.retry_after_seconds is not None:
+        details["retry_after_seconds"] = record.retry_after_seconds
+    return details

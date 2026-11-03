@@ -1,13 +1,22 @@
 """Plans in the tenants file (B-36, decision 0015): entitlements, limits, and their checks."""
 
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import anyio
+import httpx
 import pytest
+from mcp.client.session import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from typer.testing import CliRunner
 
+from quant_agent_os.api import KeyRing, add_key, load_keys
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_platform.cli import app as cli
+from quant_platform.composition import instructions_for
+from quant_platform.http import build_http_app
 from quant_platform.tenants import (
     Plan,
     TenantCatalogs,
@@ -20,6 +29,7 @@ from quant_platform.tenants import (
 )
 from quant_research import open_research
 
+BASE = "http://127.0.0.1:8000"
 PLANS = """
 [plans.team]
 toolsets = ["research", "analytics"]
@@ -133,3 +143,87 @@ def test_tenant_add_takes_a_known_plan_and_keeps_the_plans(tmp_path: Path) -> No
     assert unknown.exit_code == 1 and "not among the plans" in unknown.output
     assert widened.exit_code == 1 and "beta" not in whole.tenants and "gamma" not in whole.tenants
     assert listed.exit_code == 0 and "team" in listed.output
+
+
+def _limited(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore, TenantCatalogs]:
+    whole = TenantsFile.model_validate(
+        {
+            "plans": {
+                "per-minute": {"toolsets": ["analytics"], "calls_per_minute": 1},
+                "per-month": {"toolsets": ["analytics"], "monthly_calls": 1},
+            },
+            "tenants": {"acme": {"plan": "per-minute"}, "beta": {"plan": "per-month"}},
+        }
+    )
+    keys_path = tmp_path / "keys.toml"
+    issued = {
+        tenant: add_key(keys_path, f"{tenant}-user", ["tools:list", "tools:call"], tenant=tenant)
+        for tenant in ("acme", "beta")
+    }
+    store = MemoryRunStore()
+    catalogs = TenantCatalogs(
+        whole.tenants, run_store=store, datasets_root=tmp_path / "datasets", plans=whole.plans
+    )
+    app = build_http_app(
+        catalogs, KeyRing(load_keys(keys_path)), instructions=instructions_for(["analytics"])
+    )
+    return app, issued, store, catalogs
+
+
+def test_rest_answers_429_with_retry_after_once_the_rate_is_used(tmp_path: Path) -> None:
+    app, issued, store, catalogs = _limited(tmp_path)
+
+    async def main() -> list[httpx.Response]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url=BASE,
+            headers={"Authorization": f"Bearer {issued['acme']}"},
+        ) as client:
+            return [
+                await client.post("/v1/tools/list_datasets/call", json={"arguments": {}})
+                for _ in range(2)
+            ]
+
+    try:
+        first, second = anyio.run(main)
+    finally:
+        catalogs.close()
+
+    assert first.status_code == 200 and first.json()["status"] == "ok"
+    assert second.status_code == 429 and second.headers["Retry-After"] == "60"
+    assert second.json()["status"] == "quota_exceeded"
+    assert second.json()["retry_after_seconds"] == 60
+    usage = store.list_usage(datetime(2000, 1, 1, tzinfo=UTC), datetime(2100, 1, 1, tzinfo=UTC))
+    assert [(event.status, event.billable) for event in usage] == [
+        ("ok", True),
+        ("quota_exceeded", False),
+    ]
+
+
+def test_mcp_returns_a_structured_refusal_once_the_month_is_used(tmp_path: Path) -> None:
+    app, issued, _, catalogs = _limited(tmp_path)
+
+    async def main() -> list[Any]:
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url=BASE,
+                headers={"Authorization": f"Bearer {issued['beta']}"},
+            ) as client,
+            streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            return [await session.call_tool("list_datasets", {}) for _ in range(2)]
+
+    try:
+        first, second = anyio.run(main)
+    finally:
+        catalogs.close()
+
+    assert not first.isError
+    assert second.isError and second.structuredContent is not None
+    assert second.structuredContent["status"] == "quota_exceeded"
+    assert "used its 1 calls for" in second.structuredContent["error"]
+    assert second.structuredContent["retry_after_seconds"] >= 1
