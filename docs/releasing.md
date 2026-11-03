@@ -14,14 +14,26 @@ a reverse proxy. A public, multi-tenant endpoint is not in scope until the steps
 unauthenticated requests (F-1), a plan for every tenant (F-2), and F-1 and F-5 fixed or
 accepted in writing.
 
-## One-time setup
+## Where releases go
+
+A `v*` tag always creates a **GitHub release** with the five wheels and sdists, and notes
+taken from the changelog. Publishing to **PyPI** is opt-in: the `publish` job runs only when
+the repository variable `PUBLISH_TO_PYPI` is `true`. 0.1.0 is a GitHub-only release, and the
+package names are not registered on PyPI yet.
+
+Without PyPI, install from the release files or the repository, for example
+`uv tool install "quant-agent-os-platform[factory]" --find-links <folder with the release files>`,
+or use the Claude Code plugin, which runs from the repository.
+
+## One-time setup for PyPI
 
 Publishing registers the package names on PyPI. The names are provisional (see AGENTS.md),
-so confirm them before the first release.
+so confirm them before the first PyPI release.
 
 1. On PyPI, add a [trusted publisher](https://docs.pypi.org/trusted-publishers/) for each of
    the five packages: this repository, workflow `release.yml`, environment `pypi`.
-2. In GitHub, create the `pypi` environment, ideally with a required reviewer.
+2. In GitHub, create the `pypi` environment, ideally with a required reviewer, and set the
+   repository variable `PUBLISH_TO_PYPI` to `true`.
 
 No API token is stored in the repository.
 
@@ -37,8 +49,8 @@ No API token is stored in the repository.
    `## [Unreleased]` above it, and add the release's section to `docs/tools-changelog.md`.
 4. **Merge, then tag main.** `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow
    checks that the tag matches the version, runs the tests, builds all five packages, checks
-   them with `twine check --strict`, and publishes them.
-5. **Afterwards**, create a GitHub release from the changelog section.
+   them with `twine check --strict`, creates the GitHub release, and publishes to PyPI if
+   that is enabled.
 
 ## Compatibility promises
 
