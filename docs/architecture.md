@@ -111,7 +111,7 @@ server-side agents ([decision 0001](decisions/0001-one-orchestrator-first.md),
 | --- | --- | --- |
 | Agent orchestration in the client, skills | Confirmed | B-32 (P3) |
 | Identity: OAuth 2.1 introspection, API keys, tenants | Confirmed | [0011](decisions/0011-rest-api-and-api-keys.md), [0013](decisions/0013-identity-and-tenancy.md) |
-| Gateway: rate limits and quotas | Accepted, not built yet | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
+| Gateway: plans, rate limits, and quotas | Confirmed (per process) | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
 | Policy, approvals, executor, audit | Confirmed | [0005](decisions/0005-approval-gates.md), [0014](decisions/0014-approvals-in-the-client.md) |
 | RAG: hybrid retrieval, fusion, citations, tenant isolation | Confirmed | [section 6](#6-quant-research-graph-rag-architecture) |
 | RAG: reranking model, per-document or per-role filters | Open | Not planned; would need its own decision |
@@ -250,8 +250,8 @@ lacks. Every field has a default, so existing tools keep working.
 
 Approval is **derived, not declared**. A tool needs approval when it declares a consequential
 permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
-`CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `unknown_tool`,
-`timeout`, `error`).
+`CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`,
+`unknown_tool`, `timeout`, `error`).
 
 ### 5.3 Request lifecycle (confirmed, with proposed additions marked)
 
@@ -262,7 +262,8 @@ permission (see [section 12](#12-security-and-approval-model)). The error model 
 3. **Approve.** A step that needs approval records `approval_required` without running, and
    the run waits in `awaiting_approval`. The operator approves the exact calls, then resumes
    the run.
-4. **Execute.** For each step the executor checks permissions, validates the input, runs the
+4. **Execute.** For each step the executor checks permissions, validates the input, asks the
+   tenant's plan limits to admit the call (`quota_exceeded` if not, decision 0015), runs the
    tool with a timeout, then validates the output and enforces its size limit. Failures become
    records, not exceptions.
 5. **Report.** `build_report` collects evidence and warnings, turns failed calls into warnings,

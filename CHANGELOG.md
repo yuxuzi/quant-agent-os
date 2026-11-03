@@ -11,6 +11,9 @@ All notable changes to this project are documented here. The format follows
 - The run store is at schema 5 (usage events, B-36); older stores upgrade in place.
   `RunRecorder.resume` takes the original steps (B-35). `RunStore.add_call` takes the call's
   usage event, and `RunRecorder` takes `toolsets` (tool name to toolset).
+- Calls have a new status, `quota_exceeded`, with `retry_after_seconds` on the record, in
+  `failure_details`, and in the REST response (B-36). `ToolExecutor` takes `usage` (a
+  `UsageGate`) and `max_output_bytes`; `RunStore` has `count_billable`.
 - The team Docker image serves the platform (`quant-platform serve-http`: research and
   analytics over MCP and REST) instead of `quant-research serve-api`, with a read-only
   `datasets` volume and an operator `datasets` service. The platform's App Factory toolset is
@@ -136,6 +139,15 @@ All notable changes to this project are documented here. The format follows
   - **Usage export.** `quant-platform usage export [--tenant T] [--from D] [--to D]
     [--by day|tool] [--format csv|jsonl]`, an operator command; the team compose file has a
     `usage` service for it.
+- Plans and limits (B-36, decision 0015 P7.2):
+  - **Plans in the tenants file.** `[plans.<name>]` sets `toolsets`, `calls_per_minute`,
+    `monthly_calls`, and `max_output_bytes`; a tenant names its `plan`
+    (`quant-platform tenant add --plan`). Out-of-plan tools are not listed.
+  - **Checked before a call starts.** A refused call records `quota_exceeded` and is not
+    billable; REST answers 429 with `Retry-After`. The rate limit is per process; the monthly
+    quota counts billable usage events.
+  - **Approval page limits.** Five failed submissions deny a request; each client address may
+    submit 30 forms a minute.
 - Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,

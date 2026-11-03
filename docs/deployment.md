@@ -193,6 +193,39 @@ there, so a client finds the provider by itself. In the provider, register the s
 resource with that audience. Its tokens must carry the scopes (`tools:list`, `tools:call`) and
 a `qaos_tenant` claim naming the tenant; `tenant_claim` in the file changes the claim name.
 
+## Plans and limits (decision 0015)
+
+A plan bounds what its tenants get: the toolsets they may be served, a rate limit, a monthly
+quota, and an output cap. Plans live in the tenants file, and a tenant names its plan:
+
+```toml
+[plans.team]
+toolsets = ["research", "analytics"]
+calls_per_minute = 120        # per tenant, per server process
+monthly_calls = 50_000        # billable calls per UTC calendar month
+max_output_bytes = 200_000    # lowers any tool's own output limit
+
+[tenants.acme]
+plan = "team"
+toolsets = ["research"]       # optional: narrows the plan, never widens it
+```
+
+```bash
+quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos --plan team
+```
+
+- **No plan, no limits.** A tenant without a plan is served as before.
+- **Out-of-plan toolsets are not listed.** A tenant's tools, resources, and prompts come only
+  from its entitled toolsets, so a client never sees a tool it may not call.
+- **Limits are checked before a call starts.** A call that starts always finishes, even if it
+  takes the tenant over its quota. A refused call records `quota_exceeded`, which is not
+  billable, with `retry_after_seconds`; REST answers it 429 with `Retry-After`.
+- **The monthly count** comes from the usage events in the run store, re-read every 30
+  seconds. The rate limit is a token bucket in the server process, so N replicas would admit
+  up to N times the rate.
+- **The start-up check** refuses an unknown plan, a tenant that widens its plan, and the
+  reserved `packs` key (knowledge packs are later work).
+
 ## Approving in the client (decision 0014)
 
 Tools that need a consequential permission (for example, a tenant granted `network` for a
@@ -208,7 +241,9 @@ The client then shows a link to `https://qaos.example.com/approve/<id>`. There, 
 enters their key, checks the tool, arguments, and permissions, and approves once. The client
 runs the same call again, and it runs once. An approver key cannot call tools, and outside the
 `local` tenant nobody approves their own request (set `separate_approver = false` on a tenant
-to allow it). Requests expire after 15 minutes.
+to allow it). Requests expire after 15 minutes. Five failed submissions deny a request, and
+each client address may submit 30 forms a minute; behind a reverse proxy, run the server with
+`--proxy-headers` (uvicorn) or every client shares the proxy's allowance.
 
 ## Permissions
 

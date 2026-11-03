@@ -192,3 +192,25 @@ listings (Q-4), and a self-service admin API for plans.
   `mcp` and `api` extras, not of core.
 - **Q-18 (as proposed).** Metering, plans, quotas, and the compatibility policy are open source;
   only billing integration and the hosted operations would be paid.
+
+## Implementation notes (2026-11-03, P7.2)
+
+- **Where it lives.**
+  - `quant_agent_os.runtime.quotas`: `UsageGate`, `Refusal`, `TokenBucket`, and `PlanLimits`.
+  - `ToolExecutor(..., usage=, max_output_bytes=)` asks the gate after the tool, permissions,
+    and input are checked, before any approval is used.
+  - `quant_platform.tenants`: `Plan`, `TenantsFile.plans`, `TenantConfig.plan`,
+    `entitled_toolsets`, and `plan_limits`, which `TenantCatalogs` applies to each planned
+    tenant's executor.
+- **The monthly count.** `RunStore.count_billable` counts a tenant's billable usage events in
+  the UTC month. `PlanLimits` re-reads it every 30 seconds and counts admitted calls locally in
+  between. The run store is one SQLite file per server today, so this decision's "every replica
+  shares" holds only once a shared run store exists; until then the count is exact for one
+  server process, up to the calls in flight.
+- **Approvals and quotas.** A quota refusal does not supersede a call that waits for an
+  approval: the run stays `awaiting_approval`, and an approved request whose retry is refused
+  returns to `approved`, so the next retry runs it without a new approval.
+- **The approval page.** Failed attempts (a wrong form token, a key that cannot decide the
+  request, or the requester's own key) are counted per request, in the process. The form
+  token is now checked after the request is found, so failures count against it; request ids
+  have 128 random bits, so this reveals nothing the `GET` page does not.
