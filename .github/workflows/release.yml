@@ -1,7 +1,9 @@
 name: Release
 
-# Publishing uses PyPI Trusted Publishing; no API token is stored in the repository.
-# One-time setup: on PyPI, add a trusted publisher for this repository with workflow
+# A v* tag builds and checks the five packages and creates a GitHub release with them.
+# Publishing to PyPI is opt-in: it runs only when the repository variable PUBLISH_TO_PYPI is
+# "true". It uses PyPI Trusted Publishing, so no API token is stored in the repository.
+# One-time setup for PyPI: add a trusted publisher for this repository with workflow
 # "release.yml" and environment "pypi" for each of the five packages (quant-agent-os,
 # quant-agent-os-research, quant-agent-os-analytics, quant-agent-os-factory, and
 # quant-agent-os-platform), and create the "pypi" environment in GitHub. See docs/releasing.md.
@@ -19,6 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
       - name: Check that the tag matches the project version
         run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv sync --locked
@@ -34,8 +38,37 @@ jobs:
           name: dist
           path: dist/
 
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Take the release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+          # Relative links point into the repository at this tag.
+          base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME"
+          sed -i -E "s#\]\(((docs|deploy|skills|clients|packages|apps)/[^)]*|[A-Z]+\.md)\)#](${base}/\1)#g" notes.md
+      - name: Create the release with the built packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+
   publish:
     needs: build
+    if: vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi

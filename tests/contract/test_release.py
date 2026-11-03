@@ -61,3 +61,5 @@ def test_the_release_workflow_builds_and_checks_every_package() -> None:
 
     assert "uv build --all-packages" in workflow
     assert "tests/contract/test_release.py" in workflow
+    assert "gh release create" in workflow
+    assert "if: vars.PUBLISH_TO_PYPI == 'true'" in workflow  # PyPI is opt-in
