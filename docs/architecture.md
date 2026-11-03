@@ -109,9 +109,9 @@ server-side agents ([decision 0001](decisions/0001-one-orchestrator-first.md),
 
 | Layer | Status | Where |
 | --- | --- | --- |
-| Agent orchestration in the client, skills | Confirmed for clients; skills proposed | B-32 (P3) |
+| Agent orchestration in the client, skills | Confirmed | B-32 (P3) |
 | Identity: OAuth 2.1 introspection, API keys, tenants | Confirmed | [0011](decisions/0011-rest-api-and-api-keys.md), [0013](decisions/0013-identity-and-tenancy.md) |
-| Gateway: rate limits and quotas | Proposed | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
+| Gateway: rate limits and quotas | Accepted, not built yet | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
 | Policy, approvals, executor, audit | Confirmed | [0005](decisions/0005-approval-gates.md), [0014](decisions/0014-approvals-in-the-client.md) |
 | RAG: hybrid retrieval, fusion, citations, tenant isolation | Confirmed | [section 6](#6-quant-research-graph-rag-architecture) |
 | RAG: reranking model, per-document or per-role filters | Open | Not planned; would need its own decision |

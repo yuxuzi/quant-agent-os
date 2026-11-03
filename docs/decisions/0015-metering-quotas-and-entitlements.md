@@ -1,6 +1,6 @@
 # 0015: Metering, quotas, plan entitlements, and tool compatibility
 
-- Status: proposed (needs the user's approval, including Q-14 to Q-18, before any code)
+- Status: accepted (approved by the user 2026-11-03, with Q-14 to Q-18 as proposed)
 - Date: 2026-11-03
 - Plan: [agent-surface P7](../plans/agent-surface.md), backlog B-36. Builds on
   [0011](0011-rest-api-and-api-keys.md) (API keys), [0012](0012-remote-mcp-over-http.md)
@@ -125,8 +125,7 @@ Prices, the billing provider, and the open-core line (Q-1) are not part of it.
    A resource, `qaos://server/info`, lists the platform version, each tool's version, any
    deprecations, and the registry digest. Each skill states the platform major version it was
    written for, and its instructions tell the client to read `qaos://server/info` once and
-   tell the user when the major differs. This part waits for #24 (the skills), which is still
-   open.
+   tell the user when the major differs.
 
 ### 4. Operations (P7.4)
 
@@ -182,18 +181,14 @@ listings (Q-4), and a self-service admin API for plans.
 - **No new packages in the lock.** `opentelemetry-api` is already locked through FastAPI; Q-17
   only declares it directly, which the boundary rules say needs approval.
 
-## Open questions
+## Resolved questions
 
-- **Q-14. What is billable?** Proposal: `ok`, `error`, and `timeout` count; refusals and
-  invalid input do not.
-- **Q-15. Rate-limit accuracy.** Proposal: a token bucket per process now, and a shared
-  limiter only when a deployment needs it. Monthly quotas are counted from the shared run
-  store.
-- **Q-16. Breaking tool changes.** Proposal: a new tool name, the old one deprecated for at
-  least 90 days and one minor release.
-- **Q-17. Telemetry dependency.** Proposal: declare `opentelemetry-api` (already locked) as a
-  direct dependency of the `mcp` and `api` extras, not of core, so SDK-only installs stay lean.
-  The alternative is no telemetry in P7, with SLIs computed from `usage_events` instead.
-- **Q-18. Is this open source?** Proposal: metering, plans, quotas, and the compatibility
-  policy are open, because self-hosted teams need them. Only billing integration and
-  the hosted operations would be paid (with Q-1).
+- **Q-14 (as proposed).** `ok`, `error`, and `timeout` count; refusals and invalid input do not.
+- **Q-15 (as proposed).** A token bucket per process now, and a shared limiter only when a
+  deployment needs it. Monthly quotas are counted from the shared run store.
+- **Q-16 (as proposed).** A breaking change ships as a new tool name; the old one stays,
+  deprecated, for at least 90 days and one minor release.
+- **Q-17 (as proposed).** `opentelemetry-api` (already locked) is a direct dependency of the
+  `mcp` and `api` extras, not of core.
+- **Q-18 (as proposed).** Metering, plans, quotas, and the compatibility policy are open source;
+  only billing integration and the hosted operations would be paid.

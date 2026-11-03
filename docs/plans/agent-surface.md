@@ -320,7 +320,7 @@ steps above:
 - **SDK resume.** `Platform.resume` cannot yet resume a call with a secret-named argument;
   see the decision's notes.
 
-### P7. Commercial readiness (B-36; [decision 0015](../decisions/0015-metering-quotas-and-entitlements.md), proposed; needs approval)
+### P7. Commercial readiness (B-36; [decision 0015](../decisions/0015-metering-quotas-and-entitlements.md), accepted)
 
 1. **P7.1 Metering.** A usage event per call (tenant, tool, duration, bytes, status), written
    with the run, plus a usage export.
