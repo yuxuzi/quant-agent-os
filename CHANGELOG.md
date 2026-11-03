@@ -127,6 +127,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
+  - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
+    `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,
+    data by reference, numbers quoted as computed, cited strategy specs and reports, and App
+    Factory specs created locally. Each states the minimum server version it needs. A test
+    checks that every name a skill uses is served, and that every served tool, prompt, and
+    resource is taught.
+  - **Claude Code plugin.** `claude plugin marketplace add yuxuzi/quant-agent-os`, then
+    `claude plugin install quant-agent-os@quant-agent-os`, installs the platform server and
+    the skills.
+  - **Cursor and VS Code (Copilot).** `clients/` holds the same server command with the
+    skills as a rules file, generated from the skills.
+  - **The platform server finds its store.** It reads `QUANT_AGENT_OS_STORE` or
+    `~/.quant-agent-os/knowledge.db`, and starts without the research tools, with a warning,
+    when there is none.
+  - **Efficiency.** The agent-efficiency evaluation counts the skills: 1,114 bytes of
+    descriptions per turn, with calls and success unchanged.
 - Approving without leaving the client (B-35, [decision 0014](docs/decisions/0014-approvals-in-the-client.md)):
   - **Approval page.** With `quant-platform serve-http --approval-url URL`, a call that waits
     for an approval sends the MCP client to `/approve/<id>` (URL elicitation). An approver

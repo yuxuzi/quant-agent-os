@@ -22,6 +22,10 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Platform server** (`apps/quant-platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
   `quant-platform serve-mcp` serves them as one MCP server.
+- **Skills and client packaging**: `skills/` holds the four instruction-only skills,
+  `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
+  `clients/` holds the generated Cursor and VS Code bundles
+  ([plan](docs/plans/agent-surface.md), P3).
 
 Core must never import a product, and the products must not import each other. Only the
 platform server imports every product, and nothing imports it. Quantitative
@@ -47,6 +51,8 @@ Read [docs/architecture.md](docs/architecture.md) and the plan in
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
 | Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
+| Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
+| Regenerate client bundles (after changing a skill) | `uv run python apps/quant-platform/tests/client_bundles.py` |
 | Research evaluation | `uv run python packages/quant-research/tests/research_eval.py` (add `--update` to rebaseline) |
 | App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest packages/quant-app-factory/tests/test_factory_smoke.py` |
 | Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python packages/quant-research/tests/real_corpus.py fetch`, then `... real_corpus.py eval` |
@@ -89,7 +95,21 @@ direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `te
 - **No feedback into planning.** Never feed tool output or retrieved text back into planning
   prompts. Synthesis from retrieved text is labelled `interpretation` and cannot choose tools.
 - **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
-- **Explicit registration.** No dynamic plugin discovery or code loading, and no marketplace.
+- **Explicit registration.** No dynamic plugin discovery or code loading, and no tool
+  marketplace. The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
+  the skills for clients; it adds no tools.
+- **MCP is the capability boundary; skills are guidance.** Skills contain instructions only, never
+  scripts, so every action goes through a tool and the executor's permissions, approvals,
+  limits, and audit. `apps/quant-platform/tests/test_skills.py` fails when a skill names
+  something the server does not serve, or a served tool, prompt, or resource has no skill.
+- **No server-side agents.** A workflow the platform owns is a deterministic composite tool,
+  such as `research_report`. The orchestrator stays an SDK feature.
+- **Data by reference.** Tools take dataset ids and resource URIs; inline values are for small
+  examples only, so numbers do not travel through the model.
+- **Writes to the user's machine stay local.** Server tools compute, retrieve, and validate.
+  Creating files, as `quant-factory create` does, is a command the user runs.
+- **Efficiency is measured.** A change to the tool surface or the skills reports its delta in
+  the agent-efficiency evaluation; rebaseline only for an intended change.
 - **Offline tests.** Tests run offline with `FakeModelProvider`. Live-model evaluations are opt-in
   and never part of default CI.
 - **Secrets.** Secrets are `SecretStr`, never logged or displayed, and `.env` is never committed.

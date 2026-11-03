@@ -1,0 +1,27 @@
+{
+  "servers": {
+    "quant-agent-os": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "--locked",
+        "--no-dev",
+        "--python",
+        "3.13",
+        "--directory",
+        "/absolute/path/to/quant-agent-os",
+        "--package",
+        "quant-agent-os-platform",
+        "--extra",
+        "factory",
+        "quant-platform",
+        "serve-mcp"
+      ],
+      "env": {
+        "QUANT_AGENT_OS_STORE": "/absolute/path/to/knowledge.db"
+      }
+    }
+  }
+}

@@ -7,42 +7,94 @@
       "tools": 10
     }
   },
+  "skills": {
+    "quant-analytics": {
+      "description_bytes": 276,
+      "skill_bytes": 2598
+    },
+    "quant-app-factory": {
+      "description_bytes": 282,
+      "skill_bytes": 2415
+    },
+    "quant-research": {
+      "description_bytes": 274,
+      "skill_bytes": 2642
+    },
+    "quant-strategy": {
+      "description_bytes": 282,
+      "skill_bytes": 2486
+    }
+  },
   "tasks": {
     "analyze_a_series": {
       "argument_bytes": 125,
       "calls": 2,
       "result_bytes": 5036,
-      "success": true
+      "skill": "quant-analytics",
+      "skill_bytes": 2598,
+      "success": true,
+      "tools": [
+        "analyze_performance",
+        "list_datasets"
+      ]
     },
     "analyze_portfolio_risk": {
       "argument_bytes": 146,
       "calls": 2,
       "result_bytes": 2618,
-      "success": true
+      "skill": "quant-analytics",
+      "skill_bytes": 2598,
+      "success": true,
+      "tools": [
+        "analyze_risk",
+        "list_datasets"
+      ]
     },
     "check_an_app_spec": {
       "argument_bytes": 163,
       "calls": 2,
       "result_bytes": 7764,
-      "success": true
+      "skill": "quant-app-factory",
+      "skill_bytes": 2415,
+      "success": true,
+      "tools": [
+        "check_spec",
+        "describe_template"
+      ]
     },
     "draft_strategy": {
       "argument_bytes": 20,
       "calls": 1,
       "result_bytes": 3723,
-      "success": true
+      "skill": "quant-strategy",
+      "skill_bytes": 2486,
+      "success": true,
+      "tools": [
+        "generate_strategy"
+      ]
     },
     "report_on_a_signal": {
       "argument_bytes": 89,
       "calls": 1,
       "result_bytes": 4116,
-      "success": true
+      "skill": "quant-strategy",
+      "skill_bytes": 2486,
+      "success": true,
+      "tools": [
+        "research_report"
+      ]
     },
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
       "result_bytes": 5644,
-      "success": true
+      "skill": "quant-research",
+      "skill_bytes": 2642,
+      "success": true,
+      "tools": [
+        "find_related_signals",
+        "get_source_passage"
+      ]
     }
   },
   "totals": {
@@ -51,6 +103,8 @@
     "definition_bytes": 10785,
     "instruction_bytes": 1287,
     "result_bytes": 28901,
+    "skill_bytes": 10141,
+    "skill_description_bytes": 1114,
     "success_rate": 1.0,
     "tools": 10
   }

@@ -10,6 +10,12 @@ every turn: name, description, and input schema. The title, output schema, and a
 for the client and are counted apart. Bytes stand in for tokens, so the numbers do not depend on
 a model. The client validates every result against its tool's output schema.
 
+The skills (plan step P3) are counted too. A client keeps every skill's description in context
+and loads one skill's full text when a task needs it, so each task records the bytes of the
+skill it would load (`SKILL_FOR_TASK`) and the tools it called. The client is scripted, so the
+skills cannot change its calls; the test instead checks that each task calls only tools its
+skill teaches, so the scripted workflow and the skill's stay the same.
+
 Run ``uv run python tests/evaluation/agent_efficiency.py`` to print the metrics, and add
 ``--update`` to rewrite the recorded baseline after an intended change. Offline, deterministic,
 and no model involved (plan steps P1.1 and P2 in docs/plans/agent-surface.md).
@@ -46,6 +52,15 @@ WORKDIR_PLACEHOLDER = "/work"
 # display and the output schema for validating results, so both are counted as client-only.
 MODEL_VISIBLE = ("name", "description", "inputSchema")
 CLIENT_ONLY = ("title", "outputSchema", "annotations")
+SKILLS = ROOT / "skills"
+SKILL_FOR_TASK = {
+    "search_and_cite": "quant-research",
+    "draft_strategy": "quant-strategy",
+    "analyze_a_series": "quant-analytics",
+    "analyze_portfolio_risk": "quant-analytics",
+    "report_on_a_signal": "quant-strategy",
+    "check_an_app_spec": "quant-app-factory",
+}
 
 
 ASSETS = {"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}
@@ -68,6 +83,7 @@ class TaskResult:
     result_bytes: int = 0
     success: bool = False
     errors: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
 
 
 class Client:
@@ -85,6 +101,7 @@ class Client:
     async def call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call ``tool``, meter it, and return its structured content (or the error text)."""
         self.result.calls += 1
+        self.result.tools.append(tool)
         self.result.argument_bytes += self._metered(json.dumps(arguments, separators=(",", ":")))
         reply = await self.session.call_tool(tool, arguments)
         self.result.result_bytes += sum(
@@ -202,6 +219,21 @@ TASKS: dict[str, Task] = {
 }
 
 
+def skill_metrics() -> dict[str, dict[str, int]]:
+    """Return each skill's description bytes (always in context) and full size (on demand)."""
+    metrics: dict[str, dict[str, int]] = {}
+    for path in sorted(SKILLS.glob("*/SKILL.md")):
+        text = path.read_text("utf-8")
+        description = next(
+            line for line in text.splitlines() if line.startswith("description: ")
+        ).removeprefix("description: ")
+        metrics[path.parent.name] = {
+            "description_bytes": len(description.encode("utf-8")),
+            "skill_bytes": len(text.encode("utf-8")),
+        }
+    return metrics
+
+
 def _size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
@@ -231,11 +263,15 @@ async def _evaluate(catalog: Catalog, workdir: str) -> dict[str, Any]:
                 _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
             ),
         }
+        skills = skill_metrics()
         for task_name, task in TASKS.items():
             result = TaskResult()
             result.success = await task(Client(session, result, workdir))
             tasks[task_name] = {
                 "calls": result.calls,
+                "tools": sorted(set(result.tools)),
+                "skill": SKILL_FOR_TASK[task_name],
+                "skill_bytes": skills[SKILL_FOR_TASK[task_name]]["skill_bytes"],
                 "argument_bytes": result.argument_bytes,
                 "result_bytes": result.result_bytes,
                 "success": result.success,
@@ -250,8 +286,15 @@ async def _evaluate(catalog: Catalog, workdir: str) -> dict[str, Any]:
         "argument_bytes": sum(item["argument_bytes"] for item in tasks.values()),
         "result_bytes": sum(item["result_bytes"] for item in tasks.values()),
         "success_rate": sum(item["success"] for item in tasks.values()) / len(tasks),
+        "skill_description_bytes": sum(item["description_bytes"] for item in skills.values()),
+        "skill_bytes": sum(item["skill_bytes"] for item in skills.values()),
     }
-    return {"servers": {"platform": definitions}, "tasks": tasks, "totals": totals}
+    return {
+        "servers": {"platform": definitions},
+        "skills": skills,
+        "tasks": tasks,
+        "totals": totals,
+    }
 
 
 def _datasets(workdir: Path) -> DirectoryDatasetStore:
