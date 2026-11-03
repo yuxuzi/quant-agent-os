@@ -318,6 +318,7 @@ class TenantCatalogs:
             approvals=self.run_store,
             usage=plan_limits(tenant, plan, self.run_store) if plan else None,
             max_output_bytes=plan.max_output_bytes if plan else None,
+            tenant=tenant,
         )
         return Surface(
             executor, catalog.resources, catalog.prompts, self.run_store, catalog.toolsets

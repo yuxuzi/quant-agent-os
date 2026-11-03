@@ -32,12 +32,15 @@ dependencies = [
 quant-agent-os = "quant_agent_os.cli:main"
 
 [project.optional-dependencies]
+# opentelemetry-api: spans and metrics per call (decision 0015, Q-17); a no-op without an SDK.
 mcp = [
     "mcp>=1.20,<2",
+    "opentelemetry-api>=1.30,<2",
 ]
 api = [
     "fastapi>=0.115,<1",
     "uvicorn>=0.30,<1",
+    "opentelemetry-api>=1.30,<2",
 ]
 
 [dependency-groups]

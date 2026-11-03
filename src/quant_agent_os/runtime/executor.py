@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field, ValidationError
 from quant_agent_os.runtime.approvals import ApprovalLedger
 from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.runtime.quotas import UsageGate
+from quant_agent_os.runtime.telemetry import call_span
+from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools.permissions import (
     CONSEQUENTIAL,
     PermissionDeniedError,
@@ -105,6 +107,9 @@ class ToolExecutor:
     With ``usage`` (a tenant's plan limits, decision 0015), a call whose permissions and input
     are valid must be admitted before any approval is used or the tool starts; a refusal
     records ``quota_exceeded``. ``max_output_bytes`` caps every tool's own output limit.
+
+    Every call is traced and counted through OpenTelemetry (`telemetry.call_span`) under
+    ``tenant``, the tenant this executor serves.
     """
 
     def __init__(
@@ -115,15 +120,25 @@ class ToolExecutor:
         *,
         usage: UsageGate | None = None,
         max_output_bytes: int | None = None,
+        tenant: str = DEFAULT_TENANT,
     ) -> None:
         self.registry = registry
         self.policy = policy
         self.approvals = approvals
         self.usage = usage
         self.max_output_bytes = max_output_bytes
+        self.tenant = tenant
 
     def execute(self, step: PlanStep, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
+        # An unregistered name comes from the caller, so it never becomes a span or metric label.
+        traced = step.tool if step.tool in self.registry else "unknown"
+        with call_span(traced, self.tenant) as finish:
+            record = self._execute(step, run_id)
+            finish(record.status, record.tool_version, record.duration_ms)
+        return record
+
+    def _execute(self, step: PlanStep, run_id: str | None) -> ToolCallRecord:
         started_at = datetime.now(UTC)
         started = time.perf_counter()
         input_sha256 = canonical_sha256(step.arguments)
