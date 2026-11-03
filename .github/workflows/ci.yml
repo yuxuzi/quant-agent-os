@@ -26,7 +26,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
-      - run: uv build
+      - run: uv build --all-packages
 
   postgres:
     # The shared store contract against PostgreSQL with pgvector (B-14).

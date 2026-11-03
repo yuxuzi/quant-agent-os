@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 keywords = ["quant", "agents", "llm", "mcp", "orchestration", "research"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
     "Programming Language :: Python :: 3",

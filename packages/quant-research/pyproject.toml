@@ -7,12 +7,12 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os",
+    "quant-agent-os==0.1.0",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "rich>=13.7",
@@ -27,10 +27,10 @@ pdf = [
     "pypdf>=6.20,<7",
 ]
 mcp = [
-    "quant-agent-os[mcp]",
+    "quant-agent-os[mcp]==0.1.0",
 ]
 api = [
-    "quant-agent-os[api]",
+    "quant-agent-os[api]==0.1.0",
 ]
 # PostgreSQL knowledge store (B-14); the binary build bundles libpq.
 postgres = [

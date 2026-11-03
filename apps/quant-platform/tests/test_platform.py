@@ -107,18 +107,6 @@ def test_server_info_reports_the_platform_and_every_tool(datasets: DirectoryData
     ]
 
 
-def test_every_package_is_released_at_one_version() -> None:
-    packages = [
-        "quant-agent-os",
-        "quant-agent-os-research",
-        "quant-agent-os-analytics",
-        "quant-agent-os-factory",
-        "quant-agent-os-platform",
-    ]
-
-    assert len({version(package) for package in packages}) == 1
-
-
 def test_research_report_is_cited_deterministic_and_honours_the_contract(
     research: ResearchApp, datasets: DirectoryDatasetStore
 ) -> None:

@@ -7,14 +7,14 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os[api,mcp]",
-    "quant-agent-os-analytics",
-    "quant-agent-os-research",
+    "quant-agent-os[api,mcp]==0.1.0",
+    "quant-agent-os-analytics==0.1.0",
+    "quant-agent-os-research==0.1.0",
     "pydantic>=2.7",
     "rich>=13.7",
     "typer>=0.12",
@@ -24,14 +24,14 @@ dependencies = [
 # The App Factory toolset (decision 0012): optional, so a team image need not carry
 # pytemplate-uv.
 factory = [
-    "quant-agent-os-factory",
+    "quant-agent-os-factory==0.1.0",
 ]
 # Pass-throughs to Quant Research, for the team image.
 pdf = [
-    "quant-agent-os-research[pdf]",
+    "quant-agent-os-research[pdf]==0.1.0",
 ]
 postgres = [
-    "quant-agent-os-research[postgres]",
+    "quant-agent-os-research[postgres]==0.1.0",
 ]
 
 [project.scripts]
