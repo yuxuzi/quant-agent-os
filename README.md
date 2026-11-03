@@ -13,7 +13,7 @@ It has two products built on one core platform:
   through a replaceable adapter.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is
-> alpha research software (0.1.0, the first MVP release), not investment advice.
+> alpha research software (0.1.1; 0.1.0 was the first MVP release), not investment advice.
 
 ## Status
 

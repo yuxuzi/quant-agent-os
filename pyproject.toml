@@ -1,6 +1,6 @@
 [project]
 name = "quant-agent-os"
-version = "0.1.0"
+version = "0.1.1"
 description = "Quant-Agent-OS core: typed tools, a bounded orchestrator, and evidence-linked reports for quantitative research and application engineering"
 readme = "README.md"
 requires-python = ">=3.11"

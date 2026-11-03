@@ -1,6 +1,6 @@
 [project]
 name = "quant-agent-os-factory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Quant App Factory: generate tested, packaged Python applications with Quant-Agent-OS"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os==0.1.0",
+    "quant-agent-os==0.1.1",
     "pydantic>=2.7",
     "pytemplate-uv>=3.0,<4",
     "rich>=13.7",
@@ -24,7 +24,7 @@ quant-factory = "quant_app_factory.cli:main"
 
 [project.optional-dependencies]
 mcp = [
-    "quant-agent-os[mcp]==0.1.0",
+    "quant-agent-os[mcp]==0.1.1",
 ]
 
 [tool.uv.sources]

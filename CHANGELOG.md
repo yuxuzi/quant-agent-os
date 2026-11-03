@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-03
+
+A security release for remote servers: two of the security review's findings are fixed (F-1
+and F-5), and F-2 to F-4 remain open ([docs/security-review.md](docs/security-review.md)). No
+tool, schema, or storage changes.
+
 ### Security
 
 - **Internal errors no longer reach callers** (security review F-5). A tool that raises

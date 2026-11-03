@@ -20,6 +20,10 @@ fail when they change without a big enough version bump. After raising the versi
 
 Clients read the served versions from `qaos://server/info`.
 
+## 0.1.1
+
+No tool version changes.
+
 ## 0.1.0
 
 First versioned release. Every tool is at `1.0.0`:
