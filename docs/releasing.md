@@ -18,8 +18,8 @@ accepted in writing.
 
 A `v*` tag always creates a **GitHub release** with the five wheels and sdists, and notes
 taken from the changelog. Publishing to **PyPI** is opt-in: the `publish` job runs only when
-the repository variable `PUBLISH_TO_PYPI` is `true`. 0.1.0 is a GitHub-only release, and the
-package names are not registered on PyPI yet.
+the repository variable `PUBLISH_TO_PYPI` is `true`. Releases are GitHub-only: the owner decided
+not to publish to PyPI, so the package names are not registered there.
 
 Without PyPI, install from the release files or the repository, for example
 `uv tool install "quant-agent-os-platform[factory]" --find-links <folder with the release files>`,

@@ -1852,7 +1852,7 @@ wheels = [
 
 [[package]]
 name = "quant-agent-os"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -1914,7 +1914,7 @@ dev = [
 
 [[package]]
 name = "quant-agent-os-analytics"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/quant-analytics" }
 dependencies = [
     { name = "empyrical-reloaded" },
@@ -1931,7 +1931,7 @@ requires-dist = [
 
 [[package]]
 name = "quant-agent-os-factory"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/quant-app-factory" }
 dependencies = [
     { name = "pydantic" },
@@ -1959,7 +1959,7 @@ provides-extras = ["mcp"]
 
 [[package]]
 name = "quant-agent-os-platform"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "apps/quant-platform" }
 dependencies = [
     { name = "pydantic" },
@@ -1997,7 +1997,7 @@ provides-extras = ["factory", "pdf", "postgres"]
 
 [[package]]
 name = "quant-agent-os-research"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/quant-research" }
 dependencies = [
     { name = "pydantic" },

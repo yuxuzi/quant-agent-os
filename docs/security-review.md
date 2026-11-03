@@ -62,11 +62,11 @@ and F-2 matter much less.
 
 | Id | Severity | Finding | Recommendation |
 | --- | --- | --- | --- |
-| **F-1** | Medium | **Unauthenticated amplification through introspection.** A JWT-shaped token whose unverified `iss` names a configured provider triggers one introspection request, and failures are not cached. Anyone can make the server send requests to a tenant's identity provider at the rate they send requests. Plans do not apply before authentication. | Rate-limit unauthenticated requests in the reverse proxy (already required). Then cache refusals for a short time and bound concurrent introspections per provider. **Fixed after 0.1.0:** refusals are cached for 30 s, and each provider gets at most 600 introspections a minute and 8 at once. |
+| **F-1** | Medium | **Unauthenticated amplification through introspection.** A JWT-shaped token whose unverified `iss` names a configured provider triggers one introspection request, and failures are not cached. Anyone can make the server send requests to a tenant's identity provider at the rate they send requests. Plans do not apply before authentication. | Rate-limit unauthenticated requests in the reverse proxy (already required). Then cache refusals for a short time and bound concurrent introspections per provider. **Fixed in 0.1.1:** refusals are cached for 30 s, and each provider gets at most 600 introspections a minute and 8 at once. |
 | **F-2** | Medium | **Timed-out tools keep their threads.** The executor stops waiting at the timeout, but a Python thread cannot be killed, so a tool that hangs keeps a thread until it returns. Repeated calls to a slow tool can accumulate threads. Plan rate limits bound this per tenant; a tenant without a plan is unbounded. | Give every tenant on a shared server a plan with `calls_per_minute`. Later, run slow tools in a bounded pool, or in a process that can be killed. |
 | **F-3** | Low | **The approval page is a capability URL.** Anyone with the link sees the tool, the redacted arguments, and the requester's principal (not the key). Links can surface in browser history, proxy logs, and auto-instrumented HTTP spans. Deciding still needs an approver key. | Keep the 15-minute expiry. Document that telemetry and proxy logs see these paths (done in deployment.md). Consider requiring an approver key to view as well. |
 | **F-4** | Low | **API keys never expire,** and revocation needs a restart. An OAuth token can stay accepted for up to 60 seconds after it is revoked (the introspection cache). | Add an optional expiry to keys, and reload the keys file without a restart. |
-| **F-5** | Low | **Failure messages echo exception text.** A tool that raises returns `<ExceptionType>: <message>` to the caller, which can include internal details such as file paths. | Return a generic message with the call id, and keep the detail in the run record. **Fixed after 0.1.0:** `ValueError` and `LookupError` messages pass through; everything else is generic, with the text in `error_detail`. |
+| **F-5** | Low | **Failure messages echo exception text.** A tool that raises returns `<ExceptionType>: <message>` to the caller, which can include internal details such as file paths. | Return a generic message with the call id, and keep the detail in the run record. **Fixed in 0.1.1:** `ValueError` and `LookupError` messages pass through; everything else is generic, with the text in `error_detail`. |
 
 No finding allows a cross-tenant read, an approval without an approver key, or a call outside
 a tenant's permissions.
@@ -76,6 +76,6 @@ a tenant's permissions.
 1. Put a reverse proxy in front: TLS, a rate limit on unauthenticated requests (F-1), and
    `FORWARDED_ALLOW_IPS` set to its address.
 2. Give every tenant a plan with `calls_per_minute` (F-2).
-3. Fix F-1 and F-5 in code, or accept them in writing. Both are fixed after 0.1.0.
+3. Fix F-1 and F-5 in code, or accept them in writing. Both are fixed in 0.1.1.
 4. Have the remote surface reviewed or penetration-tested by someone independent of its
    authors.
