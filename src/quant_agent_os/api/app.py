@@ -193,6 +193,12 @@ def build_app(
                 status_code=429,
                 headers={"Retry-After": str(record.retry_after_seconds or 1)},
             )
+        if record.status == "busy":
+            return JSONResponse(
+                response.model_dump(mode="json"),
+                status_code=503,
+                headers={"Retry-After": str(record.retry_after_seconds or 1)},
+            )
         return response
 
     @app.get("/v1/runs")

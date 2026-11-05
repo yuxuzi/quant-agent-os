@@ -116,6 +116,7 @@ class IngestService:
                 counts[1] + len(mentions),
                 counts[2] + len(relations),
             ]
+        self.store.prune_entities(entity.id for entity in self.vocabulary.entities)
         embedded = self._embed_missing()
         snapshot = self.store.publish_snapshot(self._snapshot_for)
         return IngestResult(

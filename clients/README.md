@@ -16,5 +16,5 @@ reads the [one home](../docs/configuration.md): add data with `qaos ingest DIR` 
 FILE`.
 
 These files are generated from `skills/`. Do not edit them by
-hand. After changing a skill, run `uv run python tests/server/client_bundles.py`;
+hand. After changing a skill, run `uv run python scripts/client_bundles.py`;
 a test fails while they are out of date.

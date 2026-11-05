@@ -16,7 +16,8 @@ prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work t
 Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
 ingestion, `parquet` for Parquet files in `qaos data add`, `postgres` for a PostgreSQL store,
-`factory` for `qaos app`, or `all`.
+`factory` for `qaos app`, or `all`. `local-embeddings` adds semantic search on your machine; it is
+not part of `all` and needs Python 3.14 or earlier.
 
 ## 1. Add the skills (Claude Code)
 
@@ -63,6 +64,15 @@ qaos data add returns.csv         # the id is the file's name, or use --id
   `QUANT_AGENT_OS_STORE`. Without a store, the server still starts, without the research tools,
   and says so.
 - **To try it first,** `qaos init --sample` loads a small corpus and a dataset.
+- **Semantic search on your machine (optional).** With the `local-embeddings` extra, add
+  `--embedder local` to `qaos ingest` and `qaos serve`. It finds more questions phrased in other
+  words, and ingestion is much slower: about 3 minutes against 10 seconds for 21 papers. It sends no
+  text anywhere, and downloads a 64 MB model on first use.
+- **Your own terms.** `qaos ingest ~/research --vocabulary firm.toml` adds your signal and factor
+  names to the bundled vocabulary. The store keeps them, so serving and later ingestion use them
+  without the option, and changing the file re-processes the corpus. The format is the bundled
+  [`quant-v1.toml`](../src/quant_research/vocabularies/quant-v1.toml); an entity with a bundled id
+  replaces it.
 
 ## 3. Ask
 
@@ -162,7 +172,7 @@ uv run mypy                      # strict
 
 `uv` installs a supported Python (3.11 to 3.15) and every development tool; no virtualenv
 activation is needed. After changing a skill, regenerate the client bundles with
-`uv run python tests/server/client_bundles.py`.
+`uv run python scripts/client_bundles.py`.
 
 Next: play with the [tutorial](tutorial.md), then read [architecture.md](architecture.md) and
 [configuration.md](configuration.md).

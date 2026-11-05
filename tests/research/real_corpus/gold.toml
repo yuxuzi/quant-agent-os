@@ -144,3 +144,131 @@ documents = []
 kind = "unanswerable"
 query = "protein folding prediction accuracy"
 documents = []
+
+# Off-topic questions added to check the local embedder's score floor on questions it was not
+# tuned on (real-corpus-eval.md, C6). They were written before any of their scores were seen.
+
+[[questions]]
+kind = "unanswerable"
+query = "how to bake sourdough bread at home"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "symptoms of vitamin D deficiency in adults"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "best hiking trails in Patagonia"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "rules of the offside law in football"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "how do mRNA vaccines train the immune system"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "history of the Roman aqueducts"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "training a dog to stop barking"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "solar panel efficiency on cloudy days"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "causes of coral reef bleaching"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "how to tune a classical guitar"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "mortgage refinancing rates for first-time home buyers"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "how to file personal income tax as a freelancer"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "term life insurance premiums for smokers"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "commercial real estate cap rates in Chicago"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "merger review by antitrust regulators"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "pricing of catastrophe bonds after hurricanes"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "municipal bond tax exemption rules"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "credit card interest and minimum payments"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "corporate pension accounting under IFRS"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "initial coin offering regulation in Singapore"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "how central banks set the reserve requirement"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "stablecoin redemption and reserve audits"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "carbon offset certificate verification standards"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "audit fees charged by the big four accounting firms"
+documents = []
+
+[[questions]]
+kind = "unanswerable"
+query = "payday loan default rates among students"
+documents = []

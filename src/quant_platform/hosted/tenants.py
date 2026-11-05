@@ -50,7 +50,7 @@ from quant_platform.hosted.limits import PlanLimits
 from quant_platform.hosted.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_research import ResearchApp, open_research
 from quant_research.infrastructure.postgres_store import is_postgres_url
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 if TYPE_CHECKING:
     from quant_app_factory import AppFactory

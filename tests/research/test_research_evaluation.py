@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from hashing_embedder import mock_embedder
 from research_eval import BASELINE, MUST_BE_PERFECT, run
 
 METRICS = run()
@@ -22,6 +23,6 @@ def test_every_citation_and_location_is_valid(metric: str) -> None:
 
 
 def test_the_vector_channel_never_makes_retrieval_worse() -> None:
-    with_vectors = run(vector=True)
+    with_vectors = run(embedder=mock_embedder())
 
     assert all(with_vectors[metric] >= METRICS[metric] - 1e-9 for metric in METRICS), with_vectors

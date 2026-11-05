@@ -21,14 +21,14 @@ from quant_research.application.strategy import (
 )
 from quant_research.bootstrap import ResearchApp, open_research
 from quant_research.config import make_embedder
-from quant_research.domain.vocabulary import load_vocabulary
+from quant_research.domain.vocabulary import VocabularyError
 from quant_research.infrastructure.postgres_store import (
     DEFAULT_SCHEMA,
     is_postgres_url,
     redact_url,
 )
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 app = typer.Typer(
     help="Quant Research: build and query a Graph RAG knowledge store.", no_args_is_help=True
@@ -66,7 +66,7 @@ def _shown(store: str) -> str:
 class EmbedderChoice(StrEnum):
     """Embedders the CLI can enable for the vector channel."""
 
-    HASHING = "hashing"
+    LOCAL = "local"
     VOYAGE = "voyage"
     OPENAI = "openai"
 
@@ -74,13 +74,15 @@ class EmbedderChoice(StrEnum):
 EmbedderOption = Annotated[
     EmbedderChoice | None,
     typer.Option(
-        "--embedder", help="Enable the vector channel: hashing (offline mock), voyage, or openai."
+        "--embedder",
+        help="Enable the vector channel: local (on this machine; needs the local-embeddings "
+        "extra), voyage, or openai.",
     ),
 ]
 ModelOption = Annotated[
     str | None,
     typer.Option(
-        "--embedding-model", help="Provider model, e.g. voyage-4 or text-embedding-3-large."
+        "--embedding-model", help="Embedding model, e.g. voyage-4 or text-embedding-3-large."
     ),
 ]
 
@@ -92,14 +94,19 @@ def _open(
     *,
     read_only: bool = False,
     schema: str = DEFAULT_SCHEMA,
+    vocabulary: Path | None = None,
 ) -> ResearchApp:
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
-        chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
+        chosen = make_embedder(embedder.value, model=model) if embedder else None
         return open_research(
-            store or get_settings().store, embedder=chosen, read_only=read_only, schema=schema
+            store or get_settings().store,
+            vocabulary,
+            embedder=chosen,
+            read_only=read_only,
+            schema=schema,
         )
-    except (EmbeddingServiceError, StoreError) as error:
+    except (EmbeddingServiceError, StoreError, VocabularyError) as error:
         raise _fail(error) from error
 
 
@@ -116,12 +123,22 @@ def ingest(
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
     schema: SchemaOption = DEFAULT_SCHEMA,
+    vocabulary: Annotated[
+        Path | None,
+        typer.Option(
+            "--vocabulary",
+            exists=True,
+            dir_okay=False,
+            help="A TOML file of your own entities, merged over the bundled vocabulary and kept "
+            "with the store, so later ingestion and serving use it without this option.",
+        ),
+    ] = None,
 ) -> None:
     """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash.
 
     With a hosted --embedder, chunk text is sent to that provider to be embedded.
     """
-    research = _open(store, embedder, embedding_model, schema=schema)
+    research = _open(store, embedder, embedding_model, schema=schema, vocabulary=vocabulary)
     try:
         result = research.ingest.ingest(corpus)
     except (FileNotFoundError, EmbeddingServiceError) as error:
@@ -138,6 +155,7 @@ def ingest(
     )
     location = _shown(store or get_settings().store)
     console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {location}.")
+    console.print(f"Vocabulary {escape(result.snapshot.vocabulary_version)}.")
     for warning in result.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 

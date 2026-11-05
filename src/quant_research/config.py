@@ -11,17 +11,16 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from quant_agent_os.config import home_env_file
+from quant_agent_os.config import home_dir, home_env_file
 from quant_research.domain.ports import Embedder
-from quant_research.domain.vocabulary import EntityMatcher, Vocabulary
-from quant_research.infrastructure.embedding import HashingEmbedder
+from quant_research.infrastructure.local_embedding import DEFAULT_MODEL, LocalEmbedder
 from quant_research.infrastructure.remote_embedding import (
     EmbeddingServiceError,
     OpenAIEmbedder,
     VoyageEmbedder,
 )
 
-EmbedderName = Literal["hashing", "voyage", "openai"]
+EmbedderName = Literal["local", "voyage", "openai"]
 
 
 class EmbeddingSettings(BaseSettings):
@@ -38,17 +37,14 @@ class EmbeddingSettings(BaseSettings):
 
 def make_embedder(
     name: EmbedderName,
-    vocabulary: Vocabulary,
     *,
     model: str | None = None,
     dimensions: int | None = None,
     settings: EmbeddingSettings | None = None,
 ) -> Embedder:
     """Build the named embedder; hosted ones fail fast with an actionable message without a key."""
-    if name == "hashing":
-        if model is not None:
-            raise EmbeddingServiceError("The hashing embedder has no model option.")
-        return HashingEmbedder(EntityMatcher(vocabulary), dimensions=dimensions or 256)
+    if name == "local":
+        return LocalEmbedder(model or DEFAULT_MODEL, cache_dir=home_dir() / "models")
     settings = settings or EmbeddingSettings(_env_file=home_env_file())
     if name == "voyage":
         if settings.voyage_api_key is None:

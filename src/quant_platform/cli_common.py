@@ -24,10 +24,9 @@ from quant_platform.composition import (
 from quant_research import ResearchApp, open_research
 from quant_research.cli import EmbedderChoice
 from quant_research.config import make_embedder
-from quant_research.domain.vocabulary import load_vocabulary
 from quant_research.infrastructure.postgres_store import is_postgres_url
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 if TYPE_CHECKING:
     from quant_app_factory import AppFactory
@@ -144,9 +143,7 @@ def open_catalog(
     if "research" in toolsets and store is not None:
         try:
             chosen_embedder = (
-                make_embedder(embedder.value, load_vocabulary(), model=embedding_model)
-                if embedder
-                else None
+                make_embedder(embedder.value, model=embedding_model) if embedder else None
             )
             research = open_research(store, embedder=chosen_embedder, read_only=True)
         except (EmbeddingServiceError, StoreError) as error:

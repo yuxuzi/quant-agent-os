@@ -19,14 +19,12 @@ Like the SQLite store, one connection is shared across threads under a re-entran
 
 from __future__ import annotations
 
-import functools
 import json
 import math
 import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec, Self, TypeGuard, TypeVar
+from typing import TYPE_CHECKING, Any, TypeGuard
 from urllib.parse import urlsplit, urlunsplit
 
 from quant_research.domain.models import (
@@ -38,7 +36,23 @@ from quant_research.domain.models import (
     Relation,
 )
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
-from quant_research.infrastructure.sqlite_store import EDGES_PER_TRIPLE, StoreError
+from quant_research.infrastructure.sqlite_store import EDGES_PER_TRIPLE
+from quant_research.infrastructure.store_common import (
+    ALL_ENTITIES,
+    ALL_RELATIONS,
+    CHUNKS_WITHOUT_EMBEDDINGS,
+    DOCUMENT_HASHES,
+    GET_CHUNK,
+    GET_DOCUMENT,
+    HAS_DOCUMENT,
+    HAS_DOCUMENT_FROM_PIPELINE,
+    HAS_EMBEDDINGS,
+    INSERT_DOCUMENT,
+    INSERT_SNAPSHOT,
+    StoreError,
+    StoreLifecycle,
+    locked,
+)
 from quant_research.infrastructure.terms import (
     BM25_B,
     BM25_K1,
@@ -167,20 +181,6 @@ ORDER BY score DESC, t.chunk_id
 LIMIT %(limit)s
 """
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
-
-def _locked(
-    method: Callable[Concatenate[PostgresKnowledgeStore, P], R],
-) -> Callable[Concatenate[PostgresKnowledgeStore, P], R]:
-    @functools.wraps(method)
-    def wrapper(self: PostgresKnowledgeStore, /, *args: P.args, **kwargs: P.kwargs) -> R:
-        with self._lock:
-            return method(self, *args, **kwargs)
-
-    return wrapper
-
 
 def is_postgres_url(location: object) -> TypeGuard[str]:
     """Return whether ``location`` names a PostgreSQL database rather than a file."""
@@ -199,7 +199,7 @@ def redact_url(url: str) -> str:
     return urlunsplit(parts._replace(netloc=netloc))
 
 
-class PostgresKnowledgeStore:
+class PostgresKnowledgeStore(StoreLifecycle):
     """A `KnowledgeStore` and `VectorIndex` in a PostgreSQL schema.
 
     ``read_only=True`` opens an existing store in read-only transactions: nothing is created,
@@ -309,10 +309,6 @@ class PostgresKnowledgeStore:
         ).fetchone()
         return row is not None and row["found"] is not None
 
-    def _writable(self) -> None:
-        if self.read_only:
-            raise StoreError("This store is open read-only; open it for ingestion to change it.")
-
     @contextmanager
     def reading(self) -> Iterator[None]:
         """Hold one read-only, repeatable-read transaction for the block's reads."""
@@ -324,34 +320,17 @@ class PostgresKnowledgeStore:
                 self._db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 yield
 
-    @_locked
-    def close(self) -> None:
-        """Close the connection."""
-        self._db.close()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.close()
-
-    @_locked
+    @locked
+    @locked
     def has_document(self, sha256: str, pipeline: str | None = None) -> bool:
         """Return whether this content is stored (and, with ``pipeline``, by that pipeline)."""
         if pipeline is None:
-            row = self._db.execute("SELECT 1 FROM documents WHERE sha256 = %s", (sha256,))
+            row = self._db.execute(HAS_DOCUMENT, (sha256,))
         else:
-            row = self._db.execute(
-                "SELECT 1 FROM documents WHERE sha256 = %s AND pipeline = %s", (sha256, pipeline)
-            )
+            row = self._db.execute(HAS_DOCUMENT_FROM_PIPELINE, (sha256, pipeline))
         return row.fetchone() is not None
 
-    @_locked
+    @locked
     def replace_document(
         self,
         document: Document,
@@ -370,9 +349,7 @@ class PostgresKnowledgeStore:
                 (document.uri, document.sha256),
             )
             cursor.execute(
-                "INSERT INTO documents (id, sha256, uri, title, authors, published, "
-                "license_note, loader_version, pipeline) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                INSERT_DOCUMENT,
                 (
                     document.id,
                     document.sha256,
@@ -438,7 +415,7 @@ class PostgresKnowledgeStore:
                 ],
             )
 
-    @_locked
+    @locked
     def upsert_entities(self, entities: Iterable[Entity]) -> None:
         """Insert or update canonical entities."""
         from psycopg.types.json import Jsonb
@@ -452,7 +429,26 @@ class PostgresKnowledgeStore:
                 [(e.id, e.type, e.name, Jsonb(e.aliases)) for e in entities],
             )
 
-    @_locked
+    @locked
+    def prune_entities(self, keep: Iterable[str]) -> None:
+        """Delete entities outside ``keep`` that no mention or relation refers to."""
+        self._writable()
+        with self._db.transaction():
+            self._db.execute(
+                "DELETE FROM entities WHERE NOT id = ANY(%s) "
+                "AND id NOT IN (SELECT entity_id FROM mentions) "
+                "AND id NOT IN (SELECT subject_id FROM relations) "
+                "AND id NOT IN (SELECT object_id FROM relations)",
+                (sorted(set(keep)),),
+            )
+
+    @locked
+    def all_entities(self) -> list[Entity]:
+        """Return every stored entity, by id."""
+        rows = self._db.execute(ALL_ENTITIES)
+        return [Entity.model_validate(row) for row in rows]
+
+    @locked
     def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:
         """Build the snapshot from the current documents and publish it under one lock.
 
@@ -468,8 +464,7 @@ class PostgresKnowledgeStore:
             current = self.current_snapshot()
             if current is None or current.id != snapshot.id:
                 self._db.execute(
-                    "INSERT INTO corpus_snapshots (id, document_count, vocabulary_version, "
-                    "extractor_versions) VALUES (%s, %s, %s, %s)",
+                    INSERT_SNAPSHOT,
                     (
                         snapshot.id,
                         snapshot.document_count,
@@ -479,7 +474,7 @@ class PostgresKnowledgeStore:
                 )
         return snapshot
 
-    @_locked
+    @locked
     def current_snapshot(self) -> CorpusSnapshot | None:
         """Return the most recently recorded snapshot, if any."""
         row = self._db.execute(
@@ -488,25 +483,25 @@ class PostgresKnowledgeStore:
         ).fetchone()
         return None if row is None else CorpusSnapshot.model_validate(row)
 
-    @_locked
+    @locked
     def document_hashes(self) -> list[str]:
         """Return the content hashes of every stored document, sorted."""
-        rows = self._db.execute("SELECT sha256 FROM documents ORDER BY sha256").fetchall()
+        rows = self._db.execute(DOCUMENT_HASHES).fetchall()
         return [row["sha256"] for row in rows]
 
-    @_locked
+    @locked
     def get_document(self, document_id: str) -> Document | None:
         """Return a document by id."""
-        row = self._db.execute("SELECT * FROM documents WHERE id = %s", (document_id,)).fetchone()
+        row = self._db.execute(GET_DOCUMENT, (document_id,)).fetchone()
         return None if row is None else Document.model_validate(row)
 
-    @_locked
+    @locked
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         """Return a chunk by id."""
-        row = self._db.execute("SELECT * FROM chunks WHERE id = %s", (chunk_id,)).fetchone()
+        row = self._db.execute(GET_CHUNK, (chunk_id,)).fetchone()
         return None if row is None else Chunk.model_validate(row)
 
-    @_locked
+    @locked
     def get_entities(self, entity_ids: Iterable[str]) -> dict[str, Entity]:
         """Return the known entities among ``entity_ids``."""
         rows = self._db.execute(
@@ -514,7 +509,7 @@ class PostgresKnowledgeStore:
         )
         return {row["id"]: Entity.model_validate(row) for row in rows}
 
-    @_locked
+    @locked
     def mentioned_entities(self, chunk_ids: Iterable[str]) -> dict[str, list[str]]:
         """Return entity ids mentioned in each chunk, in order of first mention."""
         found: dict[str, list[str]] = {}
@@ -528,7 +523,7 @@ class PostgresKnowledgeStore:
             found.setdefault(row["chunk_id"], []).append(row["entity_id"])
         return found
 
-    @_locked
+    @locked
     def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
         """Return chunk ids ranked by distinct entities mentioned, then by mention count."""
         rows = self._db.execute(
@@ -538,7 +533,7 @@ class PostgresKnowledgeStore:
         )
         return [row["chunk_id"] for row in rows]
 
-    @_locked
+    @locked
     def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
         """Return chunks ranked by FTS5's BM25 over the indexed terms."""
         tokens = query_tokens(query)
@@ -552,7 +547,7 @@ class PostgresKnowledgeStore:
             for row in rows
         ]
 
-    @_locked
+    @locked
     def term_frequencies(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]:
         """Return the chunk count and, per term, the number of chunks containing it."""
         tokens = sorted({token for term in terms for token in query_tokens(term)})
@@ -564,13 +559,13 @@ class PostgresKnowledgeStore:
         counts = {row["term"]: row["n"] for row in rows}
         return (total["n"] if total else 0), {token: counts.get(token, 0) for token in tokens}
 
-    @_locked
+    @locked
     def all_relations(self) -> list[Relation]:
         """Return every stored relation, by id (for evaluation and export)."""
-        rows = self._db.execute("SELECT * FROM relations ORDER BY id")
+        rows = self._db.execute(ALL_RELATIONS)
         return [Relation.model_validate(row) for row in rows]
 
-    @_locked
+    @locked
     def upsert_embeddings(self, model_id: str, vectors: Sequence[tuple[str, list[float]]]) -> None:
         """Store ``(chunk_id, vector)`` pairs for ``model_id``, replacing existing ones."""
         self._writable()
@@ -587,27 +582,26 @@ class PostgresKnowledgeStore:
                 ],
             )
 
-    @_locked
+    @locked
     def has_embeddings(self, model_id: str) -> bool:
         """Return whether any chunk has an embedding for ``model_id``."""
         if not self.has_vector:
             return False
-        row = self._db.execute("SELECT 1 FROM embeddings WHERE model = %s LIMIT 1", (model_id,))
+        row = self._db.execute(HAS_EMBEDDINGS, (model_id,))
         return row.fetchone() is not None
 
-    @_locked
+    @locked
     def chunks_without_embeddings(self, model_id: str) -> list[tuple[str, str]]:
         """Return ``(chunk_id, text)`` for chunks with no ``model_id`` embedding, by id."""
         if not self.has_vector:
             raise StoreError(NO_VECTOR)
         rows = self._db.execute(
-            "SELECT c.id, c.text FROM chunks AS c LEFT JOIN embeddings AS e "
-            "ON e.chunk_id = c.id AND e.model = %s WHERE e.chunk_id IS NULL ORDER BY c.id",
+            CHUNKS_WITHOUT_EMBEDDINGS,
             (model_id,),
         )
         return [(row["id"], row["text"]) for row in rows]
 
-    @_locked
+    @locked
     def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
         """Return chunks by cosine similarity to ``vector`` (exact), best first."""
         if not self.has_vector or not math.sqrt(sum(value * value for value in vector)):
@@ -626,7 +620,7 @@ class PostgresKnowledgeStore:
         )
         return [VectorHit(chunk_id=row["chunk_id"], score=row["score"]) for row in rows]
 
-    @_locked
+    @locked
     def expand(
         self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
     ) -> list[GraphEdge]:

@@ -244,6 +244,11 @@ surfaces. Neither widens permissions, but confirm each before merging.
 
 ### P4. Hardening and honest retrieval
 
+**Done 2026-11-05; measured results are in [real-corpus-eval.md](real-corpus-eval.md), C5 and C6.**
+Owner's decisions while doing it: the local embedder ships as an opt-in extra; the `httpx` move in
+step 4 is dropped, because `httpx` has no retry for HTTP errors and so would not remove that code;
+and step 4's shared SQL turned out small (11 short statements and the store lifecycle).
+
 1. **Ablation first.** Extend `real_corpus.py` to report hit rate and MRR with and without each
    channel, and report typed-fact counts. Use it to decide how the product is described.
 2. **Firm vocabulary, and key handling.** `qaos ingest --vocabulary firm.toml` merges with the
@@ -275,7 +280,8 @@ surfaces. Neither widens permissions, but confirm each before merging.
   tool table. Aim for about half the length.
 - **`ENGINEERING_REVIEW_PLAN.md`:** reduce to open backlog and open questions. Move finished
   plans to `docs/plans/archive/`.
-- **Product wording:** describe research as "cited hybrid search with a knowledge graph", and
+- **Product wording:** describe research as "cited keyword search with entity linking and a small
+  graph of extracted facts", plus "optional semantic search" (owner's decision, 2026-11-05), and
   state what P4.1 measured. Update `AGENTS.md` invariants and the command table.
 
 ### Not in this plan

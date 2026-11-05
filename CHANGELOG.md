@@ -15,8 +15,30 @@ All notable changes to this project are documented here. The format follows
 - **Parquet datasets.** With the new `parquet` extra (pandas and pyarrow), `qaos data add` takes a
   `.parquet` or `.pq` file. It is converted to CSV when added, so tools and the server are unchanged,
   and the fingerprint is the stored CSV's. The dataset limits still apply.
+- **A firm vocabulary.** `qaos ingest DIR --vocabulary firm.toml` merges your own signal and factor
+  names over the bundled vocabulary. The store keeps the result, so serving and later ingestion match
+  what ingestion saw.
+- **API key expiry and reload.** `qaos keys new --expires-in-days N` sets an `expires` time on a
+  key. A running HTTP server re-reads the keys file when it changes, so issuing or revoking a key
+  needs no restart. **While the file is missing or invalid, the server accepts no key.**
+- **A `busy` call status.** Each executor runs at most 16 tool calls at once in one bounded pool,
+  instead of one new thread per call. A call beyond that returns `busy` with `retry_after_seconds`
+  (REST: 503 with `Retry-After`), and spends no quota or approval. A timed-out call keeps its slot
+  until its thread returns.
+- **A local embedder.** The new `local-embeddings` extra adds `--embedder local`: semantic search
+  with `BAAI/bge-small-en-v1.5` on your machine, off by default. On the 21 real papers it raises
+  topic MRR from 0.899 to 1.0 and paraphrase hits from 0.833 to 1.0, and still abstains on all 28
+  off-topic questions. Ingestion takes about 3 minutes instead of 10 seconds. It is not in the `all`
+  extra because `onnxruntime` has no Python 3.15 wheel.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
+
+### Removed
+
+- **The FTS5 fallback.** A SQLite without FTS5 is now refused with what to do, instead of ranking
+  keyword search by a second, simpler path. Python builds from uv include FTS5.
+- **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
+  was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
 
 ### Fixed
 

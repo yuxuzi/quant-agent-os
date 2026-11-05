@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -31,10 +32,18 @@ CallStatus = Literal[
     "denied",
     "approval_required",
     "quota_exceeded",
+    "busy",
     "unknown_tool",
     "timeout",
     "error",
 ]
+
+# Refused before the tool started or an approval was used, so an approval stays for a retry.
+NOT_STARTED: frozenset[CallStatus] = frozenset({"quota_exceeded", "busy"})
+# Calls one executor runs at once. A timed-out tool keeps its slot until its thread returns,
+# because a Python thread cannot be killed; `busy` is the bound on how many can pile up.
+MAX_CONCURRENT_CALLS = 16
+BUSY_RETRY_SECONDS = 5
 
 # What a caller (usually a model) should do after each failure, and whether retrying can help.
 FAILURE_HINTS: dict[CallStatus, tuple[str, bool]] = {
@@ -56,6 +65,11 @@ FAILURE_HINTS: dict[CallStatus, tuple[str, bool]] = {
     "quota_exceeded": (
         "The tenant reached a limit of its plan. Wait retry_after_seconds before calling again, "
         "and tell the user which limit was reached.",
+        True,
+    ),
+    "busy": (
+        "The server is running as many tool calls as it allows. Wait retry_after_seconds, then "
+        "call again.",
         True,
     ),
     "timeout": (
@@ -154,6 +168,7 @@ class ToolExecutor:
         usage: UsageGate | None = None,
         max_output_bytes: int | None = None,
         tenant: str = DEFAULT_TENANT,
+        max_concurrent_calls: int = MAX_CONCURRENT_CALLS,
     ) -> None:
         self.registry = registry
         self.policy = policy
@@ -161,6 +176,8 @@ class ToolExecutor:
         self.usage = usage
         self.max_output_bytes = max_output_bytes
         self.tenant = tenant
+        self._pool = ThreadPoolExecutor(max_concurrent_calls, thread_name_prefix="tool")
+        self._slots = threading.BoundedSemaphore(max_concurrent_calls)
 
     def execute(self, step: ToolCall, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
@@ -205,39 +222,57 @@ class ToolExecutor:
         except ValidationError as error:
             return record("invalid_input", tool_version=spec.version, error=_brief(error))
         input_sha256 = canonical_sha256(params.model_dump(mode="json"))
-        refusal = self.usage.admit(spec.name) if self.usage is not None else None
-        if refusal is not None:
+        # Taken before the quota and the approval, so that a busy refusal spends neither.
+        if not self._slots.acquire(blocking=False):
             return record(
-                "quota_exceeded",
+                "busy",
                 tool_version=spec.version,
-                error=refusal.message,
-                retry_after_seconds=refusal.retry_after_seconds,
+                error="The server is running as many tool calls as it allows.",
+                retry_after_seconds=BUSY_RETRY_SECONDS,
             )
-        pending = self.policy.needs_approval(spec.permissions)
-        if pending:
-            granted = (
-                self.approvals.consume(run_id, spec.name, input_sha256)
-                if self.approvals is not None and run_id is not None
-                else None
-            )
-            if granted is None:
-                names = ", ".join(sorted(permission.value for permission in pending))
-                return record(
-                    "approval_required",
-                    tool_version=spec.version,
-                    error=(
-                        f"Tool '{spec.name}' needs an operator approval for {names} "
-                        f"(run {run_id or 'none'}, input sha256 {input_sha256[:16]})."
-                    ),
-                )
-            approval = granted.approval_id
-        standing = (spec.permissions & CONSEQUENTIAL) & self.policy.preapproved
-        if approval is None and standing:
-            approval = "standing:" + ",".join(sorted(permission.value for permission in standing))
-
-        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"tool-{spec.name}")
+        admitted = False
         try:
-            result = pool.submit(spec.function, params).result(timeout=spec.timeout_seconds)
+            refusal = self.usage.admit(spec.name) if self.usage is not None else None
+            if refusal is not None:
+                return record(
+                    "quota_exceeded",
+                    tool_version=spec.version,
+                    error=refusal.message,
+                    retry_after_seconds=refusal.retry_after_seconds,
+                )
+            pending = self.policy.needs_approval(spec.permissions)
+            if pending:
+                granted = (
+                    self.approvals.consume(run_id, spec.name, input_sha256)
+                    if self.approvals is not None and run_id is not None
+                    else None
+                )
+                if granted is None:
+                    names = ", ".join(sorted(permission.value for permission in pending))
+                    return record(
+                        "approval_required",
+                        tool_version=spec.version,
+                        error=(
+                            f"Tool '{spec.name}' needs an operator approval for {names} "
+                            f"(run {run_id or 'none'}, input sha256 {input_sha256[:16]})."
+                        ),
+                    )
+                approval = granted.approval_id
+            standing = (spec.permissions & CONSEQUENTIAL) & self.policy.preapproved
+            if approval is None and standing:
+                approval = "standing:" + ",".join(
+                    sorted(permission.value for permission in standing)
+                )
+            admitted = True
+        finally:
+            if not admitted:
+                self._slots.release()
+
+        future: Future[Any] | None = None
+        try:
+            future = self._pool.submit(spec.function, params)
+            future.add_done_callback(lambda _: self._slots.release())
+            result = future.result(timeout=spec.timeout_seconds)
         except FutureTimeoutError:
             return record(
                 "timeout",
@@ -258,7 +293,8 @@ class ToolExecutor:
                 }
             )
         finally:
-            pool.shutdown(wait=False, cancel_futures=True)
+            if future is None:
+                self._slots.release()
 
         try:
             output = spec.output_model.model_validate(result)

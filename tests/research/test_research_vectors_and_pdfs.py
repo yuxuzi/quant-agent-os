@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from hashing_embedder import HashingEmbedder, mock_embedder
 from pdf_fixtures import LOW_VOLATILITY_PAGES, write_pdf
 
 from quant_research import ResearchApp, ResearchQuery, open_research
@@ -12,7 +13,6 @@ from quant_research.application.ingest import IngestService
 from quant_research.domain.chunking import MAX_CHUNK_CHARS, PAGE_CHUNK_CHARS, split_page
 from quant_research.domain.ports import SourceReadError
 from quant_research.domain.vocabulary import EntityMatcher, load_vocabulary
-from quant_research.infrastructure.embedding import HashingEmbedder
 from quant_research.infrastructure.files import TextFileLoader
 from quant_research.infrastructure.pdf import PdfLoader, UnavailableLoader
 from quant_research.infrastructure.sqlite_store import SCHEMA_VERSION, SqliteKnowledgeStore
@@ -68,7 +68,7 @@ def test_vector_ingestion_embeds_every_chunk_and_backfills(corpus_dir: Path) -> 
 
 
 def test_vector_search_ranks_by_cosine_and_ignores_zero_queries(corpus_dir: Path) -> None:
-    with open_research(":memory:", vector=True) as research:
+    with open_research(":memory:", embedder=mock_embedder()) as research:
         research.ingest.ingest(corpus_dir)
         (query,) = EMBEDDER.embed(["betting against beta"])
 
@@ -82,7 +82,7 @@ def test_vector_search_ranks_by_cosine_and_ignores_zero_queries(corpus_dir: Path
 
 
 def test_vector_channel_contributes_passages(corpus_dir: Path) -> None:
-    with open_research(":memory:", vector=True) as research:
+    with open_research(":memory:", embedder=mock_embedder()) as research:
         research.ingest.ingest(corpus_dir)
         packet = research.research.find_related(ResearchQuery(query="betting against beta"))
 
@@ -92,7 +92,7 @@ def test_vector_channel_contributes_passages(corpus_dir: Path) -> None:
 def test_replacing_a_document_drops_its_embeddings(tmp_path: Path) -> None:
     note = tmp_path / "note.md"
     note.write_text("Carry correlates with crowding.\n")
-    with open_research(tmp_path / "kb.db", vector=True) as research:
+    with open_research(tmp_path / "kb.db", embedder=mock_embedder()) as research:
         research.ingest.ingest(tmp_path)
         note.write_text("Momentum predicts momentum crashes.\n")
         research.ingest.ingest(tmp_path)

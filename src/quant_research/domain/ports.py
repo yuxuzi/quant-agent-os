@@ -61,12 +61,14 @@ class Embedder(Protocol):
 
     ``kind`` distinguishes stored passages from search queries, which some models embed
     differently. ``requires_network`` is true when embedding sends text to a remote service, so
-    tools that embed queries must declare the ``network`` permission.
+    tools that embed queries must declare the ``network`` permission. ``min_score`` is the lowest
+    cosine similarity that counts as evidence; it differs by model.
     """
 
     model_id: str
     dimensions: int
     requires_network: bool
+    min_score: float
 
     def embed(
         self,
@@ -153,6 +155,14 @@ class KnowledgeStore(Protocol):
 
     def upsert_entities(self, entities: Iterable[Entity]) -> None:
         """Insert or update canonical entities."""
+        ...
+
+    def prune_entities(self, keep: Iterable[str]) -> None:
+        """Delete entities outside ``keep`` that no mention or relation refers to."""
+        ...
+
+    def all_entities(self) -> list[Entity]:
+        """Return every stored entity, by id."""
         ...
 
     def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:

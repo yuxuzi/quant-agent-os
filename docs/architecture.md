@@ -226,7 +226,7 @@ Core's internal import order is **confirmed**:
 
 A `ToolSpec` has the following fields:
 - a snake_case name and a description;
-- a `MAJOR.MINOR.PATCH` version, checked against `tool-versions.lock`, and an optional
+- a `MAJOR.MINOR.PATCH` version, checked against `scripts/tool-versions.lock`, and an optional
   `Deprecation` (decision 0015; [tools changelog](tools-changelog.md));
 - pydantic input and output models;
 - the plain function;
@@ -250,14 +250,15 @@ lacks. Every field has a default, so existing tools keep working.
 Approval is **derived, not declared**. A tool needs approval when it declares a consequential
 permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
 `CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`,
-`unknown_tool`, `timeout`, `error`).
+`busy`, `unknown_tool`, `timeout`, `error`).
 
 ### 5.3 Request lifecycle (confirmed)
 
 1. **Choose.** The client, or the caller's code, decides which tools to call. The platform has no
    planner ([decision 0016](decisions/0016-clients-orchestrate.md)).
-2. **Execute.** For each call, the executor checks permissions, validates the input, asks the
-   tenant's plan limits to admit the call (`quota_exceeded` if not, decision 0015), checks for an
+2. **Execute.** For each call, the executor checks permissions, validates the input, takes one of its
+   16 slots (`busy` if none is free), asks the tenant's plan limits to admit the call
+   (`quota_exceeded` if not, decision 0015), checks for an
    approval when the tool is consequential (`approval_required` if not, and the run waits), runs
    the tool with a timeout, then validates the output and enforces its size limit. Failures become
    records, not exceptions.
@@ -345,8 +346,8 @@ enabled by default.
    most 3 entities in the best keyword passage, report them as direct (`hops = 0`) results, and
    warn.
 2. **Keyword channel:** BM25 over chunks (SQLite FTS5; FTS5's BM25 computed in SQL on PostgreSQL),
-   using the query's content terms with stopwords removed. Without FTS5, a term-overlap scorer
-   is used.
+   using the query's content terms with stopwords removed. A SQLite without FTS5 is refused with a
+   clear message.
 3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
    topic rank well.
 4. **Graph channel:**
@@ -366,10 +367,10 @@ enabled by default.
    - **Benchmark.** On the mock world at 3,000 documents and 15,000 relations, two-hop
      queries take 14 ms at p50 and 37 ms at p95 (`research_bench.py`).
 5. **Vector channel** (optional, off by default): cosine similarity between the query
-   embedding and the chunk embeddings of the same model, keeping hits of at least 0.2. The
-   `Embedder` port has three adapters:
-   - `HashingEmbedder`, an offline mock (feature hashing over words, word pairs, and
-     vocabulary entities), used in tests;
+   embedding and the chunk embeddings of the same model, keeping hits of at least the embedder's
+   `min_score` (0.8 for the measured local model, 0.2 for hosted models, which have no measured
+   floor). The `Embedder` port has three adapters:
+   - `LocalEmbedder`, fastembed and ONNX on this machine (the `local-embeddings` extra);
    - `VoyageEmbedder`, where `voyage-finance-2` is the default and any current Voyage model is
      allowed;
    - `OpenAIEmbedder`, using `text-embedding-3-small` or `-large`.
@@ -481,7 +482,7 @@ are:
   worker threads.
 - `TextFileLoader`, for Markdown and text with front matter, and `PdfLoader`, for PDF through
   pypdf.
-- `HashingEmbedder`, the offline mock embedder. `SqliteKnowledgeStore` also implements
+- `LocalEmbedder`, the on-machine embedder. `SqliteKnowledgeStore` also implements
   `VectorIndex` with exact brute-force cosine, which is fine for thousands of chunks.
 - DuckDB was considered and not chosen for this store. It suits the later analytics and
   backtest service (columnar scans over factor and price data) better than this workload of

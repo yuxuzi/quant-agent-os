@@ -1,10 +1,10 @@
-"""A deterministic, offline stand-in for a real embedding model (the "mock vector" embedder).
+"""Test support: a deterministic, offline stand-in for a real embedding model.
 
 Features are content words, adjacent word pairs, and the vocabulary entities a text mentions,
 folded into a fixed number of dimensions with signed feature hashing and L2-normalised. Entity
 features make aliases land together ("HML" and "book-to-market" share ``factor:value``), which
-gives the vector channel something keyword search does not. It is not semantic understanding;
-swap in a real `Embedder` (a different ``model_id``) for production.
+gives the vector channel something keyword search does not. It is not semantic understanding,
+which is why it lives with the tests.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from typing import Literal
 
 from quant_research.domain.text import content_terms
-from quant_research.domain.vocabulary import EntityMatcher
+from quant_research.domain.vocabulary import EntityMatcher, load_vocabulary
 
 ENTITY_WEIGHT = 3.0
 BIGRAM_WEIGHT = 0.5
@@ -26,6 +26,7 @@ class HashingEmbedder:
     """Signed feature hashing over words, word pairs, and vocabulary entities."""
 
     requires_network = False
+    min_score = 0.2
 
     def __init__(self, matcher: EntityMatcher | None = None, *, dimensions: int = 256) -> None:
         if dimensions < 8:
@@ -64,3 +65,8 @@ class HashingEmbedder:
             vector[index] += sign * weight
         norm = math.sqrt(sum(value * value for value in vector))
         return [value / norm for value in vector] if norm else vector
+
+
+def mock_embedder() -> HashingEmbedder:
+    """Return the embedder the vector-channel tests use, over the bundled vocabulary."""
+    return HashingEmbedder(EntityMatcher(load_vocabulary()))

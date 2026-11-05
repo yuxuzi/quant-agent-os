@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hashing_embedder import mock_embedder
 
 from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.application.strategy import StrategyRequest, StrategyService
@@ -24,7 +25,7 @@ from quant_research.infrastructure.postgres_store import (
     is_postgres_url,
     redact_url,
 )
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 POSTGRES_URL = os.environ.get("QUANT_RESEARCH_TEST_POSTGRES_URL")
 QUERIES = [
@@ -77,7 +78,7 @@ def reference(corpus_dir: Path) -> Iterator[ResearchApp]:
 @pytest.fixture(scope="module")
 def vector_reference(corpus_dir: Path) -> Iterator[ResearchApp]:
     """The reference with the offline vector channel (the embedder is part of the snapshot)."""
-    app = open_research(":memory:", vector=True)
+    app = open_research(":memory:", embedder=mock_embedder())
     app.ingest.ingest(corpus_dir)
     yield app
     app.close()
@@ -110,7 +111,7 @@ def test_every_retrieval_answer_equals_the_reference(
     backend: Backend, corpus_dir: Path, vector_reference: ResearchApp
 ) -> None:
     reference = vector_reference
-    with backend.open(vector=True) as app:
+    with backend.open(embedder=mock_embedder()) as app:
         app.ingest.ingest(corpus_dir)
         store, expected = app.store, reference.store
 
@@ -154,7 +155,7 @@ def test_vectors_round_trip_and_rank_like_the_reference(
     backend: Backend, corpus_dir: Path, vector_reference: ResearchApp
 ) -> None:
     reference = vector_reference
-    with backend.open(vector=True) as app:
+    with backend.open(embedder=mock_embedder()) as app:
         result = app.ingest.ingest(corpus_dir)
         assert app.embedder is not None and result.embedded == result.chunks
         model = app.embedder.model_id
@@ -290,3 +291,65 @@ def test_the_cli_takes_a_postgres_url_and_never_prints_its_password() -> None:
 
     assert result.exit_code != 0
     assert "s3cret" not in result.output and "qa:***@127.0.0.1:1" in result.output
+
+
+def _firm_vocabulary(path: Path, version: str, *aliases: str) -> Path:
+    path.write_text(
+        f'version = "{version}"\n[[entities]]\nid = "signal:firm-carry"\ntype = "signal"\n'
+        f'name = "Firm carry"\naliases = {list(aliases)!r}\n',
+        "utf-8",
+    )
+    return path
+
+
+def test_a_firm_vocabulary_stays_with_the_store(backend: Backend, tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "note.md").write_text("# Note\n\nDesk sigma predicts momentum.\n", "utf-8")
+    firm = _firm_vocabulary(tmp_path / "firm.toml", "firm-1", "desk sigma")
+
+    with backend.open(vocabulary_path=firm) as app:
+        first = app.ingest.ingest(corpus)
+    assert first.snapshot.vocabulary_version.startswith("quant-v1+firm-1.")
+
+    with backend.open(read_only=True) as serving:  # no path: the store says what it holds
+        assert serving.vocabulary.version == first.snapshot.vocabulary_version
+        found = serving.research.find_related(ResearchQuery(query="desk sigma"))
+        assert found.seed_entities == ["signal:firm-carry"]
+
+    with backend.open() as app:  # ingesting again without the option keeps the firm's terms
+        again = app.ingest.ingest(corpus)
+    assert again.unchanged == ["note.md"]
+    assert again.snapshot == first.snapshot
+
+    changed = _firm_vocabulary(tmp_path / "firm.toml", "firm-1", "desk gamma")
+    with backend.open(vocabulary_path=changed) as app:  # an edit re-processes, same version or not
+        edited = app.ingest.ingest(corpus)
+    assert edited.reprocessed == ["note.md"]
+    assert edited.snapshot.vocabulary_version != first.snapshot.vocabulary_version
+    with backend.open(read_only=True) as serving:
+        seeds = serving.research.find_related(ResearchQuery(query="desk sigma")).seed_entities
+        assert "signal:firm-carry" not in seeds  # the old alias no longer names it
+
+
+def test_a_replaced_firm_vocabulary_drops_its_unused_entities(
+    backend: Backend, tmp_path: Path
+) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "note.md").write_text("# Note\n\nMomentum works.\n", "utf-8")
+    firm = _firm_vocabulary(tmp_path / "firm.toml", "firm-1", "desk sigma")
+    other = tmp_path / "other.toml"
+    other.write_text(
+        'version = "other-1"\n[[entities]]\nid = "signal:other"\ntype = "signal"\nname = "Other"\n',
+        "utf-8",
+    )
+    with backend.open(vocabulary_path=firm) as app:
+        app.ingest.ingest(corpus)
+    with backend.open(vocabulary_path=other) as app:
+        app.ingest.ingest(corpus)
+        ids = {entity.id for entity in app.store.all_entities()}
+
+    assert "signal:other" in ids
+    assert "signal:firm-carry" not in ids
+    assert "factor:momentum" in ids

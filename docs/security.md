@@ -36,7 +36,8 @@ sends data to that provider:
   `network` (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). The default policy refuses it.
 
 Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` and are held as `SecretStr`. Error messages name the variable, never its value. Use
-the offline `hashing` embedder, or none, for documents that must not leave the machine.
+the `local` embedder, or none, for documents that must not leave the machine. It sends no text
+anywhere. It downloads its model files from Hugging Face on first use, into `models/` in the home.
 
 ## Serving is read-only
 
@@ -75,7 +76,9 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
   `qaos keys new` prints a key once. The keys file
   (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256
   hashes and is created with mode 0600. To revoke a key, delete its entry or set
-  `disabled = true`, then restart the server. The server does not start without an enabled key.
+  `disabled = true`. The server re-reads the file when it changes, and accepts no key while the
+  file is missing or invalid. A key can have an `expires` time (`--expires-in-days`). The server
+  does not start without an enabled, unexpired key.
 - **Scopes narrow; they never widen.**
   - `tools:list` lists the tools and `tools:call` calls them.
   - `runs:read` reads every run in the store, including retrieved passages, so grant it like
