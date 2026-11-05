@@ -172,7 +172,7 @@ uv run mypy                      # strict
 
 `uv` installs a supported Python (3.11 to 3.15) and every development tool; no virtualenv
 activation is needed. After changing a skill, regenerate the client bundles with
-`uv run python tests/server/client_bundles.py`.
+`uv run python scripts/client_bundles.py`.
 
 Next: play with the [tutorial](tutorial.md), then read [architecture.md](architecture.md) and
 [configuration.md](configuration.md).

@@ -329,7 +329,7 @@ steps above:
    quota and are never cut off mid-call.
 3. **P7.3 Compatibility.** Tool versions follow semver, with a deprecation window and a
    changelog for tools. The server advertises its version, and skills check it. Done:
-   `tool-versions.lock`, `qaos://server/info`, [tools changelog](../tools-changelog.md).
+   `scripts/tool-versions.lock`, `qaos://server/info`, [tools changelog](../tools-changelog.md).
 4. **P7.4 Operations.** SLO dashboards from OpenTelemetry, and a security review of the remote
    surface (OWASP and MCP security best practices) before any public endpoint, folded into
    B-22. Done: telemetry and SLOs in [deployment](../deployment.md), and the

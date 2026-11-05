@@ -4,7 +4,7 @@ Claude Code installs the plugin (`.claude-plugin/plugin.json`), which ships `ski
 server command. Clients without skills get `qaos serve` and the skills' text as a rules file
 instead. Run this after changing a skill or the server command:
 
-    uv run python tests/server/client_bundles.py
+    uv run python scripts/client_bundles.py
 
 `test_client_bundles.py` fails while the committed files are out of date.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from quant_platform.onboarding import Client, server_entry
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 CLIENTS = ROOT / "clients"
 PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
@@ -26,7 +26,7 @@ DESCRIPTION = (
     "Quant-Agent-OS: search the user's research corpus with citations, compute performance and "
     "risk metrics by dataset reference, draft cited strategy specs, and check App Factory specs."
 )
-GENERATED = "Generated from skills/ by tests/server/client_bundles.py; do not edit."
+GENERATED = "Generated from skills/ by scripts/client_bundles.py; do not edit."
 
 
 def rules() -> str:

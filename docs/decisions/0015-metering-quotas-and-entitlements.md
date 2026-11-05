@@ -110,7 +110,7 @@ Prices, the billing provider, and the open-core line (Q-1) are not part of it.
    - **Minor:** additions only (an optional input, a new output field, a new enum value in
      the output).
    - **Patch:** fixes that change neither schema.
-2. **CI enforces it.** A checked-in `tool-versions.lock` records each tool's version and a hash
+2. **CI enforces it.** A checked-in `scripts/tool-versions.lock` records each tool's version and a hash
    of its schemas. The contract tests fail when a schema changes without the lock being
    updated, or when a breaking change comes without a major bump. The test classifies the
    change by diffing the JSON Schemas.
@@ -224,7 +224,7 @@ listings (Q-4), and a self-service admin API for plans.
   and `server_info_resource` in `quant_agent_os.tools.server_info`. The platform's `compose`
   adds `server_info` to every catalog, toolset `platform`, so a tenant's `server_info` lists only
   that tenant's tools.
-- **The lock.** `tool-versions.lock` holds full schemas, not hashes, so the test can say what
+- **The lock.** `scripts/tool-versions.lock` holds full schemas, not hashes, so the test can say what
   kind of change was made. `apps/quant-platform/tests/tool_lock.py --update` refuses to write
   while a bump is smaller than the change. The classifier is conservative: any structural
   change it does not recognise is major.

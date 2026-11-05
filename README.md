@@ -25,7 +25,7 @@ It has two products built on one core platform:
 | Remote MCP, tenants, and OAuth | Implemented: `qaos serve --http` serves MCP over Streamable HTTP and REST from one app with API keys; `qaos hosted` adds a catalog per tenant and OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
 | Approvals in the client | Implemented: a consequential call asks the user in the client (stdio) or sends them to an approval page (HTTP) ([decision 0014](docs/decisions/0014-approvals-in-the-client.md)) |
 | Metering, plans, and quotas | Implemented: a usage event per call, `qaos hosted usage export`, plans with toolsets, rate limits, and monthly quotas per tenant ([decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)) |
-| Tool compatibility | Implemented: semver tool versions checked against `tool-versions.lock`, deprecations, `qaos://server/info` ([tools changelog](docs/tools-changelog.md)) |
+| Tool compatibility | Implemented: semver tool versions checked against `scripts/tool-versions.lock`, deprecations, `qaos://server/info` ([tools changelog](docs/tools-changelog.md)) |
 | Team server in Docker | Implemented on SQLite or PostgreSQL + pgvector ([docs/deployment.md](docs/deployment.md)); both smoke-tested by `docker compose up` in CI |
 | Skills and client packaging | Implemented: four instruction-only skills kept in step with the server by tests, a Claude Code plugin, and Cursor and VS Code bundles ([getting started](docs/getting-started.md)) |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |

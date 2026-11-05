@@ -226,7 +226,7 @@ Core's internal import order is **confirmed**:
 
 A `ToolSpec` has the following fields:
 - a snake_case name and a description;
-- a `MAJOR.MINOR.PATCH` version, checked against `tool-versions.lock`, and an optional
+- a `MAJOR.MINOR.PATCH` version, checked against `scripts/tool-versions.lock`, and an optional
   `Deprecation` (decision 0015; [tools changelog](tools-changelog.md));
 - pydantic input and output models;
 - the plain function;

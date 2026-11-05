@@ -21,7 +21,7 @@ def test_the_client_bundles_are_generated_from_the_current_skills() -> None:
         if not path.is_file() or path.read_text("utf-8") != content
     ]
 
-    assert stale == [], "Regenerate with `uv run python tests/server/client_bundles.py`"
+    assert stale == [], "Regenerate with `uv run python scripts/client_bundles.py`"
 
 
 def test_every_bundle_carries_every_skill_and_the_same_server() -> None:

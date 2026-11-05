@@ -10,7 +10,7 @@ def test_every_served_tool_matches_the_lock() -> None:
 
     assert problems == [], (
         "Tool schemas changed. Raise each tool's version as the change needs, run "
-        "`uv run python tests/server/tool_lock.py --update`, and add the change "
+        "`uv run python scripts/tool_lock.py --update`, and add the change "
         "to docs/tools-changelog.md:\n" + "\n".join(problems)
     )
 

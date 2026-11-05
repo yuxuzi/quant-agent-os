@@ -35,6 +35,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Removed
 
+- **The FTS5 fallback.** A SQLite without FTS5 is now refused with what to do, instead of ranking
+  keyword search by a second, simpler path. Python builds from uv include FTS5.
 - **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
   was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
 

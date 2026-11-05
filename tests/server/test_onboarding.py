@@ -93,7 +93,8 @@ def test_connect_write_refuses_a_broken_file_and_leaves_it(tmp_path: Path) -> No
 
 
 def test_doctor_explains_an_empty_home_and_still_passes() -> None:
-    result = RUNNER.invoke(app, ["doctor"], env={"COLUMNS": "200"})
+    # Wide enough that no hint wraps, however long the temporary home's path is.
+    result = RUNNER.invoke(app, ["doctor"], env={"COLUMNS": "1000"})
 
     assert result.exit_code == 0, result.output
     for hint in ("qaos init", "qaos ingest DIR", "qaos data add FILE"):

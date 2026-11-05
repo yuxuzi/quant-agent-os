@@ -5,7 +5,7 @@ description: Quant-Agent-OS: search the user's research corpus with citations, c
 
 # Quant-Agent-OS
 
-<!-- Generated from skills/ by tests/server/client_bundles.py; do not edit. -->
+<!-- Generated from skills/ by scripts/client_bundles.py; do not edit. -->
 
 ## quant-analytics
 

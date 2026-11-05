@@ -12,9 +12,9 @@ changelog is [CHANGELOG.md](../CHANGELOG.md).
 - **Minor:** additions only, such as an optional input, a new output field, or a new enum value.
 - **Patch:** fixes that change neither schema, such as a clearer description.
 
-`tool-versions.lock` records each tool's version, permissions, and schemas. The platform tests
+`scripts/tool-versions.lock` records each tool's version, permissions, and schemas. The platform tests
 fail when they change without a big enough version bump. After raising the version, run
-`uv run python tests/server/tool_lock.py --update` and add an entry here.
+`uv run python scripts/tool_lock.py --update` and add an entry here.
 
 Clients read the served versions from `qaos://server/info`.
 
