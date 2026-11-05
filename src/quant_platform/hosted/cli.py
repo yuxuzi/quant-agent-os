@@ -17,7 +17,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing, load_keys
+from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
 from quant_agent_os.config import get_settings, home_dir
 from quant_agent_os.mcp import MCPUnavailableError
@@ -122,7 +122,7 @@ def serve_hosted(
 
     settings = get_settings()
     try:
-        ring = KeyRing(load_keys(keys or settings.api_keys_file))
+        ring = KeyRing.from_file(keys or settings.api_keys_file)
     except ApiKeyError as error:
         errors.print(f"[red]error:[/red] {error}")
         raise typer.Exit(1) from error

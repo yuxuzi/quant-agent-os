@@ -75,7 +75,9 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
   `qaos keys new` prints a key once. The keys file
   (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256
   hashes and is created with mode 0600. To revoke a key, delete its entry or set
-  `disabled = true`, then restart the server. The server does not start without an enabled key.
+  `disabled = true`. The server re-reads the file when it changes, and accepts no key while the
+  file is missing or invalid. A key can have an `expires` time (`--expires-in-days`). The server
+  does not start without an enabled, unexpired key.
 - **Scopes narrow; they never widen.**
   - `tools:list` lists the tools and `tools:call` calls them.
   - `runs:read` reads every run in the store, including retrieved passages, so grant it like

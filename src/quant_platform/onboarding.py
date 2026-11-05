@@ -173,7 +173,10 @@ def doctor() -> None:
 
     if settings.api_keys_file.is_file():
         try:
-            add("API keys", "ok", f"{len(load_keys(settings.api_keys_file))} configured")
+            keys = load_keys(settings.api_keys_file)
+            expired = sum(key.expired for key in keys)
+            shown = f"{len(keys)} configured" + (f", {expired} expired" if expired else "")
+            add("API keys", "ok", shown)
         except ApiKeyError as error:
             add("API keys", "fail", str(error))
     else:

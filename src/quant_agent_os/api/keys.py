@@ -6,6 +6,7 @@ A keys file is TOML with one ``[[keys]]`` table per key::
     principal = "alice"
     sha256 = "<64 hex characters>"
     scopes = ["tools:list", "tools:call"]
+    expires = 2027-01-31T00:00:00Z  # optional
 
 Keys are 32 random bytes, so a plain SHA-256 is enough to store them; nothing here needs the
 ``api`` extra.
@@ -15,20 +16,24 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
+import threading
 import tomllib
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_validator
 
 from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
 
 Scope = Literal["tools:list", "tools:call", "runs:read", "runs:approve"]
 SCOPES: tuple[Scope, ...] = get_args(Scope)
 KEY_PREFIX = "qaos_"
+logger = logging.getLogger("quant_agent_os.api")
 PRINCIPAL_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$"
 
 
@@ -44,6 +49,12 @@ class ApiKey(BaseModel):
     scopes: frozenset[Scope] = Field(min_length=1)
     tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     disabled: bool = False
+    expires: AwareDatetime | None = None
+
+    @property
+    def expired(self) -> bool:
+        """Return whether the key's expiry has passed."""
+        return self.expires is not None and self.expires <= datetime.now(UTC)
 
     @model_validator(mode="after")
     def _approvers_cannot_call(self) -> ApiKey:
@@ -87,17 +98,26 @@ def load_keys(path: Path) -> list[ApiKey]:
 
 
 def add_key(
-    path: Path, principal: str, scopes: Iterable[Scope], *, tenant: str = DEFAULT_TENANT
+    path: Path,
+    principal: str,
+    scopes: Iterable[Scope],
+    *,
+    tenant: str = DEFAULT_TENANT,
+    expires: datetime | None = None,
 ) -> str:
     """Generate a key, append its hash to ``path`` (created with mode 0600), and return it.
 
     The key itself is returned once and never written anywhere. A key acts only within its
-    ``tenant``.
+    ``tenant``, and until ``expires`` if given.
     """
     key = new_key()
     try:
         entry = ApiKey(
-            principal=principal, sha256=hash_key(key), scopes=frozenset(scopes), tenant=tenant
+            principal=principal,
+            sha256=hash_key(key),
+            scopes=frozenset(scopes),
+            tenant=tenant,
+            expires=expires,
         )
     except ValidationError as error:
         problems = "; ".join(
@@ -114,6 +134,7 @@ def add_key(
         f'\n[[keys]]\nprincipal = "{entry.principal}"\nsha256 = "{entry.sha256}"\n'
         f"scopes = [{scope_list}]\n"
         + (f'tenant = "{entry.tenant}"\n' if entry.tenant != DEFAULT_TENANT else "")
+        + (f"expires = {entry.expires.isoformat()}\n" if entry.expires else "")
     )
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
@@ -122,19 +143,62 @@ def add_key(
 
 
 class KeyRing:
-    """The enabled keys a server accepts."""
+    """The keys a server accepts: enabled ones whose expiry has not passed.
+
+    `from_file` follows a keys file, so issuing or revoking a key needs no restart. If the file
+    becomes missing or invalid, no key is accepted until it is fixed: a mistyped revocation must
+    not leave the revoked key working.
+    """
 
     def __init__(self, keys: Iterable[ApiKey]) -> None:
         self._keys = [key for key in keys if not key.disabled]
+        self._path: Path | None = None
+        self._stamp: tuple[int, int, int] | None = None
+        self._lock = threading.Lock()
+
+    @classmethod
+    def from_file(cls, path: Path) -> KeyRing:
+        """Return a ring that follows ``path``; raise `ApiKeyError` if it cannot be read now."""
+        stamp = _stamp_of(path)  # first, so a change made while loading is seen next time
+        ring = cls(load_keys(path))
+        ring._path = path
+        ring._stamp = stamp
+        return ring
 
     def __len__(self) -> int:
-        return len(self._keys)
+        self._reload()
+        return sum(not key.expired for key in self._keys)
 
     def authenticate(self, presented: str) -> ApiKey | None:
         """Return the key matching ``presented``, comparing every hash in constant time."""
+        self._reload()
         digest = hash_key(presented)
         found: ApiKey | None = None
         for key in self._keys:
             if hmac.compare_digest(key.sha256, digest):
                 found = key
-        return found
+        return None if found is None or found.expired else found
+
+    def _reload(self) -> None:
+        """Re-read the file if it changed; only a change costs more than one `stat`."""
+        if self._path is None:
+            return
+        with self._lock:
+            stamp = _stamp_of(self._path)
+            if stamp == self._stamp:
+                return
+            self._stamp = stamp
+            try:
+                self._keys = [key for key in load_keys(self._path) if not key.disabled]
+            except ApiKeyError as error:
+                self._keys = []
+                logger.error("Accepting no API keys until this is fixed: %s", error)
+
+
+def _stamp_of(path: Path) -> tuple[int, int, int] | None:
+    """Return what identifies a version of ``path``: inode, size, and modification time."""
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    return info.st_ino, info.st_size, info.st_mtime_ns

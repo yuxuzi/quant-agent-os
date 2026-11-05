@@ -1,5 +1,6 @@
 """Core's commands: datasets, API keys, and the run audit. `qaos` mounts them."""
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -56,6 +57,10 @@ def key_new(
     tenant: Annotated[
         str, typer.Option(help="The tenant the key acts in; its data only (decision 0013).")
     ] = DEFAULT_TENANT,
+    expires_in_days: Annotated[
+        int | None,
+        typer.Option(min=1, help="Stop accepting the key after this many days. Default: never."),
+    ] = None,
 ) -> None:
     """Create an API key: print it once and append only its hash to the keys file."""
     unknown = sorted(set(scope) - set(SCOPES))
@@ -67,14 +72,14 @@ def key_new(
     path = keys or get_settings().api_keys_file
     scopes: list[Scope] = [item for item in SCOPES if item in scope]
     try:
-        key = add_key(path, principal, scopes, tenant=tenant)
+        expires = datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
+        key = add_key(path, principal, scopes, tenant=tenant, expires=expires)
     except (ApiKeyError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     errors.print(
         f"Added a key for {principal} in tenant {tenant} ({', '.join(scopes)}) to {path}. "
-        "It is shown once; "
-        "store it now. Restart the server to use it."
+        "It is shown once; store it now. A running server accepts it at once."
     )
     typer.echo(key)
 

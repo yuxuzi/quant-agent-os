@@ -11,7 +11,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os import __version__
-from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing, load_keys
+from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
 from quant_agent_os.cli import data_app, keys_app, show_runs
 from quant_agent_os.config import ConfigFileError, get_settings
@@ -141,7 +141,7 @@ def _serve_http(
 ) -> None:
     settings = get_settings()
     try:
-        ring = KeyRing(load_keys(keys or settings.api_keys_file))
+        ring = KeyRing.from_file(keys or settings.api_keys_file)
     except ApiKeyError as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error

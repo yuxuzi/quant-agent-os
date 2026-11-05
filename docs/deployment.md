@@ -57,10 +57,13 @@ docker compose -f deploy/compose.yaml run --rm -T keys new --principal alice \
   - `tools:list` and `tools:call` list and call the tools;
   - `runs:read` reads every recorded run, including retrieved passages, so grant it like
     access to the corpus.
+- **Expiry:** `qaos keys new --expires-in-days 90` sets an `expires` time on the key. You can also
+  add one by hand, with a UTC offset: `expires = 2027-01-31T00:00:00Z`.
 - **Revoking:** remove the key's entry, or add `disabled = true` under it, in
-  `/keys/api-keys.toml`, then restart the server.
-- **New keys** are read when the server starts, so restart it after issuing one:
-  `docker compose -f deploy/compose.yaml restart server`.
+  `/keys/api-keys.toml`.
+- **No restart:** the server re-reads the keys file when it changes, so new, revoked, and edited
+  keys apply on the next request. If the file is missing or invalid, the server logs the error and
+  **accepts no key** until the file is fixed, so a mistyped revocation can't leave a key working.
 
 ## 4. Add datasets (operator)
 

@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
 - **A firm vocabulary.** `qaos ingest DIR --vocabulary firm.toml` merges your own signal and factor
   names over the bundled vocabulary. The store keeps the result, so serving and later ingestion match
   what ingestion saw.
+- **API key expiry and reload.** `qaos keys new --expires-in-days N` sets an `expires` time on a
+  key. A running HTTP server re-reads the keys file when it changes, so issuing or revoking a key
+  needs no restart. **While the file is missing or invalid, the server accepts no key.**
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
 
