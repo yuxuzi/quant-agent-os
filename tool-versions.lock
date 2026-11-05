@@ -48,11 +48,19 @@
             "title": "Benchmark"
           },
           "periods_per_year": {
-            "default": 12,
-            "maximum": 366,
-            "minimum": 1,
-            "title": "Periods Per Year",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 366,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
+            "title": "Periods Per Year"
           },
           "returns": {
             "anyOf": [
@@ -240,7 +248,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     "analyze_risk": {
       "input_schema": {
@@ -329,11 +337,19 @@
             "title": "Factor Returns"
           },
           "periods_per_year": {
-            "default": 12,
-            "maximum": 366,
-            "minimum": 1,
-            "title": "Periods Per Year",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 366,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
+            "title": "Periods Per Year"
           },
           "portfolio_id": {
             "minLength": 1,
@@ -655,7 +671,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     "check_spec": {
       "input_schema": {
@@ -2942,11 +2958,19 @@
             "type": "string"
           },
           "periods_per_year": {
-            "default": 12,
-            "maximum": 366,
-            "minimum": 1,
-            "title": "Periods Per Year",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 366,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
+            "title": "Periods Per Year"
           },
           "returns": {
             "anyOf": [
@@ -3152,7 +3176,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     "server_info": {
       "input_schema": {

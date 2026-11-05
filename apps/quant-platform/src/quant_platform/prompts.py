@@ -40,13 +40,13 @@ ANALYZE_RETURNS = PromptSpec(
     description="Performance metrics of a dataset column, by reference.",
     template=(
         'Call analyze_performance with returns {{"dataset": "{dataset}", "column": '
-        '"{column}"}} and periods_per_year {periods_per_year}. Report the metrics with '
-        "their conventions and warnings, as computed; do not recompute them."
+        '"{column}"}}. The server infers periods per year from the dates; if it asks for '
+        "periods_per_year, ask me. Report the metrics with their conventions and warnings, as "
+        "computed; do not recompute them."
     ),
     arguments=(
         PromptArgument("dataset", "A dataset id from list_datasets"),
         PromptArgument("column", "The returns column"),
-        PromptArgument("periods_per_year", "252 for daily, 52 weekly, 12 monthly"),
     ),
 )
 

@@ -90,7 +90,9 @@ def test_planning_prompt_lists_only_registered_tools() -> None:
 
 def test_max_drawdown_known_answer() -> None:
     # Wealth path 1.10 -> 0.55 -> 0.66: the worst decline is 0.55 / 1.10 - 1 = -50%.
-    result = max_drawdown.function(ReturnsInput(series_id="s", returns=[0.1, -0.5, 0.2]))
+    result = max_drawdown.function(
+        ReturnsInput(series_id="s", returns=[0.1, -0.5, 0.2], periods_per_year=12)
+    )
 
     assert result.value == pytest.approx(-0.5)
 

@@ -41,13 +41,17 @@ def test_analyze_performance_honours_the_contract_and_states_conventions() -> No
 
 
 def test_without_a_benchmark_there_are_no_benchmark_metrics() -> None:
-    output = analyze_performance.function(PerformanceInput(series_id="fund", returns=FUND))
+    output = analyze_performance.function(
+        PerformanceInput(series_id="fund", returns=FUND, periods_per_year=12)
+    )
 
     assert "beta" not in output.metrics and "alpha" not in output.metrics
 
 
 def test_short_and_flat_series_are_flagged() -> None:
-    output = analyze_performance.function(PerformanceInput(series_id="cash", returns=[0.001] * 4))
+    output = analyze_performance.function(
+        PerformanceInput(series_id="cash", returns=[0.001] * 4, periods_per_year=12)
+    )
 
     assert output.metrics["sharpe_ratio"] is None
     assert any("unreliable" in warning for warning in output.warnings)
@@ -64,12 +68,12 @@ def test_short_and_flat_series_are_flagged() -> None:
 )
 def test_bad_inputs_are_refused(fields: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
-        PerformanceInput(series_id="x", **fields)
+        PerformanceInput(series_id="x", periods_per_year=12, **fields)
 
 
 @pytest.mark.parametrize("spec", [annualized_return, max_drawdown])
 def test_the_single_metric_tools_honour_the_contract(spec: Any) -> None:
-    record = check_tool(spec, {"series_id": "fund", "returns": FUND})
+    record = check_tool(spec, {"series_id": "fund", "returns": FUND, "periods_per_year": 12})
 
     assert record.output is not None
     assert record.output["evidence"]

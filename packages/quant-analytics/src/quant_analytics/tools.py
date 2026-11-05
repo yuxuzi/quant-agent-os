@@ -9,6 +9,8 @@ evidence that names the series it came from.
 from __future__ import annotations
 
 import math
+import statistics
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -21,6 +23,7 @@ from quant_analytics import metrics, risk
 MIN_OBSERVATIONS = 12
 MAX_ASSETS = 500
 MAX_FACTORS = 50
+PERCENT_LIKE = 0.2  # a typical period's return above this is more likely percent than fraction
 CONVENTIONS = {
     "source": "empyrical-reloaded (the metrics behind pyfolio)",
     "returns": "simple per-period returns, as fractions",
@@ -65,13 +68,16 @@ class ReturnsInput(BaseModel):
 
     series_id: str = Field(min_length=1, description="Identifier of the returns series")
     returns: list[float] = Field(min_length=2, description="Simple returns, e.g. 0.01 for 1%")
-    periods_per_year: int = Field(default=12, ge=1, le=366)
+    periods_per_year: int = Field(ge=1, le=366, description="252 daily, 52 weekly, 12 monthly")
 
     @field_validator("returns")
     @classmethod
     def _finite(cls, values: list[float]) -> list[float]:
         if not all(math.isfinite(value) and value > -1.0 for value in values):
-            raise ValueError("returns must be finite and above -1 (a loss of more than 100%)")
+            raise ValueError(
+                "returns must be finite and above -1 (a loss of more than 100%); give them as "
+                "fractions, 0.01 for 1%"
+            )
         return values
 
 
@@ -104,7 +110,7 @@ def _check_series(label: str, series: dict[str, list[float]], loss_floor: bool) 
         if not all(math.isfinite(v) and (v > -1.0 or not loss_floor) for v in values)
     )
     if bad:
-        floor = " and above -1" if loss_floor else ""
+        floor = " and above -1 (fractions, 0.01 for 1%)" if loss_floor else ""
         raise ValueError(f"{label} must be finite{floor}: {', '.join(bad)}")
     return lengths.pop()
 
@@ -124,7 +130,7 @@ class RiskInput(BaseModel):
         max_length=MAX_FACTORS,
         description="Factor returns (e.g. market, value), over the same periods",
     )
-    periods_per_year: int = Field(default=12, ge=1, le=366)
+    periods_per_year: int = Field(ge=1, le=366, description="252 daily, 52 weekly, 12 monthly")
 
     @model_validator(mode="after")
     def _aligned(self) -> RiskInput:
@@ -229,6 +235,16 @@ def _sample_warnings(params: ReturnsInput) -> list[str]:
     return []
 
 
+def _unit_warnings(name: str, values: Sequence[float]) -> list[str]:
+    typical = statistics.median(abs(value) for value in values)
+    if typical <= PERCENT_LIKE:
+        return []
+    return [
+        f"Returns of {name} look like percentages (typical size {typical:g}); the tools expect "
+        "fractions, 0.01 for 1%, and these results would be wrong if so."
+    ]
+
+
 def _computed(statement: str, params: ReturnsInput) -> Evidence:
     return Evidence(
         kind="computed",
@@ -262,7 +278,7 @@ def analyze_performance(params: PerformanceInput) -> PerformanceOutput:
         "value_at_risk": metrics.value_at_risk(returns),
         "hit_rate": metrics.hit_rate(returns),
     }
-    warnings = _sample_warnings(params)
+    warnings = _sample_warnings(params) + _unit_warnings(params.series_id, returns)
     if params.benchmark is not None:
         values |= metrics.benchmark_metrics(returns, params.benchmark, periods, params.risk_free)
     if values["sharpe_ratio"] is None:
@@ -343,6 +359,8 @@ def analyze_risk(params: RiskInput) -> RiskOutput:
             f"Only {periods} observations for {name}; results are unreliable below "
             f"{MIN_OBSERVATIONS}."
         )
+    for asset, values in params.asset_returns.items():
+        warnings += _unit_warnings(asset, values)
     if breakdown.volatility == 0.0:
         warnings.append(f"{name} does not vary, so its volatility contributions are undefined.")
     statements = [f"Annualised volatility of {name} is {breakdown.volatility:.2%}."]

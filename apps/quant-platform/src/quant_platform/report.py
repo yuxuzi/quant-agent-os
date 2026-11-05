@@ -28,7 +28,12 @@ class ReportRequest(BaseModel):
     )
     returns: ColumnRef | None = Field(default=None, description="A strategy's returns column")
     benchmark: ColumnRef | None = None
-    periods_per_year: int = Field(default=12, ge=1, le=366)
+    periods_per_year: int | None = Field(
+        default=None,
+        ge=1,
+        le=366,
+        description="Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
+    )
 
 
 class ReportStep(BaseModel):
@@ -74,16 +79,16 @@ def research_report_tool(
         permissions=frozenset().union(*(registry.get(name).permissions for name in used)),
         timeout_seconds=60.0,
         max_output_bytes=300_000,
+        version="2.0.0",
     )
     def research_report(params: ReportRequest) -> ResearchReport:
         steps = [PlanStep(tool="generate_strategy", arguments={"focus": params.focus})]
         if params.returns is not None:
             if not measures:
                 raise ValueError("This server has no analytics toolset; omit returns.")
-            arguments: dict[str, Any] = {
-                "returns": params.returns.model_dump(),
-                "periods_per_year": params.periods_per_year,
-            }
+            arguments: dict[str, Any] = {"returns": params.returns.model_dump()}
+            if params.periods_per_year is not None:
+                arguments["periods_per_year"] = params.periods_per_year
             if params.benchmark is not None:
                 arguments["benchmark"] = params.benchmark.model_dump()
             steps.append(PlanStep(tool="analyze_performance", arguments=arguments))

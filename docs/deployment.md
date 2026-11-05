@@ -69,8 +69,11 @@ DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm dat
   push /import/returns.csv --id returns
 ```
 
-A dataset is a CSV file: a header row, an optional text index column (dates), then numeric
-columns. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
+A dataset is a CSV file: a header row, an index column (dates, oldest first), then numeric
+columns, where blank and `NaN` cells count as missing. The first column is the index when it is
+named `date`, `datetime`, `time`, or `period`, holds `20240102` or `202401` values, or is not all
+numbers; `--index` names any other column. The tools infer the frequency from the dates and join
+datasets on them. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
 values, so the numbers never pass through a model. Without `DATASETS_SOURCE`, the import
 directory is `deploy/sample-data`. Pushing the same id again replaces the dataset; its new
 fingerprint shows in each result's data versions. The server reads datasets per request, so no

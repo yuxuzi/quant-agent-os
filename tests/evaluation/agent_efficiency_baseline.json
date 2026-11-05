@@ -1,8 +1,8 @@
 {
   "servers": {
     "platform": {
-      "client_only_bytes": 29461,
-      "definition_bytes": 11008,
+      "client_only_bytes": 29660,
+      "definition_bytes": 11347,
       "instruction_bytes": 1287,
       "tools": 11
     }
@@ -10,7 +10,7 @@
   "skills": {
     "quant-analytics": {
       "description_bytes": 276,
-      "skill_bytes": 2805
+      "skill_bytes": 3060
     },
     "quant-app-factory": {
       "description_bytes": 282,
@@ -27,11 +27,11 @@
   },
   "tasks": {
     "analyze_a_series": {
-      "argument_bytes": 125,
+      "argument_bytes": 102,
       "calls": 2,
-      "result_bytes": 5036,
+      "result_bytes": 5119,
       "skill": "quant-analytics",
-      "skill_bytes": 2805,
+      "skill_bytes": 3060,
       "success": true,
       "tools": [
         "analyze_performance",
@@ -39,11 +39,11 @@
       ]
     },
     "analyze_portfolio_risk": {
-      "argument_bytes": 146,
+      "argument_bytes": 123,
       "calls": 2,
-      "result_bytes": 2618,
+      "result_bytes": 2701,
       "skill": "quant-analytics",
-      "skill_bytes": 2805,
+      "skill_bytes": 3060,
       "success": true,
       "tools": [
         "analyze_risk",
@@ -74,7 +74,7 @@
       ]
     },
     "report_on_a_signal": {
-      "argument_bytes": 89,
+      "argument_bytes": 66,
       "calls": 1,
       "result_bytes": 4116,
       "skill": "quant-strategy",
@@ -98,12 +98,12 @@
     }
   },
   "totals": {
-    "argument_bytes": 631,
+    "argument_bytes": 562,
     "calls": 10,
-    "definition_bytes": 11008,
+    "definition_bytes": 11347,
     "instruction_bytes": 1287,
-    "result_bytes": 28901,
-    "skill_bytes": 10969,
+    "result_bytes": 29067,
+    "skill_bytes": 11224,
     "skill_description_bytes": 1114,
     "success_rate": 1.0,
     "tools": 11
