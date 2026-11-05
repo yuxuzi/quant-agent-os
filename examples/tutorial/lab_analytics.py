@@ -2,18 +2,18 @@
 
 Usage: uv run python examples/tutorial/lab_analytics.py [DATASETS_DIR]
 
-The datasets directory defaults to $QUANT_AGENT_OS_DATASETS_DIR. Push the two sample datasets
-first, as docs/tutorial.md shows. The script passes dataset ids, never values, which is what an
+The datasets directory defaults to the home's. Add the two sample datasets first, as
+docs/tutorial.md shows. The script passes dataset ids, never values, which is what an
 AI client does through MCP.
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
+from quant_agent_os.config import Settings
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.sdk import Platform
 from quant_analytics.tools import analytics_tools
@@ -31,10 +31,8 @@ def ok(platform: Platform, tool: str, arguments: dict[str, Any]) -> dict[str, An
 
 def main() -> None:
     """Print the fund's performance against its benchmark, then the portfolio's risk."""
-    directory = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("QUANT_AGENT_OS_DATASETS_DIR")
-    if not directory:
-        raise SystemExit("Give a datasets directory, or set QUANT_AGENT_OS_DATASETS_DIR.")
-    with Platform(analytics_tools(DirectoryDatasetStore(Path(directory)))) as platform:
+    directory = Path(sys.argv[1]) if len(sys.argv) > 1 else Settings().datasets_dir
+    with Platform(analytics_tools(DirectoryDatasetStore(directory))) as platform:
         performance = ok(
             platform,
             "analyze_performance",
