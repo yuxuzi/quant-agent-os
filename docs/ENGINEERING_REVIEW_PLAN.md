@@ -388,8 +388,7 @@ Success metrics (to be confirmed after the first baseline):
   This needs its own decision record.
 - **O-9:** *Resolved by B-25:* `data-database` supports PostgreSQL, SQLite, and DuckDB.
   Snowflake waits for demand.
-- **O-10 (answered 2026-11-05):** Opt-in for size: the platform's `parquet` extra brings `pyarrow`,
-  adding about 126 MB. The App Factory's `data-parquet` component is separate (B-23).
+- **O-10:** Does `data-parquet` bring `pyarrow` by default, or is it opt-in for size (B-23)?
 - **O-11:** When `factory.toml` moves to Core, and whether a keychain backend is added, are
   decided by the second product that needs the settings.
 - **O-12:** Does pytemplate-uv's roadmap include generic pack authoring (an API or a

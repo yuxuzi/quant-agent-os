@@ -116,7 +116,7 @@ module = ["empyrical", "empyrical.*"]  # untyped; quant_analytics.metrics types 
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["pyarrow", "pyarrow.*"]  # untyped; read in one function of quant_agent_os.data
+module = ["pandas", "pyarrow", "pyarrow.*"]  # untyped; read in one function of quant_agent_os.data
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

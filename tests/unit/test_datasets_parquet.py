@@ -13,8 +13,8 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from quant_platform.cli import app
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore, datasets, parse_dataset
+from quant_platform.cli import app
 
 pandas = pytest.importorskip("pandas")
 pyarrow = pytest.importorskip("pyarrow")
