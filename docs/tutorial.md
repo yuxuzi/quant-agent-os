@@ -652,6 +652,9 @@ the answers, and tell us if the difference is visible.
 
 ## Lab 7: A server with two tenants
 
+The first part runs one team's server. The tenants and plans later in this lab are for a vendor
+hosting many customers, so they use `quant-platform hosted` ([hosted.md](hosted.md)).
+
 **Goal:** run the platform as a service: first with one API key, then with two customers who
 can't see each other's data, then with a quota. It all stays on your machine.
 
@@ -741,14 +744,14 @@ uv run quant-research ingest "$TUT/notes" --store "$TUT/tenants/globex.db"
 uv run quant-agent-os dataset push examples/tutorial/data/fund_returns.csv --id fund --dir "$TUT/tenants/datasets" --tenant acme
 
 export QUANT_AGENT_OS_TENANTS_FILE="$TUT/tenants.toml"
-uv run quant-platform tenant add acme --store "$TUT/tenants/acme.db" --toolsets research,analytics
-uv run quant-platform tenant add globex --store "$TUT/tenants/globex.db" --toolsets research
-uv run quant-platform tenant list
+uv run quant-platform hosted tenant add acme --store "$TUT/tenants/acme.db" --toolsets research,analytics
+uv run quant-platform hosted tenant add globex --store "$TUT/tenants/globex.db" --toolsets research
+uv run quant-platform hosted tenant list
 
 ALICE=$(uv run quant-agent-os api-key new --principal alice --tenant acme --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
 GINA=$(uv run quant-agent-os api-key new --principal gina --tenant globex --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
 
-uv run quant-platform serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
+uv run quant-platform hosted serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
 ```
@@ -810,15 +813,15 @@ cat >> "$TUT/tenants.toml" <<'TOML'
 toolsets = ["research"]
 calls_per_minute = 2
 TOML
-uv run quant-platform tenant add globex --store "$TUT/tenants/globex.db" --plan trial
+uv run quant-platform hosted tenant add globex --store "$TUT/tenants/globex.db" --plan trial
 
-uv run quant-platform serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
+uv run quant-platform hosted serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
 
 ask "$GINA"; ask "$GINA"; ask "$GINA"
 kill $SERVER
-uv run quant-platform usage export --runs "$TUT/tenants/runs.db" --by tool
+uv run quant-platform hosted usage export --runs "$TUT/tenants/runs.db" --by tool
 ```
 
 The third call is refused (the wait time varies), and the usage export separates billable calls
@@ -847,7 +850,7 @@ unset QUANT_AGENT_OS_TENANTS_FILE
 | Try this | What you should see |
 | --- | --- |
 | Create a key with only `--scope tools:list`, then use it to call a tool | Listing works, and the call is refused: `This API key lacks the 'tools:call' scope.` |
-| `uv run quant-platform tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
+| `uv run quant-platform hosted tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
 | Connect Claude over HTTP while the Part 1 server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 11 tools, over HTTP |
 
 > This setup is for learning on loopback. Before you put a server on a network, read
@@ -982,7 +985,7 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | **Data** | `dataset push` | `list_datasets`, `analyze_performance`, `analyze_risk` |
 | **Documents** | `quant-research ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
 | **Projects** | `quant-factory create`, `quant-factory new` | `describe_template`, `check_spec` (with the factory toolset) |
-| **Access** | `api-key new`, `tenant add` | None |
+| **Access** | `api-key new`, `hosted tenant add` | None |
 
 | I want to | Command |
 | --- | --- |

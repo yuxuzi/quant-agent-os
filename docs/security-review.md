@@ -15,14 +15,14 @@ lists what is still open.
 
 ## The surface
 
-`quant-platform serve-http` serves everything below on one port. Local stdio (`serve-mcp`) is
+`quant-platform hosted serve-http` serves everything below on one port; the default `serve-http` serves all but the approval page and OAuth metadata. Local stdio (`serve-mcp`) is
 out of scope: it trusts the user who started it.
 
 | Route | Who may call it | Guarded by |
 | --- | --- | --- |
 | `POST /mcp` (Streamable HTTP, stateless) | API key or OAuth token, scope per method | `mcp/http.py`: bearer middleware, `caller_of`, `tenant_route` |
 | `/v1/tools`, `/v1/tools/{name}/call`, `/v1/runs` | API key with the route's scope | `api/app.py`: `requires(scope)`, `surface_of` |
-| `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `api/approval_page.py`, `approval_desk.py` |
+| `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `quant_platform/hosted/approval_page.py`, `approval_desk.py` |
 | `/.well-known/oauth-protected-resource/mcp` | Anyone (public metadata) | MCP SDK |
 | `/healthz` | Anyone; returns `{"status": "ok"}` only | — |
 
@@ -34,15 +34,15 @@ permission policy, input validation, plan limits, approval, timeout, and output 
 | Risk | What the code does | Evidence | Verdict |
 | --- | --- | --- | --- |
 | **API1 Broken object-level authorization** | The tenant comes only from the verified credential. Each tenant has its own store, datasets, and registry; run reads are filtered by tenant; a guessed resource URI resolves inside the caller's tenant. Within a tenant, any `runs:read` key reads every principal's runs (by design: the tenant is the boundary). | `tests/contract/test_mcp_http.py`, `apps/quant-platform/tests/test_platform_tenants.py` (isolation release gate) | Pass |
-| **API2 Broken authentication** | Keys have 256 random bits, are stored as SHA-256 hashes (file mode 0600), and are compared in constant time against every hash. OAuth tokens are introspected and must be active, unexpired, for this server's audience, from a pinned issuer, and name a pinned tenant. Tokens are never sent to a server that could not have issued them. | `tests/unit/test_api_key_cli.py`, `tests/contract/test_mcp_oauth.py` | Pass, with F-1 and F-4 |
+| **API2 Broken authentication** | Keys have 256 random bits, are stored as SHA-256 hashes (file mode 0600), and are compared in constant time against every hash. OAuth tokens are introspected and must be active, unexpired, for this server's audience, from a pinned issuer, and name a pinned tenant. Tokens are never sent to a server that could not have issued them. | `tests/unit/test_api_key_cli.py`, `apps/quant-platform/tests/test_hosted_oauth.py` | Pass, with F-1 and F-4 |
 | **API3 Broken object-property-level authorization** | Inputs are validated against each tool's model, and REST rejects unknown body keys. Outputs are validated against the output model. Stored arguments and outputs are redacted; usage events and telemetry carry sizes and labels only. | `tests/unit/test_runs.py`, `tests/unit/test_telemetry.py` | Pass |
-| **API4 Unrestricted resource consumption** | Bodies are capped at 5 MiB (approval forms at 8 KiB), each tool has a timeout and an output cap, and a tenant's plan can limit calls a minute and a month. Unauthenticated requests are not limited, and a timed-out tool thread keeps running. | `tests/unit/test_quotas.py`, `apps/quant-platform/tests/test_platform_plans.py` | Partial: F-1, F-2 |
-| **API5 Broken function-level authorization** | Scopes are checked per MCP method and per REST route. No route can approve: approving needs `runs:approve`, which no key holding `tools:call` and no OAuth token can carry. Operator actions (ingestion, keys, tenants, usage export) are CLI commands, not routes. | `tests/contract/test_approvals_in_client.py` | Pass |
-| **API6 Unrestricted access to sensitive business flows** | A consequential call needs a per-call approval bound to the run, tool, and input hash, decided once by a different person (four eyes except `local`). Five failed attempts deny a request; each address may submit 30 forms a minute. Remote servers never write users' files (`create_app` is not served over HTTP). | `tests/contract/test_approvals_in_client.py` | Pass, with F-3 |
-| **API7 Server-side request forgery** | No tool takes a URL. Outbound calls go only to operator-configured hosts: the introspection URLs in the tenants file and the hosted embedder. | Code reading: `mcp/oauth.py`, `quant_research/infrastructure/remote_embedding.py` | Pass |
+| **API4 Unrestricted resource consumption** | Bodies are capped at 5 MiB (approval forms at 8 KiB), each tool has a timeout and an output cap, and a tenant's plan can limit calls a minute and a month. Unauthenticated requests are not limited, and a timed-out tool thread keeps running. | `apps/quant-platform/tests/test_hosted_limits.py`, `apps/quant-platform/tests/test_platform_plans.py` | Partial: F-1, F-2 |
+| **API5 Broken function-level authorization** | Scopes are checked per MCP method and per REST route. No route can approve: approving needs `runs:approve`, which no key holding `tools:call` and no OAuth token can carry. Operator actions (ingestion, keys, tenants, usage export) are CLI commands, not routes. | `apps/quant-platform/tests/test_hosted_approvals.py` | Pass |
+| **API6 Unrestricted access to sensitive business flows** | A consequential call needs a per-call approval bound to the run, tool, and input hash, decided once by a different person (four eyes except `local`). Five failed attempts deny a request; each address may submit 30 forms a minute. Remote servers never write users' files (`create_app` is not served over HTTP). | `apps/quant-platform/tests/test_hosted_approvals.py` | Pass, with F-3 |
+| **API7 Server-side request forgery** | No tool takes a URL. Outbound calls go only to operator-configured hosts: the introspection URLs in the tenants file and the hosted embedder. | Code reading: `quant_platform/hosted/oauth.py`, `quant_research/infrastructure/remote_embedding.py` | Pass |
 | **API8 Security misconfiguration** | Binds loopback by default and warns otherwise; no CORS, docs pages, server header, or date header; DNS-rebinding protection on `/mcp`; the approval page sends a strict CSP, `no-store`, `no-referrer`, and `DENY` framing. A failed tool's exception text is returned to the caller. | `tests/contract/test_mcp_http.py`, `tests/contract/test_rest_api.py` | Pass, with F-5 |
 | **API9 Improper inventory management** | Tools are registered explicitly, never discovered. Each has a semver version checked against `tool-versions.lock`; `server_info` and `qaos://server/info` list them; deprecations name a replacement and a removal date. | `apps/quant-platform/tests/test_tool_lock.py` | Pass |
-| **API10 Unsafe consumption of APIs** | Introspection responses are type-checked claim by claim, and failures refuse the token. Retrieved passages are marked `"trust": "untrusted"`, and no tool output reaches the platform's own planner. | `tests/contract/test_mcp_oauth.py`, research contract tests | Pass |
+| **API10 Unsafe consumption of APIs** | Introspection responses are type-checked claim by claim, and failures refuse the token. Retrieved passages are marked `"trust": "untrusted"`, and no tool output reaches the platform's own planner. | `apps/quant-platform/tests/test_hosted_oauth.py`, research contract tests | Pass |
 
 ## MCP security best practices
 

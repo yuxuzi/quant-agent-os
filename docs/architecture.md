@@ -136,8 +136,8 @@ sees the same corpus. A team that needs separation within a firm uses separate t
 | Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
 | MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool`, and resources (each read through its tool) and prompts (`tools/catalog.py`) over the executor | Confirmed |
 | Tenancy and serving | `tenancy.py`, `serving.py` | Tenant ids; `Surface` (one tenant's executor, resources, prompts, runs) and `Tenancy`, which REST and HTTP MCP route each caller to ([0013](decisions/0013-identity-and-tenancy.md)) | Confirmed (B-34) |
-| Approvals in the client | `approval_desk.py`, `api/approval_page.py` | Approval requests for waiting HTTP calls, the approval page (approver keys, four eyes), resume in the original run; stdio confirmation in the client ([0014](decisions/0014-approvals-in-the-client.md)) | Confirmed (B-35) |
-| OAuth | `mcp/oauth.py` | OAuth 2.1 resource server: introspection, audience, issuer-pinned tenants, Protected Resource Metadata | Confirmed (B-34) |
+| Approvals in the client | `quant_platform/hosted/approval_desk.py`, `approval_page.py` | Approval requests for waiting HTTP calls, the approval page (approver keys, four eyes), resume in the original run; stdio confirmation in the client ([0014](decisions/0014-approvals-in-the-client.md)) | Confirmed (B-35) |
+| OAuth | `quant_platform/hosted/oauth.py` | OAuth 2.1 resource server: introspection, audience, issuer-pinned tenants, Protected Resource Metadata | Confirmed (B-34) |
 | Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `quant-agent-os dataset push` | Confirmed (B-31) |
 | CLI | `cli.py` | `info`, `--version` | Confirmed |
 | Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |

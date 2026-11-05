@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Hosted features moved to `quant-platform hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
+  `hosted serve-http` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
+  `usage` are under `hosted`. The default `serve-http` serves one team with API keys. Their modules
+  moved from `quant_agent_os` to `quant_platform.hosted`. See [hosted.md](docs/hosted.md).
 - **App Factory is off by default on the platform server**, and the plugin no longer installs it.
   Add it with `--toolsets research,analytics,factory`. `quant-factory` is unchanged.
 

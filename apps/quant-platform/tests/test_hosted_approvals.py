@@ -22,13 +22,13 @@ from mcp.shared.exceptions import McpError
 from pydantic import BaseModel
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, build_app, load_keys
-from quant_agent_os.api.approval_page import approval_routes
-from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import Refusal, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
+from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
+from quant_platform.hosted.approval_page import approval_routes
 
 BASE = "http://127.0.0.1:8000"
 WRITES: list[str] = []
@@ -95,7 +95,9 @@ def server(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore, Approva
     tenancy = Tenants(store)
     app = build_app(None, keys, None, tenancy=tenancy)
     app.router.routes.extend(approval_routes(desk))
-    add_mcp_route(app, tenancy, name="test", verifier=KeyVerifier(keys), desk=desk)
+    add_mcp_route(
+        app, tenancy, name="test", verifier=KeyVerifier(keys), gate_for=approval_gates(desk)
+    )
     return app, issued, store, desk
 
 

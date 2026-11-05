@@ -12,17 +12,15 @@ from quant_agent_os.runs.recorder import outcome
 from quant_agent_os.runtime import (
     Approval,
     MemoryApprovalLedger,
-    PlanLimits,
     Refusal,
-    TokenBucket,
     ToolCall,
     ToolCallRecord,
     ToolExecutor,
     failure_details,
 )
 from quant_agent_os.runtime.executor import FAILURE_HINTS, canonical_sha256
-from quant_agent_os.runtime.quotas import month_window
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
+from quant_platform.hosted.limits import PlanLimits, TokenBucket, month_window
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 

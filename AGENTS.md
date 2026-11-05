@@ -19,6 +19,8 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Quant Analytics** (`packages/quant-analytics`): performance metrics from empyrical-reloaded
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
+- **Hosted features** (`quant_platform.hosted`): tenants, plans, usage, OAuth, and the approval page,
+  run only through `quant-platform hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`apps/quant-platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
   `quant-platform serve-mcp` serves them as one MCP server.
@@ -71,8 +73,7 @@ the real results.
    `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from
    `observability/logging.py`.
 4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
-   `approval_desk.py` (approval requests),
-   `mcp/` (stdio, HTTP, OAuth), `sdk/`, `testing.py` (`check_tool`), `observability/`,
+   `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a

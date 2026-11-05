@@ -1,6 +1,8 @@
 """The platform server (plan steps P2.1, P2.4, P2.5): one catalog, research_report, and prompts."""
 
 import json
+import subprocess
+import sys
 from importlib.metadata import version
 from typing import Any
 
@@ -19,6 +21,7 @@ from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
 from quant_platform import Catalog, compose
 from quant_platform.cli import app as cli
+from quant_platform.cli_common import parse_toolsets
 from quant_research import ResearchApp
 
 FUND = [0.012, -0.004, 0.021, -0.015, 0.008, 0.017, -0.006, 0.011, 0.002, -0.009, 0.014, 0.005]
@@ -221,5 +224,25 @@ def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
 
 
 def test_app_factory_is_served_only_when_asked_for() -> None:
-    assert platform_cli._toolsets(None) == ["research", "analytics"]
-    assert platform_cli._toolsets("research,factory") == ["research", "factory"]
+    assert parse_toolsets(None) == ["research", "analytics"]
+    assert parse_toolsets("research,factory") == ["research", "factory"]
+
+
+def test_the_default_commands_never_load_the_hosted_modules() -> None:
+    """Tenants, plans, OAuth, and the approval page stay off a self-hosted firm's path."""
+    code = (
+        "import sys, quant_platform.cli\n"
+        "names = [n for n in sys.modules if n.startswith('quant_platform.hosted.')]\n"
+        "print(sorted(names))"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+
+    assert done.stdout.strip() == "['quant_platform.hosted.cli']"
+
+
+def test_the_default_server_takes_no_hosted_options() -> None:
+    shown = CliRunner(env={"COLUMNS": "200"}).invoke(platform_cli.app, ["serve-http", "--help"])
+
+    assert shown.exit_code == 0
+    for option in ("--tenants", "--approval-url", "--resource-url"):
+        assert option not in shown.output

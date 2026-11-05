@@ -24,6 +24,8 @@ from typing import NoReturn
 from pydantic import ValidationError
 
 from quant_agent_os.api.keys import KeyRing
+from quant_agent_os.mcp.http import Caller
+from quant_agent_os.mcp.server import ApprovalGate
 from quant_agent_os.runs.models import ApprovalRequest, AuditEvent
 from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunRecorder
 from quant_agent_os.runs.redaction import redact
@@ -214,3 +216,20 @@ def _input_hash(executor: ToolExecutor, step: ToolCall) -> str | None:
     except (UnknownToolError, ValidationError):
         return None
     return canonical_sha256(params.model_dump(mode="json"))
+
+
+def approval_gates(desk: ApprovalDesk) -> Callable[[Caller], ApprovalGate]:
+    """Return what `add_mcp_route` needs: for each caller, a gate that opens their requests."""
+
+    def gate_for(caller: Caller) -> ApprovalGate:
+        def gate(
+            executor: ToolExecutor, step: ToolCall, recorder: RunRecorder
+        ) -> tuple[ToolCallRecord, tuple[str, str] | None]:
+            record, opened = desk.call(
+                executor, step, tenant=caller.tenant, principal=caller.principal, recorder=recorder
+            )
+            return record, (opened.request_id, desk.url(opened)) if opened is not None else None
+
+        return gate
+
+    return gate_for

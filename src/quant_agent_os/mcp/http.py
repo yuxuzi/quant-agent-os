@@ -11,13 +11,12 @@ the ``mcp`` and ``api`` extras.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os.api.keys import KeyRing
-from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.mcp.server import (
     AccessDeniedError,
     ApprovalGate,
@@ -26,8 +25,6 @@ from quant_agent_os.mcp.server import (
     build_server,
 )
 from quant_agent_os.runs.recorder import RunRecorder
-from quant_agent_os.runtime.call import ToolCall
-from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.serving import Tenancy
 
 if TYPE_CHECKING:
@@ -69,6 +66,9 @@ class Caller:
     tenant: str
 
 
+GateFor = Callable[[Caller], ApprovalGate]
+
+
 def caller_of(request: Any, scope: str) -> Caller:
     """Return the caller of an authenticated request whose credential has ``scope``.
 
@@ -89,11 +89,10 @@ def caller_of(request: Any, scope: str) -> Caller:
     return Caller(principal=token.subject or token.client_id, tenant=tenant)
 
 
-def tenant_route(tenancy: Tenancy, desk: ApprovalDesk | None = None) -> Route:
+def tenant_route(tenancy: Tenancy, gate_for: GateFor | None = None) -> Route:
     """Return the `Route` that serves each caller its tenant's surface, recording as them.
 
-    With ``desk``, a call that waits for an approval opens an approval request for its caller
-    (decision 0014).
+    With ``gate_for``, a call that waits for an approval goes through that caller's gate.
     """
 
     def route(request: Any, scope: str) -> Served:
@@ -112,21 +111,9 @@ def tenant_route(tenancy: Tenancy, desk: ApprovalDesk | None = None) -> Route:
             if surface.run_store is not None
             else None
         )
-        return Served(surface, recorder, _gate(desk, caller) if desk is not None else None)
+        return Served(surface, recorder, gate_for(caller) if gate_for is not None else None)
 
     return route
-
-
-def _gate(desk: ApprovalDesk, caller: Caller) -> ApprovalGate:
-    def gate(
-        executor: ToolExecutor, step: ToolCall, recorder: RunRecorder
-    ) -> tuple[ToolCallRecord, tuple[str, str] | None]:
-        record, opened = desk.call(
-            executor, step, tenant=caller.tenant, principal=caller.principal, recorder=recorder
-        )
-        return record, (opened.request_id, desk.url(opened)) if opened is not None else None
-
-    return gate
 
 
 def allowed_hosts(extra: list[str]) -> tuple[list[str], list[str]]:
@@ -151,14 +138,13 @@ def add_mcp_route(
     max_request_bytes: int = MAX_REQUEST_BYTES,
     path: str = "/mcp",
     resource_metadata_url: str | None = None,
-    desk: ApprovalDesk | None = None,
+    gate_for: GateFor | None = None,
 ) -> None:
     """Serve each caller its tenant's tools, resources, and prompts as MCP at ``path``.
 
     ``verifier`` checks bearer credentials (`KeyVerifier` for API keys). With
     ``resource_metadata_url``, a 401 points clients to the OAuth Protected Resource Metadata.
-    With ``desk``, waiting calls send the client to the approval page (serve
-    `approval_routes` on the same app).
+    With ``gate_for``, a call that waits for an approval goes through that caller's gate.
     """
     from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend, RequireAuthMiddleware
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -168,7 +154,7 @@ def add_mcp_route(
     from starlette.routing import Route as StarletteRoute
 
     server = build_server(
-        None, name=name, instructions=instructions, route=tenant_route(tenancy, desk)
+        None, name=name, instructions=instructions, route=tenant_route(tenancy, gate_for)
     )
     hosts, origins = allowed_hosts(extra_hosts or [])
     security = TransportSecuritySettings(

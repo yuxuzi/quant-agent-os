@@ -8,7 +8,7 @@ decision records. The core ideas are good. The problem is that it grew a vendor'
 machinery before it had a smooth single-user path, and one number it computes can be silently
 wrong.
 
-**Status.** P0 is done (#32). The tutorial is #33. P1 is in progress.
+**Status.** P0 is released in 0.1.2. P1 is done: see decisions 0016 and 0017.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.
@@ -189,7 +189,7 @@ backlog items B-37 onward** as the first commit.
    against tools and the server. Close B-12, B-15, B-16, and B-20 as "not until a design partner
    asks", which also ends the "blocked on provider choice" state.
 2. **Fence off hosted.** Move `tenants.py`, plan and quota implementations, usage export, OAuth,
-   and the approval desk and page behind a `hosted` extra and a `qaos hosted ...` command group.
+   and the approval desk and page behind a `hosted` command group (an extra cannot exclude modules; see decision 0017).
    Core keeps small optional hooks (`UsageGate`) and the `tenant` column (default `local`), which
    is cheap and avoids a migration. The default HTTP server becomes one tenant with API keys.
    Move the hosted material from `docs/deployment.md` to `docs/hosted.md`.

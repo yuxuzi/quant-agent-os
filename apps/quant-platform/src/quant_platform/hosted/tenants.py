@@ -38,15 +38,16 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
-from quant_agent_os.approval_desk import four_eyes_except_local
 from quant_agent_os.data import DirectoryDatasetStore
-from quant_agent_os.mcp.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_agent_os.runs import RunStore
-from quant_agent_os.runtime import PlanLimits, ToolExecutor
+from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tenancy import check_tenant
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry
 from quant_platform.composition import Toolset, available_toolsets, compose
+from quant_platform.hosted.approval_desk import four_eyes_except_local
+from quant_platform.hosted.limits import PlanLimits
+from quant_platform.hosted.oauth import DEFAULT_TENANT_CLAIM, AuthorizationServer
 from quant_research import ResearchApp, open_research
 from quant_research.infrastructure.postgres_store import is_postgres_url
 from quant_research.infrastructure.sqlite_store import StoreError

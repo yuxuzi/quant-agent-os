@@ -13,12 +13,13 @@ from mcp.client.streamable_http import streamable_http_client
 from typer.testing import CliRunner
 
 from quant_agent_os.api import KeyRing, add_key, load_keys
-from quant_agent_os.approval_desk import ApprovalDesk
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.tools import PermissionPolicy
 from quant_platform import compose
 from quant_platform.cli import app as cli
+from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
+from quant_platform.hosted.approval_page import approval_routes
 from quant_platform.http import build_http_app, single_tenant
 from quant_research import ResearchApp
 
@@ -111,11 +112,13 @@ def test_the_approval_page_is_served_only_with_a_desk(
         response = anyio.run(main)
         return response.status_code, response.headers.get("content-security-policy", "")
 
+    desk = ApprovalDesk(store, keys, base_url="https://qaos.example")
     with_desk = build_http_app(
         tenancy,
         keys,
         instructions=catalog.instructions,
-        desk=ApprovalDesk(store, keys, base_url="https://qaos.example"),
+        gate_for=approval_gates(desk),
+        extra_routes=approval_routes(desk),
     )
     without = build_http_app(tenancy, keys, instructions=catalog.instructions)
 
