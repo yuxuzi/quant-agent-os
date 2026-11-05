@@ -193,10 +193,10 @@ SDK / CLI  ─┤      (no logic)        permissions·approval                  
 | Package | Owns | May import | Distribution |
 | --- | --- | --- | --- |
 | `quant_agent_os` (repo root) | Core | pydantic, typer, rich; optional extras | `quant-agent-os` |
-| `quant_research` (`packages/quant-research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
-| `quant_app_factory` (`packages/quant-app-factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
-| `quant_analytics` (`packages/quant-analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `quant-agent-os-analytics` (name open) |
-| `quant_platform` (`apps/quant-platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `quant-agent-os-platform` (name open) |
+| `quant_research` (`src/quant_research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
+| `quant_app_factory` (`src/quant_app_factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
+| `quant_analytics` (`src/quant_analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `quant-agent-os-analytics` (name open) |
+| `quant_platform` (`src/quant_platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `quant-agent-os-platform` (name open) |
 | `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | `pytemplate-uv` |
 
 Rules:
@@ -272,7 +272,7 @@ reads them, so they stay marked untrusted.
 ## 6. Quant Research: Graph RAG architecture
 
 **Confirmed** for keyword, mention, graph, and mock-vector retrieval over SQLite, and for
-Markdown, text, and PDF ingestion (`packages/quant-research`; step plan in
+Markdown, text, and PDF ingestion (`src/quant_research`; step plan in
 [plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)). **Proposed** for a
 real embedding model, the LLM extractor, OCR, and server-side synthesis. PostgreSQL with
 pgvector is **confirmed** (B-14) and gives the same answers as SQLite.
@@ -415,7 +415,7 @@ snapshot.
 
 ### 6.7 Quality evaluation
 
-`packages/quant-research/tests/research_eval.py` scores a gold set
+`tests/research/research_eval.py` scores a gold set
 (`tests/evaluation/gold.toml`) on the following metrics:
 - related-entity recall;
 - passage precision@k;

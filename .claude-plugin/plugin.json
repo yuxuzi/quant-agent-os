@@ -20,8 +20,10 @@
         "3.13",
         "--directory",
         "${CLAUDE_PLUGIN_ROOT}",
-        "--package",
-        "quant-agent-os-platform",
+        "--extra",
+        "analytics",
+        "--extra",
+        "server",
         "quant-platform",
         "serve-mcp"
       ]

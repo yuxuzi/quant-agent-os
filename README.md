@@ -182,7 +182,7 @@ registry = ToolRegistry([total_return])
 ## Repository layout
 
 ```text
-src/quant_agent_os/      Core platform (products will live in packages/, see decision 0003)
+src/quant_agent_os/      Core platform
   tools/          contract (ToolSpec, @tool), registry, permissions
   runtime/        tool calls, bounded executor, approvals, the subprocess runner
   config/         settings from QUANT_AGENT_OS_* environment variables
@@ -194,11 +194,11 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   runs/           run store (memory, SQLite), recorder, append-only audit, redaction
   sdk/            Platform facade: call, report, get_run
   observability/  logging with secret redaction
-packages/quant-research/   Quant Research (Graph RAG) product
-packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
-packages/quant-analytics/  performance and risk metrics as tools
+src/quant_research/      Quant Research (Graph RAG) product
+src/quant_app_factory/   Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
+src/quant_analytics/     performance and risk metrics as tools
 deploy/   team-server Dockerfile, compose file, and smoke test
-apps/quant-platform/   platform server: every toolset, resource, and prompt behind one MCP server
+src/quant_platform/      platform server: every toolset, resource, and prompt behind one MCP server
 skills/   instruction-only skills (research, analytics, strategy, App Factory)
 .claude-plugin/   Claude Code plugin and marketplace manifests; clients/: Cursor and VS Code bundles
 examples/portfolio-research/  examples/quant-research/  examples/your-own-model/  examples/tutorial/

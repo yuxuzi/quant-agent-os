@@ -9,19 +9,19 @@ Quant-Agent-OS is an open-source quantitative intelligence and application-engin
 platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
   executor, evidence-linked reports, and the MCP adapter.
-- **Quant Research** (`packages/quant-research`): a Graph RAG knowledge system. It is layered
+- **Quant Research** (`src/quant_research`): a Graph RAG knowledge system. It is layered
   as `domain` → `application` → `infrastructure`, with `tools.py` and `cli.py` as interfaces and
   `bootstrap.py` as the composition root.
-- **Quant App Factory** (`packages/quant-app-factory`): Python application generation. An
+- **Quant App Factory** (`src/quant_app_factory`): Python application generation. An
   `AppSpec` goes through the `ArchitecturePlanner` and a `ScaffoldProvider` (pytemplate-uv),
   and the generated project's checks run through the subprocess runner. Its `agent-tool`
   template pack is in `quant_app_factory/packs/`.
-- **Quant Analytics** (`packages/quant-analytics`): performance metrics from empyrical-reloaded
+- **Quant Analytics** (`src/quant_analytics`): performance metrics from empyrical-reloaded
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
 - **Hosted features** (`quant_platform.hosted`): tenants, plans, usage, OAuth, and the approval page,
   run only through `quant-platform hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
-- **Platform server** (`apps/quant-platform`): the composition root. `compose()` assembles the
+- **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
   `quant-platform serve-mcp` serves them as one MCP server.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
@@ -54,11 +54,11 @@ Read [docs/architecture.md](docs/architecture.md) and the plan in
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
 | Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
-| Regenerate client bundles (after changing a skill) | `uv run python apps/quant-platform/tests/client_bundles.py` |
-| Update the tool lock (after a tool version bump) | `uv run python apps/quant-platform/tests/tool_lock.py --update` |
-| Research evaluation | `uv run python packages/quant-research/tests/research_eval.py` (add `--update` to rebaseline) |
-| App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest packages/quant-app-factory/tests/test_factory_smoke.py` |
-| Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python packages/quant-research/tests/real_corpus.py fetch`, then `... real_corpus.py eval` |
+| Regenerate client bundles (after changing a skill) | `uv run python tests/server/client_bundles.py` |
+| Update the tool lock (after a tool version bump) | `uv run python tests/server/tool_lock.py --update` |
+| Research evaluation | `uv run python tests/research/research_eval.py` (add `--update` to rebaseline) |
+| App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest tests/factory/test_factory_smoke.py` |
+| Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python tests/research/real_corpus.py fetch`, then `... real_corpus.py eval` |
 
 Before reporting work as done, run the test, lint, format, and type-check commands and report
 the real results.
@@ -101,7 +101,7 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
   the skills for clients; it adds no tools.
 - **MCP is the capability boundary; skills are guidance.** Skills contain instructions only, never
   scripts, so every action goes through a tool and the executor's permissions, approvals,
-  limits, and audit. `apps/quant-platform/tests/test_skills.py` fails when a skill names
+  limits, and audit. `tests/server/test_skills.py` fails when a skill names
   something the server does not serve, or a served tool, prompt, or resource has no skill.
 - **No server-side agents.** A workflow the platform owns is a deterministic composite tool,
   such as `research_report`. `Platform.report` runs calls its caller names.

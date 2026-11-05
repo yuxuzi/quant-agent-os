@@ -5,10 +5,6 @@
 !README.md
 !LICENSE
 !src/
-!packages/quant-research/
-!packages/quant-analytics/
-!packages/quant-app-factory/pyproject.toml
-!apps/quant-platform/
 **/__pycache__
 **/*.py[cod]
 **/.env

@@ -19,6 +19,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **One wheel with extras** ([decision 0018](docs/decisions/0018-one-wheel.md)). The five
+  distributions are now one, `quant-agent-os`, with extras `analytics`, `server`, `pdf`, `postgres`,
+  `factory`, and `all`. Sources moved to `src/` and tests to `tests/`; import names did not change.
 - **Hosted features moved to `quant-platform hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
   `hosted serve-http` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
   `usage` are under `hosted`. The default `serve-http` serves one team with API keys. Their modules

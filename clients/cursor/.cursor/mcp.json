@@ -11,8 +11,10 @@
         "3.13",
         "--directory",
         "/absolute/path/to/quant-agent-os",
-        "--package",
-        "quant-agent-os-platform",
+        "--extra",
+        "analytics",
+        "--extra",
+        "server",
         "quant-platform",
         "serve-mcp"
       ],

@@ -14,7 +14,7 @@ changelog is [CHANGELOG.md](../CHANGELOG.md).
 
 `tool-versions.lock` records each tool's version, permissions, and schemas. The platform tests
 fail when they change without a big enough version bump. After raising the version, run
-`uv run python apps/quant-platform/tests/tool_lock.py --update` and add an entry here.
+`uv run python tests/server/tool_lock.py --update` and add an entry here.
 
 Clients read the served versions from `qaos://server/info`.
 

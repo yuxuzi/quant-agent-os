@@ -17,5 +17,5 @@ do not load skills.
   `QUANT_AGENT_OS_DATASETS_DIR`. Add one with `quant-agent-os dataset push FILE --id ID`.
 
 These files are generated from `skills/` and `.claude-plugin/plugin.json`. Do not edit them by
-hand. After changing a skill, run `uv run python apps/quant-platform/tests/client_bundles.py`;
+hand. After changing a skill, run `uv run python tests/server/client_bundles.py`;
 a test fails while they are out of date.

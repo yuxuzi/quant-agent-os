@@ -23,7 +23,7 @@ Start with the small sample corpus: six short notes on reversal, momentum, order
 and earnings drift, one of them a prompt-injection test. Step 7 uses your own documents.
 
 ```bash
-uv run quant-research ingest packages/quant-research/tests/fixtures/corpus --store ~/qr-demo/kb.db
+uv run quant-research ingest tests/research/fixtures/corpus --store ~/qr-demo/kb.db
 ```
 
 Ingestion runs offline:
@@ -163,8 +163,8 @@ downloads 21 pinned arXiv papers once and scores retrieval and extraction offlin
 ([plans/real-corpus-eval.md](plans/real-corpus-eval.md)):
 
 ```bash
-uv run python packages/quant-research/tests/real_corpus.py fetch
-uv run python packages/quant-research/tests/real_corpus.py eval
+uv run python tests/research/real_corpus.py fetch
+uv run python tests/research/real_corpus.py eval
 ```
 
 ## 9. From Python

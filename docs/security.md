@@ -136,7 +136,7 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   cached for 30 seconds, and each provider is asked at most 600 times a minute and 8 times at
   once; beyond that tokens are refused without asking, with one warning a minute. The
   reverse proxy's limit on unauthenticated requests stays the first defence.
-- **Isolation is a release gate.** `apps/quant-platform/tests/test_platform_tenants.py` runs
+- **Isolation is a release gate.** `tests/server/test_platform_tenants.py` runs
   two tenants with different corpora and datasets on one server and checks that neither can
   reach the other's passages, datasets, or runs by any tool, URI, or route.
 

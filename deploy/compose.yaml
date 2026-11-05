@@ -46,7 +46,7 @@ services:
     entrypoint: ["quant-research", "ingest"]
     command: ["/corpus", "--store", "/data/knowledge/kb.db"]
     volumes:
-      - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
+      - ${CORPUS:-../tests/research/fixtures/corpus}:/corpus:ro
       - knowledge:/data/knowledge
     network_mode: none
     cap_drop: [ALL]

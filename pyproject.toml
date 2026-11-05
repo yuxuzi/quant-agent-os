@@ -1,7 +1,7 @@
 [project]
 name = "quant-agent-os"
 version = "0.1.2"
-description = "Quant-Agent-OS core: typed tools, a bounded executor, and evidence-linked reports for quantitative research and application engineering"
+description = "Quantitative research tools with cited, computed evidence, served to AI clients over MCP: Graph RAG over your own corpus, performance and risk metrics by dataset reference, and application generation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -28,8 +28,12 @@ dependencies = [
     "typer>=0.12",
 ]
 
+# One wheel holds the five import names (decision 0018); each extra brings a product's dependencies.
 [project.scripts]
 quant-agent-os = "quant_agent_os.cli:main"
+quant-factory = "quant_app_factory.cli:main"
+quant-platform = "quant_platform.cli:main"
+quant-research = "quant_research.cli:main"
 
 [project.optional-dependencies]
 # opentelemetry-api: spans and metrics per call (decision 0015, Q-17); a no-op without an SDK.
@@ -42,6 +46,16 @@ api = [
     "uvicorn>=0.30,<1",
     "opentelemetry-api>=1.30,<2",
 ]
+# The MCP and REST server, over stdio and HTTP.
+server = ["quant-agent-os[api,mcp]"]
+pdf = ["pypdf>=6.20,<7"]
+# PostgreSQL knowledge store (B-14); the binary build bundles libpq.
+postgres = ["psycopg[binary]>=3.2,<4"]
+# The metric formulas (decision 0010): empyrical, not pyfolio, which adds only plotting.
+analytics = ["empyrical-reloaded>=0.7,<0.8"]
+# The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.
+factory = ["pytemplate-uv>=3.0,<4"]
+all = ["quant-agent-os[analytics,factory,pdf,postgres,server]"]
 
 [dependency-groups]
 dev = [
@@ -49,11 +63,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",
-    "quant-agent-os-analytics",
-    "quant-agent-os-factory",
-    "quant-agent-os-platform[factory]",
-    "quant-agent-os-research[pdf,postgres]",
-    "quant-agent-os[api,mcp]",
+    "quant-agent-os[all]",
 ]
 
 [tool.uv]
@@ -65,20 +75,18 @@ dev = [
 # needs its 3.0 API.
 exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z" }
 
-[tool.uv.workspace]
-# Core stays at the root; each product is a member with its own version (decision 0003).
-members = ["packages/*", "apps/quant-platform"]
-
-[tool.uv.sources]
-quant-agent-os = { workspace = true }
-quant-agent-os-analytics = { workspace = true }
-quant-agent-os-factory = { workspace = true }
-quant-agent-os-platform = { workspace = true }
-quant-agent-os-research = { workspace = true }
-
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = [
+    "quant_agent_os",
+    "quant_analytics",
+    "quant_app_factory",
+    "quant_platform",
+    "quant_research",
+]
 
 [tool.ruff]
 line-length = 100
@@ -100,29 +108,16 @@ known-first-party = [
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = [
-    "src",
-    "examples",
-    "packages/quant-analytics/src",
-    "packages/quant-research/src",
-    "packages/quant-app-factory/src",
-    "apps/quant-platform/src",
-]
+files = ["src", "examples"]
 # Template packs hold code for generated projects, which type-check it themselves.
-exclude = ["packages/quant-app-factory/src/quant_app_factory/packs/"]
+exclude = ["src/quant_app_factory/packs/"]
 
 [[tool.mypy.overrides]]
 module = ["empyrical", "empyrical.*"]  # untyped; quant_analytics.metrics types its boundary
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = [
-    "tests",
-    "packages/quant-analytics/tests",
-    "packages/quant-research/tests",
-    "packages/quant-app-factory/tests",
-    "apps/quant-platform/tests",
-]
+testpaths = ["tests"]
 pythonpath = ["examples/portfolio-research"]
 filterwarnings = [
     "error::ResourceWarning",

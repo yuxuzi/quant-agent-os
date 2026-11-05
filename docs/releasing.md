@@ -1,10 +1,8 @@
 # Releasing
 
-Every workspace package is released together at one version: `quant-agent-os` (core),
-`quant-agent-os-research`, `quant-agent-os-analytics`, `quant-agent-os-factory`, and
-`quant-agent-os-platform`. Each pins its siblings to that exact version, and
-`tests/contract/test_release.py` checks this, so an installation never mixes versions and the
-server's `serverInfo.version` is the platform version.
+The project is one wheel, `quant-agent-os`, at one version ([decision 0018](decisions/0018-one-wheel.md)).
+`tests/contract/test_release.py` checks that the plugin and the changelog name it, and the
+server's `serverInfo.version` is this version.
 
 ## 0.1.0 scope
 
@@ -16,13 +14,12 @@ accepted in writing.
 
 ## Where releases go
 
-A `v*` tag always creates a **GitHub release** with the five wheels and sdists, and notes
-taken from the changelog. Publishing to **PyPI** is opt-in: the `publish` job runs only when
+A `v*` tag always creates a **GitHub release** with the wheel and sdist, and notes taken from the changelog. Publishing to **PyPI** is opt-in: the `publish` job runs only when
 the repository variable `PUBLISH_TO_PYPI` is `true`. Releases are GitHub-only: the owner decided
 not to publish to PyPI, so the package names are not registered there.
 
-Without PyPI, install from the release files or the repository, for example
-`uv tool install "quant-agent-os-platform[factory]" --find-links <folder with the release files>`,
+Without PyPI, install from the tag, for example
+`uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@vX.Y.Z"`,
 or use the Claude Code plugin, which runs from the repository.
 
 ## One-time setup for PyPI
@@ -30,8 +27,8 @@ or use the Claude Code plugin, which runs from the repository.
 Publishing registers the package names on PyPI. The names are provisional (see AGENTS.md),
 so confirm them before the first PyPI release.
 
-1. On PyPI, add a [trusted publisher](https://docs.pypi.org/trusted-publishers/) for each of
-   the five packages: this repository, workflow `release.yml`, environment `pypi`.
+1. On PyPI, add a [trusted publisher](https://docs.pypi.org/trusted-publishers/) for
+   `quant-agent-os`: this repository, workflow `release.yml`, environment `pypi`.
 2. In GitHub, create the `pypi` environment, ideally with a required reviewer, and set the
    repository variable `PUBLISH_TO_PYPI` to `true`.
 
@@ -41,14 +38,13 @@ No API token is stored in the repository.
 
 1. **Check main.** CI is green on every OS and Python version, and
    `uv run python tests/evaluation/agent_efficiency.py` shows no unintended delta.
-2. **Set the version** (for a release after 0.1.0) in all five `pyproject.toml` files, in the
-   sibling pins, and in `.claude-plugin/plugin.json`. Then run `uv lock` and
-   `uv run pytest tests/contract/test_release.py apps/quant-platform/tests/test_client_bundles.py`.
+2. **Set the version** in `pyproject.toml` and `.claude-plugin/plugin.json`. Then run `uv lock` and
+   `uv run pytest tests/contract/test_release.py tests/server/test_client_bundles.py`.
 3. **Changelogs.** Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`
    (0.1.0's is already dated; correct the date if the tag is later), add a new empty
    `## [Unreleased]` above it, and add the release's section to `docs/tools-changelog.md`.
 4. **Merge, then tag main.** `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow
-   checks that the tag matches the version, runs the tests, builds all five packages, checks
+   checks that the tag matches the version, runs the tests, builds the wheel and sdist, checks
    them with `twine check --strict`, creates the GitHub release, and publishes to PyPI if
    that is enabled.
 

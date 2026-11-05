@@ -23,19 +23,12 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /src
 # Dependencies first, from the lockfile only, so code changes reuse this layer.
 COPY pyproject.toml uv.lock ./
-COPY packages/quant-research/pyproject.toml packages/quant-research/
-COPY packages/quant-analytics/pyproject.toml packages/quant-analytics/
-COPY packages/quant-app-factory/pyproject.toml packages/quant-app-factory/
-COPY apps/quant-platform/pyproject.toml apps/quant-platform/
-RUN uv sync --locked --no-dev --no-install-workspace \
-        --package quant-agent-os-platform --extra pdf --extra postgres
+RUN uv sync --locked --no-dev --no-install-project \
+        --extra analytics --extra server --extra pdf --extra postgres
 COPY README.md LICENSE ./
 COPY src src
-COPY packages/quant-research packages/quant-research
-COPY packages/quant-analytics packages/quant-analytics
-COPY apps/quant-platform apps/quant-platform
 RUN uv sync --locked --no-dev --no-editable \
-        --package quant-agent-os-platform --extra pdf --extra postgres
+        --extra analytics --extra server --extra pdf --extra postgres
 
 FROM ${PYTHON_IMAGE}
 # A fixed non-root user. The data directories are created here, owned by that user, so named

@@ -78,7 +78,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
+      - ${CORPUS:-../tests/research/fixtures/corpus}:/corpus:ro
     networks: [backend]  # internal: PostgreSQL only, no internet
 
   datasets:
