@@ -7,6 +7,9 @@ other column must be numeric, and a blank or ``NaN`` cell is kept as a missing v
 filled in. An operator adds datasets with ``qaos data add`` (a write, so it is a
 command, not a tool), and tools name them by id. Each dataset's fingerprint is the SHA-256 of its
 file, recorded as a data version so a result says exactly which data it came from.
+
+From Python, `MemoryDatasetStore.put` takes a pandas object and sends it through the same parser
+as CSV, so its dates, missing values, and limits are treated the same. Nothing here imports pandas.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from datetime import date, datetime
 from functools import cached_property
 from itertools import pairwise
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -265,11 +268,7 @@ class DirectoryDatasetStore:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
         path = self.root / f"{check_dataset_id(dataset_id)}.csv"
         if not path.is_file():
-            known = self.ids()
-            raise UnknownDatasetError(
-                f"No dataset '{dataset_id}'; "
-                + (f"the datasets are {', '.join(known)}." if known else "none have been added.")
-            )
+            raise _unknown_dataset(dataset_id, self.ids())
         data = path.read_bytes()
         marker = self._index_marker(dataset_id)
         index_column = marker.read_text(encoding="utf-8") if marker.is_file() else None
@@ -296,6 +295,76 @@ class DirectoryDatasetStore:
 
     def _index_marker(self, dataset_id: str) -> Path:
         return self.root / f"{dataset_id}.index"
+
+
+class MemoryDatasetStore:
+    """Datasets from pandas objects, kept for this session in front of an optional ``base`` store.
+
+    Nothing is written to disk, and an id here hides the same id in ``base``. A result's data
+    version is the fingerprint of the frame as CSV, so a run records which data it used, though
+    only the session that made it can read that data again.
+    """
+
+    def __init__(self, base: DatasetStore | None = None) -> None:
+        self.base = base
+        self._datasets: dict[str, Dataset] = {}
+
+    def put(self, dataset_id: str, frame: Any) -> DatasetInfo:
+        """Validate a DataFrame or Series and keep a copy as ``dataset_id``, replacing any other.
+
+        Its index is the dataset's index, except an unnamed row counter, which is no index at all:
+        a date column must then come first. Raises `DatasetError` as for a CSV file, for example
+        when a column is not numeric or the dates are out of order.
+        """
+        check_dataset_id(dataset_id)
+        data, index_column = _frame_csv(dataset_id, frame)
+        dataset = parse_dataset(dataset_id, data, index_column=index_column)
+        self._datasets[dataset_id] = dataset
+        return dataset.info()
+
+    def get(self, dataset_id: str) -> Dataset:
+        """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
+        if dataset_id in self._datasets:
+            return self._datasets[dataset_id]
+        if self.base is not None and dataset_id in self.base.ids():
+            return self.base.get(dataset_id)
+        raise _unknown_dataset(dataset_id, self.ids())
+
+    def ids(self) -> list[str]:
+        """Return every dataset id, here and in the base store, sorted."""
+        below = self.base.ids() if self.base is not None else []
+        return sorted({*self._datasets, *below})
+
+
+def _unknown_dataset(dataset_id: str, known: list[str]) -> UnknownDatasetError:
+    return UnknownDatasetError(
+        f"No dataset '{dataset_id}'; "
+        + (f"the datasets are {', '.join(known)}." if known else "none have been added.")
+    )
+
+
+def _frame_csv(dataset_id: str, frame: Any) -> tuple[bytes, str | None]:
+    """Return a pandas object as CSV, and the column holding its index if it has one."""
+    if hasattr(frame, "to_frame") and hasattr(frame, "name"):
+        frame = frame.to_frame(dataset_id if frame.name is None else frame.name)
+    if not all(hasattr(frame, name) for name in ("to_csv", "index", "columns")):
+        raise DatasetError(
+            f"Dataset '{dataset_id}' must be a pandas DataFrame or Series, not "
+            f"{type(frame).__name__}. Add a file with `qaos data add`."
+        )
+    index = frame.index
+    if index.nlevels > 1 or frame.columns.nlevels > 1:
+        raise DatasetError(
+            f"Dataset '{dataset_id}' has several index or column levels; it needs one date index "
+            "and one column per series. Flatten it first, with `reset_index` or `pivot`."
+        )
+    # Written out, because a line of blank cells would read as no row at all.
+    missing = "NaN"
+    row_numbers = index.name is None and index.dtype.kind in "iu"
+    if row_numbers and not all(parse_date(str(value)) for value in index):
+        return frame.to_csv(index=False, na_rep=missing).encode("utf-8"), None
+    label = "index" if index.name is None else str(index.name)
+    return frame.to_csv(index_label=label, na_rep=missing).encode("utf-8"), label
 
 
 def _plausible(day: date) -> date | None:

@@ -3,8 +3,10 @@
 import hashlib
 import json
 import math
+from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -12,6 +14,7 @@ from typer.testing import CliRunner
 from quant_agent_os.data import (
     DatasetError,
     DirectoryDatasetStore,
+    MemoryDatasetStore,
     UnknownColumnError,
     UnknownDatasetError,
     dataset_resources,
@@ -288,3 +291,167 @@ def test_the_cli_keeps_each_tenants_datasets_apart(tmp_path: Path) -> None:
     assert DirectoryDatasetStore(tmp_path / "datasets" / "acme").ids() == ["returns"]
     assert DirectoryDatasetStore(tmp_path / "datasets").ids() == []
     assert refused.exit_code == 1 and "Tenant id" in refused.output
+
+
+DAY_LABELS = ["2024-01-02", "2024-01-03"]
+
+
+def _frame(**columns: list[float]) -> Any:
+    pandas = pytest.importorskip("pandas")
+    days = pandas.date_range("2024-01-02", periods=len(next(iter(columns.values()))), freq="B")
+    return pandas.DataFrame(columns, index=days)
+
+
+def test_memory_store_reads_a_frame_like_a_csv_file(tmp_path: Path) -> None:
+    source = tmp_path / "fund.csv"
+    source.write_text("date,fund\n2024-01-02,0.1\n2024-01-03,-0.2\n2024-01-04,0.05\n")
+    from_file = parse_dataset("fund", source.read_bytes())
+    store = MemoryDatasetStore()
+
+    info = store.put("fund", _frame(fund=[0.1, -0.2, 0.05]))
+
+    assert store.get("fund").columns == from_file.columns
+    assert store.get("fund").dates == from_file.dates
+    assert info.periods_per_year == 252
+    assert store.ids() == ["fund"]
+
+
+def test_memory_store_keeps_a_copy_of_the_frame() -> None:
+    frame = _frame(fund=[0.1, -0.2, 0.05])
+    store = MemoryDatasetStore()
+    store.put("fund", frame)
+
+    frame.iloc[0, 0] = 9.0
+
+    assert store.get("fund").column("fund")[0] == 0.1
+
+
+def test_memory_store_keeps_values_exactly_and_rows_with_nothing_in_them() -> None:
+    frame = _frame(fund=[0.1 + 0.2, math.nan, 1e-17], other=[1.0, math.nan, 2.0])
+    store = MemoryDatasetStore()
+
+    info = store.put("fund", frame)
+
+    assert store.get("fund").rows == 3
+    assert store.get("fund").column("fund")[0] == 0.1 + 0.2
+    assert store.get("fund").column("fund")[2] == 1e-17
+    assert info.missing_cells == 2
+
+
+def test_memory_store_keeps_a_missing_row_of_a_frame_without_an_index() -> None:
+    pandas = pytest.importorskip("pandas")
+    store = MemoryDatasetStore()
+
+    info = store.put("fund", pandas.Series([0.1, math.nan, 0.2], name="fund"))
+
+    assert info.rows == 3
+    assert info.missing_cells == 1
+    assert info.index_name is None
+
+
+def test_memory_store_names_an_unnamed_series_after_the_dataset() -> None:
+    pandas = pytest.importorskip("pandas")
+    days = pandas.date_range("2024-01-31", periods=3, freq="ME")
+    store = MemoryDatasetStore()
+
+    info = store.put("fund", pandas.Series([0.1, 0.2, 0.3], index=days))
+
+    assert info.columns == ["fund"]
+    assert info.periods_per_year == 12
+
+
+def test_memory_store_finds_the_date_column_of_a_frame_without_an_index() -> None:
+    pandas = pytest.importorskip("pandas")
+    frame = pandas.DataFrame({"date": ["2024-01-02", "2024-01-03"], "fund": [0.1, 0.2]})
+
+    info = MemoryDatasetStore().put("fund", frame)
+
+    assert info.index_name == "date"
+    assert info.columns == ["fund"]
+
+
+def test_memory_store_reads_an_unnamed_integer_index_of_compact_dates_as_dates() -> None:
+    pandas = pytest.importorskip("pandas")
+    frame = pandas.DataFrame({"fund": [0.1, 0.2, 0.3]}, index=[20240102, 20240103, 20240104])
+
+    info = MemoryDatasetStore().put("fund", frame)
+
+    assert info.first_index == "20240102"
+    assert info.periods_per_year == 252
+
+
+def test_memory_store_does_not_treat_row_numbers_left_by_a_filter_as_an_index() -> None:
+    pandas = pytest.importorskip("pandas")
+    frame = pandas.DataFrame({"fund": [0.1, -0.2, 0.3, 0.4]})
+
+    info = MemoryDatasetStore().put("fund", frame[frame["fund"] > 0])
+
+    assert info.index_name is None
+    assert info.rows == 3
+
+
+def test_memory_store_keeps_a_named_index_that_is_not_dates() -> None:
+    pandas = pytest.importorskip("pandas")
+    frame = pandas.DataFrame({"fund": [0.1, 0.2]}, index=pandas.Index([7, 9], name="period_id"))
+
+    info = MemoryDatasetStore().put("fund", frame)
+
+    assert info.index_name == "period_id"
+    assert info.first_index == "7"
+
+
+@pytest.mark.parametrize(
+    ("build", "message"),
+    [
+        (lambda pd: pd.DataFrame({"fund": ["a", "b"]}), "no numeric column"),
+        (lambda pd: pd.DataFrame({"fund": ["a", "b"]}, index=DAY_LABELS), "not a number"),
+        (lambda pd: pd.DataFrame({"fund": [0.1, math.inf]}, index=DAY_LABELS), "not a number"),
+        (lambda pd: pd.DataFrame({"fund": [0.1]}), "at least two rows"),
+        (
+            lambda pd: pd.DataFrame(
+                {"fund": [0.1, 0.2]}, index=pd.to_datetime(["2024-01-03", "2024-01-02"])
+            ),
+            "not in date order",
+        ),
+        (
+            lambda pd: pd.DataFrame(
+                {"fund": [0.1, 0.2]},
+                index=pd.MultiIndex.from_tuples([("a", 1), ("b", 2)], names=["x", "y"]),
+            ),
+            "Flatten",
+        ),
+        (lambda pd: [0.1, 0.2], "pandas DataFrame or Series, not list"),
+    ],
+)
+def test_memory_store_refuses_what_a_file_would_be_refused_for(
+    build: Callable[[Any], Any], message: str
+) -> None:
+    pandas = pytest.importorskip("pandas")
+
+    with pytest.raises(DatasetError, match=message):
+        MemoryDatasetStore().put("fund", build(pandas))
+
+
+def test_memory_store_refuses_a_bad_id() -> None:
+    with pytest.raises(DatasetError, match="lowercase"):
+        MemoryDatasetStore().put("../fund", _frame(fund=[0.1, 0.2, 0.3]))
+
+
+def test_memory_store_sits_in_front_of_its_base(tmp_path: Path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text("date,fund\n2024-01-02,0.5\n2024-01-03,0.6\n2024-01-04,0.7\n")
+    base = DirectoryDatasetStore(tmp_path / "datasets")
+    base.put("kept", source)
+    base.put("fund", source)
+    store = MemoryDatasetStore(base)
+
+    store.put("fund", _frame(fund=[0.1, 0.2, 0.3]))
+    store.put("session", _frame(fund=[0.1, 0.2, 0.3]))
+
+    assert store.ids() == ["fund", "kept", "session"]
+    assert store.get("kept").column("fund")[0] == 0.5
+    assert store.get("fund").column("fund")[0] == 0.1
+    assert base.ids() == ["fund", "kept"]
+    assert base.get("fund").column("fund")[0] == 0.5
+    with pytest.raises(UnknownDatasetError, match="fund, kept, session"):
+        store.get("absent")
