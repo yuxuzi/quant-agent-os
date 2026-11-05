@@ -46,13 +46,15 @@ api = [
 # The MCP and REST server, over stdio and HTTP.
 server = ["quant-agent-os[api,mcp]"]
 pdf = ["pypdf>=6.20,<7"]
+# Parquet files for `qaos data add`, converted when added; serving needs neither package.
+parquet = ["pandas>=3,<4", "pyarrow>=26,<27"]
 # PostgreSQL knowledge store (B-14); the binary build bundles libpq.
 postgres = ["psycopg[binary]>=3.2,<4"]
 # The metric formulas (decision 0010): empyrical, not pyfolio, which adds only plotting.
 analytics = ["empyrical-reloaded>=0.7,<0.8"]
 # The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.
 factory = ["pytemplate-uv>=3.0,<4"]
-all = ["quant-agent-os[analytics,factory,pdf,postgres,server]"]
+all = ["quant-agent-os[analytics,factory,parquet,pdf,postgres,server]"]
 
 [dependency-groups]
 dev = [
@@ -67,10 +69,10 @@ dev = [
 # Supply-chain cool-off: dependencies added by this project (and their new transitive
 # dependencies) lock only releases at least two weeks old. Move the date forward deliberately
 # when upgrading. Quant Analytics' empyrical-reloaded stack (B-13) and the api extra's
-# fastapi and opentelemetry-api (B-18), and psycopg (B-14) use 2026-10-18.
+# fastapi and opentelemetry-api (B-18), and psycopg (B-14) use 2026-10-18; pyarrow uses 2026-10-22.
 # pytemplate-uv is exempt: it is first-party (same author), and the App Factory
 # needs its 3.0 API.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z" }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
@@ -111,6 +113,10 @@ exclude = ["src/quant_app_factory/packs/"]
 
 [[tool.mypy.overrides]]
 module = ["empyrical", "empyrical.*"]  # untyped; quant_analytics.metrics types its boundary
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]  # untyped; read in one function of quant_agent_os.data
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
