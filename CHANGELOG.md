@@ -19,6 +19,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **One command, `qaos`**, replaces `quant-agent-os`, `quant-research`, `quant-factory`, and
+  `quant-platform`: `ingest`, `search`, `strategy`, `data add|list`, `keys new`, `runs`, `serve
+  [--http]`, `catalog`, `app ...`, and `hosted ...`. `serve` is the one way to start a server;
+  `quant-research serve-mcp` and `serve-api`, `quant-factory serve-mcp`, and `quant-platform
+  serve-http` are gone, and `--toolsets` serves any subset. `data add` takes its id from the file
+  name unless given `--id`. `info` became `doctor`.
 - **One wheel with extras** ([decision 0018](docs/decisions/0018-one-wheel.md)). The five
   distributions are now one, `quant-agent-os`, with extras `analytics`, `server`, `pdf`, `postgres`,
   `factory`, and `all`. Sources moved to `src/` and tests to `tests/`; import names did not change.
@@ -40,6 +46,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`qaos init [--sample]`** makes the home and can load a sample corpus and dataset, now in the
+  wheel. **`qaos connect claude|cursor|vscode`** prints a client's config, or with `--write` adds
+  it to the project's file. **`qaos doctor`** checks the home, store, datasets, extras, and
+  permissions, and says how to fix what is off.
+- `qaos serve` takes `--embedder` and `--embedding-model`, so vector search works on the one server.
 - `Platform.report(goal, calls)` runs named calls as one recorded run and returns the
   evidence-linked report. `examples/your-own-model` drives the tools from your own model.
 

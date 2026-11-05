@@ -194,7 +194,7 @@ def test_the_cli_lists_the_catalog_and_refuses_bad_choices(
     listed = runner.invoke(
         cli, ["catalog", "--toolsets", "analytics", "--datasets", str(datasets.root)]
     )
-    no_store = runner.invoke(cli, ["serve-mcp", "--toolsets", "research"])
+    no_store = runner.invoke(cli, ["serve", "--toolsets", "research"])
     unknown = runner.invoke(cli, ["catalog", "--toolsets", "trading"])
 
     assert listed.exit_code == 0 and "list_datasets" in listed.output
@@ -214,7 +214,7 @@ def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
     monkeypatch.setattr(
         composition.importlib.util,
         "find_spec",
-        lambda name, *args: None if name == "quant_app_factory" else real(name, *args),
+        lambda name, *args: None if name == "pytemplate" else real(name, *args),
     )
 
     asked = CliRunner().invoke(cli, ["catalog", "--toolsets", "factory"])
@@ -241,7 +241,9 @@ def test_the_default_commands_never_load_the_hosted_modules() -> None:
 
 
 def test_the_default_server_takes_no_hosted_options() -> None:
-    shown = CliRunner(env={"COLUMNS": "200"}).invoke(platform_cli.app, ["serve-http", "--help"])
+    shown = CliRunner(env={"COLUMNS": "200"}).invoke(
+        platform_cli.app, ["serve", "--http", "--help"]
+    )
 
     assert shown.exit_code == 0
     for option in ("--tenants", "--approval-url", "--resource-url"):

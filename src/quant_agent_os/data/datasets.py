@@ -4,7 +4,7 @@ A dataset is a CSV file with a header row. The first column is its index when it
 a date (``date``, ``datetime``, ``time``, ``period``), when it holds compact dates (``20240102``,
 ``202401``), or when its values are not all numbers; ``--index`` names any other column. Every
 other column must be numeric, and a blank or ``NaN`` cell is kept as a missing value (NaN), never
-filled in. An operator adds datasets with ``quant-agent-os dataset push`` (a write, so it is a
+filled in. An operator adds datasets with ``qaos data add`` (a write, so it is a
 command, not a tool), and tools name them by id. Each dataset's fingerprint is the SHA-256 of its
 file, recorded as a data version so a result says exactly which data it came from.
 """

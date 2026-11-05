@@ -51,7 +51,7 @@ echo "== operator commands: ingest the sample corpus and issue a key"
 key="$("${compose[@]}" run --rm -T keys new --principal smoke \
   --scope tools:list --scope tools:call --scope runs:read 2>/dev/null | tail -n 1)"
 [[ "$key" == qaos_* ]] || fail "no API key was printed"
-"${compose[@]}" run --rm -T datasets push /import/monthly-returns.csv --id monthly >/dev/null \
+"${compose[@]}" run --rm -T datasets add /import/monthly-returns.csv --id monthly >/dev/null \
   || fail "the sample dataset was not added"
 
 echo "== docker compose up"

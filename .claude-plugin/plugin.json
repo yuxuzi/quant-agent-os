@@ -24,8 +24,8 @@
         "analytics",
         "--extra",
         "server",
-        "quant-platform",
-        "serve-mcp"
+        "qaos",
+        "serve"
       ]
     }
   }

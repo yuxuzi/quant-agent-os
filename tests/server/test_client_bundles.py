@@ -5,13 +5,13 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-from client_bundles import PLUGIN, ROOT, SERVER, bundles, server_args
+from client_bundles import PLUGIN, ROOT, SERVER, bundles
 from typer.testing import CliRunner
 
 from quant_platform import cli as platform_cli
 from quant_research.cli import app as research_cli
 
-CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 
 
 def test_the_client_bundles_are_generated_from_the_current_skills() -> None:
@@ -29,7 +29,7 @@ def test_every_bundle_carries_every_skill_and_the_same_server() -> None:
         if path.suffix == ".json":
             servers = json.loads(content)
             entry = (servers.get("mcpServers") or servers["servers"])[SERVER]
-            assert entry["args"] == server_args()
+            assert (entry["command"], entry["args"]) == ("qaos", ["serve"])
         else:
             for skill in (
                 "quant-research",
@@ -52,8 +52,8 @@ def test_the_plugin_serves_this_platform_version_with_its_skills() -> None:
         "analytics",
         "--extra",
         "server",
-        "quant-platform",
-        "serve-mcp",
+        "qaos",
+        "serve",
     ]
     assert "${CLAUDE_PLUGIN_ROOT}" in args and "--locked" in args
     assert [(entry["name"], entry["source"]) for entry in marketplace["plugins"]] == [

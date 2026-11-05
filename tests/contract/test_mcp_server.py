@@ -141,7 +141,7 @@ def test_external_actions_are_advertised_as_open_world() -> None:
 def test_a_missing_extra_gives_the_install_hint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "anyio", None)
 
-    with pytest.raises(MCPUnavailableError, match="quant-agent-os\\[mcp\\]"):
+    with pytest.raises(MCPUnavailableError, match="quant-agent-os\\[server\\]"):
         run_stdio(EXECUTOR, name="test")
 
 

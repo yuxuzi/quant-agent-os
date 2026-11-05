@@ -4,9 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
-from quant_agent_os.cli import app
 from quant_agent_os.config import ConfigFileError, Settings, home_dir
 from quant_agent_os.observability import RedactSecretsFilter
 from quant_agent_os.tools import Permission
@@ -27,13 +25,6 @@ def test_logging_filter_redacts_secrets() -> None:
     RedactSecretsFilter(["sk-secret"]).filter(record)
 
     assert record.getMessage() == "key=[REDACTED]"
-
-
-def test_cli_info() -> None:
-    info = CliRunner().invoke(app, ["info"])
-
-    assert info.exit_code == 0
-    assert "granted_permissions" in info.output
 
 
 def test_permissions_can_be_granted_through_the_environment(

@@ -202,7 +202,7 @@ def test_has_document_respects_the_pipeline(backend: Backend, corpus_dir: Path) 
 def test_read_only_stores_refuse_writes_and_missing_stores(
     backend: Backend, corpus_dir: Path
 ) -> None:
-    with pytest.raises(StoreError, match="run quant-research ingest"):
+    with pytest.raises(StoreError, match="run qaos ingest"):
         backend.open(read_only=True)
     with backend.open() as app:
         app.ingest.ingest(corpus_dir)

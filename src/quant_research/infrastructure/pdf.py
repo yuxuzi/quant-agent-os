@@ -23,7 +23,7 @@ from quant_research.domain.ports import SourceFile, SourceReadError
 from quant_research.infrastructure.files import uri_for
 
 VERSION = "pdf-v2"
-INSTALL_HINT = "install the PDF extra: uv add 'quant-agent-os[pdf]'"
+INSTALL_HINT = "install the quant-agent-os[pdf] extra"
 
 
 class PdfLoader:

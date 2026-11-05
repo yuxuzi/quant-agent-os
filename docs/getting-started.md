@@ -47,7 +47,7 @@ uv run quant-agent-os dataset push returns.csv --id returns
   store, the server still starts, without the research tools, and says so.
 - **Datasets** go to `~/.quant-agent-os/datasets`, or to `QUANT_AGENT_OS_DATASETS_DIR`.
 - **To try it first,** ingest the sample corpus in
-  `tests/research/fixtures/corpus`.
+  `src/quant_platform/sample/corpus`.
 
 ## 3. Ask
 

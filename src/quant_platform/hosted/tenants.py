@@ -182,7 +182,7 @@ def load_tenants_file(path: Path) -> TenantsFile:
         loaded.check_plans()
     except FileNotFoundError as error:
         raise TenantsFileError(
-            f"No tenants file at {path}; add a tenant with `quant-platform tenant add`."
+            f"No tenants file at {path}; add a tenant with `qaos hosted tenant add`."
         ) from error
     except (OSError, tomllib.TOMLDecodeError, ValidationError, ValueError) as error:
         raise TenantsFileError(f"Invalid tenants file {path}: {error}") from error

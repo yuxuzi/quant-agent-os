@@ -39,7 +39,7 @@ from quant_platform.http import build_http_app
 from quant_research import open_research
 
 ROOT = Path(__file__).resolve().parents[2]
-CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 BASE = "http://127.0.0.1:8000"
 SCOPES: list[Any] = ["tools:list", "tools:call", "runs:read"]
 
@@ -300,7 +300,7 @@ def test_serve_http_needs_the_resource_url_and_the_secret_for_oauth(
     path = tmp_path / "tenants.toml"
     path.write_text(OAUTH_FILE)
     add_key(tmp_path / "keys.toml", "svc", ["tools:list"], tenant="acme")
-    base = ["hosted", "serve-http", "--tenants", str(path), "--keys", str(tmp_path / "keys.toml")]
+    base = ["hosted", "serve", "--tenants", str(path), "--keys", str(tmp_path / "keys.toml")]
     monkeypatch.delenv("QAOS_TEST_ACME_SECRET", raising=False)
 
     no_url = CliRunner().invoke(cli, base)

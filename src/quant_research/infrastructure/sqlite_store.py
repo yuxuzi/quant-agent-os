@@ -574,7 +574,7 @@ def _open_read_only(path: str | Path) -> sqlite3.Connection:
         raise StoreError("A read-only store needs a file; ingest into one first.")
     location = Path(path)
     if not location.is_file():
-        raise StoreError(f"No knowledge store at {location}; run quant-research ingest.")
+        raise StoreError(f"No knowledge store at {location}; run qaos ingest.")
     db = sqlite3.connect(
         f"{location.resolve().as_uri()}?mode=ro", uri=True, check_same_thread=False
     )
@@ -584,7 +584,7 @@ def _open_read_only(path: str | Path) -> sqlite3.Connection:
         db.close()
         raise StoreError(
             f"The store at {location} has schema version {version}, and this version reads "
-            f"{SCHEMA_VERSION}. Run quant-research ingest on it once to upgrade it."
+            f"{SCHEMA_VERSION}. Run qaos ingest on it once to upgrade it."
         )
     return db
 

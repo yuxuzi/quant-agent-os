@@ -8,6 +8,7 @@ import pytest
 from conftest import CORPUS
 from typer.testing import CliRunner
 
+from quant_platform.cli import app as platform_cli
 from quant_research import ResearchQuery, open_research
 from quant_research.cli import app as cli
 from quant_research.infrastructure.sqlite_store import (
@@ -41,7 +42,7 @@ def test_read_only_stores_are_never_modified(built: Path) -> None:
 
 
 def test_read_only_refuses_missing_and_outdated_stores(tmp_path: Path, built: Path) -> None:
-    with pytest.raises(StoreError, match="run quant-research ingest"):
+    with pytest.raises(StoreError, match="run qaos ingest"):
         SqliteKnowledgeStore(tmp_path / "absent.db", read_only=True)
     with pytest.raises(StoreError, match="needs a file"):
         SqliteKnowledgeStore(":memory:", read_only=True)
@@ -59,7 +60,7 @@ def test_search_and_serve_do_not_create_a_store(tmp_path: Path) -> None:
     missing = tmp_path / "absent.db"
 
     searched = runner.invoke(cli, ["search", "carry", "--store", str(missing)])
-    served = runner.invoke(cli, ["serve-mcp", "--store", str(missing)])
+    served = runner.invoke(platform_cli, ["serve", "--store", str(missing)])
 
     assert searched.exit_code == served.exit_code == 1
     assert not missing.exists()

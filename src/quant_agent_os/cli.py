@@ -1,4 +1,4 @@
-"""Command-line interface for quant-agent-os."""
+"""Core's commands: datasets, API keys, and the run audit. `qaos` mounts them."""
 
 from pathlib import Path
 from typing import Annotated
@@ -7,22 +7,16 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from quant_agent_os import __version__
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
+from quant_agent_os.runs import RunStoreError, SqliteRunStore
 from quant_agent_os.tenancy import DEFAULT_TENANT, TenantError, check_tenant
 
-app = typer.Typer(
-    help="Quant-Agent-OS: typed tools, a bounded executor, and evidence-linked reports.",
-    no_args_is_help=True,
-)
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
-api_key_app = typer.Typer(help="Manage API keys for the REST interface.", no_args_is_help=True)
-app.add_typer(api_key_app, name="api-key")
-dataset_app = typer.Typer(help="Add and list datasets that tools read by id.", no_args_is_help=True)
-app.add_typer(dataset_app, name="dataset")
+keys_app = typer.Typer(help="Manage API keys for the HTTP server.", no_args_is_help=True)
+data_app = typer.Typer(help="Add and list datasets that tools read by id.", no_args_is_help=True)
 DatasetTenantOption = Annotated[
     str | None,
     typer.Option(
@@ -37,43 +31,14 @@ DatasetsOption = Annotated[
         help="Datasets directory (default: QUANT_AGENT_OS_DATASETS_DIR, or datasets/ in the home).",
     ),
 ]
+RunsOption = Annotated[
+    Path | None,
+    typer.Option("--runs", help="SQLite run store (default: runs.db in the home)."),
+]
 
 
-def _show_version(value: bool) -> None:
-    if value:
-        console.print(f"quant-agent-os {__version__}")
-        raise typer.Exit()
-
-
-@app.callback()
-def _root(
-    version: Annotated[
-        bool,
-        typer.Option(
-            "--version",
-            "-V",
-            help="Show the version and exit.",
-            callback=_show_version,
-            is_eager=True,
-        ),
-    ] = False,
-) -> None:
-    """Quant-Agent-OS command-line interface."""
-
-
-@app.command()
-def info() -> None:
-    """Show the active configuration (secrets are reported only as set or unset)."""
-    table = Table(title=f"quant-agent-os {__version__}")
-    table.add_column("Setting", style="cyan")
-    table.add_column("Value", style="magenta")
-    for key, value in get_settings().public_summary().items():
-        table.add_row(key, value)
-    console.print(table)
-
-
-@api_key_app.command("new")
-def api_key_new(
+@keys_app.command("new")
+def key_new(
     principal: Annotated[
         str, typer.Option(help="Who the key belongs to; recorded on every run it makes.")
     ],
@@ -118,10 +83,12 @@ def _datasets_dir(directory: Path | None, tenant: str | None) -> Path:
     return root / check_tenant(tenant) if tenant is not None else root
 
 
-@dataset_app.command("push")
-def dataset_push(
+@data_app.command("add")
+def data_add(
     source: Annotated[Path, typer.Argument(help="A CSV file: a header row, then one row each.")],
-    dataset_id: Annotated[str, typer.Option("--id", help="The id tools will use.")],
+    dataset_id: Annotated[
+        str | None, typer.Option("--id", help="The id tools will use (default: the file's name).")
+    ] = None,
     index: Annotated[
         str | None, typer.Option("--index", help="The column holding the dates or row labels.")
     ] = None,
@@ -136,7 +103,7 @@ def dataset_push(
     """
     try:
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
-        info = store.put(dataset_id, source, index_column=index)
+        info = store.put(dataset_id or source.stem, source, index_column=index)
     except (DatasetError, TenantError, OSError) as error:
         errors.print(f"[red]error:[/red] {error}")
         raise typer.Exit(1) from error
@@ -156,8 +123,8 @@ def dataset_push(
         console.print(f"{info.missing_cells} cells are missing; tools leave those rows out.")
 
 
-@dataset_app.command("list")
-def dataset_list(directory: DatasetsOption = None, tenant: DatasetTenantOption = None) -> None:
+@data_app.command("list")
+def data_list(directory: DatasetsOption = None, tenant: DatasetTenantOption = None) -> None:
     """List the datasets with their rows, columns, and fingerprints."""
     try:
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
@@ -178,10 +145,53 @@ def dataset_list(directory: DatasetsOption = None, tenant: DatasetTenantOption =
     console.print(table)
 
 
-def main() -> None:
-    """Run the command-line interface."""
-    app()
-
-
-if __name__ == "__main__":
-    main()
+def show_runs(
+    run_id: Annotated[str | None, typer.Argument(help="A run id to show in full.")] = None,
+    runs: RunsOption = None,
+    limit: Annotated[int, typer.Option(help="How many recent runs to list.")] = 20,
+) -> None:
+    """List recent runs, or show one run's tool calls and audit trail."""
+    path = runs or get_settings().runs_file
+    if not path.is_file():
+        console.print(f"No runs recorded at {path} yet.")
+        return
+    try:
+        run_store = SqliteRunStore(path)
+    except RunStoreError as error:
+        errors.print(f"[red]error:[/red] {error}")
+        raise typer.Exit(1) from error
+    try:
+        if run_id is None:
+            for run in run_store.list_runs(limit):
+                snapshot = run.data_versions.get("corpus_snapshot", "-")
+                console.print(
+                    f"{run.run_id}  {run.started_at:%Y-%m-%d %H:%M:%S}  {run.actor:<4}  "
+                    f"{run.status:<9}  {snapshot}  {run.goal}",
+                    soft_wrap=True,  # run ids must stay whole to be copied
+                )
+            return
+        stored = run_store.get_run(run_id)
+        if stored is None:
+            errors.print(f"[red]error:[/red] no run {run_id} in {path}.")
+            raise typer.Exit(1)
+        run = stored.run
+        console.print(
+            f"Run {run.run_id} ({run.kind}, {run.status}) by {run.actor}"
+            f"{f' ({run.principal})' if run.principal else ''}: {run.goal}\n"
+            f"Platform {run.platform_version}, registry {run.registry_digest[:16]}, "
+            f"data {run.data_versions or 'none'}.",
+            soft_wrap=True,
+        )
+        for call in stored.calls:
+            console.print(
+                f"  call {call.call_id}  {call.tool}  {call.status}  "
+                f"input {(call.input_sha256 or '-')[:16]}  {call.duration_ms:.1f} ms",
+                soft_wrap=True,
+            )
+        for event in stored.events:
+            console.print(
+                f"  {event.at:%H:%M:%S}  {event.event}  {event.subject}  {event.details}",
+                soft_wrap=True,
+            )
+    finally:
+        run_store.close()

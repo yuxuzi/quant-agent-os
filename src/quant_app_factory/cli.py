@@ -1,4 +1,4 @@
-"""Operator command line for Quant App Factory: preview an app, then create it with approval."""
+"""Quant App Factory's commands, mounted as `qaos app`: preview an app, then create it."""
 
 from __future__ import annotations
 
@@ -12,12 +12,11 @@ import typer
 from rich.console import Console
 
 from quant_agent_os.config import get_settings
-from quant_agent_os.mcp import MCPUnavailableError, run_stdio
-from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
-from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.runs import SqliteRunStore
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, ToolSpec
+from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy
 from quant_app_factory.application.factory import AppFactory, FactoryReport
+from quant_app_factory.bootstrap import open_factory
 from quant_app_factory.domain.connections import (
     DATABASE_COMPONENT,
     DATABASE_SECRETS,
@@ -36,11 +35,9 @@ from quant_app_factory.domain.spec import (
     resolve_alias,
 )
 from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
-from quant_app_factory.infrastructure.pytemplate_uv import PytemplateUvScaffolder
 from quant_app_factory.infrastructure.settings_file import (
     RegisteredTemplate,
     SettingsError,
-    git_identity,
     load_settings,
     remove_value,
     set_value,
@@ -49,7 +46,6 @@ from quant_app_factory.infrastructure.settings_file import (
 )
 from quant_app_factory.tools import CHECK_PERMISSIONS, CREATE_PERMISSIONS, factory_tools
 
-SERVED_TOOLS = frozenset({"describe_template", "check_spec"})
 app = typer.Typer(
     help="Quant App Factory: generate tested, packaged Python applications.", no_args_is_help=True
 )
@@ -76,15 +72,9 @@ def _fail(error: Exception | str) -> typer.Exit:
 def default_factory() -> AppFactory:
     """Return the factory configured by the settings file, or exit with the settings error."""
     try:
-        settings = load_settings()
-    except SettingsError as error:
+        return open_factory()
+    except (ScaffoldError, SettingsError) as error:
         raise _fail(error) from error
-    return AppFactory(
-        PytemplateUvScaffolder(),
-        identity=lambda: settings.identity.merged(git_identity()),
-        connections=lambda: settings.connections,
-        templates=lambda: {name: entry.path for name, entry in settings.templates.items()},
-    )
 
 
 def _load(path: Path) -> AppSpec:
@@ -384,7 +374,7 @@ def new(
 ) -> None:
     """Answer the template's questions (or take its defaults), write the spec, and create it.
 
-    `quant-factory new quant-research my-lab --defaults` is the one-command start. The
+    `qaos app new quant-research my-lab --defaults` is the one-command start. The
     questions come from the template itself, only those that apply are asked, and
     pytemplate-uv checks the result. Secrets are asked for as variable names, never values.
     """
@@ -422,7 +412,7 @@ def new(
     chosen_profile = described.profiles[0]
     console.print(f"{template}/{profile}: {chosen_profile.description}", soft_wrap=True)
     if name is None and defaults:
-        raise _fail("Name the project: quant-factory new TARGET NAME --defaults.")
+        raise _fail("Name the project: qaos app new TARGET NAME --defaults.")
     name = name or str(typer.prompt("Project name (a lowercase slug, such as momo-lab)"))
     question_defaults = {q.name: q.default for q in described.questions if q.default}
     if defaults:
@@ -528,7 +518,7 @@ def new(
     if not check.ready:
         for problem in check.problems:
             errors.print(f"[yellow]{problem.field}: {problem.message}[/yellow]")
-        errors.print(f"Edit {target_file}, then run `quant-factory plan {target_file}`.")
+        errors.print(f"Edit {target_file}, then run `qaos app plan {target_file}`.")
         raise typer.Exit(code=1)
     if not defaults:  # with --defaults, create's summary follows at once
         console.print(f"Ready: {len(check.files)} files.")
@@ -676,7 +666,7 @@ def template_fork(
     """Copy a built-in profile into your own pack, check it, and register it.
 
     Edit the copy by hand or with an AI assistant: add questions to questions.yml, files to the
-    template, or components; then run `quant-factory template check`.
+    template, or components; then run `qaos app template check`.
     """
     pack_name, _, profile = source.partition("/")
     if pack_name not in BUILT_IN_PACKS or not profile:
@@ -742,61 +732,3 @@ def template_add(
             shutil.rmtree(path, ignore_errors=True)
         raise typer.Exit(code=1)
     _register(name, RegisteredTemplate(source=source, ref=ref, path=path.as_posix()))
-
-
-MCP_INSTRUCTIONS = (
-    "Quant App Factory guides a user to a ready app spec. Call describe_template to learn what "
-    "a template asks, ask the user, and call check_spec until it is ready. Then give the user "
-    "spec_toml to save and ask them to run `quant-factory create FILE`, which asks for their "
-    "approval. Never put a secret in a spec: use env:NAME references."
-)
-
-
-def served_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
-    """Return the tools a server offers: guidance only, because the user creates in a terminal."""
-    return [spec for spec in factory_tools(factory) if spec.name in SERVED_TOOLS]
-
-
-@app.command("serve-mcp")
-def serve_mcp(
-    runs: Annotated[Path | None, typer.Option("--runs", help=RUNS_HELP)] = None,
-    record: Annotated[
-        bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
-    ] = True,
-) -> None:
-    """Serve the guiding tools (describe_template, check_spec) over stdio.
-
-    Creating a project writes files and runs its checks, so people do that from the terminal with
-    `quant-factory create`. Messages go to stderr because stdout carries the protocol.
-    """
-    run_store: SqliteRunStore | None = None
-    try:
-        if record:
-            try:
-                run_store = SqliteRunStore(_runs_path(runs))
-            except RunStoreError as error:
-                errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
-        run_stdio(
-            ToolExecutor(
-                ToolRegistry(served_tools(default_factory())),
-                PermissionPolicy(),
-                approvals=run_store,
-            ),
-            name="quant-factory",
-            instructions=MCP_INSTRUCTIONS,
-            recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
-        )
-    except MCPUnavailableError as error:
-        raise _fail(error) from error
-    finally:
-        if run_store is not None:
-            run_store.close()
-
-
-def main() -> None:
-    """Run the command-line interface."""
-    app()
-
-
-if __name__ == "__main__":
-    main()

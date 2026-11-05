@@ -30,10 +30,7 @@ dependencies = [
 
 # One wheel holds the five import names (decision 0018); each extra brings a product's dependencies.
 [project.scripts]
-quant-agent-os = "quant_agent_os.cli:main"
-quant-factory = "quant_app_factory.cli:main"
-quant-platform = "quant_platform.cli:main"
-quant-research = "quant_research.cli:main"
+qaos = "quant_platform.cli:main"
 
 [project.optional-dependencies]
 # opentelemetry-api: spans and metrics per call (decision 0015, Q-17); a no-op without an SDK.

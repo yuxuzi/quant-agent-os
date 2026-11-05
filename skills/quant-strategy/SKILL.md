@@ -2,7 +2,7 @@
 name: quant-strategy
 description: Turn the user's research corpus into a cited strategy specification or a one-call research report for one signal, factor, or strategy, through the Quant-Agent-OS MCP server. Use when the user wants a strategy spec, a report on a signal, or open questions before building a backtest.
 license: MIT
-compatibility: Needs the Quant-Agent-OS MCP server (quant-platform) with the research toolset; metrics in reports also need the analytics toolset.
+compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the research toolset; metrics in reports also need the analytics toolset.
 metadata:
   min-server-version: "0.1.2"
 ---

@@ -1,7 +1,7 @@
-"""`quant-platform hosted`: many tenants, plans, OAuth, and usage (decisions 0013 to 0015, 0017).
+"""`qaos hosted`: many tenants, plans, OAuth, and usage (decisions 0013 to 0015, 0017).
 
 Importing this builds only the commands. Each one imports the hosted modules it uses, so the
-default `serve-mcp` and `serve-http` never load them.
+default `serve` never loads them.
 """
 
 from __future__ import annotations
@@ -65,8 +65,8 @@ TenantsOption = Annotated[
 ]
 
 
-@hosted_app.command("serve-http")
-def serve_http(
+@hosted_app.command("serve")
+def serve_hosted(
     toolsets: ToolsetsOption = None,
     store: StoreOption = None,
     datasets: DatasetsOption = None,
@@ -104,7 +104,7 @@ def serve_http(
 ) -> None:
     """Serve many tenants over HTTP, with plans, OAuth, and the approval page if configured.
 
-    Create keys with `quant-agent-os api-key new`. Every call is recorded with the key's
+    Create keys with `qaos keys new`. Every call is recorded with the key's
     principal and tenant; the server does not start without a key or a run store. Without
     --tenants it serves one tenant, from --store and --datasets; with a tenants file, each key
     is served its own tenant (decision 0013), and --store, --toolsets, and --datasets are not
@@ -114,7 +114,7 @@ def serve_http(
     (decision 0012). When the tenants file lists authorization_servers, MCP also accepts their
     OAuth tokens, checked by introspection, and publishes the Protected Resource Metadata.
     With --approval-url, a call that waits for an approval sends the client to the approval
-    page; issue approver keys with `api-key new --scope runs:approve`.
+    page; issue approver keys with `qaos keys new --scope runs:approve`.
     """
     from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
     from quant_platform.hosted.approval_page import approval_routes
@@ -128,8 +128,7 @@ def serve_http(
         raise typer.Exit(1) from error
     if not len(ring):
         errors.print(
-            "[red]error:[/red] the keys file has no enabled key; add one with "
-            "`quant-agent-os api-key new`."
+            "[red]error:[/red] the keys file has no enabled key; add one with `qaos keys new`."
         )
         raise typer.Exit(1)
     whole = _load_tenants_file(tenants) if tenants is not None else None
@@ -286,7 +285,7 @@ def tenant_add(
     """Add a tenant to the tenants file, or replace its settings.
 
     On PostgreSQL, ingest its corpus into its own schema:
-    `quant-research ingest DIR --store URL --schema qr_<tenant>`.
+    `qaos ingest DIR --store URL --schema qr_<tenant>`.
     """
     from quant_platform.hosted.tenants import (
         TenantConfig,
@@ -317,11 +316,10 @@ def tenant_add(
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     shown = describe(name, configured[name])
-    errors.print(f"Tenant {name} saved to {path}; restart serve-http to serve it.")
+    errors.print(f"Tenant {name} saved to {path}; restart the server to serve it.")
     if shown["schema"]:
         errors.print(
-            f"Ingest its corpus with: quant-research ingest DIR --store URL --schema "
-            f"{shown['schema']}"
+            f"Ingest its corpus with: qaos ingest DIR --store URL --schema {shown['schema']}"
         )
 
 
@@ -354,7 +352,7 @@ def tenant_disable(
         raise typer.Exit(1)
     whole.tenants[name] = whole.tenants[name].model_copy(update={"disabled": True})
     save_tenants(path, whole)
-    errors.print(f"Tenant {name} disabled in {path}; restart serve-http to apply it.")
+    errors.print(f"Tenant {name} disabled in {path}; restart the server to apply it.")
 
 
 def _utc(value: datetime) -> datetime:

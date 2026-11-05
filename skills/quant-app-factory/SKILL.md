@@ -2,7 +2,7 @@
 name: quant-app-factory
 description: Guide the user to a ready Quant-Agent-OS App Factory spec (quant research projects, agent tools) that they create locally, through the Quant-Agent-OS MCP server. Use when the user wants to generate a Python project, a backtest or research project, or a tool package from a template.
 license: MIT
-compatibility: Needs the Quant-Agent-OS MCP server (quant-platform) with the factory toolset; creating the project needs the quant-factory CLI on the user's machine.
+compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the factory toolset; creating the project needs the quant-factory CLI on the user's machine.
 metadata:
   min-server-version: "0.1.0"
 ---
@@ -10,7 +10,7 @@ metadata:
 # Drafting an App Factory spec
 
 If these tools are not offered, the server was started without the factory toolset. The user can
-add `--toolsets research,analytics,factory`, or run `quant-factory new` in a terminal instead.
+add `--toolsets research,analytics,factory`, or run `qaos app new` in a terminal instead.
 
 The server checks specs; the user creates the project on their own machine. Nothing here
 writes files, runs code, or touches the network.
@@ -26,7 +26,7 @@ writes files, runs code, or touches the network.
 3. **Check until ready.** Send the draft as `spec` to `check_spec`, fix every problem it
    reports, and repeat until it says ready. It returns the exact files and the spec as TOML.
 4. **Hand over.** Give the user the TOML to save, and tell them to run
-   `quant-factory create FILE` themselves. Creating a project writes files and runs its checks,
+   `qaos app create FILE` themselves. Creating a project writes files and runs its checks,
    so it needs their confirmation on their machine; never claim you created it.
 
 ## Rules

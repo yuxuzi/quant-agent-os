@@ -11,13 +11,22 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from typer.testing import CliRunner
 
 from quant_agent_os.runs import SqliteRunStore
-from quant_research.cli import app as cli
+from quant_platform.cli import app as cli
 
 
 def _server(store: Path, *extra: str) -> StdioServerParameters:
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "quant_research.cli", "serve-mcp", "--store", str(store), *extra],
+        args=[
+            "-m",
+            "quant_platform.cli",
+            "serve",
+            "--toolsets",
+            "research",
+            "--store",
+            str(store),
+            *extra,
+        ],
         env=dict(os.environ) | {"QUANT_AGENT_OS_HOME": str(store.parent)},
     )
 
@@ -51,12 +60,13 @@ def test_claude_style_client_gets_cited_answers(corpus_dir: Path, tmp_path: Path
 
     initialised, tools, found, passage = _run(_server(store), check)
 
-    assert initialised.serverInfo.name == "quant-research"
+    assert initialised.serverInfo.name == "quant-agent-os"
     assert "cite every claim" in (initialised.instructions or "")
-    assert [item.name for item in tools] == [
+    assert sorted(item.name for item in tools) == [
         "find_related_signals",
-        "generate_strategy",
         "get_source_passage",
+        "research_report",
+        "server_info",
     ]
     assert all(item.annotations.readOnlyHint for item in tools)
     packet = found.structuredContent
@@ -67,11 +77,11 @@ def test_claude_style_client_gets_cited_answers(corpus_dir: Path, tmp_path: Path
     assert passage.structuredContent["evidence"][0]["kind"] == "retrieved"
 
 
-def test_serve_mcp_refuses_a_missing_store(tmp_path: Path) -> None:
-    result = CliRunner().invoke(cli, ["serve-mcp", "--store", str(tmp_path / "absent.db")])
+def test_serving_refuses_a_missing_store(tmp_path: Path) -> None:
+    result = CliRunner().invoke(cli, ["serve", "--store", str(tmp_path / "absent.db")])
 
     assert result.exit_code == 1
-    assert "run quant-research ingest" in " ".join(result.output.split())
+    assert "run qaos ingest" in " ".join(result.output.split())
 
 
 def test_every_mcp_call_is_recorded_as_a_run(corpus_dir: Path, tmp_path: Path) -> None:

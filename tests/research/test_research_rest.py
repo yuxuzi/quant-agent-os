@@ -1,4 +1,4 @@
-"""`quant-research serve-api` (B-18): research tools over REST, equal to MCP, behind keys."""
+"""`qaos serve --http` (B-18): research tools over REST, equal to MCP, behind keys."""
 
 from pathlib import Path
 from typing import Any
@@ -12,8 +12,8 @@ from quant_agent_os.api import add_key
 from quant_agent_os.mcp import call_tool
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
+from quant_platform.cli import app as cli
 from quant_research import open_research, research_tools
-from quant_research.cli import app as cli
 
 QUERY = {"query": "What is related to short-term reversal?"}
 
@@ -26,17 +26,17 @@ def store(tmp_path: Path) -> str:
 
 
 def _serve(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> tuple[Any, dict[str, Any]]:
-    """Run serve-api with uvicorn replaced, returning the result and the app it would serve."""
+    """Run the HTTP server with uvicorn replaced; return the result and the app it would serve."""
     served: dict[str, Any] = {}
 
     def fake_run(app: Any, *, host: str, port: int) -> None:
         served.update(app=app, host=host, port=port)
 
-    monkeypatch.setattr("quant_research.cli.run_http", fake_run)
-    return CliRunner().invoke(cli, ["serve-api", *args]), served
+    monkeypatch.setattr("quant_platform.cli.run_http", fake_run)
+    return CliRunner().invoke(cli, ["serve", "--http", "--toolsets", "research", *args]), served
 
 
-def test_serve_api_serves_research_results_equal_to_mcp(
+def test_http_serves_research_results_equal_to_mcp(
     monkeypatch: pytest.MonkeyPatch, store: str, tmp_path: Path
 ) -> None:
     keys = tmp_path / "keys.toml"
@@ -50,8 +50,10 @@ def test_serve_api_serves_research_results_equal_to_mcp(
         _check(app, key, expected)
         checked.append(f"{host}:{port}")
 
-    monkeypatch.setattr("quant_research.cli.run_http", serve)
-    result = CliRunner().invoke(cli, ["serve-api", "--store", store, "--keys", str(keys)])
+    monkeypatch.setattr("quant_platform.cli.run_http", serve)
+    result = CliRunner().invoke(
+        cli, ["serve", "--http", "--toolsets", "research", "--store", store, "--keys", str(keys)]
+    )
 
     assert result.exit_code == 0, result.output
     assert checked == ["127.0.0.1:8000"]
@@ -66,13 +68,18 @@ def _check(app: Any, key: str, expected: dict[str, Any]) -> None:
     ).json()
     run = client.get(f"/v1/runs/{body['run_id']}", headers=headers).json()["run"]
 
-    assert names == ["find_related_signals", "generate_strategy", "get_source_passage"]
+    assert sorted(names) == [
+        "find_related_signals",
+        "get_source_passage",
+        "research_report",
+        "server_info",
+    ]
     assert body["status"] == "ok" and body["output"] == expected
     assert (run["actor"], run["principal"]) == ("rest", "alice")
     assert run["data_versions"] == {"corpus_snapshot": expected["corpus_snapshot"]}
 
 
-def test_serve_api_refuses_to_start_without_keys(
+def test_http_refuses_to_start_without_keys(
     monkeypatch: pytest.MonkeyPatch, store: str, tmp_path: Path
 ) -> None:
     disabled = tmp_path / "disabled.toml"
@@ -82,12 +89,12 @@ def test_serve_api_refuses_to_start_without_keys(
     missing, served = _serve(monkeypatch, ["--store", store, "--keys", str(tmp_path / "none")])
     revoked, _ = _serve(monkeypatch, ["--store", store, "--keys", str(disabled)])
 
-    assert missing.exit_code != 0 and "api-key new" in missing.output
+    assert missing.exit_code != 0 and "keys new" in missing.output
     assert revoked.exit_code != 0 and "no enabled key" in revoked.output
     assert served == {}
 
 
-def test_serve_api_warns_when_binding_beyond_loopback(
+def test_http_warns_when_binding_beyond_loopback(
     monkeypatch: pytest.MonkeyPatch, store: str, tmp_path: Path
 ) -> None:
     keys = tmp_path / "keys.toml"

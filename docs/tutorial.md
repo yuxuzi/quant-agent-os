@@ -293,7 +293,7 @@ flowchart TD
 ### Build the store
 
 ```bash
-uv run quant-research ingest tests/research/fixtures/corpus --store "$KB"
+uv run quant-research ingest src/quant_platform/sample/corpus --store "$KB"
 ```
 
 ```text
@@ -400,7 +400,7 @@ To see one run's calls and audit trail, run `uv run quant-research runs <RUN_ID>
 
 | Try this | What you should see |
 | --- | --- |
-| `uv run quant-research search "carry" --store "$KB"`, then read `tests/research/fixtures/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
+| `uv run quant-research search "carry" --store "$KB"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
 | `uv run quant-research search "inventory risk" --store "$KB"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
 | `uv run quant-research search "reversal" --hops 2 --store "$KB"` | More entities, found two graph steps away |
 | Add `--min-confidence 0.4` to the `strategy` command | More rows, from weaker links |
@@ -739,7 +739,7 @@ Give each tenant its own data, and give `globex` research only:
 
 ```bash
 mkdir -p "$TUT/tenants"
-uv run quant-research ingest tests/research/fixtures/corpus --store "$TUT/tenants/acme.db"
+uv run quant-research ingest src/quant_platform/sample/corpus --store "$TUT/tenants/acme.db"
 uv run quant-research ingest "$TUT/notes" --store "$TUT/tenants/globex.db"
 uv run quant-agent-os dataset push examples/tutorial/data/fund_returns.csv --id fund --dir "$TUT/tenants/datasets" --tenant acme
 

@@ -88,11 +88,11 @@ def test_one_port_serves_every_toolset_as_mcp_and_rest(
 def test_serve_http_refuses_to_start_without_a_key(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         cli,
-        ["serve-http", "--toolsets", "analytics", "--keys", str(tmp_path / "none.toml")],
+        ["serve", "--http", "--toolsets", "analytics", "--keys", str(tmp_path / "none.toml")],
     )
 
     assert result.exit_code == 1
-    assert "api-key new" in " ".join(result.output.split())
+    assert "keys new" in " ".join(result.output.split())
 
 
 def test_the_approval_page_is_served_only_with_a_desk(

@@ -36,6 +36,7 @@ from quant_analytics.computed import (
     performance,
     portfolio_risk,
 )
+from quant_analytics.references import ColumnRef
 
 PERFORMANCE_DESCRIPTION = (
     "Performance of a returns series, from empyrical: annualised return and volatility, "
@@ -60,15 +61,6 @@ PERIODS_FIELD = Field(
     le=366,
     description="Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
 )
-
-
-class ColumnRef(BaseModel):
-    """One column of a dataset."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    dataset: str = Field(min_length=1)
-    column: str = Field(min_length=1)
 
 
 class DatasetRef(BaseModel):

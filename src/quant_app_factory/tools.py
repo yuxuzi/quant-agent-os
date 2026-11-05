@@ -20,6 +20,13 @@ CREATE_PERMISSIONS = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.NETWORK}
 )
 CHECK_PERMISSIONS = frozenset({Permission.EXECUTE_CODE, Permission.NETWORK})
+SERVED_TOOLS = frozenset({"describe_template", "check_spec"})
+MCP_INSTRUCTIONS = (
+    "Quant App Factory guides a user to a ready app spec. Call describe_template to learn what "
+    "a template asks, ask the user, and call check_spec until it is ready. Then give the user "
+    "spec_toml to save and ask them to run `qaos app create FILE`, which asks for their "
+    "approval. Never put a secret in a spec: use env:NAME references."
+)
 
 
 class DescribeTemplateInput(BaseModel):
@@ -117,7 +124,7 @@ def guide_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
         check = factory.check_spec(params.spec)
         if check.ready:
             next_step = (
-                "Save spec_toml to a file and ask the user to run `quant-factory create FILE`; "
+                "Save spec_toml to a file and ask the user to run `qaos app create FILE`; "
                 "creating writes files and runs commands, so the user approves it there."
             )
         else:
@@ -212,3 +219,8 @@ def factory_resources() -> list[ResourceSpec]:
             tool="describe_template",
         ),
     ]
+
+
+def served_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
+    """Return the tools a server offers: guidance only, because the user creates in a terminal."""
+    return [spec for spec in factory_tools(factory) if spec.name in SERVED_TOOLS]

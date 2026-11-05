@@ -46,7 +46,7 @@ from quant_platform import Catalog, compose
 from quant_research import open_research
 
 ROOT = Path(__file__).resolve().parents[2]
-CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 BASELINE = Path(__file__).parent / "agent_efficiency_baseline.json"
 WORKDIR_PLACEHOLDER = "/work"
 # What a client sends the model for each tool (the Messages API tool format); the title is for

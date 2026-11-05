@@ -1,4 +1,4 @@
-"""B-24: guided specs (describe_template, check_spec, quant-factory new) and factory settings."""
+"""B-24: guided specs (describe_template, check_spec, qaos app new) and factory settings."""
 
 from __future__ import annotations
 
@@ -178,7 +178,7 @@ def test_the_guiding_tools_are_read_only_and_answer_through_the_platform(tmp_pat
 
     assert described.status == checked.status == "ok"
     assert checked.output is not None and checked.output["check"]["ready"] is True
-    assert "quant-factory create" in checked.output["next_step"]
+    assert "qaos app create" in checked.output["next_step"]
     assert list(tmp_path.iterdir()) == []
 
 
@@ -275,7 +275,7 @@ def test_removing_a_connection_and_a_broken_file(tmp_path: Path) -> None:
 def settings_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "factory.toml"
     monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(path.parent))
-    monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
+    monkeypatch.setattr("quant_app_factory.bootstrap.git_identity", lambda: Identity())
     return path
 
 
@@ -334,11 +334,11 @@ def test_settings_commands_never_store_secrets(settings_file: Path) -> None:
     assert "hunter2" not in settings_file.read_text()
 
 
-def test_serve_mcp_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
+def test_the_server_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
     env = dict(os.environ) | {"QUANT_AGENT_OS_HOME": str(tmp_path)}
     parameters = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "quant_app_factory.cli", "serve-mcp", "--no-record"],
+        args=["-m", "quant_platform.cli", "serve", "--toolsets", "factory", "--no-record"],
         env=env,
     )
 
@@ -355,6 +355,6 @@ def test_serve_mcp_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
 
     initialised, tools, checked = anyio.run(main)
 
-    assert initialised.serverInfo.name == "quant-factory"
-    assert sorted(tools) == ["check_spec", "describe_template"]
+    assert initialised.serverInfo.name == "quant-agent-os"
+    assert sorted(tools) == ["check_spec", "describe_template", "server_info"]
     assert checked.structuredContent["check"]["ready"] is True

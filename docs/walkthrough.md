@@ -23,7 +23,7 @@ Start with the small sample corpus: six short notes on reversal, momentum, order
 and earnings drift, one of them a prompt-injection test. Step 7 uses your own documents.
 
 ```bash
-uv run quant-research ingest tests/research/fixtures/corpus --store ~/qr-demo/kb.db
+uv run quant-research ingest src/quant_platform/sample/corpus --store ~/qr-demo/kb.db
 ```
 
 Ingestion runs offline:

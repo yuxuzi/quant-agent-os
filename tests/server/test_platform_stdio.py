@@ -16,7 +16,7 @@ from quant_agent_os.runs import SqliteRunStore
 from quant_research.cli import app as research_cli
 
 ROOT = Path(__file__).resolve().parents[2]
-CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 
 
 def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: Path) -> None:
@@ -32,7 +32,7 @@ def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: 
         args=[
             "-m",
             "quant_platform.cli",
-            "serve-mcp",
+            "serve",
             "--store",
             str(store),
             "--datasets",

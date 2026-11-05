@@ -38,7 +38,7 @@ from quant_agent_os.tools.catalog import PromptArgumentError, PromptSpec, Resour
 if TYPE_CHECKING:
     from mcp.server.lowlevel import Server
 
-INSTALL_HINT = "install the MCP extra: uv add 'quant-agent-os[mcp]'"
+INSTALL_HINT = "install the quant-agent-os[server] extra"
 
 
 class MCPUnavailableError(RuntimeError):

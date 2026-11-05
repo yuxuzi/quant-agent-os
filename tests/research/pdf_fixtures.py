@@ -60,7 +60,7 @@ def write_pdf(
     return path
 
 
-TEXT_CORPUS = Path(__file__).parent / "fixtures" / "corpus"
+TEXT_CORPUS = Path(__file__).parents[2] / "src" / "quant_platform" / "sample" / "corpus"
 
 LOW_VOLATILITY_PAGES = [
     [

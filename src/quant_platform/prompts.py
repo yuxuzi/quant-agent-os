@@ -57,7 +57,7 @@ DRAFT_APP_SPEC = PromptSpec(
         "Help me draft an App Factory spec for the {template} template. Call "
         "describe_template, ask me only the questions that apply, and call check_spec until it "
         "is ready. Secrets must be env:NAME references. Then tell me to run "
-        "`quant-factory create FILE` myself."
+        "`qaos app create FILE` myself."
     ),
     arguments=(PromptArgument("template", "quant-baseline, agent-tool, or bundled"),),
 )

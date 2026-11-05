@@ -29,7 +29,7 @@ class _PassingChecks:
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(tmp_path))
-    monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
+    monkeypatch.setattr("quant_app_factory.bootstrap.git_identity", lambda: Identity())
     factory = AppFactory(PytemplateUvScaffolder(), runner=_PassingChecks())
     monkeypatch.setattr(factory_cli, "default_factory", lambda: factory)
     return tmp_path

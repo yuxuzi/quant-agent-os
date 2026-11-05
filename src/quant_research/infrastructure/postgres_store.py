@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = 1
 DEFAULT_SCHEMA = "quant_research"
 URL_SCHEMES = ("postgresql://", "postgres://")
-INSTALL_HINT = "install the PostgreSQL extra: uv add 'quant-agent-os[postgres]'"
+INSTALL_HINT = "install the quant-agent-os[postgres] extra"
 NO_VECTOR = (
     "This PostgreSQL database has no pgvector extension, so the vector channel is unavailable. "
     "Ask an administrator to run CREATE EXTENSION vector, or ingest without an embedder."
@@ -286,14 +286,13 @@ class PostgresKnowledgeStore:
     def _check_version(self) -> None:
         if not self._table_exists("meta"):
             raise StoreError(
-                f"No knowledge store in schema {self.schema} at {self.location}; "
-                "run quant-research ingest."
+                f"No knowledge store in schema {self.schema} at {self.location}; run qaos ingest."
             )
         version = self._version()
         if version != SCHEMA_VERSION:
             raise StoreError(
                 f"The store in schema {self.schema} at {self.location} has schema version "
-                f"{version}, and this version reads {SCHEMA_VERSION}. Run quant-research ingest "
+                f"{version}, and this version reads {SCHEMA_VERSION}. Run qaos ingest "
                 "on it once to upgrade it."
             )
 

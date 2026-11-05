@@ -203,7 +203,7 @@ class AppFactory:
             known = ", ".join(sorted(saved)) or "none saved"
             raise PlanningError(
                 f"No connection {spec.connection!r} in factory.toml ({known}); add it with "
-                f"`quant-factory settings set connections.{spec.connection}.kind ...`."
+                f"`qaos app settings set connections.{spec.connection}.kind ...`."
             )
         return apply_connection(spec, saved[spec.connection])
 
@@ -356,7 +356,7 @@ class AppFactory:
         if preview.target_exists:
             raise ScaffoldRequestError(
                 f"{preview.project_path} already exists; choose another name or output_dir, or "
-                "re-run its checks with `quant-factory check`."
+                "re-run its checks with `qaos app check`."
             )
         if expected_pack_digest is not None and plan.request.template is not None:
             current = directory_digest(Path(plan.request.template))

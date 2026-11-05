@@ -5,7 +5,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from quant_agent_os.api import hash_key, load_keys
-from quant_agent_os.cli import app
+from quant_platform.cli import app
 
 
 def test_a_new_key_is_printed_once_and_stored_as_a_hash(tmp_path: Path) -> None:
@@ -13,7 +13,7 @@ def test_a_new_key_is_printed_once_and_stored_as_a_hash(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "api-key",
+            "keys",
             "new",
             "--principal",
             "alice",
@@ -39,10 +39,10 @@ def test_unknown_scopes_and_bad_principals_are_refused(tmp_path: Path) -> None:
     runner = CliRunner()
 
     scope = runner.invoke(
-        app, ["api-key", "new", "--principal", "a", "--scope", "admin", "--keys", str(path)]
+        app, ["keys", "new", "--principal", "a", "--scope", "admin", "--keys", str(path)]
     )
     principal = runner.invoke(
-        app, ["api-key", "new", "--principal", "a b", "--scope", "runs:read", "--keys", str(path)]
+        app, ["keys", "new", "--principal", "a b", "--scope", "runs:read", "--keys", str(path)]
     )
 
     assert scope.exit_code == 2 and "unknown scope admin" in scope.stderr

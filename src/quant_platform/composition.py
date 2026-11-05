@@ -3,8 +3,8 @@
 This is the only place that imports every product (decision 0003 keeps them independent of
 each other). Each toolset contributes its own tools, resources, prompts, and a paragraph of
 server instructions; `research_report` is added when the research toolset is served. The
-factory toolset is an optional extra (``quant-agent-os[factory]``, decision 0012), so
-App Factory is imported only when it is served.
+analytics and factory toolsets need extras (``quant-agent-os[analytics]``, ``[factory]``), so each
+is imported only when it is served.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any, Literal
 from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
 from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
 from quant_agent_os.tools.server_info import server_info_resource, server_info_tool
-from quant_analytics.tools import analytics_tools
 from quant_platform.prompts import (
     ANALYZE_RETURNS,
     DRAFT_APP_SPEC,
@@ -24,9 +23,9 @@ from quant_platform.prompts import (
     RESEARCH_SIGNAL,
 )
 from quant_platform.report import STRATEGY_STEP, research_report_tool
+from quant_research import MCP_INSTRUCTIONS as RESEARCH_INSTRUCTIONS
 from quant_research import research_resources, research_tools
 from quant_research.application.retrieval import ResearchService
-from quant_research.cli import MCP_INSTRUCTIONS as RESEARCH_INSTRUCTIONS
 
 if TYPE_CHECKING:
     from quant_app_factory import AppFactory
@@ -41,7 +40,11 @@ ANALYTICS_INSTRUCTIONS = (
     "the numbers as computed, never recomputed."
 )
 PLATFORM_INSTRUCTIONS = "Quant-Agent-OS: quantitative research tools with cited, computed evidence."
-FACTORY_EXTRA = "install the factory extra: uv add 'quant-agent-os[factory]'"
+# The module each optional toolset needs, and the extra that brings it.
+TOOLSET_NEEDS: dict[Toolset, tuple[str, str]] = {
+    "analytics": ("empyrical", "install the quant-agent-os[analytics] extra"),
+    "factory": ("pytemplate", "install the quant-agent-os[factory] extra"),
+}
 REPORT_INSTRUCTIONS = (
     "research_report gives a cited report on one signal, with metrics of a named series, in "
     "one call."
@@ -56,9 +59,12 @@ def platform_version() -> str:
 
 
 def available_toolsets() -> list[Toolset]:
-    """Return the toolsets this installation can serve (factory only with its extra)."""
-    has_factory = importlib.util.find_spec("quant_app_factory") is not None
-    return [name for name in TOOLSETS if name != "factory" or has_factory]
+    """Return the toolsets this installation can serve, given the extras it has."""
+    return [
+        name
+        for name in TOOLSETS
+        if name not in TOOLSET_NEEDS or importlib.util.find_spec(TOOLSET_NEEDS[name][0]) is not None
+    ]
 
 
 @dataclass(frozen=True)
@@ -109,6 +115,8 @@ def compose(
         prompts.append(RESEARCH_SIGNAL)
         served.append("research")
     if datasets is not None:
+        from quant_analytics.tools import analytics_tools
+
         add("analytics", [*analytics_tools(datasets).specs(), *dataset_tools(datasets)])
         resources += dataset_resources()
         prompts.append(ANALYZE_RETURNS)
@@ -117,10 +125,9 @@ def compose(
         add("research", [research_report_tool([*tools, *internal], policy)])
         prompts.append(REPORT_ON_SIGNAL)
     if factory is not None:
-        from quant_app_factory import factory_resources
-        from quant_app_factory.cli import served_tools as factory_served_tools
+        from quant_app_factory import factory_resources, served_tools
 
-        add("factory", factory_served_tools(factory))
+        add("factory", served_tools(factory))
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
@@ -142,7 +149,7 @@ def instructions_for(toolsets: list[Toolset]) -> str:
     if "research" in toolsets:
         paragraphs.append(REPORT_INSTRUCTIONS)
     if "factory" in toolsets:
-        from quant_app_factory.cli import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
+        from quant_app_factory import MCP_INSTRUCTIONS as FACTORY_INSTRUCTIONS
 
         paragraphs.append(FACTORY_INSTRUCTIONS)
     return "\n\n".join(paragraphs)

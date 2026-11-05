@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from quant_agent_os.cli import app
 from quant_agent_os.data import (
     DatasetError,
     DirectoryDatasetStore,
@@ -25,6 +24,7 @@ from quant_agent_os.mcp import read_resource
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
+from quant_platform.cli import app
 
 PRICES = b"date,fund,market\n2024-01-02,0.01,0.005\n2024-01-03,-0.02,-0.01\n2024-01-04,0.03,0.02\n"
 
@@ -246,11 +246,11 @@ def test_the_cli_pushes_and_lists_datasets(tmp_path: Path) -> None:
     directory = tmp_path / "datasets"
 
     pushed = CliRunner().invoke(
-        app, ["dataset", "push", str(source), "--id", "returns", "--dir", str(directory)]
+        app, ["data", "add", str(source), "--id", "returns", "--dir", str(directory)]
     )
-    listed = CliRunner().invoke(app, ["dataset", "list", "--dir", str(directory)])
+    listed = CliRunner().invoke(app, ["data", "list", "--dir", str(directory)])
     refused = CliRunner().invoke(
-        app, ["dataset", "push", str(source), "--id", "Bad Id", "--dir", str(directory)]
+        app, ["data", "add", str(source), "--id", "Bad Id", "--dir", str(directory)]
     )
 
     assert pushed.exit_code == 0 and "3 rows, columns fund, market" in pushed.output
@@ -263,9 +263,9 @@ def test_the_cli_reports_the_frequency_or_warns_and_takes_an_index(tmp_path: Pat
     source.write_text("fund,day\n0.1,20240102\n,20240103\n0.3,20240104\n")
     directory = ["--dir", str(tmp_path / "datasets")]
 
-    undated = CliRunner().invoke(app, ["dataset", "push", str(source), "--id", "t", *directory])
+    undated = CliRunner().invoke(app, ["data", "add", str(source), "--id", "t", *directory])
     dated = CliRunner().invoke(
-        app, ["dataset", "push", str(source), "--id", "t", "--index", "day", *directory]
+        app, ["data", "add", str(source), "--id", "t", "--index", "day", *directory]
     )
 
     assert "no dates showing a frequency" in undated.output
@@ -278,10 +278,10 @@ def test_the_cli_keeps_each_tenants_datasets_apart(tmp_path: Path) -> None:
     root = ["--dir", str(tmp_path / "datasets")]
 
     pushed = CliRunner().invoke(
-        app, ["dataset", "push", str(source), "--id", "returns", "--tenant", "acme", *root]
+        app, ["data", "add", str(source), "--id", "returns", "--tenant", "acme", *root]
     )
     refused = CliRunner().invoke(
-        app, ["dataset", "push", str(source), "--id", "returns", "--tenant", "../x", *root]
+        app, ["data", "add", str(source), "--id", "returns", "--tenant", "../x", *root]
     )
 
     assert pushed.exit_code == 0

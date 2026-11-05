@@ -9,7 +9,7 @@ from quant_agent_os.data import DirectoryDatasetStore
 from quant_research import ResearchApp, open_research
 
 ROOT = Path(__file__).resolve().parents[2]
-CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 FUND = [0.012, -0.004, 0.021, -0.015, 0.008, 0.017, -0.006, 0.011, 0.002, -0.009, 0.014, 0.005]
 
 

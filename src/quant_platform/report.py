@@ -17,7 +17,7 @@ from quant_agent_os.evidence import Evidence
 from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec, tool
-from quant_analytics.tools import ColumnRef
+from quant_analytics.references import ColumnRef
 from quant_research.application.strategy import StrategySpec
 
 STRATEGY_STEP = "generate_strategy"

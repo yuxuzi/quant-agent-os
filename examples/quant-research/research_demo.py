@@ -21,7 +21,7 @@ from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_research import open_research, research_tools
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
+DEFAULT_CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 DEFAULT_QUESTION = "What is related to short-term reversal?"
 
 
