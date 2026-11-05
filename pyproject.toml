@@ -1,13 +1,13 @@
 [project]
 name = "quant-agent-os"
 version = "0.1.1"
-description = "Quant-Agent-OS core: typed tools, a bounded orchestrator, and evidence-linked reports for quantitative research and application engineering"
+description = "Quant-Agent-OS core: typed tools, a bounded executor, and evidence-linked reports for quantitative research and application engineering"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
-keywords = ["quant", "agents", "llm", "mcp", "orchestration", "research"]
+keywords = ["quant", "agents", "llm", "mcp", "research"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

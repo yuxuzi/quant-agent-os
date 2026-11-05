@@ -169,7 +169,6 @@ class RunRecorder:
         goal: str,
         *,
         registry_digest: str,
-        provider: str | None = None,
         run_id: str | None = None,
     ) -> RunRecord:
         """Record that a run started and return it."""
@@ -182,7 +181,6 @@ class RunRecorder:
             principal=self.principal,
             tenant=self.tenant,
             platform_version=__version__,
-            provider=provider,
             registry_digest=registry_digest,
             started_at=datetime.now(UTC),
         )

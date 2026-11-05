@@ -1,8 +1,8 @@
 # quant-agent-os
 
 **Quant-Agent-OS** is an open-source quantitative intelligence and application-engineering
-platform. It is not a chatbot: Claude, Copilot, Cursor, and other AI clients use its typed tools,
-bounded workflows, and evidence-linked reports through MCP and a Python SDK. You bring your own
+platform. It is not a chatbot: Claude, Copilot, Cursor, and other AI clients use its typed tools
+and evidence-linked reports through MCP and a Python SDK. You bring your own
 models, data, and documents.
 
 It has two products built on one core platform:
@@ -19,7 +19,7 @@ It has two products built on one core platform:
 
 | Area | State |
 | --- | --- |
-| Core: tool contract, registry, permissions, bounded executor, orchestrator, evidence reports | Implemented |
+| Core: tool contract, registry, permissions, bounded executor, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
 | Remote MCP, tenants, and OAuth | Implemented: `quant-platform serve-http` serves MCP over Streamable HTTP and REST from one app, a catalog per tenant, API keys or OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
@@ -138,18 +138,19 @@ for you. See [docs/walkthrough.md](docs/walkthrough.md#10-generate-a-tool-packag
 ## How it fits together
 
 ```text
-request ─▶ Orchestrator ─▶ ModelProvider (BYO model) ─▶ Plan (validated: allowlist, step limit)
-                │
-                ▼
-          ToolExecutor ─▶ registered tools (plain Python functions)
-                │          permissions · input/output validation · timeout · output size
-                ▼
-          Report: findings (computed / retrieved / interpretation) + sources,
-                  warnings, limitations, per-call provenance
+AI client or your code ─▶ MCP · REST · SDK ─▶ ToolExecutor ─▶ registered tools (plain functions)
+(plans, picks the tools)                       permissions · input and output validation
+                                               approvals · timeout · output size
+                                                    │
+                                                    ▼
+                               Evidence (computed / retrieved / interpretation) + sources,
+                               warnings, limitations, per-call provenance, and an audit trail
 ```
 
-MCP clients reach the same tools through `quant_agent_os.mcp`, which calls the same executor, so
-every boundary gets identical validation and limits.
+The platform has no planner and calls no model ([decision 0016](docs/decisions/0016-clients-orchestrate.md)):
+your client does the planning, and every interface reaches the same executor, so every caller
+gets identical validation and limits. To drive the tools from your own model, see
+[examples/your-own-model](examples/your-own-model/drive_tools.py).
 
 ## Define a tool
 
@@ -183,8 +184,7 @@ registry = ToolRegistry([total_return])
 ```text
 src/quant_agent_os/      Core platform (products will live in packages/, see decision 0003)
   tools/          contract (ToolSpec, @tool), registry, permissions
-  runtime/        plan models, bounded executor, orchestrator
-  providers/      ModelProvider protocol and FakeModelProvider (bring your own model)
+  runtime/        tool calls, bounded executor, approvals, the subprocess runner
   config/         settings from QUANT_AGENT_OS_* environment variables
   evidence/       Evidence and SourceRef (facts vs interpretation)
   reporting/      Report models and Markdown rendering
@@ -192,7 +192,7 @@ src/quant_agent_os/      Core platform (products will live in packages/, see dec
   data/           datasets tools read by id, and list_datasets
   api/            REST routes over the executor and scoped API keys (optional api extra)
   runs/           run store (memory, SQLite), recorder, append-only audit, redaction
-  sdk/            Platform facade: call, run, get_run
+  sdk/            Platform facade: call, report, get_run
   observability/  logging with secret redaction
 packages/quant-research/   Quant Research (Graph RAG) product
 packages/quant-app-factory/  Quant App Factory product (spec, planner, pytemplate-uv adapter, agent-tool pack)
@@ -201,7 +201,7 @@ deploy/   team-server Dockerfile, compose file, and smoke test
 apps/quant-platform/   platform server: every toolset, resource, and prompt behind one MCP server
 skills/   instruction-only skills (research, analytics, strategy, App Factory)
 .claude-plugin/   Claude Code plugin and marketplace manifests; clients/: Cursor and VS Code bundles
-examples/portfolio-research/  examples/quant-research/
+examples/portfolio-research/  examples/quant-research/  examples/your-own-model/  examples/tutorial/
 tests/  unit/  contract/  integration/  evaluation/
 docs/   architecture, configuration, security, getting started, decisions, roadmap
 ```

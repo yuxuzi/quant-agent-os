@@ -4,8 +4,8 @@ import json
 
 from conftest import CORPUS
 
-from quant_agent_os.providers import FakeModelProvider
-from quant_agent_os.runtime.orchestrator import Orchestrator
+from quant_agent_os.runtime import ToolCall
+from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import READ_ONLY, PermissionPolicy, ToolRegistry
 from quant_research import ResearchApp, ResearchQuery, open_research, research_tools
 
@@ -31,20 +31,16 @@ def test_ingesting_hostile_documents_does_not_change_tool_contracts() -> None:
     assert before == after
 
 
-def test_tool_output_never_reaches_the_planner(research: ResearchApp) -> None:
-    plan = {
-        "goal": "Research carry",
-        "steps": [{"tool": "find_related_signals", "arguments": {"query": "carry"}}],
-    }
-    provider = FakeModelProvider([json.dumps(plan)])
+def test_retrieved_text_never_changes_what_runs(research: ResearchApp) -> None:
+    """A run makes exactly the calls it was given, with the policy it started with."""
     policy = PermissionPolicy()
-    orchestrator = Orchestrator(ToolRegistry(research_tools(research.research)), provider, policy)
+    call = ToolCall(tool="find_related_signals", arguments={"query": "carry", "detail": "full"})
 
-    report = orchestrator.run("Research carry")
+    with Platform(research_tools(research.research), policy=policy) as platform:
+        report = platform.report("Research carry", [call])
 
     assert report.succeeded
     assert INJECTED in json.dumps(report.tool_calls[0].output)
-    assert len(provider.prompts) == 1
-    assert INJECTED not in provider.prompts[0]
     assert [call.tool for call in report.tool_calls] == ["find_related_signals"]
+    assert all(finding.kind == "retrieved" for finding in report.findings)
     assert policy.granted == READ_ONLY

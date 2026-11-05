@@ -8,7 +8,7 @@ Claude Code reads this file through `CLAUDE.md`.
 Quant-Agent-OS is an open-source quantitative intelligence and application-engineering
 platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
-  executor, one orchestrator, evidence-linked reports, and the MCP adapter.
+  executor, evidence-linked reports, and the MCP adapter.
 - **Quant Research** (`packages/quant-research`): a Graph RAG knowledge system. It is layered
   as `domain` → `application` → `infrastructure`, with `tools.py` and `cli.py` as interfaces and
   `bootstrap.py` as the composition root.
@@ -65,26 +65,24 @@ the real results.
 
 `src/quant_agent_os/`, importing downward only:
 1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions; `tenancy.py` (tenant ids).
-2. `runtime/call.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: plan
-   models, approvals, the subprocess runner, and bounded execution.
+2. `runtime/call.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: tool
+   calls, approvals, the subprocess runner, and bounded execution.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
    `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from
    `observability/logging.py`.
-4. `runtime/orchestrator.py`: planning, validation, execution, report, and optional
-   recording. Not re-exported from `runtime/__init__` to avoid an import cycle.
-5. `providers/`, `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
+4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
    `approval_desk.py` (approval requests),
    `mcp/` (stdio, HTTP, OAuth), `sdk/`, `testing.py` (`check_tool`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a
-direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `tests/evaluation`
+direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
 (opt-in quality evaluations).
 
 ## Invariants
 
-- **One bounded orchestrator.** No multi-agent features without an evaluation showing value
-  ([decision 0001](docs/decisions/0001-one-orchestrator-first.md)).
+- **Clients orchestrate.** The platform has no planner and calls no model
+  ([decision 0016](docs/decisions/0016-clients-orchestrate.md)). No multi-agent features.
 - **Business logic stays out of MCP.** MCP code only adapts the registry
   ([decision 0002](docs/decisions/0002-mcp-boundary.md)).
 - **Read-only by default.** Never widen `READ_ONLY` or default permissions. New capabilities must
@@ -93,8 +91,9 @@ direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `te
   or model output, and never pre-approve a permission in code or defaults.
 - **Programs run through `run_command`.** Never call `subprocess` from a tool; the runner
   scrubs the environment and kills the process tree on timeout.
-- **No feedback into planning.** Never feed tool output or retrieved text back into planning
-  prompts. Synthesis from retrieved text is labelled `interpretation` and cannot choose tools.
+- **Retrieved text never steers the platform.** No tool reads tool output or retrieved text to
+  choose what runs next. Retrieved text stays marked untrusted, and anything synthesized from it
+  is labelled `interpretation`.
 - **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
 - **Explicit registration.** No dynamic plugin discovery or code loading, and no tool
   marketplace. The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
@@ -104,15 +103,15 @@ direct call), `tests/integration` (end-to-end with `FakeModelProvider`), and `te
   limits, and audit. `apps/quant-platform/tests/test_skills.py` fails when a skill names
   something the server does not serve, or a served tool, prompt, or resource has no skill.
 - **No server-side agents.** A workflow the platform owns is a deterministic composite tool,
-  such as `research_report`. The orchestrator stays an SDK feature.
+  such as `research_report`. `Platform.report` runs calls its caller names.
 - **Data by reference.** Tools take dataset ids and resource URIs; inline values are for small
   examples only, so numbers do not travel through the model.
 - **Writes to the user's machine stay local.** Server tools compute, retrieve, and validate.
   Creating files, as `quant-factory create` does, is a command the user runs.
 - **Efficiency is measured.** A change to the tool surface or the skills reports its delta in
   the agent-efficiency evaluation; rebaseline only for an intended change.
-- **Offline tests.** Tests run offline with `FakeModelProvider`. Live-model evaluations are opt-in
-  and never part of default CI.
+- **Offline tests.** Tests run offline. Anything that needs a network is opt-in and never part of
+  default CI.
 - **Secrets.** Secrets are `SecretStr`, never logged or displayed, and `.env` is never committed.
 - **Facts versus interpretation.** Reports keep `computed`, `retrieved`, and `interpretation`
   evidence distinct. Financial metrics need documented conventions and known-answer tests.

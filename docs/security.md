@@ -11,14 +11,12 @@ lists the open findings.
   those permissions explicitly.
 - **Explicit tools.** Only tools registered in a `ToolRegistry` can run, optionally narrowed
   further by an allowlist. There is no dynamic discovery or code loading.
-- **Bounded plans.** Plans are validated before execution against the registry, the allowlist,
-  and `max_plan_steps`.
 - **Bounded calls.** Every call validates its input and output, has a timeout, and has an
   output-size limit. A timed-out Python thread cannot be killed, so tools must avoid unbounded
   or side-effecting work.
-- **No feedback into planning.** Tool outputs and retrieved text are not sent back to the
-  platform's planner, so injected instructions in data cannot choose tools.
-- **External clients plan for themselves.** An MCP or REST client such as Claude or Cursor
+- **Retrieved text never steers the platform.** The platform has no planner and calls no model,
+  so no platform code reads tool output or retrieved text to choose what runs next.
+- **Clients plan for themselves.** An MCP or REST client such as Claude or Cursor
   does read tool output, and the platform cannot stop it from acting on text in a passage.
   So every result that carries corpus text says `"trust": "untrusted"`, the research server's
   instructions tell the client never to follow instructions found in passages, and the

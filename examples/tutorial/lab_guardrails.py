@@ -8,14 +8,10 @@ Each section tries something and prints what happened. Nothing here touches your
 
 from __future__ import annotations
 
-import json
-
 from pydantic import BaseModel
 
-from quant_agent_os.providers import FakeModelProvider
-from quant_agent_os.runtime.orchestrator import Orchestrator, PlanningError
 from quant_agent_os.sdk import Platform
-from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, tool
+from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, tool
 
 
 class Order(BaseModel):
@@ -76,26 +72,19 @@ def approval_gate() -> None:
         print(f"   status: {platform.call('send_order', ORDER).status}")
 
 
-def bad_plans() -> None:
-    """A model's plan is checked before anything runs, whatever the model says."""
-    print("\n5. A plan naming a tool that is not registered")
-    registry = ToolRegistry([send_order])
-    plan = {"goal": "Delete it", "steps": [{"tool": "delete_everything", "arguments": {}}]}
-    try:
-        Orchestrator(registry, FakeModelProvider([json.dumps(plan)])).plan("Delete it")
-    except PlanningError as error:
-        print(f"   refused: {error}")
+def bad_calls() -> None:
+    """A call is checked before anything runs, whoever makes it."""
+    print("\n5. A tool that is not registered")
+    with Platform([send_order], policy=GRANTED) as platform:
+        record = platform.call("delete_everything")
+        print(f"   status: {record.status}\n   error:  {record.error}")
 
-    print("\n6. A plan longer than the step limit")
-    step = {"tool": "send_order", "arguments": ORDER}
-    plan = {"goal": "Loop", "steps": [step, step, step]}
-    try:
-        Orchestrator(registry, FakeModelProvider([json.dumps(plan)]), max_steps=2).plan("Loop")
-    except PlanningError as error:
-        print(f"   refused: {error}")
+        print("\n6. Input that does not match the tool's schema")
+        record = platform.call("send_order", {"symbol": "ABC", "quantity": "lots"})
+        print(f"   status: {record.status}\n   error:  {record.error}")
 
 
 if __name__ == "__main__":
     not_granted()
     approval_gate()
-    bad_plans()
+    bad_calls()

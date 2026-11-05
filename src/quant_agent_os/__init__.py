@@ -1,4 +1,4 @@
-"""QuantAgentOS runtime: typed tools, a bounded orchestrator, and evidence-linked reports."""
+"""Quant-Agent-OS runtime: typed tools, a bounded executor, and evidence-linked reports."""
 
 from importlib.metadata import PackageNotFoundError, version
 

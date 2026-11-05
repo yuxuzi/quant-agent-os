@@ -1,36 +1,31 @@
-"""The `Platform` facade: one object for calling tools, running plans, and reading runs back."""
+"""The `Platform` facade: one object for calling tools, making reports, and reading runs back."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import Any, Self
 
-from quant_agent_os.providers.base import ModelProvider
+from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.reporting.models import Report
 from quant_agent_os.runs.models import RunRecord, StoredRun
-from quant_agent_os.runs.recorder import RunRecorder
+from quant_agent_os.runs.recorder import RunRecorder, outcome
 from quant_agent_os.runs.store import MemoryRunStore, RunStore
 from quant_agent_os.runtime.approvals import Approval
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
-from quant_agent_os.runtime.orchestrator import Orchestrator
 from quant_agent_os.tools.contracts import ToolSpec
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
 
 
-class ProviderRequiredError(RuntimeError):
-    """Raised when `Platform.run` is called on a platform built without a model provider."""
-
-
 class Platform:
-    """Call registered tools and run plans, with every run persisted to a `RunStore`.
+    """Call registered tools and make reports, with every run persisted to a `RunStore`.
 
     Calls go through the same `ToolExecutor` as the MCP server, so an SDK call and an MCP call
     with the same arguments produce the same record. Runs are kept in memory unless a
-    ``run_store`` (for example a `SqliteRunStore`) is given. ``provider`` is only needed for
-    `run`, which plans with a model.
+    ``run_store`` (for example a `SqliteRunStore`) is given.
 
         platform = Platform(research_tools(app.research), run_store=SqliteRunStore("runs.db"))
         record = platform.call("find_related_signals", query="short-term reversal")
@@ -42,18 +37,14 @@ class Platform:
         tools: ToolRegistry | Iterable[ToolSpec[Any, Any]],
         *,
         policy: PermissionPolicy | None = None,
-        provider: ModelProvider | None = None,
         run_store: RunStore | None = None,
         actor: str = "sdk",
-        max_steps: int = 8,
     ) -> None:
         self.registry = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.policy = policy or PermissionPolicy()
         self.run_store = run_store or MemoryRunStore()
         self.executor = ToolExecutor(self.registry, self.policy, approvals=self.run_store)
         self.recorder = RunRecorder(self.run_store, actor=actor)
-        self.provider = provider
-        self.max_steps = max_steps
 
     def call(
         self, tool: str, arguments: Mapping[str, Any] | None = None, /, **kwargs: Any
@@ -65,21 +56,30 @@ class Platform:
         step = ToolCall(tool=tool, arguments={**(arguments or {}), **kwargs})
         return self.recorder.call(self.executor, step)
 
-    def run(self, goal: str) -> Report:
-        """Plan ``goal`` with the provider, execute the plan, and return the report."""
-        if self.provider is None:
-            raise ProviderRequiredError(
-                "Platform.run plans with a model; pass provider=... (for example "
-                "FakeModelProvider in tests), or use Platform.call for single tools."
-            )
-        orchestrator = Orchestrator(
-            self.registry,
-            self.provider,
-            self.policy,
-            max_steps=self.max_steps,
-            recorder=self.recorder,
+    def report(self, goal: str, calls: Iterable[ToolCall]) -> Report:
+        """Run ``calls`` in order as one recorded run, and return its evidence-linked report.
+
+        The calls are the caller's; nothing here reads a result to choose what runs next. A call
+        that fails becomes a warning in the report, and the later calls still run.
+        """
+        started_at = datetime.now(UTC)
+        digest = self.registry.digest()
+        run = self.recorder.start("plan", goal, registry_digest=digest)
+        records = []
+        for call in calls:
+            record = self.executor.execute(call, run_id=run.run_id)
+            self.recorder.record_call(record)
+            records.append(record)
+        report = build_report(
+            goal,
+            records,
+            run_id=run.run_id,
+            registry_digest=digest,
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
         )
-        return orchestrator.run(goal)
+        self.recorder.finish(run, outcome(records), data_versions=report.metadata.data_versions)
+        return report
 
     def approve(self, run_id: str, *, approved_by: str = "operator") -> list[Approval]:
         """Approve, once, each call ``run_id`` is waiting on (an operator action).

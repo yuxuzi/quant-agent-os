@@ -19,7 +19,7 @@ the client supplies the conversation.
 
 | Kind | Name | Role | Status |
 | --- | --- | --- | --- |
-| Platform | Quant-Agent-OS Core (`quant_agent_os`) | Runtime, tool registry, executor, orchestrator, evidence, interfaces | Confirmed (partial) |
+| Platform | Quant-Agent-OS Core (`quant_agent_os`) | Runtime, tool registry, executor, evidence, interfaces | Confirmed (partial) |
 | Product A | Quant Research (`quant_research`) | Graph RAG research and knowledge system with source provenance | Proposed |
 | Product B | Quant App Factory (`quant_app_factory`) | Requirements to tested, packaged Python applications | Confirmed (foundation) |
 | Domain service | Quant analytics (separate package; name open) | Deterministic performance, risk, and later backtest calculations | Proposed |
@@ -45,8 +45,8 @@ names remain provisional until availability checks are done.
  ┌─────────────────────────────────▼─────────────────────────────────────┐
  │                      Quant-Agent-OS Core platform                     │
  │  tool contract & registry · permission & approval policy · executor   │
- │  orchestrator · evidence & reports · run store & audit · config       │
- │  model-provider ports · observability                                 │
+ │  evidence & reports · run store & audit · config                      │
+ │  observability                                                        │
  └───────────────▲───────────────────────────────────▲───────────────────┘
                  │ registers tools                   │ registers tools
      ┌───────────┴────────────┐          ┌───────────┴─────────────┐
@@ -73,7 +73,7 @@ The same system seen from the people who use it, top to bottom. Orchestration (p
 selection, and conversation state) happens in the client, not on the server. The platform
 enforces policy, controls the workflow, and keeps the audit trail for every call, whichever
 client makes it. Workflows the platform owns are deterministic composite tools, not
-server-side agents ([decision 0001](decisions/0001-one-orchestrator-first.md),
+server-side agents ([decision 0016](decisions/0016-clients-orchestrate.md),
 [agent-surface plan](plans/agent-surface.md), principle 2).
 
 ```text
@@ -128,12 +128,10 @@ sees the same corpus. A team that needs separation within a firm uses separate t
 | Tool contract | `tools/contracts.py` | `ToolSpec`, `@tool`, descriptors | Confirmed |
 | Registry | `tools/registry.py` | Explicit, unique registration and lookup | Confirmed |
 | Permissions | `tools/permissions.py` | `Permission`, `PermissionPolicy`, allowlist, read-only default | Confirmed |
-| Plan models | `runtime/call.py` | `Plan`, `ToolCall` | Confirmed |
+| Tool call | `runtime/call.py` | `ToolCall`, what every interface hands the executor | Confirmed |
 | Executor | `runtime/executor.py` | Permissions, validation, timeout, output size, `ToolCallRecord` | Confirmed |
-| Orchestrator | `runtime/orchestrator.py` | One bounded plan, validate, execute, report | Confirmed |
 | Evidence | `evidence/models.py` | `Evidence` (`retrieved` · `computed` · `interpretation`), `SourceRef` | Confirmed |
 | Reporting | `reporting/` | `Report`, `RunMetadata`, Markdown rendering | Confirmed |
-| Providers | `providers/` | `ModelProvider` protocol, `FakeModelProvider` | Confirmed; no real adapter |
 | Configuration | `config/settings.py` | `QUANT_AGENT_OS_*` settings, `SecretStr` | Confirmed |
 | Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
 | MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool`, and resources (each read through its tool) and prompts (`tools/catalog.py`) over the executor | Confirmed |
@@ -141,11 +139,11 @@ sees the same corpus. A team that needs separation within a firm uses separate t
 | Approvals in the client | `approval_desk.py`, `api/approval_page.py` | Approval requests for waiting HTTP calls, the approval page (approver keys, four eyes), resume in the original run; stdio confirmation in the client ([0014](decisions/0014-approvals-in-the-client.md)) | Confirmed (B-35) |
 | OAuth | `mcp/oauth.py` | OAuth 2.1 resource server: introspection, audience, issuer-pinned tenants, Protected Resource Metadata | Confirmed (B-34) |
 | Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `quant-agent-os dataset push` | Confirmed (B-31) |
-| CLI | `cli.py` | `info`, `plan-schema`, `--version` | Confirmed |
+| CLI | `cli.py` | `info`, `--version` | Confirmed |
 | Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
 | MCP server | `mcp/server.py`, `mcp/http.py` | stdio transport, and stateless Streamable HTTP with API-key auth and per-method scopes ([0012](decisions/0012-remote-mcp-over-http.md)); tool annotations from declared permissions | Confirmed |
-| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `run`, run lookup | Confirmed |
+| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `report`, run lookup | Confirmed |
 | REST API | `api/` | FastAPI over the same executor and recorder (optional `api` extra); scoped API keys stored as hashes ([0011](decisions/0011-rest-api-and-api-keys.md)) | Confirmed (B-18) |
 | Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
 
@@ -173,7 +171,7 @@ contract:
 MCP client ─┐
 REST client ┼─▶ interface adapter ─▶ ToolExecutor ─▶ ToolSpec(@tool wrapper) ─▶ Application service
 SDK / CLI  ─┤      (no logic)        permissions·approval                         │
-Orchestrator┘                        validation·limits·record                     ▼
+                                   validation·limits·record                     ▼
                                                                        Domain models and ports
                                                                                    │
                                                                        Infrastructure adapters
@@ -183,7 +181,7 @@ Orchestrator┘                        validation·limits·record               
   the platform.
 - A `@tool` wrapper is a few lines that call one service method and map its result to an output
   model carrying `warnings` and `evidence`.
-- Every remote or agent path (MCP, REST, orchestrator, and SDK `call`) goes through
+- Every remote or agent path (MCP, REST, and SDK `call` and `report`) goes through
   `ToolExecutor`. Permissions, approvals, validation, timeouts, size limits, and records
   therefore apply identically on every path. Contract tests assert this
   ([decision 0002](decisions/0002-mcp-boundary.md)).
@@ -220,7 +218,7 @@ workspace (decision 0010) and moves out when it has its own release cycle.
 
 Core's internal import order is **confirmed**:
 `tools` → `runtime.call` / `runtime.executor` → `evidence` / `reporting` →
-`runtime.orchestrator` → `providers`, `config`, `mcp`, `observability`, `cli`.
+`config`, `mcp`, `sdk`, `observability`, `cli`.
 
 ## 5. Tool contract and request lifecycle
 
@@ -254,27 +252,22 @@ permission (see [section 12](#12-security-and-approval-model)). The error model 
 `CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`,
 `unknown_tool`, `timeout`, `error`).
 
-### 5.3 Request lifecycle (confirmed, with proposed additions marked)
+### 5.3 Request lifecycle (confirmed)
 
-1. **Plan.** The orchestrator sends the provider the goal and the descriptors of the tools it
-   allows, then parses the reply into a `Plan`.
-2. **Validate.** The plan is rejected before anything runs if it is malformed, exceeds
-   `max_steps`, or names a tool that is unregistered or outside the allowlist.
-3. **Approve.** A step that needs approval records `approval_required` without running, and
-   the run waits in `awaiting_approval`. The operator approves the exact calls, then resumes
-   the run.
-4. **Execute.** For each step the executor checks permissions, validates the input, asks the
-   tenant's plan limits to admit the call (`quota_exceeded` if not, decision 0015), runs the
-   tool with a timeout, then validates the output and enforces its size limit. Failures become
+1. **Choose.** The client, or the caller's code, decides which tools to call. The platform has no
+   planner ([decision 0016](decisions/0016-clients-orchestrate.md)).
+2. **Execute.** For each call, the executor checks permissions, validates the input, asks the
+   tenant's plan limits to admit the call (`quota_exceeded` if not, decision 0015), checks for an
+   approval when the tool is consequential (`approval_required` if not, and the run waits), runs
+   the tool with a timeout, then validates the output and enforces its size limit. Failures become
    records, not exceptions.
-5. **Report.** `build_report` collects evidence and warnings, turns failed calls into warnings,
-   and adds limitations and run metadata.
-6. **Persist.** With a `RunRecorder`, the run, its records, and audit events go to the run
-   store as they happen, including runs whose plan is rejected, and so do approvals.
+3. **Report.** `research_report` and `Platform.report` collect evidence and warnings, turn failed
+   calls into warnings, and add limitations and run metadata.
+4. **Persist.** With a `RunRecorder`, the run, its records, and audit events go to the run store as
+   they happen, and so do approvals.
 
-Tool output and retrieved text are never fed back into **planning**. A tool may give retrieved
-text to a model for synthesis (section 6.5). The synthesized text is labelled `interpretation`
-and cannot choose tools.
+No platform code reads tool output or retrieved text to choose what runs next. A client's model
+reads them, so they stay marked untrusted.
 
 ## 6. Quant Research: Graph RAG architecture
 
@@ -400,7 +393,7 @@ enabled by default.
 
 - In the MVP, **the client LLM synthesizes**. Quant Research returns evidence packets, and
   Claude (or another client) writes the answer, so the MVP makes no server-side model calls.
-- Server-side synthesis (`research_alpha`) is a later, optional tool. It uses a `ModelProvider`,
+- Server-side synthesis (`research_alpha`) is closed by decision 0016. If it returns, it uses a model,
   needs the `network` permission when the provider is remote, and returns `interpretation`
   evidence that cites the passages it used. Hypotheses are always `interpretation`.
 - Retrieved documents are untrusted. Fixture documents containing injected instructions must
@@ -753,8 +746,8 @@ Kubernetes, or several model frameworks.
 
 ## 14. Extension points (confirmed)
 
-- **Models:** implement `ModelProvider` (`name`, `generate(prompt) -> str`). Each vendor ships
-  as an adapter with its own optional dependency, and tests stay on `FakeModelProvider`.
+- **Models:** the platform calls none ([decision 0016](decisions/0016-clients-orchestrate.md)).
+  Drive the tools with your vendor's tool loop over `tool_definitions` and `Platform.call`.
 - **Tools:** register `ToolSpec`s from your own packages in an explicit `ToolRegistry`. There is
   no plugin discovery and no dynamic code loading.
 - **MCP:** a transport only forwards `tools/list` and `tools/call` to `tool_definitions` and
@@ -767,7 +760,7 @@ Extension points are `KnowledgeStore` and `RunStore` (confirmed), and `ScaffoldP
 ## 15. Not in scope
 
 The following are not in scope:
-- multi-agent orchestration without an evaluation ([decision 0001](decisions/0001-one-orchestrator-first.md));
+- server-side planning or multi-agent orchestration ([decision 0016](decisions/0016-clients-orchestrate.md));
 - autonomous trading or external actions;
 - unrestricted code execution;
 - hosted multi-tenant infrastructure;

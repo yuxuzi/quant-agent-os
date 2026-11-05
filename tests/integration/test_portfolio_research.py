@@ -1,15 +1,15 @@
-"""End-to-end workflow on synthetic data with a fake provider (no network, no LLM)."""
+"""End-to-end workflow on synthetic data (no network, no model)."""
 
-import json
 import math
+import runpy
+import sys
+from pathlib import Path
 
 import pytest
 from portfolio_research import DEFAULT_CONFIG, load_config, run
 from portfolio_tools import SeriesInput, build_registry, max_drawdown
 
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.reporting import render_markdown
-from quant_agent_os.runtime.orchestrator import Orchestrator, PlanningError
 
 
 def test_example_produces_a_complete_evidence_linked_report() -> None:
@@ -38,54 +38,29 @@ def test_short_series_produces_warnings() -> None:
     assert any("unreliable" in warning for warning in report.warnings)
 
 
-def _orchestrator(plan: dict[str, object], max_steps: int = 4) -> Orchestrator:
-    provider = FakeModelProvider([json.dumps(plan)])
-    return Orchestrator(build_registry(), provider, max_steps=max_steps)
+def test_an_unknown_tool_is_reported_and_nothing_else_is_lost() -> None:
+    config = load_config(DEFAULT_CONFIG)
+    config["request"]["metrics"] = ["place_trade", "max_drawdown"]
+
+    report = run(config)
+
+    assert [call.status for call in report.tool_calls] == ["unknown_tool", "ok"]
+    assert any("place_trade: unknown_tool" in warning for warning in report.warnings)
+    assert report.findings
 
 
-def test_plans_with_unknown_tools_are_rejected_before_execution() -> None:
-    plan = {"goal": "g", "steps": [{"tool": "place_trade", "arguments": {}}]}
+def test_your_own_model_example_recovers_from_a_failed_call(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = Path(__file__).parents[2] / "examples" / "your-own-model" / "drive_tools.py"
+    monkeypatch.setattr(sys, "argv", [str(script)])
 
-    with pytest.raises(PlanningError, match="place_trade"):
-        _orchestrator(plan).run("g")
+    runpy.run_path(str(script), run_name="__main__")
 
-
-def test_plans_over_the_step_limit_are_rejected() -> None:
-    step = {"tool": "max_drawdown", "arguments": {"series_id": "s", "returns": [0.1, 0.2]}}
-    plan = {"goal": "g", "steps": [step] * 3}
-
-    with pytest.raises(PlanningError, match="limit is 2"):
-        _orchestrator(plan, max_steps=2).run("g")
-
-
-def test_malformed_provider_output_is_rejected() -> None:
-    orchestrator = Orchestrator(build_registry(), FakeModelProvider(["not json"]))
-
-    with pytest.raises(PlanningError, match="invalid plan"):
-        orchestrator.run("g")
-
-
-def test_planning_prompt_lists_only_registered_tools() -> None:
-    provider = FakeModelProvider(
-        [
-            json.dumps(
-                {
-                    "goal": "g",
-                    "steps": [
-                        {
-                            "tool": "max_drawdown",
-                            "arguments": {"series_id": "s", "returns": [0.1, -0.2]},
-                        }
-                    ],
-                }
-            )
-        ]
-    )
-
-    Orchestrator(build_registry(), provider).run("g")
-
-    assert '"name": "annualized_return"' in provider.prompts[0]
-    assert '"name": "max_drawdown"' in provider.prompts[0]
+    output = capsys.readouterr().out
+    assert "analyze_performance: invalid_input" in output
+    assert "analyze_performance: ok" in output
+    assert "Sharpe ratio, computed by the tool: 1.44" in output
 
 
 def test_max_drawdown_known_answer() -> None:

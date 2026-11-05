@@ -1,4 +1,4 @@
-"""The structured report every orchestrated run produces."""
+"""The structured report of a run: what it found, from what, and how it was produced."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence.models import Evidence
-from quant_agent_os.runtime.call import Plan
 from quant_agent_os.runtime.executor import ToolCallRecord
 
 
@@ -16,7 +15,6 @@ class RunMetadata(BaseModel):
 
     run_id: str
     platform_version: str
-    provider: str
     registry_digest: str
     started_at: datetime
     finished_at: datetime
@@ -24,10 +22,9 @@ class RunMetadata(BaseModel):
 
 
 class Report(BaseModel):
-    """Findings with their evidence, plus the plan, tool calls, warnings, and limitations."""
+    """Findings with their evidence, plus the tool calls, warnings, and limitations."""
 
     goal: str
-    plan: Plan
     tool_calls: list[ToolCallRecord]
     findings: list[Evidence] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

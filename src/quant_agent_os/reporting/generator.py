@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from quant_agent_os import __version__
 from quant_agent_os.evidence.models import Evidence
 from quant_agent_os.reporting.models import Report, RunMetadata
-from quant_agent_os.runtime.call import Plan
 from quant_agent_os.runtime.executor import ToolCallRecord
 
 STANDARD_LIMITATIONS = (
@@ -19,11 +18,10 @@ STANDARD_LIMITATIONS = (
 
 
 def build_report(
-    plan: Plan,
+    goal: str,
     records: list[ToolCallRecord],
     *,
     run_id: str,
-    provider: str,
     registry_digest: str,
     started_at: datetime,
     finished_at: datetime,
@@ -49,8 +47,7 @@ def build_report(
             except ValidationError:
                 warnings.append(f"{call.tool}: returned malformed evidence, which was ignored.")
     return Report(
-        goal=plan.goal,
-        plan=plan,
+        goal=goal,
         tool_calls=records,
         findings=findings,
         warnings=warnings,
@@ -58,7 +55,6 @@ def build_report(
         metadata=RunMetadata(
             run_id=run_id,
             platform_version=__version__,
-            provider=provider,
             registry_digest=registry_digest,
             started_at=started_at,
             finished_at=finished_at,
@@ -98,7 +94,7 @@ def render_markdown(report: Report) -> str:
     meta = report.metadata
     lines += [
         "",
-        f"Run `{meta.run_id}`: platform {meta.platform_version}, provider `{meta.provider}`, "
+        f"Run `{meta.run_id}`: platform {meta.platform_version}, "
         f"registry `{meta.registry_digest[:12]}`, "
         f"{meta.started_at.isoformat()} to {meta.finished_at.isoformat()}.",
     ]

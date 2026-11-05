@@ -19,7 +19,7 @@ class DuplicateToolError(ValueError):
 
 
 class ToolRegistry:
-    """Holds the tools available to an orchestrator or MCP adapter."""
+    """Holds the tools available to an executor and its interfaces."""
 
     def __init__(self, tools: Iterable[ToolSpec[Any, Any]] = ()) -> None:
         self._tools: dict[str, ToolSpec[Any, Any]] = {}

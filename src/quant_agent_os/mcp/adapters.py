@@ -1,6 +1,6 @@
 """Map registered tools, resources, and prompts onto MCP, without an SDK dependency.
 
-The adapter calls tools through the same `ToolExecutor` as the orchestrator, so MCP clients get
+The adapter calls tools through the same `ToolExecutor` as every interface, so MCP clients get
 identical validation, permissions, limits, and outputs. A server transport only forwards
 ``tools/list`` to `tool_definitions`, ``tools/call`` to `call_tool`, the resource requests to
 `resource_templates` and `read_resource` (which call the resource's tool), and the prompt

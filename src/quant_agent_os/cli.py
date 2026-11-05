@@ -1,6 +1,5 @@
 """Command-line interface for quant-agent-os."""
 
-import json
 from pathlib import Path
 from typing import Annotated
 
@@ -12,11 +11,10 @@ from quant_agent_os import __version__
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
-from quant_agent_os.runtime.call import Plan
 from quant_agent_os.tenancy import DEFAULT_TENANT, TenantError, check_tenant
 
 app = typer.Typer(
-    help="QuantAgentOS: typed tools, a bounded orchestrator, and evidence-linked reports.",
+    help="Quant-Agent-OS: typed tools, a bounded executor, and evidence-linked reports.",
     no_args_is_help=True,
 )
 console = Console()
@@ -60,7 +58,7 @@ def _root(
         ),
     ] = False,
 ) -> None:
-    """QuantAgentOS command-line interface."""
+    """Quant-Agent-OS command-line interface."""
 
 
 @app.command()
@@ -72,12 +70,6 @@ def info() -> None:
     for key, value in get_settings().public_summary().items():
         table.add_row(key, value)
     console.print(table)
-
-
-@app.command("plan-schema")
-def plan_schema() -> None:
-    """Print the JSON schema that provider adapters must return for a plan."""
-    typer.echo(json.dumps(Plan.model_json_schema(), indent=2))
 
 
 @api_key_app.command("new")

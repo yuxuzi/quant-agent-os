@@ -5,9 +5,8 @@ import json
 import pytest
 
 from quant_agent_os.mcp import call_tool, tool_definitions
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.runtime import ToolCall, ToolExecutor
-from quant_agent_os.runtime.orchestrator import Orchestrator
+from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry
 from quant_research import ResearchApp, ResearchQuery, research_tools
 from quant_research.application.retrieval import CONCISE_PREVIEW_CHARS
@@ -81,13 +80,11 @@ def test_unknown_passages_and_bad_input_fail_with_actionable_messages(
     assert "query" in (invalid.error or "") and "hops" in (invalid.error or "")
 
 
-def test_orchestrated_reports_record_the_corpus_snapshot(research: ResearchApp) -> None:
-    plan = {"goal": "g", "steps": [{"tool": "find_related_signals", "arguments": QUERY}]}
-    orchestrator = Orchestrator(
-        ToolRegistry(research_tools(research.research)), FakeModelProvider([json.dumps(plan)])
-    )
+def test_reports_record_the_corpus_snapshot(research: ResearchApp) -> None:
+    call = ToolCall(tool="find_related_signals", arguments=QUERY)
 
-    report = orchestrator.run("g")
+    with Platform(research_tools(research.research)) as platform:
+        report = platform.report("g", [call])
 
     snapshot = research.store.current_snapshot()
     assert snapshot is not None
