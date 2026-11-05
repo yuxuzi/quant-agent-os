@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os.config import get_settings
@@ -103,7 +104,7 @@ def _open(
 
 
 def _fail(error: Exception | str) -> typer.Exit:
-    errors.print(f"[red]{error}[/red]")
+    errors.print(f"[red]{escape(str(error))}[/red]")
     return typer.Exit(code=1)
 
 

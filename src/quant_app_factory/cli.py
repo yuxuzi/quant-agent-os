@@ -10,6 +10,7 @@ from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from quant_agent_os.config import get_settings
 from quant_agent_os.runs import SqliteRunStore
@@ -65,7 +66,7 @@ SpecArgument = Annotated[
 
 
 def _fail(error: Exception | str) -> typer.Exit:
-    errors.print(f"[red]{error}[/red]")
+    errors.print(f"[red]{escape(str(error))}[/red]")
     return typer.Exit(code=1)
 
 

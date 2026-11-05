@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
@@ -68,7 +69,7 @@ def key_new(
     try:
         key = add_key(path, principal, scopes, tenant=tenant)
     except (ApiKeyError, ValueError) as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     errors.print(
         f"Added a key for {principal} in tenant {tenant} ({', '.join(scopes)}) to {path}. "
@@ -105,7 +106,7 @@ def data_add(
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
         info = store.put(dataset_id or source.stem, source, index_column=index)
     except (DatasetError, TenantError, OSError) as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     console.print(
         f"Added dataset {info.id}: {info.rows} rows, columns {', '.join(info.columns)} "
@@ -129,7 +130,7 @@ def data_list(directory: DatasetsOption = None, tenant: DatasetTenantOption = No
     try:
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
     except TenantError as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     table = Table(title=f"Datasets in {store.root}")
     for column in ("Id", "Rows", "Columns", "Index range", "sha256"):
@@ -138,7 +139,7 @@ def data_list(directory: DatasetsOption = None, tenant: DatasetTenantOption = No
         try:
             info = store.get(dataset_id).info()
         except DatasetError as error:
-            errors.print(f"[yellow]warning:[/yellow] {error}")
+            errors.print(f"[yellow]warning:[/yellow] {escape(str(error))}")
             continue
         span = f"{info.first_index} to {info.last_index}" if info.first_index else ""
         table.add_row(info.id, str(info.rows), ", ".join(info.columns), span, info.fingerprint[:16])
@@ -158,7 +159,7 @@ def show_runs(
     try:
         run_store = SqliteRunStore(path)
     except RunStoreError as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     try:
         if run_id is None:

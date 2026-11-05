@@ -153,3 +153,21 @@ def test_the_command_starts_without_any_extra(blocked: str) -> None:
 
     assert done.returncode == 0, done.stderr
     assert "serve" in done.stdout
+
+
+def test_a_missing_extra_is_named_in_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rich must not read `[server]` or `[factory]` in a message as markup and drop it."""
+    from quant_agent_os.mcp import MCPUnavailableError
+    from quant_app_factory.domain.ports import ScaffoldError
+
+    def missing(*_: object, **__: object) -> None:
+        raise MCPUnavailableError("MCP support is not installed; quant-agent-os[server].")
+
+    def no_factory() -> None:
+        raise ScaffoldError("The App Factory is not installed; quant-agent-os[factory].")
+
+    monkeypatch.setattr("quant_platform.cli.run_stdio", missing)
+    monkeypatch.setattr("quant_app_factory.cli.open_factory", no_factory)
+
+    assert "quant-agent-os[server]" in RUNNER.invoke(app, ["serve", "--no-record"]).output
+    assert "quant-agent-os[factory]" in RUNNER.invoke(app, ["app", "template", "list"]).output

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os.api import ApiKeyError, load_keys
@@ -93,7 +94,9 @@ def connect(
         if not isinstance(config, dict) or not isinstance(config.get(key, {}), dict):
             raise ValueError("expected a JSON object")
     except (OSError, ValueError) as error:
-        errors.print(f"[red]error:[/red] cannot update {path}: {error}. Nothing was changed.")
+        errors.print(
+            f"[red]error:[/red] cannot update {path}: {escape(str(error))}. Nothing was changed."
+        )
         raise typer.Exit(1) from error
     config.setdefault(key, {})[SERVER_NAME] = entry
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,7 +208,7 @@ def doctor() -> None:
     for column in ("Check", "Status", "Detail"):
         table.add_column(column, overflow="fold")
     for check, status, detail in rows:
-        table.add_row(check, f"[{colours[status]}]{status}[/{colours[status]}]", detail)
+        table.add_row(check, f"[{colours[status]}]{status}[/{colours[status]}]", escape(detail))
     console.print(table)
     if any(status == "fail" for _, status, _ in rows):
         raise typer.Exit(1)

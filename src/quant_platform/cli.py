@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 from pydantic import ValidationError
+from rich.markup import escape
 from rich.table import Table
 
 from quant_agent_os import __version__
@@ -74,7 +75,7 @@ def _root(
     try:
         get_settings()
     except (ConfigFileError, ValidationError) as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
 
 
@@ -117,7 +118,7 @@ def _serve_stdio(
             prompts=catalog.prompts,
         )
     except MCPUnavailableError as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     finally:
         if run_store is not None:
@@ -142,7 +143,7 @@ def _serve_http(
     try:
         ring = KeyRing(load_keys(keys or settings.api_keys_file))
     except ApiKeyError as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     if not len(ring):
         errors.print(
@@ -155,7 +156,7 @@ def _serve_http(
         try:
             run_store = SqliteRunStore(runs or settings.runs_file)
         except RunStoreError as error:
-            errors.print(f"[red]error:[/red] {error}")
+            errors.print(f"[red]error:[/red] {escape(str(error))}")
             raise typer.Exit(1) from error
         catalog, research = open_catalog(
             parse_toolsets(toolsets),
@@ -184,7 +185,7 @@ def _serve_http(
         )
         run_http(http_app, host=host, port=port)
     except (ApiUnavailableError, MCPUnavailableError) as error:
-        errors.print(f"[red]error:[/red] {error}")
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     finally:
         if run_store is not None:
