@@ -363,7 +363,8 @@ def _frame_csv(dataset_id: str, frame: Any) -> tuple[bytes, str | None]:
     row_numbers = index.name is None and index.dtype.kind in "iu"
     if row_numbers and not all(parse_date(str(value)) for value in index):
         return frame.to_csv(index=False, na_rep=missing).encode("utf-8"), None
-    label = "index" if index.name is None else str(index.name)
+    unnamed = "date" if index.dtype.kind == "M" else "index"
+    label = unnamed if index.name is None else str(index.name)
     return frame.to_csv(index_label=label, na_rep=missing).encode("utf-8"), label
 
 

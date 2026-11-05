@@ -6,7 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A notebook path.** `quant_platform.open_platform()` opens the home's knowledge store, datasets,
+  and run log in one call. `platform.data.put("fund", df)` adds a pandas DataFrame or Series for the
+  session, with the same date, alignment, and missing-value handling as a CSV file, and writes
+  nothing to the home. See [getting-started.md](docs/getting-started.md#use-it-from-a-notebook).
+- **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
+  hint. `Platform.call` still never raises.
+
 ### Fixed
+
+- **Two messages named the removed `dataset push`.** `list_datasets` and the undated-alignment
+  refusal now name `qaos data add`.
 
 - **The install command pins Python 3.13.** Without it, uv may choose 3.15, where the `analytics`
   extra compiles `bottleneck` from source and fails if the machine has no working C compiler.

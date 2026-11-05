@@ -23,7 +23,7 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
-  `qaos serve` serves them as one MCP server.
+  `qaos serve` serves them as one MCP server, and `open_platform()` opens them from a notebook.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles

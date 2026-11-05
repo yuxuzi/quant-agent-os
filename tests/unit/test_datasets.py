@@ -313,6 +313,7 @@ def test_memory_store_reads_a_frame_like_a_csv_file(tmp_path: Path) -> None:
     assert store.get("fund").columns == from_file.columns
     assert store.get("fund").dates == from_file.dates
     assert info.periods_per_year == 252
+    assert info.index_name == "date"
     assert store.ids() == ["fund"]
 
 
