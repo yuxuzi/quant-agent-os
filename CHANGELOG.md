@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format follows
 
 - `quant-agent-os dataset push --index COLUMN` names the date column, and the command reports the
   frequency the dates show. `list_datasets` reports it too.
+- A hands-on [tutorial](docs/tutorial.md): eight labs with flow charts, sample data, things to
+  try, and a feedback template. Its files are in `examples/tutorial/`.
+
 
 ## [0.1.1] - 2026-11-03
 
