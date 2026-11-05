@@ -88,6 +88,22 @@ def test_a_frame_is_aligned_by_date_with_a_dataset_in_the_home(home: Path) -> No
     assert len(fingerprint) == 64
 
 
+def test_a_parquet_dataset_gives_the_same_numbers_as_the_frame_it_came_from(home: Path) -> None:
+    pytest.importorskip("pyarrow")
+    source = home / "fund.parquet"
+    frame = pandas.DataFrame({"fund": FUND}, index=DAYS.rename("date"))
+    frame.to_parquet(source)
+    DirectoryDatasetStore(get_settings().datasets_dir).put("from-parquet", source)
+
+    with open_platform() as platform:
+        platform.data.put("from-frame", frame)
+        parquet = platform.call("analyze_performance", returns=_series("from-parquet")).result()
+        direct = platform.call("analyze_performance", returns=_series("from-frame")).result()
+
+    assert parquet["metrics"] == direct["metrics"]
+    assert parquet["periods_per_year"] == 252
+
+
 def test_a_frame_writes_nothing_to_the_home(home: Path) -> None:
     with open_platform() as platform:
         platform.data.put("session", pandas.DataFrame({"fund": FUND}, index=DAYS))

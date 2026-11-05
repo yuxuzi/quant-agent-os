@@ -8,8 +8,10 @@ filled in. An operator adds datasets with ``qaos data add`` (a write, so it is a
 command, not a tool), and tools name them by id. Each dataset's fingerprint is the SHA-256 of its
 file, recorded as a data version so a result says exactly which data it came from.
 
-From Python, `MemoryDatasetStore.put` takes a pandas object and sends it through the same parser
-as CSV, so its dates, missing values, and limits are treated the same. Nothing here imports pandas.
+A Parquet file (the ``parquet`` extra) is converted to CSV when it is added, so the stored file,
+and so the fingerprint, is that CSV. From Python, `MemoryDatasetStore.put` takes a pandas object.
+Both go through the same parser as a CSV file, so their dates, missing values, and limits are
+treated the same, and nothing else here needs pandas.
 """
 
 from __future__ import annotations
@@ -19,7 +21,6 @@ import hashlib
 import io
 import math
 import re
-import shutil
 import statistics
 from datetime import date, datetime
 from functools import cached_property
@@ -34,6 +35,7 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 200_000
 MAX_COLUMNS = 500
 MAX_CACHED = 16
+PARQUET_SUFFIXES = frozenset({".parquet", ".pq"})
 INDEX_NAMES = frozenset({"date", "datetime", "time", "period"})
 MISSING_CELLS = frozenset({"", "na", "n/a", "nan", "null", "none"})
 # Median days between dates, and the periods per year they mean. Daily is decided separately.
@@ -244,18 +246,22 @@ class DirectoryDatasetStore:
         self._parsed: dict[str, tuple[str | None, Dataset]] = {}
 
     def put(self, dataset_id: str, source: Path, *, index_column: str | None = None) -> DatasetInfo:
-        """Validate ``source`` and copy it in as ``dataset_id``, replacing any earlier version.
+        """Validate ``source`` and store it as ``dataset_id``, replacing any earlier version.
 
-        ``index_column`` names the index column and is kept beside the file, which stays exactly
-        as given so its fingerprint matches the source.
+        ``index_column`` names the index column and is kept beside the file. A CSV file stays
+        exactly as given, so its fingerprint matches the source; a Parquet file is stored as CSV.
         """
-        dataset = parse_dataset(
-            check_dataset_id(dataset_id), source.read_bytes(), index_column=index_column
-        )
+        check_dataset_id(dataset_id)
+        if source.suffix.lower() in PARQUET_SUFFIXES:
+            data, own_index = _frame_csv(dataset_id, _read_parquet(dataset_id, source))
+            index_column = index_column or own_index
+        else:
+            data = source.read_bytes()
+        dataset = parse_dataset(dataset_id, data, index_column=index_column)
         self.root.mkdir(parents=True, exist_ok=True)
         target = self.root / f"{dataset_id}.csv"
         partial = target.with_suffix(".csv.partial")
-        shutil.copyfile(source, partial)
+        partial.write_bytes(data)
         partial.replace(target)
         marker = self._index_marker(dataset_id)
         if index_column is None:
@@ -341,6 +347,30 @@ def _unknown_dataset(dataset_id: str, known: list[str]) -> UnknownDatasetError:
         f"No dataset '{dataset_id}'; "
         + (f"the datasets are {', '.join(known)}." if known else "none have been added.")
     )
+
+
+def _read_parquet(dataset_id: str, source: Path) -> Any:
+    """Return a Parquet file as a DataFrame, checking its size before decoding any of it."""
+    if source.stat().st_size > MAX_FILE_BYTES:
+        raise DatasetError(f"Dataset '{dataset_id}' exceeds {MAX_FILE_BYTES} bytes.")
+    try:
+        import pandas  # noqa: F401  # to_pandas needs it; a missing one is reported here
+        import pyarrow
+        from pyarrow import parquet
+    except ImportError as error:
+        raise DatasetError(
+            f"Dataset '{dataset_id}' is a Parquet file, which needs the parquet extra: install "
+            "quant-agent-os[parquet], or add it as CSV."
+        ) from error
+    try:
+        shape = parquet.read_metadata(source)
+        if shape.num_rows > MAX_ROWS or shape.num_columns > MAX_COLUMNS:
+            raise DatasetError(
+                f"Dataset '{dataset_id}' exceeds {MAX_ROWS} rows or {MAX_COLUMNS} columns."
+            )
+        return parquet.read_table(source).to_pandas()
+    except pyarrow.ArrowException as error:
+        raise DatasetError(f"Dataset '{dataset_id}' cannot be read as Parquet: {error}") from error
 
 
 def _frame_csv(dataset_id: str, frame: Any) -> tuple[bytes, str | None]:

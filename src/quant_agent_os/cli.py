@@ -86,7 +86,7 @@ def _datasets_dir(directory: Path | None, tenant: str | None) -> Path:
 
 @data_app.command("add")
 def data_add(
-    source: Annotated[Path, typer.Argument(help="A CSV file: a header row, then one row each.")],
+    source: Annotated[Path, typer.Argument(help="A CSV or Parquet file with one row per date.")],
     dataset_id: Annotated[
         str | None, typer.Option("--id", help="The id tools will use (default: the file's name).")
     ] = None,
@@ -96,11 +96,12 @@ def data_add(
     directory: DatasetsOption = None,
     tenant: DatasetTenantOption = None,
 ) -> None:
-    """Validate a CSV file and add it as a dataset, replacing an earlier one with the same id.
+    """Validate a file and add it as a dataset, replacing an earlier one with the same id.
 
     The first column is the index when it is named date, datetime, time, or period, holds dates
     like 20240102 or 202401, or is not all numbers; --index names any other column. Every other
-    column must be numeric; blank and NaN cells are kept as missing values.
+    column must be numeric; blank and NaN cells are kept as missing values. A Parquet file needs
+    the parquet extra, and is stored as CSV.
     """
     try:
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))

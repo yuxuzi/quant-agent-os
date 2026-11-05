@@ -10,8 +10,9 @@ wrong.
 
 **Status.** P0 is released in 0.1.2. P1 and P2 are released in 0.2.0: see decisions 0016, 0017, and
 0018; the `research` and `hosted` extras were left out because they would be empty.
-P3 is on `main`, unreleased, except Parquet (P3.3), which awaits the owner's decision on a new
-dependency.
+P3 is complete and unreleased. Parquet (P3.3) was approved on 2026-11-05 and uses pyarrow, because
+pandas 3.1 deprecates its fastparquet engine, and fastparquet failed on a pyarrow-written frame with
+an unnamed date index and has no Python 3.15 wheel.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.

@@ -31,6 +31,7 @@ EXTRAS = {
     "server": ("mcp", "`qaos serve` cannot run"),
     "analytics": ("empyrical", "no metrics tools"),
     "pdf": ("pypdf", "PDFs are skipped at ingestion"),
+    "parquet": ("pyarrow", "`qaos data add` takes CSV only"),
     "postgres": ("psycopg", "SQLite stores only"),
     "factory": ("pytemplate", "`qaos app` cannot run"),
 }

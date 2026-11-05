@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   and run log in one call. `platform.data.put("fund", df)` adds a pandas DataFrame or Series for the
   session, with the same date, alignment, and missing-value handling as a CSV file, and writes
   nothing to the home. See [getting-started.md](docs/getting-started.md#use-it-from-a-notebook).
+- **Parquet datasets.** With the new `parquet` extra (pandas and pyarrow), `qaos data add` takes a
+  `.parquet` or `.pq` file. It is converted to CSV when added, so tools and the server are unchanged,
+  and the fingerprint is the stored CSV's. The dataset limits still apply.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
 
