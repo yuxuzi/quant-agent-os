@@ -11,8 +11,8 @@ import json
 from typing import Any
 
 from quant_agent_os.mcp.adapters import call_tool
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import CallStatus, ToolCallRecord, ToolExecutor
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.contracts import ToolContractError, ToolSpec
 from quant_agent_os.tools.permissions import READ_ONLY, PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
@@ -41,7 +41,7 @@ def check_tool(
             problems.append(f"{schema} is not a JSON object schema")
     policy = PermissionPolicy(granted=READ_ONLY | spec.permissions, preapproved=spec.permissions)
     executor = ToolExecutor(ToolRegistry([spec]), policy)
-    record = executor.execute(PlanStep(tool=spec.name, arguments=arguments))
+    record = executor.execute(ToolCall(tool=spec.name, arguments=arguments))
     if record.status != expect:
         problems.append(f"status is {record.status!r}, expected {expect!r}: {record.error}")
     via_mcp = call_tool(executor, spec.name, arguments)
@@ -54,7 +54,7 @@ def check_tool(
         if problem:
             problems.append(f"output does not match the published output schema: {problem}")
         if spec.deterministic:
-            again = executor.execute(PlanStep(tool=spec.name, arguments=arguments))
+            again = executor.execute(ToolCall(tool=spec.name, arguments=arguments))
             if again.output != record.output:
                 problems.append("declared deterministic, but two calls returned different output")
     if problems:

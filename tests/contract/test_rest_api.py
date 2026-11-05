@@ -23,7 +23,7 @@ from quant_agent_os.api import (
 )
 from quant_agent_os.mcp import call_tool, tool_definitions
 from quant_agent_os.runs import MemoryRunStore, RunRecorder
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -118,7 +118,7 @@ def test_tool_list_and_results_equal_mcp_and_direct_calls(
         json={"arguments": ARGUMENTS},
     )
 
-    direct = EXECUTOR.execute(PlanStep(tool="annualized_return", arguments=ARGUMENTS))
+    direct = EXECUTOR.execute(ToolCall(tool="annualized_return", arguments=ARGUMENTS))
     via_mcp = call_tool(EXECUTOR, "annualized_return", ARGUMENTS)
     assert listed == tool_definitions(EXECUTOR)
     assert response.status_code == 200

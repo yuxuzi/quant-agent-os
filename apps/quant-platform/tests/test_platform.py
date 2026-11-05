@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
@@ -97,7 +97,7 @@ def test_server_info_reports_the_platform_and_every_tool(datasets: DirectoryData
     registry = ToolRegistry(catalog.tools)
     executor = ToolExecutor(registry, PermissionPolicy())
 
-    record = executor.execute(PlanStep(tool="server_info", arguments={}))
+    record = executor.execute(ToolCall(tool="server_info", arguments={}))
 
     assert record.status == "ok" and record.output is not None
     assert record.output["platform_version"] == version("quant-agent-os-platform")
@@ -143,7 +143,7 @@ def test_research_report_without_analytics_refuses_a_series(research: ResearchAp
     executor = ToolExecutor(ToolRegistry(catalog.tools), PermissionPolicy())
 
     record = executor.execute(
-        PlanStep(
+        ToolCall(
             tool="research_report",
             arguments={"focus": "momentum", "returns": {"dataset": "r", "column": "c"}},
         )

@@ -12,7 +12,7 @@ from quant_agent_os import __version__
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
-from quant_agent_os.runtime.plan import Plan
+from quant_agent_os.runtime.call import Plan
 from quant_agent_os.tenancy import DEFAULT_TENANT, TenantError, check_tenant
 
 app = typer.Typer(

@@ -14,7 +14,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from quant_agent_os.runtime.approvals import ApprovalLedger
-from quant_agent_os.runtime.plan import PlanStep
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.quotas import UsageGate
 from quant_agent_os.runtime.telemetry import call_span
 from quant_agent_os.tenancy import DEFAULT_TENANT
@@ -139,7 +139,7 @@ class ToolExecutor:
         self.max_output_bytes = max_output_bytes
         self.tenant = tenant
 
-    def execute(self, step: PlanStep, *, run_id: str | None = None) -> ToolCallRecord:
+    def execute(self, step: ToolCall, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
         # An unregistered name comes from the caller, so it never becomes a span or metric label.
         traced = step.tool if step.tool in self.registry else "unknown"
@@ -148,7 +148,7 @@ class ToolExecutor:
             finish(record.status, record.tool_version, record.duration_ms)
         return record
 
-    def _execute(self, step: PlanStep, run_id: str | None) -> ToolCallRecord:
+    def _execute(self, step: ToolCall, run_id: str | None) -> ToolCallRecord:
         started_at = datetime.now(UTC)
         started = time.perf_counter()
         input_sha256 = canonical_sha256(step.arguments)

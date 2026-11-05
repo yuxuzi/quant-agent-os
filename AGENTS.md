@@ -65,7 +65,7 @@ the real results.
 
 `src/quant_agent_os/`, importing downward only:
 1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions; `tenancy.py` (tenant ids).
-2. `runtime/plan.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: plan
+2. `runtime/call.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: plan
    models, approvals, the subprocess runner, and bounded execution.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
    `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from

@@ -13,8 +13,8 @@ import json
 from typing import Any
 
 from quant_agent_os.runs.recorder import RunRecorder
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor, failure_details
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.catalog import (
     PromptArgumentError,
     PromptSpec,
@@ -100,7 +100,7 @@ def call_tool(
     A failure is an error result whose text leads with the status and whose structured content
     adds a hint on what to do next and whether retrying can help (`failure_details`).
     """
-    step = PlanStep(tool=name, arguments=arguments)
+    step = ToolCall(tool=name, arguments=arguments)
     record = recorder.call(executor, step) if recorder else executor.execute(step)
     return call_result(executor, record)
 
@@ -192,7 +192,7 @@ def read_resource(
         resource, arguments = find_resource(served_resources(executor, resources), uri)
     except LookupError as error:
         raise ResourceReadError(str(error)) from None
-    step = PlanStep(tool=resource.tool, arguments=dict(arguments))
+    step = ToolCall(tool=resource.tool, arguments=dict(arguments))
     record = recorder.call(executor, step) if recorder else executor.execute(step)
     if record.status != "ok":
         details = failure_details(record, [resource.tool])

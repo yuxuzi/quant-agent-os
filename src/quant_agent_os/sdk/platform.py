@@ -12,9 +12,9 @@ from quant_agent_os.runs.models import RunRecord, StoredRun
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runs.store import MemoryRunStore, RunStore
 from quant_agent_os.runtime.approvals import Approval
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.runtime.orchestrator import Orchestrator
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tools.contracts import ToolSpec
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
@@ -62,7 +62,7 @@ class Platform:
 
         Arguments come as a mapping, as keywords, or both (keywords win).
         """
-        step = PlanStep(tool=tool, arguments={**(arguments or {}), **kwargs})
+        step = ToolCall(tool=tool, arguments={**(arguments or {}), **kwargs})
         return self.recorder.call(self.executor, step)
 
     def run(self, goal: str) -> Report:

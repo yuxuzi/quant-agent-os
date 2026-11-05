@@ -128,7 +128,7 @@ sees the same corpus. A team that needs separation within a firm uses separate t
 | Tool contract | `tools/contracts.py` | `ToolSpec`, `@tool`, descriptors | Confirmed |
 | Registry | `tools/registry.py` | Explicit, unique registration and lookup | Confirmed |
 | Permissions | `tools/permissions.py` | `Permission`, `PermissionPolicy`, allowlist, read-only default | Confirmed |
-| Plan models | `runtime/plan.py` | `Plan`, `PlanStep` | Confirmed |
+| Plan models | `runtime/call.py` | `Plan`, `ToolCall` | Confirmed |
 | Executor | `runtime/executor.py` | Permissions, validation, timeout, output size, `ToolCallRecord` | Confirmed |
 | Orchestrator | `runtime/orchestrator.py` | One bounded plan, validate, execute, report | Confirmed |
 | Evidence | `evidence/models.py` | `Evidence` (`retrieved` · `computed` · `interpretation`), `SourceRef` | Confirmed |
@@ -219,7 +219,7 @@ code. `pytemplate-uv` keeps its own repository and release cycle. Analytics star
 workspace (decision 0010) and moves out when it has its own release cycle.
 
 Core's internal import order is **confirmed**:
-`tools` → `runtime.plan` / `runtime.executor` → `evidence` / `reporting` →
+`tools` → `runtime.call` / `runtime.executor` → `evidence` / `reporting` →
 `runtime.orchestrator` → `providers`, `config`, `mcp`, `observability`, `cli`.
 
 ## 5. Tool contract and request lifecycle

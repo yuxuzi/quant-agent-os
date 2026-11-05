@@ -7,8 +7,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence.models import Evidence
+from quant_agent_os.runtime.call import Plan
 from quant_agent_os.runtime.executor import ToolCallRecord
-from quant_agent_os.runtime.plan import Plan
 
 
 class RunMetadata(BaseModel):

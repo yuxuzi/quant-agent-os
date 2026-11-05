@@ -6,7 +6,7 @@ import pytest
 
 from quant_agent_os.mcp import call_tool, tool_definitions
 from quant_agent_os.providers import FakeModelProvider
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.runtime.orchestrator import Orchestrator
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry
 from quant_research import ResearchApp, ResearchQuery, research_tools
@@ -33,7 +33,7 @@ def test_research_tools_declare_a_complete_read_only_contract(executor: ToolExec
 
 
 def test_mcp_results_equal_direct_calls(executor: ToolExecutor) -> None:
-    direct = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY))
+    direct = executor.execute(ToolCall(tool="find_related_signals", arguments=QUERY))
     via_mcp = call_tool(executor, "find_related_signals", QUERY)
 
     assert [d["name"] for d in tool_definitions(executor)] == [
@@ -50,7 +50,7 @@ def test_records_carry_the_corpus_snapshot_and_fit_the_size_limit(
 ) -> None:
     snapshot = research.store.current_snapshot()
     record = executor.execute(
-        PlanStep(tool="find_related_signals", arguments=QUERY | {"k": 25, "hops": 2})
+        ToolCall(tool="find_related_signals", arguments=QUERY | {"k": 25, "hops": 2})
     )
 
     assert record.status == "ok"
@@ -59,7 +59,7 @@ def test_records_carry_the_corpus_snapshot_and_fit_the_size_limit(
 
 
 def test_passages_round_trip_through_get_source_passage(executor: ToolExecutor) -> None:
-    packet = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    packet = executor.execute(ToolCall(tool="find_related_signals", arguments=QUERY)).output
     assert packet is not None
     chunk_id = packet["passages"][0]["chunk_id"]
 
@@ -72,8 +72,8 @@ def test_passages_round_trip_through_get_source_passage(executor: ToolExecutor) 
 def test_unknown_passages_and_bad_input_fail_with_actionable_messages(
     executor: ToolExecutor,
 ) -> None:
-    unknown = executor.execute(PlanStep(tool="get_source_passage", arguments={"chunk_id": "x"}))
-    invalid = executor.execute(PlanStep(tool="find_related_signals", arguments={"hops": 5}))
+    unknown = executor.execute(ToolCall(tool="get_source_passage", arguments={"chunk_id": "x"}))
+    invalid = executor.execute(ToolCall(tool="find_related_signals", arguments={"hops": 5}))
 
     assert unknown.status == "error"
     assert "No passage with id 'x'" in (unknown.error or "")
@@ -99,9 +99,9 @@ def test_search_is_concise_by_default_and_full_on_request(
     research: ResearchApp, executor: ToolExecutor
 ) -> None:
     full = executor.execute(
-        PlanStep(tool="find_related_signals", arguments={**QUERY, "detail": "full"})
+        ToolCall(tool="find_related_signals", arguments={**QUERY, "detail": "full"})
     ).output
-    concise = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    concise = executor.execute(ToolCall(tool="find_related_signals", arguments=QUERY)).output
     assert full is not None and concise is not None
 
     assert full == research.research.find_related(ResearchQuery(**QUERY)).model_dump(mode="json")
@@ -125,13 +125,13 @@ def test_concise_previews_are_short_and_say_they_are_truncated(research: Researc
 
 
 def test_every_result_with_corpus_text_is_marked_untrusted(executor: ToolExecutor) -> None:
-    found = executor.execute(PlanStep(tool="find_related_signals", arguments=QUERY)).output
+    found = executor.execute(ToolCall(tool="find_related_signals", arguments=QUERY)).output
     assert found is not None
     chunk_id = found["passages"][0]["chunk_id"]
     passage = executor.execute(
-        PlanStep(tool="get_source_passage", arguments={"chunk_id": chunk_id})
+        ToolCall(tool="get_source_passage", arguments={"chunk_id": chunk_id})
     )
-    draft = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": "momentum"}))
+    draft = executor.execute(ToolCall(tool="generate_strategy", arguments={"focus": "momentum"}))
 
     assert found["trust"] == "untrusted"
     assert passage.output is not None and passage.output["trust"] == "untrusted"

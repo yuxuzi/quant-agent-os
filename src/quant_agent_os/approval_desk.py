@@ -28,8 +28,8 @@ from quant_agent_os.runs.models import ApprovalRequest, AuditEvent
 from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunRecorder
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import RunStore
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor, canonical_sha256
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools.registry import UnknownToolError
 
@@ -73,7 +73,7 @@ class ApprovalDesk:
     def call(
         self,
         executor: ToolExecutor,
-        step: PlanStep,
+        step: ToolCall,
         *,
         tenant: str,
         principal: str | None,
@@ -206,7 +206,7 @@ class ApprovalDesk:
         )
 
 
-def _input_hash(executor: ToolExecutor, step: PlanStep) -> str | None:
+def _input_hash(executor: ToolExecutor, step: ToolCall) -> str | None:
     """Return the hash the executor would record for ``step``'s validated input, or None."""
     try:
         spec = executor.registry.get(step.tool)

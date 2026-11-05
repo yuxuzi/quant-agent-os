@@ -12,8 +12,8 @@ from quant_agent_os.providers.base import ModelProvider
 from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.reporting.models import Report
 from quant_agent_os.runs.recorder import RunRecorder, outcome
+from quant_agent_os.runtime.call import Plan
 from quant_agent_os.runtime.executor import ToolExecutor
-from quant_agent_os.runtime.plan import Plan
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
 

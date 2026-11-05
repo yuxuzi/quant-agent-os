@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from quant_agent_os.evidence import Evidence
 from quant_agent_os.reporting.generator import build_report
-from quant_agent_os.runtime import Plan, PlanStep, ToolExecutor
+from quant_agent_os.runtime import Plan, ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec, tool
 from quant_analytics.tools import ColumnRef
 
@@ -82,7 +82,7 @@ def research_report_tool(
         version="2.0.0",
     )
     def research_report(params: ReportRequest) -> ResearchReport:
-        steps = [PlanStep(tool="generate_strategy", arguments={"focus": params.focus})]
+        steps = [ToolCall(tool="generate_strategy", arguments={"focus": params.focus})]
         if params.returns is not None:
             if not measures:
                 raise ValueError("This server has no analytics toolset; omit returns.")
@@ -91,7 +91,7 @@ def research_report_tool(
                 arguments["periods_per_year"] = params.periods_per_year
             if params.benchmark is not None:
                 arguments["benchmark"] = params.benchmark.model_dump()
-            steps.append(PlanStep(tool="analyze_performance", arguments=arguments))
+            steps.append(ToolCall(tool="analyze_performance", arguments=arguments))
         plan = Plan(goal=f"Research report on {params.focus}", steps=steps)
         records = [executor.execute(step) for step in plan.steps]
         now = datetime.now(UTC)

@@ -13,9 +13,9 @@ from quant_agent_os.runtime import (
     Approval,
     MemoryApprovalLedger,
     PlanLimits,
-    PlanStep,
     Refusal,
     TokenBucket,
+    ToolCall,
     ToolCallRecord,
     ToolExecutor,
     failure_details,
@@ -176,7 +176,7 @@ def test_a_refused_call_never_starts_and_keeps_its_approval() -> None:
         usage=gate,
     )
 
-    refused = executor.execute(PlanStep(tool="fetch", arguments={"value": 1}), run_id="run-1")
+    refused = executor.execute(ToolCall(tool="fetch", arguments={"value": 1}), run_id="run-1")
 
     assert refused.status == "quota_exceeded" and refused.retry_after_seconds == 42
     assert RAN == [] and gate.asked == ["fetch"]
@@ -196,11 +196,11 @@ def test_only_valid_permitted_calls_are_put_to_the_gate() -> None:
     executor = ToolExecutor(ToolRegistry([double, fetch]), PermissionPolicy(), usage=gate)
 
     statuses = [
-        executor.execute(PlanStep(tool="nope", arguments={})).status,
-        executor.execute(PlanStep(tool="fetch", arguments={"value": 1})).status,
-        executor.execute(PlanStep(tool="double", arguments={"value": "x"})).status,
-        executor.execute(PlanStep(tool="double", arguments={"value": 2})).status,
-        executor.execute(PlanStep(tool="double", arguments={"value": 3})).status,
+        executor.execute(ToolCall(tool="nope", arguments={})).status,
+        executor.execute(ToolCall(tool="fetch", arguments={"value": 1})).status,
+        executor.execute(ToolCall(tool="double", arguments={"value": "x"})).status,
+        executor.execute(ToolCall(tool="double", arguments={"value": 2})).status,
+        executor.execute(ToolCall(tool="double", arguments={"value": 3})).status,
     ]
 
     assert statuses == ["unknown_tool", "denied", "invalid_input", "ok", "quota_exceeded"]
@@ -210,8 +210,8 @@ def test_only_valid_permitted_calls_are_put_to_the_gate() -> None:
 def test_a_plans_output_cap_lowers_every_tools_limit() -> None:
     executor = ToolExecutor(ToolRegistry([text]), PermissionPolicy(), max_output_bytes=50)
 
-    capped = executor.execute(PlanStep(tool="text", arguments={"value": 100}))
-    small = executor.execute(PlanStep(tool="text", arguments={"value": 10}))
+    capped = executor.execute(ToolCall(tool="text", arguments={"value": 100}))
+    small = executor.execute(ToolCall(tool="text", arguments={"value": 10}))
 
     assert capped.status == "error" and "50-byte limit" in (capped.error or "")
     assert small.status == "ok"
@@ -230,7 +230,7 @@ def test_stores_count_a_tenants_billable_calls_in_a_window(store: RunStore) -> N
     executor = ToolExecutor(ToolRegistry([double]), PermissionPolicy())
     for tenant, value in [("acme", 1), ("acme", "bad"), ("acme", 2), ("beta", 3)]:
         RunRecorder(store, tenant=tenant).call(
-            executor, PlanStep(tool="double", arguments={"value": value})
+            executor, ToolCall(tool="double", arguments={"value": value})
         )
     start, end = month_window(datetime.now(UTC))
 

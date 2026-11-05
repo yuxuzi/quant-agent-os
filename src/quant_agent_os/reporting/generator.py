@@ -9,8 +9,8 @@ from pydantic import ValidationError
 from quant_agent_os import __version__
 from quant_agent_os.evidence.models import Evidence
 from quant_agent_os.reporting.models import Report, RunMetadata
+from quant_agent_os.runtime.call import Plan
 from quant_agent_os.runtime.executor import ToolCallRecord
-from quant_agent_os.runtime.plan import Plan
 
 STANDARD_LIMITATIONS = (
     "Findings are limited to the registered tools and the data supplied for this run.",

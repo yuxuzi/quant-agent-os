@@ -8,7 +8,7 @@ from conftest import CORPUS
 from typer.testing import CliRunner
 
 from quant_agent_os.mcp import call_tool
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_research import ResearchApp, research_tools
 from quant_research.application.strategy import (
@@ -152,7 +152,7 @@ def test_the_tool_matches_the_service_and_mcp(
     executor = ToolExecutor(ToolRegistry(research_tools(research.research)), PermissionPolicy())
     arguments = {"focus": "trend following"}
 
-    record = executor.execute(PlanStep(tool="generate_strategy", arguments=arguments))
+    record = executor.execute(ToolCall(tool="generate_strategy", arguments=arguments))
     via_mcp = call_tool(executor, "generate_strategy", arguments)
 
     assert record.status == "ok"
@@ -166,8 +166,8 @@ def test_the_tool_matches_the_service_and_mcp(
 def test_tool_failures_are_recorded_with_actionable_messages(research: ResearchApp) -> None:
     executor = ToolExecutor(ToolRegistry(research_tools(research.research)), PermissionPolicy())
 
-    unknown = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": "fish"}))
-    invalid = executor.execute(PlanStep(tool="generate_strategy", arguments={"focus": ""}))
+    unknown = executor.execute(ToolCall(tool="generate_strategy", arguments={"focus": "fish"}))
+    invalid = executor.execute(ToolCall(tool="generate_strategy", arguments={"focus": ""}))
 
     assert unknown.status == "error"
     assert "names no signal, factor, or strategy" in (unknown.error or "")
