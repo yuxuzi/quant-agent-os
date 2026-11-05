@@ -94,8 +94,8 @@ uv add "quant-agent-os[analytics] @ git+https://github.com/yuxuzi/quant-agent-os
 from quant_agent_os.sdk import ToolCallError
 from quant_platform import open_platform
 
-platform = open_platform()      # the home's knowledge store and datasets, and its run log
-platform.data.put("fund", returns)      # `returns` is a DataFrame with one column per series
+platform = open_platform()  # the home's knowledge store and datasets, and its run log
+platform.data.put("fund", returns)  # `returns` is a DataFrame with one column per series
 
 series = {"dataset": "fund", "column": "fund"}
 output = platform.call("analyze_performance", returns=series).result()
