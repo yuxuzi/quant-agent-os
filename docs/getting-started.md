@@ -15,7 +15,8 @@ prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work t
 
 Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
-ingestion, `postgres` for a PostgreSQL store, `factory` for `qaos app`, or `all`.
+ingestion, `parquet` for Parquet files in `qaos data add`, `postgres` for a PostgreSQL store,
+`factory` for `qaos app`, or `all`.
 
 ## 1. Add the skills (Claude Code)
 
@@ -114,6 +115,11 @@ A frame gets the same checks as a CSV file: the index gives the dates and the fr
 are joined on it, and missing values are left out with a warning. Sort dates oldest first, and keep
 one column per series. `put` keeps a copy for this session and writes nothing to the home; to keep a
 dataset, use `qaos data add`. A run records the frame's fingerprint, but not the frame.
+
+With the `parquet` extra, `qaos data add returns.parquet` takes a Parquet file, and a notebook can
+use `pd.read_parquet`. The file is stored as CSV, so the dataset's fingerprint is that CSV's and
+not the Parquet file's, and the same limits apply: 20 MB, 200,000 rows, and 500 columns. Serving
+it needs no extra.
 
 `result()` returns the output or raises `ToolCallError`, while `record.status` and `record.error`
 hold the same failure if you prefer to check. Every call shows in `qaos runs`, with the same
