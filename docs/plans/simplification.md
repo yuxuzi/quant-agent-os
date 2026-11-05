@@ -10,6 +10,9 @@ wrong.
 
 **Status.** P0 is done (#32). The tutorial is #33. P1 is in progress.
 
+**Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
+mature enough, so tools may change or be removed with a changelog entry.
+
 **Decisions made for this plan (2026-11-04):**
 1. **Customer:** a firm or team self-hosting. Tenants, plans, metering, and OAuth move behind an
    opt-in `hosted` extra. The code is kept but leaves the default path. This narrows the earlier

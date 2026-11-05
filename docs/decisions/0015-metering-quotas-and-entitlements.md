@@ -114,7 +114,9 @@ Prices, the billing provider, and the open-core line (Q-1) are not part of it.
    of its schemas. The contract tests fail when a schema changes without the lock being
    updated, or when a breaking change comes without a major bump. The test classifies the
    change by diffing the JSON Schemas.
-3. **Deprecation window (Q-16).** A breaking change ships as a new tool name (for example
+3. **Deprecation window (Q-16). Suspended 2026-11-04 by the owner** until the project is mature
+   enough; see the [tools changelog](../tools-changelog.md). The rule, for when it returns: a
+   breaking change ships as a new tool name (for example
    `search_passages_v2`) next to the old one, because one name has one schema on a server.
    The old tool is marked deprecated in its description and `_meta`, naming its replacement
    and a removal date at least 90 days, and one minor platform release, later. Removal is a
