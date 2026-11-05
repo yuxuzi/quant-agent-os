@@ -1,6 +1,6 @@
 [project]
 name = "quant-agent-os-platform"
-version = "0.1.1"
+version = "0.1.2"
 description = "Quant-Agent-OS platform server: every product's tools, resources, and prompts behind one MCP server"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,9 +12,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quant-agent-os[api,mcp]==0.1.1",
-    "quant-agent-os-analytics==0.1.1",
-    "quant-agent-os-research==0.1.1",
+    "quant-agent-os[api,mcp]==0.1.2",
+    "quant-agent-os-analytics==0.1.2",
+    "quant-agent-os-research==0.1.2",
     "pydantic>=2.7",
     "rich>=13.7",
     "typer>=0.12",
@@ -24,14 +24,14 @@ dependencies = [
 # The App Factory toolset (decision 0012): optional, so a team image need not carry
 # pytemplate-uv.
 factory = [
-    "quant-agent-os-factory==0.1.1",
+    "quant-agent-os-factory==0.1.2",
 ]
 # Pass-throughs to Quant Research, for the team image.
 pdf = [
-    "quant-agent-os-research[pdf]==0.1.1",
+    "quant-agent-os-research[pdf]==0.1.2",
 ]
 postgres = [
-    "quant-agent-os-research[postgres]==0.1.1",
+    "quant-agent-os-research[postgres]==0.1.2",
 ]
 
 [project.scripts]
