@@ -87,6 +87,7 @@ import a tool's environment. The `analytics` extra brings pandas. `open_platform
 0.2.0, so until the next release, install from `main`:
 
 ```bash
+uv init --python 3.13 my-research && cd my-research     # in a project you have: uv python pin 3.13
 uv add "quant-agent-os[analytics] @ git+https://github.com/yuxuzi/quant-agent-os@main"
 ```
 
