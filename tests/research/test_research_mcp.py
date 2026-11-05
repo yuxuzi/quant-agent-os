@@ -18,7 +18,7 @@ def _server(store: Path, *extra: str) -> StdioServerParameters:
     return StdioServerParameters(
         command=sys.executable,
         args=["-m", "quant_research.cli", "serve-mcp", "--store", str(store), *extra],
-        env=dict(os.environ),
+        env=dict(os.environ) | {"QUANT_AGENT_OS_HOME": str(store.parent)},
     )
 
 
@@ -87,8 +87,8 @@ def test_every_mcp_call_is_recorded_as_a_run(corpus_dir: Path, tmp_path: Path) -
     with SqliteRunStore(tmp_path / "runs.db") as runs:
         recorded = runs.list_runs()
         searched = runs.get_run(recorded[-1].run_id)
-    listing = runner.invoke(cli, ["runs", "--store", str(store)])
-    shown = runner.invoke(cli, ["runs", recorded[-1].run_id, "--store", str(store)])
+    listing = runner.invoke(cli, ["runs", "--runs", str(tmp_path / "runs.db")])
+    shown = runner.invoke(cli, ["runs", recorded[-1].run_id, "--runs", str(tmp_path / "runs.db")])
 
     assert [(run.goal, run.status, run.actor) for run in recorded] == [
         ("get_source_passage", "failed", "mcp"),
@@ -113,4 +113,7 @@ def test_serving_without_recording_writes_no_run_store(corpus_dir: Path, tmp_pat
     _run(_server(store, "--no-record"), check)
 
     assert not (tmp_path / "runs.db").exists()
-    assert "No runs recorded" in CliRunner().invoke(cli, ["runs", "--store", str(store)]).output
+    assert (
+        "No runs recorded"
+        in CliRunner().invoke(cli, ["runs", "--runs", str(tmp_path / "runs.db")]).output
+    )

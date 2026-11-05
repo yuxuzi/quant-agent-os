@@ -16,7 +16,6 @@ from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import ToolRegistry
 from quant_platform.cli_common import (
-    DEFAULT_RUNS,
     DatasetsOption,
     StoreOption,
     ToolsetsOption,
@@ -42,7 +41,7 @@ def serve_mcp(
     store: StoreOption = None,
     datasets: DatasetsOption = None,
     runs: Annotated[
-        Path | None, typer.Option(help="Run store (default ~/.quant-agent-os).")
+        Path | None, typer.Option(help="Run store (default: runs.db in the home).")
     ] = None,
     record: Annotated[
         bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
@@ -61,7 +60,7 @@ def serve_mcp(
     try:
         if record:
             try:
-                run_store = SqliteRunStore(runs or DEFAULT_RUNS)
+                run_store = SqliteRunStore(runs or get_settings().runs_file)
             except RunStoreError as error:
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         run_stdio(
@@ -103,7 +102,7 @@ def serve_http(
         typer.Option(help="A public host name clients use (repeat); loopback is always allowed."),
     ] = None,
     runs: Annotated[
-        Path | None, typer.Option(help="Run store (default ~/.quant-agent-os).")
+        Path | None, typer.Option(help="Run store (default: runs.db in the home).")
     ] = None,
 ) -> None:
     """Serve the toolsets over HTTP: MCP at /mcp and REST at /v1, for callers with an API key.
@@ -130,7 +129,7 @@ def serve_http(
     research: ResearchApp | None = None
     try:
         try:
-            run_store = SqliteRunStore(runs or DEFAULT_RUNS)
+            run_store = SqliteRunStore(runs or get_settings().runs_file)
         except RunStoreError as error:
             errors.print(f"[red]error:[/red] {error}")
             raise typer.Exit(1) from error

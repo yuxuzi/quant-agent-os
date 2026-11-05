@@ -179,7 +179,7 @@ def test_a_bad_ref_fails_cleanly(tmp_path: Path) -> None:
 @pytest.fixture
 def settings_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "home" / "factory.toml"
-    monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(path))
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(path.parent))
     monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
     return path
 

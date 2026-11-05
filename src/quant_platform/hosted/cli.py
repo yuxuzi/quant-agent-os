@@ -19,14 +19,13 @@ from rich.table import Table
 
 from quant_agent_os.api import ApiKeyError, ApiUnavailableError, KeyRing, load_keys
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
-from quant_agent_os.config import get_settings
+from quant_agent_os.config import get_settings, home_dir
 from quant_agent_os.mcp import MCPUnavailableError
 from quant_agent_os.runs import RunStoreError, SqliteRunStore, UsageGrouping, summarize
 from quant_agent_os.serving import Tenancy
 from quant_agent_os.tenancy import check_tenant
 from quant_agent_os.tools import READ_ONLY, Permission
 from quant_platform.cli_common import (
-    DEFAULT_RUNS,
     DatasetsOption,
     StoreOption,
     ToolsetsOption,
@@ -55,7 +54,6 @@ usage_app = typer.Typer(
     help="Read what each tenant used from the run store (decision 0015).", no_args_is_help=True
 )
 hosted_app.add_typer(usage_app, name="usage")
-DEFAULT_TENANTS = Path.home() / ".quant-agent-os" / "tenants.toml"
 
 TenantsOption = Annotated[
     Path | None,
@@ -85,7 +83,7 @@ def serve_http(
         typer.Option(help="A public host name clients use (repeat); loopback is always allowed."),
     ] = None,
     runs: Annotated[
-        Path | None, typer.Option(help="Run store (default ~/.quant-agent-os).")
+        Path | None, typer.Option(help="Run store (default: runs.db in the home).")
     ] = None,
     approval_url: Annotated[
         str | None,
@@ -142,7 +140,7 @@ def serve_http(
     catalogs: TenantCatalogs | None = None
     try:
         try:
-            run_store = SqliteRunStore(runs or DEFAULT_RUNS)
+            run_store = SqliteRunStore(runs or get_settings().runs_file)
         except RunStoreError as error:
             errors.print(f"[red]error:[/red] {error}")
             raise typer.Exit(1) from error
@@ -259,7 +257,7 @@ def _oauth(whole: TenantsFile, keys: KeyRing, resource_url: str | None) -> dict[
 
 
 def _tenants_path(path: Path | None) -> Path:
-    return path or DEFAULT_TENANTS
+    return path or home_dir() / "tenants.toml"
 
 
 @tenant_app.command("add")
@@ -392,7 +390,7 @@ def usage_export(
         str, typer.Option("--format", help="Output format: 'csv' or 'jsonl'.")
     ] = "csv",
     runs: Annotated[
-        Path | None, typer.Option(help="Run store (default ~/.quant-agent-os/runs.db).")
+        Path | None, typer.Option(help="Run store (default: runs.db in the home).")
     ] = None,
 ) -> None:
     """Write usage events, or their totals, to stdout: an operator command, not an agent tool.
@@ -409,7 +407,7 @@ def usage_export(
     now = datetime.now(UTC)
     first = _utc(start) if start else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     last = _utc(end) if end else now
-    path = runs or DEFAULT_RUNS
+    path = runs or get_settings().runs_file
     if not path.is_file():
         errors.print(f"[red]error:[/red] no run store at {path}.")
         raise typer.Exit(1)

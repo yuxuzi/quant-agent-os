@@ -33,7 +33,7 @@ from quant_research.application.strategy import (
     StrategyService,
     UnknownFocusError,
 )
-from quant_research.bootstrap import DEFAULT_STORE, ResearchApp, open_research
+from quant_research.bootstrap import ResearchApp, open_research
 from quant_research.config import make_embedder
 from quant_research.domain.vocabulary import load_vocabulary
 from quant_research.infrastructure.postgres_store import (
@@ -62,22 +62,22 @@ MCP_INSTRUCTIONS = (
 )
 
 StoreOption = Annotated[
-    str,
+    str | None,
     typer.Option(
         "--store",
         "-s",
         help="SQLite knowledge store file, or a postgresql:// URL (give the password through "
-        "PGPASSWORD or ~/.pgpass, not the URL).",
+        "PGPASSWORD or ~/.pgpass, not the URL). Default: knowledge.db in the home, or "
+        "QUANT_AGENT_OS_STORE.",
     ),
 ]
-DEFAULT_STORE_OPTION = str(DEFAULT_STORE)
 
 
 SchemaOption = Annotated[
     str,
     typer.Option(
         "--schema",
-        envvar="QUANT_RESEARCH_SCHEMA",
+        envvar="QUANT_AGENT_OS_SCHEMA",
         help="PostgreSQL schema of the store; one per tenant on a shared server (decision 0013).",
     ),
 ]
@@ -87,17 +87,13 @@ RunsOption = Annotated[
     Path | None,
     typer.Option(
         "--runs",
-        help="SQLite run store (default: runs.db beside a SQLite knowledge store, or in "
-        ".quant-research for PostgreSQL).",
+        help="SQLite run store (default: runs.db in the home).",
     ),
 ]
 
 
-def _runs_path(store: str, runs: Path | None) -> Path:
-    if runs is not None:
-        return runs
-    base = DEFAULT_STORE.parent if is_postgres_url(store) else Path(store).parent
-    return base / "runs.db"
+def _runs_path(runs: Path | None) -> Path:
+    return runs if runs is not None else get_settings().runs_file
 
 
 def _shown(store: str) -> str:
@@ -128,7 +124,7 @@ ModelOption = Annotated[
 
 
 def _open(
-    store: str,
+    store: str | None,
     embedder: EmbedderChoice | None,
     model: str | None,
     *,
@@ -138,7 +134,9 @@ def _open(
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
         chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
-        return open_research(store, embedder=chosen, read_only=read_only, schema=schema)
+        return open_research(
+            store or get_settings().store, embedder=chosen, read_only=read_only, schema=schema
+        )
     except (EmbeddingServiceError, StoreError) as error:
         raise _fail(error) from error
 
@@ -151,7 +149,7 @@ def _fail(error: Exception | str) -> typer.Exit:
 @app.command()
 def ingest(
     corpus: Annotated[Path, typer.Argument(help="A corpus directory or a single file.")],
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the result as JSON.")] = False,
@@ -176,7 +174,8 @@ def ingest(
         f"skipped {len(result.skipped)}: {result.chunks} chunks, {result.mentions} mentions, "
         f"{result.relations} relations, {result.embedded} embeddings."
     )
-    console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {_shown(store)}.")
+    location = _shown(store or get_settings().store)
+    console.print(f"Corpus snapshot [cyan]{result.snapshot.id}[/cyan] in {location}.")
     for warning in result.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
@@ -184,7 +183,7 @@ def ingest(
 @app.command()
 def search(
     query: Annotated[str, typer.Argument(help="A research question.")],
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     k: Annotated[int, typer.Option(help="Maximum passages.")] = 6,
     hops: Annotated[int, typer.Option(help="Graph expansion depth (1-2).")] = 1,
     embedder: EmbedderOption = None,
@@ -225,7 +224,7 @@ def search(
 @app.command()
 def strategy(
     focus: Annotated[str, typer.Argument(help="A signal, factor, or strategy, or an entity id.")],
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     min_confidence: Annotated[float, typer.Option(help="Weakest relation to include.")] = 0.5,
     as_json: Annotated[bool, typer.Option("--json", help="Print the spec as JSON.")] = False,
 ) -> None:
@@ -263,7 +262,7 @@ def strategy(
 
 @app.command("serve-mcp")
 def serve_mcp(
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     embedder: EmbedderOption = None,
     embedding_model: ModelOption = None,
     runs: RunsOption = None,
@@ -284,7 +283,7 @@ def serve_mcp(
     try:
         if record:
             try:
-                run_store = SqliteRunStore(_runs_path(store, runs))
+                run_store = SqliteRunStore(_runs_path(runs))
             except RunStoreError as error:
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         policy = get_settings().policy()
@@ -306,7 +305,7 @@ def serve_mcp(
 
 @app.command("serve-api")
 def serve_api(
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     keys: Annotated[
         Path | None,
         typer.Option(help="API keys file (default: QUANT_AGENT_OS_API_KEYS_FILE)."),
@@ -337,7 +336,7 @@ def serve_api(
     run_store: SqliteRunStore | None = None
     try:
         try:
-            run_store = SqliteRunStore(_runs_path(store, runs))
+            run_store = SqliteRunStore(_runs_path(runs))
         except RunStoreError as error:
             raise _fail(error) from error
         tools = research_tools(research.research)
@@ -367,12 +366,12 @@ def serve_api(
 @app.command("runs")
 def show_runs(
     run_id: Annotated[str | None, typer.Argument(help="A run id to show in full.")] = None,
-    store: StoreOption = DEFAULT_STORE_OPTION,
+    store: StoreOption = None,
     runs: RunsOption = None,
     limit: Annotated[int, typer.Option(help="How many recent runs to list.")] = 20,
 ) -> None:
     """List recent runs, or show one run's tool calls and audit trail."""
-    path = _runs_path(store, runs)
+    path = _runs_path(runs)
     if not path.is_file():
         console.print(f"No runs recorded at {path} yet.")
         return

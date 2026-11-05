@@ -21,7 +21,6 @@ from quant_research.infrastructure.postgres_store import (
 )
 from quant_research.infrastructure.sqlite_store import SqliteKnowledgeStore
 
-DEFAULT_STORE = Path(".quant-research") / "knowledge.db"
 Store = SqliteKnowledgeStore | PostgresKnowledgeStore
 
 
@@ -52,7 +51,7 @@ class ResearchApp:
 
 
 def open_research(
-    store_path: str | Path = DEFAULT_STORE,
+    store_path: str | Path,
     vocabulary_path: Path | None = None,
     *,
     vector: bool = False,

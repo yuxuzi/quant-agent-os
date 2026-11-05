@@ -11,6 +11,7 @@ from typing import Annotated, Any
 import typer
 from rich.console import Console
 
+from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import MCPUnavailableError, run_stdio
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
@@ -54,12 +55,12 @@ app = typer.Typer(
 )
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
-RUNS_HELP = "SQLite run store for the audit (default: factory-runs.db beside factory.toml)."
+RUNS_HELP = "SQLite run store for the audit (default: runs.db in the home)."
 
 
 def _runs_path(runs: Path | None) -> Path:
-    """Return the run store: ``--runs``, or factory-runs.db beside the settings file."""
-    return runs if runs is not None else settings_path().parent / "factory-runs.db"
+    """Return the run store: ``--runs``, or the platform's one run store."""
+    return runs if runs is not None else get_settings().runs_file
 
 
 SpecArgument = Annotated[

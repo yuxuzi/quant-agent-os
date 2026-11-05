@@ -9,7 +9,6 @@ from client_bundles import PLUGIN, ROOT, SERVER, bundles, server_args
 from typer.testing import CliRunner
 
 from quant_platform import cli as platform_cli
-from quant_platform import cli_common
 from quant_research.cli import app as research_cli
 
 CORPUS = ROOT / "tests" / "research" / "fixtures" / "corpus"
@@ -63,13 +62,6 @@ def test_the_plugin_serves_this_platform_version_with_its_skills() -> None:
     assert (ROOT / "skills").is_dir()
 
 
-@pytest.fixture
-def no_default_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(cli_common, "DEFAULT_STORE", tmp_path / "absent" / "knowledge.db")
-    monkeypatch.delenv("QUANT_AGENT_OS_STORE", raising=False)
-
-
-@pytest.mark.usefixtures("no_default_store")
 def test_without_a_store_the_server_still_starts_without_research(tmp_path: Path) -> None:
     result = CliRunner().invoke(platform_cli.app, ["catalog", "--datasets", str(tmp_path)])
 
@@ -78,14 +70,12 @@ def test_without_a_store_the_server_still_starts_without_research(tmp_path: Path
     assert "analyze_performance" in result.output and "find_related_signals" not in result.output
 
 
-@pytest.mark.usefixtures("no_default_store")
 def test_choosing_research_without_a_store_is_an_error(tmp_path: Path) -> None:
     result = CliRunner().invoke(platform_cli.app, ["catalog", "--toolsets", "research"])
 
-    assert result.exit_code == 2 and "QUANT_AGENT_OS_STORE" in result.output
+    assert result.exit_code == 2 and "ingest first" in result.output
 
 
-@pytest.mark.usefixtures("no_default_store")
 def test_the_store_can_come_from_the_environment(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

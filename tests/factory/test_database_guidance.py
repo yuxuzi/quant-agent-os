@@ -192,7 +192,7 @@ def test_simple_conditions_decide_which_questions_are_asked(
 @pytest.fixture
 def settings_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "factory.toml"
-    monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(path))
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(path.parent))
     monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
     return path
 

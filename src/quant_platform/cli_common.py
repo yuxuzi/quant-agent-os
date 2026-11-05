@@ -21,6 +21,7 @@ from quant_platform.composition import (
     compose,
 )
 from quant_research import ResearchApp, open_research
+from quant_research.infrastructure.postgres_store import is_postgres_url
 from quant_research.infrastructure.sqlite_store import StoreError
 
 if TYPE_CHECKING:
@@ -28,8 +29,6 @@ if TYPE_CHECKING:
 
 console = Console()
 errors = Console(stderr=True, soft_wrap=True)
-DEFAULT_RUNS = Path.home() / ".quant-agent-os" / "runs.db"
-DEFAULT_STORE = Path.home() / ".quant-agent-os" / "knowledge.db"
 
 ToolsetsOption = Annotated[
     str | None,
@@ -41,9 +40,8 @@ ToolsetsOption = Annotated[
 StoreOption = Annotated[
     str | None,
     typer.Option(
-        envvar="QUANT_AGENT_OS_STORE",
-        help="Research knowledge store: a SQLite path or postgresql:// URL (default "
-        "~/.quant-agent-os/knowledge.db when it exists).",
+        help="Research knowledge store: a SQLite path or postgresql:// URL (default: "
+        "QUANT_AGENT_OS_STORE, or knowledge.db in the home, when it exists).",
     ),
 ]
 DatasetsOption = Annotated[
@@ -79,25 +77,25 @@ def open_catalog(
 ) -> tuple[Catalog, ResearchApp | None]:
     """Open what the toolsets need and compose them, or exit with an actionable message.
 
-    Without a store, the research toolset uses ``~/.quant-agent-os/knowledge.db`` if it exists.
-    Otherwise it is an error when the toolsets were ``chosen``, and skipped with a warning when
-    they are the default, so a client configured once (a plugin) still starts.
+    Without a store, the research toolset uses the configured one if it exists. Otherwise it is
+    an error when the toolsets were ``chosen``, and skipped with a warning when they are the
+    default, so a client configured once (a plugin) still starts.
     """
     research: ResearchApp | None = None
+    settings = get_settings()
     if "research" in toolsets and store is None:
-        if DEFAULT_STORE.is_file():
-            store = str(DEFAULT_STORE)
+        if is_postgres_url(settings.store) or Path(settings.store).is_file():
+            store = settings.store
         elif chosen:
             errors.print(
-                "[red]error:[/red] the research toolset needs --store or QUANT_AGENT_OS_STORE "
-                "(ingest first)."
+                f"[red]error:[/red] no knowledge store at {settings.store}; ingest first, or "
+                "give --store."
             )
             raise typer.Exit(2)
         else:
             errors.print(
-                "[yellow]warning:[/yellow] no knowledge store, so the research toolset is not "
-                "served. Ingest with `quant-research ingest DIR --store "
-                f"{DEFAULT_STORE}`, or set QUANT_AGENT_OS_STORE."
+                f"[yellow]warning:[/yellow] no knowledge store at {settings.store}, so the "
+                "research toolset is not served. Ingest with `quant-research ingest DIR`."
             )
             toolsets = [item for item in toolsets if item != "research"]
     if "research" in toolsets and store is not None:
@@ -106,7 +104,6 @@ def open_catalog(
         except StoreError as error:
             errors.print(f"[red]error:[/red] {error}")
             raise typer.Exit(1) from error
-    settings = get_settings()
     catalog = compose(
         policy=settings.policy(),
         research=research.research if research else None,

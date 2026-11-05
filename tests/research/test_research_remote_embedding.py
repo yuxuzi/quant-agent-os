@@ -202,9 +202,9 @@ def test_openai_errors_name_the_openai_key() -> None:
         embedder.embed(["carry"])
 
 
-def test_settings_read_conventional_and_prefixed_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_read_the_conventional_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VOYAGE_API_KEY", "v-key")
-    monkeypatch.setenv("QUANT_RESEARCH_OPENAI_API_KEY", "o-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "o-key")
 
     settings = EmbeddingSettings(_env_file=None)  # type: ignore[call-arg]
 

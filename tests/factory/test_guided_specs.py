@@ -274,7 +274,7 @@ def test_removing_a_connection_and_a_broken_file(tmp_path: Path) -> None:
 @pytest.fixture
 def settings_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "factory.toml"
-    monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(path))
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(path.parent))
     monkeypatch.setattr(factory_cli, "git_identity", lambda: Identity())
     return path
 
@@ -335,7 +335,7 @@ def test_settings_commands_never_store_secrets(settings_file: Path) -> None:
 
 
 def test_serve_mcp_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
-    env = dict(os.environ) | {"QUANT_FACTORY_SETTINGS": str(tmp_path / "factory.toml")}
+    env = dict(os.environ) | {"QUANT_AGENT_OS_HOME": str(tmp_path)}
     parameters = StdioServerParameters(
         command=sys.executable,
         args=["-m", "quant_app_factory.cli", "serve-mcp", "--no-record"],

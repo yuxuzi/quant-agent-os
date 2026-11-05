@@ -34,7 +34,7 @@ DatasetsOption = Annotated[
     Path | None,
     typer.Option(
         "--dir",
-        help="Datasets directory (default: QUANT_AGENT_OS_DATASETS_DIR or ~/.quant-agent-os).",
+        help="Datasets directory (default: QUANT_AGENT_OS_DATASETS_DIR, or datasets/ in the home).",
     ),
 ]
 
@@ -84,7 +84,7 @@ def api_key_new(
     keys: Annotated[
         Path | None,
         typer.Option(
-            help="Keys file (default: QUANT_AGENT_OS_API_KEYS_FILE or ~/.quant-agent-os)."
+            help="Keys file (default: QUANT_AGENT_OS_API_KEYS_FILE, or api-keys.toml in the home)."
         ),
     ] = None,
     tenant: Annotated[

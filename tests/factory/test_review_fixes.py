@@ -181,7 +181,7 @@ def test_cli_check_reruns_and_records_the_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     checks = FakeChecks()
-    monkeypatch.setenv("QUANT_FACTORY_SETTINGS", str(tmp_path / "home" / "factory.toml"))
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(tmp_path / "home"))
     monkeypatch.setattr(factory_cli, "default_factory", lambda: _factory(checks))
     spec = _spec(tmp_path, connection=None)
     spec_file = tmp_path / "app.toml"
@@ -195,7 +195,7 @@ def test_cli_check_reruns_and_records_the_approval(
 
     assert result.exit_code == 0, result.output
     assert "Checked" in result.output
-    assert (tmp_path / "home" / "factory-runs.db").is_file()
+    assert (tmp_path / "home" / "runs.db").is_file()
 
 
 # TLS and typed answers

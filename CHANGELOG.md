@@ -22,6 +22,15 @@ All notable changes to this project are documented here. The format follows
 - **One wheel with extras** ([decision 0018](docs/decisions/0018-one-wheel.md)). The five
   distributions are now one, `quant-agent-os`, with extras `analytics`, `server`, `pdf`, `postgres`,
   `factory`, and `all`. Sources moved to `src/` and tests to `tests/`; import names did not change.
+- **One home.** `QUANT_AGENT_OS_HOME` (default `~/.quant-agent-os`) holds `config.toml`, `.env`,
+  `knowledge.db`, `datasets/`, `runs.db`, `api-keys.toml`, and `factory.toml`, and every command
+  uses it without flags. Factory runs join the one run store, replacing `factory-runs.db`.
+- **`.env` is read only from the home, never the working directory**, which a client that launches
+  the server chooses. `config.toml` may set paths and the log level, and refuses permissions: those
+  come only from the environment or the home's `.env`.
+- **One environment prefix.** `QUANT_RESEARCH_SCHEMA` and `QUANT_RESEARCH_EMBEDDING_TIMEOUT` are now
+  `QUANT_AGENT_OS_*`. `QUANT_RESEARCH_VOYAGE_API_KEY`, `QUANT_RESEARCH_OPENAI_API_KEY`, and
+  `QUANT_FACTORY_SETTINGS` are gone: use `VOYAGE_API_KEY`, `OPENAI_API_KEY`, and the home.
 - **Hosted features moved to `quant-platform hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
   `hosted serve-http` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
   `usage` are under `hosted`. The default `serve-http` serves one team with API keys. Their modules

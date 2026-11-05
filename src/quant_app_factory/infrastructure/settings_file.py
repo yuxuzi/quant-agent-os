@@ -1,4 +1,4 @@
-"""The factory settings file, `~/.quant-agent-os/factory.toml` (decision 0008).
+"""The factory settings file, `factory.toml` in the platform's home (decision 0008).
 
 It holds identity defaults, named database connections, and registered template packs. It never
 holds a secret: connections name the environment variables that hold passwords or URLs, unknown
@@ -19,13 +19,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from quant_agent_os.config import home_dir
 from quant_agent_os.runtime.runner import CommandResult, run_command
 from quant_app_factory.domain import toml_text
 from quant_app_factory.domain.connections import Connection
 from quant_app_factory.domain.secrets import secret_problem
 from quant_app_factory.domain.spec import Identity
-
-DEFAULT_SETTINGS = Path.home() / ".quant-agent-os" / "factory.toml"
 
 
 class SettingsError(ValueError):
@@ -53,8 +52,8 @@ class FactorySettings(_Strict):
 
 
 def settings_path() -> Path:
-    """Return the settings file: ``$QUANT_FACTORY_SETTINGS``, or the default location."""
-    return Path(os.environ.get("QUANT_FACTORY_SETTINGS", DEFAULT_SETTINGS))
+    """Return the settings file, in the platform's home."""
+    return home_dir() / "factory.toml"
 
 
 def load_settings(path: Path | None = None) -> FactorySettings:
