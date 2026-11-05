@@ -9,7 +9,7 @@ something, and see what happens. At the end, [tell us what to improve](#give-fee
   install, only Labs 6 and 8 use the network. All the sample data is synthetic.
 - **Time:** about 90 minutes for everything, and each lab stands alone after setup.
 
-The commands were run on version 0.1.1 on 2026-11-03, and the analytics labs again on 0.1.2. Run ids and timings will differ, and
+The outputs were recorded on version 0.1.1 on 2026-11-03, and the analytics labs again on 0.1.2; 0.2.0 renamed the commands to `qaos`. Run ids and timings will differ, and
 tables wrap to your terminal's width. Some outputs are shortened. This is research software, not
 investment advice.
 

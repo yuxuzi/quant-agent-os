@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
+One install, one command, one home, and a smaller surface. **This release breaks existing setups,
+with no migration:** the old commands and environment variables are gone, and files are not moved
+for you. Install again from the tag, then run `qaos doctor`, which warns about a store in
+`./.quant-research` or an old `factory-runs.db`; move those to the home by hand. Reconnect clients
+with `qaos connect`, because their server command changed. See
+[getting-started.md](docs/getting-started.md).
+
 ### Removed
 
 - **The orchestrator** ([decision 0016](docs/decisions/0016-clients-orchestrate.md)):
@@ -37,12 +46,14 @@ All notable changes to this project are documented here. The format follows
 - **One environment prefix.** `QUANT_RESEARCH_SCHEMA` and `QUANT_RESEARCH_EMBEDDING_TIMEOUT` are now
   `QUANT_AGENT_OS_*`. `QUANT_RESEARCH_VOYAGE_API_KEY`, `QUANT_RESEARCH_OPENAI_API_KEY`, and
   `QUANT_FACTORY_SETTINGS` are gone: use `VOYAGE_API_KEY`, `OPENAI_API_KEY`, and the home.
-- **Hosted features moved to `quant-platform hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
-  `hosted serve-http` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
-  `usage` are under `hosted`. The default `serve-http` serves one team with API keys. Their modules
-  moved from `quant_agent_os` to `quant_platform.hosted`. See [hosted.md](docs/hosted.md).
-- **App Factory is off by default on the platform server**, and the plugin no longer installs it.
-  Add it with `--toolsets research,analytics,factory`. `quant-factory` is unchanged.
+- **Hosted features moved to `qaos hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
+  `hosted serve` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
+  `usage` are under `hosted`. The default `qaos serve --http` serves one team with API keys. Their
+  modules moved from `quant_agent_os` to `quant_platform.hosted`. See [hosted.md](docs/hosted.md).
+- **App Factory is off by default on the server**, and the plugin no longer installs it. Add it with
+  `--toolsets research,analytics,factory`. Its commands are under `qaos app`.
+- **The `quant-strategy` and `quant-app-factory` skills need server 0.2.0**, because they rely on
+  `research_report` returning `spec` and `check_spec` returning the exact files.
 
 ### Added
 

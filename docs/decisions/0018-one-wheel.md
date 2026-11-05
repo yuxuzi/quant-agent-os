@@ -27,7 +27,7 @@ happened and every release paid for it. Releases are GitHub-only, so installing 
 
 ## Consequences
 
-- `uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@TAG"`
+- `uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.2.0"`
   installs everything from one git tag, with no clone. A spike confirmed that `uv_build` packs the
   five modules and the template packs' odd file names, and that this install works.
 - Products can no longer be released on separate versions. Splitting one out later is still possible,

@@ -20,7 +20,7 @@
     },
     "quant-app-factory": {
       "description_bytes": 282,
-      "skill_bytes": 2463
+      "skill_bytes": 2458
     },
     "quant-research": {
       "description_bytes": 274,
@@ -61,7 +61,7 @@
       "calls": 2,
       "result_bytes": 7759,
       "skill": "quant-app-factory",
-      "skill_bytes": 2463,
+      "skill_bytes": 2458,
       "success": true,
       "tools": [
         "check_spec",
@@ -109,7 +109,7 @@
     "definition_bytes": 6457,
     "instruction_bytes": 817,
     "result_bytes": 31501,
-    "skill_bytes": 10327,
+    "skill_bytes": 10322,
     "skill_description_bytes": 1114,
     "success_rate": 1.0,
     "tools": 7
