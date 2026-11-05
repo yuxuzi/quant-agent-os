@@ -2096,6 +2096,24 @@
                 "default": null,
                 "title": "Last Index"
               },
+              "missing_cells": {
+                "default": 0,
+                "title": "Missing Cells",
+                "type": "integer"
+              },
+              "periods_per_year": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Inferred from the dates; None when they do not show it",
+                "title": "Periods Per Year"
+              },
               "rows": {
                 "title": "Rows",
                 "type": "integer"
@@ -2222,7 +2240,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "plan_app": {
       "input_schema": {

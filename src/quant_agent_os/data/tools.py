@@ -35,6 +35,7 @@ def dataset_tools(store: DatasetStore) -> list[ToolSpec[Any, Any]]:
             "List the datasets analytics tools can read by id, with their columns and rows. "
             "Pass a dataset id and column to a tool instead of copying values."
         ),
+        version="1.1.0",
         permissions=[Permission.READ_LOCAL_DATA],
     )
     def list_datasets(params: DatasetQuery) -> DatasetList:
