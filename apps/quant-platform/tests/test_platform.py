@@ -133,6 +133,9 @@ def test_research_report_measures_a_named_series(
     assert record.output["metrics"]["sharpe_ratio"] is not None
     assert {e["kind"] for e in record.output["evidence"]} == {"retrieved", "computed"}
     assert set(record.data_versions) == {"corpus_snapshot", "dataset:returns"}
+    assert any("Annualized return" in e["statement"] for e in record.output["evidence"]), (
+        "metrics come from the dates, with no frequency given"
+    )
 
 
 def test_research_report_without_analytics_refuses_a_series(research: ResearchApp) -> None:
@@ -169,7 +172,7 @@ def test_a_client_reads_resources_and_prompts_from_the_composed_server(
         dataset = await session.read_resource("qaos://dataset/returns")  # type: ignore[arg-type]
         template = await session.read_resource("qaos://template/quant-baseline")  # type: ignore[arg-type]
         prompt = await session.get_prompt(
-            "analyze_returns", {"dataset": "returns", "column": "fund", "periods_per_year": "12"}
+            "analyze_returns", {"dataset": "returns", "column": "fund"}
         )
         return chunk_id, passage, dataset, template, prompt
 

@@ -130,17 +130,21 @@ def _datasets_dir(directory: Path | None, tenant: str | None) -> Path:
 def dataset_push(
     source: Annotated[Path, typer.Argument(help="A CSV file: a header row, then one row each.")],
     dataset_id: Annotated[str, typer.Option("--id", help="The id tools will use.")],
+    index: Annotated[
+        str | None, typer.Option("--index", help="The column holding the dates or row labels.")
+    ] = None,
     directory: DatasetsOption = None,
     tenant: DatasetTenantOption = None,
 ) -> None:
     """Validate a CSV file and add it as a dataset, replacing an earlier one with the same id.
 
-    The first column is an index (dates, say) when its values are not all numbers; every other
-    column must be numeric.
+    The first column is the index when it is named date, datetime, time, or period, holds dates
+    like 20240102 or 202401, or is not all numbers; --index names any other column. Every other
+    column must be numeric; blank and NaN cells are kept as missing values.
     """
     try:
         store = DirectoryDatasetStore(_datasets_dir(directory, tenant))
-        info = store.put(dataset_id, source)
+        info = store.put(dataset_id, source, index_column=index)
     except (DatasetError, TenantError, OSError) as error:
         errors.print(f"[red]error:[/red] {error}")
         raise typer.Exit(1) from error
@@ -148,6 +152,16 @@ def dataset_push(
         f"Added dataset {info.id}: {info.rows} rows, columns {', '.join(info.columns)} "
         f"(sha256 {info.fingerprint[:16]})."
     )
+    if info.periods_per_year is not None:
+        console.print(f"Its dates show {info.periods_per_year} periods per year.")
+    else:
+        errors.print(
+            "[yellow]warning:[/yellow] no dates showing a frequency, so analytics tools need "
+            "periods_per_year, and this dataset cannot be aligned with others. Name the date "
+            "column with --index if it has one."
+        )
+    if info.missing_cells:
+        console.print(f"{info.missing_cells} cells are missing; tools leave those rows out.")
 
 
 @dataset_app.command("list")

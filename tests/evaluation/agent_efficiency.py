@@ -29,6 +29,7 @@ import sys
 import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -150,7 +151,6 @@ async def analyze_a_series(client: Client) -> bool:
         {
             "returns": {"dataset": "daily", "column": "fund"},
             "benchmark": {"dataset": "daily", "column": "benchmark"},
-            "periods_per_year": 252,
         },
     )
     metrics = output.get("metrics", {})
@@ -168,7 +168,6 @@ async def analyze_portfolio_risk(client: Client) -> bool:
             "portfolio_id": "book",
             "weights": ASSETS,
             "asset_returns": {"dataset": "daily"},
-            "periods_per_year": 252,
         },
     )
     return set(output.get("contributions", {})) == set(ASSETS)
@@ -181,7 +180,6 @@ async def report_on_a_signal(client: Client) -> bool:
         {
             "focus": "momentum",
             "returns": {"dataset": "daily", "column": "fund"},
-            "periods_per_year": 252,
         },
     )
     kinds = {item["kind"] for item in report.get("evidence", [])}
@@ -301,9 +299,11 @@ def _datasets(workdir: Path) -> DirectoryDatasetStore:
     """A year of daily returns for a fund, its benchmark, and three assets, as one dataset."""
     columns = {"fund": daily_returns(1), "benchmark": daily_returns(2)}
     columns |= {name: daily_returns(seed) for seed, name in enumerate(ASSETS, 3)}
-    lines = ["day," + ",".join(columns)]
+    days = (date(2025, 1, 1) + timedelta(days=step) for step in range(400))
+    business_days = [day for day in days if day.weekday() < 5][:252]
+    lines = ["date," + ",".join(columns)]
     lines += [
-        f"d{row + 1:03d}," + ",".join(str(values[row]) for values in columns.values())
+        f"{business_days[row]}," + ",".join(str(values[row]) for values in columns.values())
         for row in range(252)
     ]
     source = workdir / "daily.csv"

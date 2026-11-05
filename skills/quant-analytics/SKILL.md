@@ -19,8 +19,7 @@ Read one dataset's details with `dataset_id`, or the resource `qaos://dataset/{d
 
 Pass series **by reference**, never by copying values:
 - **Performance:** `analyze_performance` with `returns` as `{"dataset": ID, "column": NAME}`,
-  optionally a `benchmark` reference the same way, and `periods_per_year` (252 daily, 52
-  weekly, 12 monthly). `risk_free` is an annual rate.
+  optionally a `benchmark` reference the same way. `risk_free` is an annual rate.
 - **Risk:** `analyze_risk` with `weights` naming each asset, `asset_returns` as
   `{"dataset": ID}` (one column per asset, named like the weights), and, for exposures,
   `factor_returns` as `{"dataset": ID, "columns": [...]}`.
@@ -29,14 +28,18 @@ Inline number lists are accepted only for small examples the user typed. If the 
 there, the user adds it: `quant-agent-os dataset push FILE --id ID`. Adding data is never a
 tool call.
 
+**Leave `periods_per_year` out** when the data has dates: the server infers it. If it says the
+dates show no frequency, ask the user (252 daily, 52 weekly, 12 monthly); do not guess.
+
 ## Report what was computed
 
 - **Quote numbers as computed.** Never recompute, round differently, or "correct" a value in
   prose.
 - **State the conventions** the result lists, for example a geometric annual return, sample
   volatility, or a drawdown as a negative fraction.
-- **Pass on the warnings,** such as a short sample, a series that does not vary, or collinear
-  factors.
+- **Pass on the warnings,** such as rows left out (missing values, aligning datasets), a
+  frequency that disagrees with the dates, returns that look like percentages, a short sample,
+  a series that does not vary, or collinear factors.
 - **Explain risk contributions plainly.** Percent contributions sum to one, and a negative one
   means the position hedges the rest. Factor variance shares plus the specific share sum to
   one.

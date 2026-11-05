@@ -45,7 +45,7 @@ def test_performance_by_reference_equals_performance_by_value(store: DirectoryDa
     by_value = _call(
         store,
         "analyze_performance",
-        {"series_id": "returns.fund", "returns": FUND, "benchmark": MARKET},
+        {"series_id": "returns.fund", "returns": FUND, "benchmark": MARKET, "periods_per_year": 12},
     )
     by_reference = _call(
         store,
@@ -53,6 +53,7 @@ def test_performance_by_reference_equals_performance_by_value(store: DirectoryDa
         {
             "returns": {"dataset": "returns", "column": "fund"},
             "benchmark": {"dataset": "returns", "column": "market"},
+            "periods_per_year": 12,
         },
     )
 
@@ -70,6 +71,7 @@ def test_risk_takes_assets_and_factors_by_reference(store: DirectoryDatasetStore
             "weights": {"fund": 0.6, "bond": 0.4},
             "asset_returns": {"fund": FUND, "bond": BOND},
             "factor_returns": {"mkt": MARKET},
+            "periods_per_year": 12,
         },
     )
     by_reference = _call(
@@ -80,6 +82,7 @@ def test_risk_takes_assets_and_factors_by_reference(store: DirectoryDatasetStore
             "weights": {"fund": 0.6, "bond": 0.4},
             "asset_returns": {"dataset": "returns"},
             "factor_returns": {"dataset": "factors", "columns": ["mkt"]},
+            "periods_per_year": 12,
         },
     )
 
@@ -88,24 +91,12 @@ def test_risk_takes_assets_and_factors_by_reference(store: DirectoryDatasetStore
     assert set(by_reference.data_versions) == {"dataset:returns", "dataset:factors"}
 
 
-def test_a_missing_column_or_misaligned_datasets_are_reported(
-    store: DirectoryDatasetStore, tmp_path: Path
-) -> None:
+def test_a_missing_column_is_reported(store: DirectoryDatasetStore) -> None:
     missing = _call(
         store, "analyze_performance", {"returns": {"dataset": "returns", "column": "cash"}}
     )
-    store.put("later", _csv(tmp_path / "l.csv", {"mkt": MARKET}, start=2))  # one month later
-    misaligned = _call(
-        store,
-        "analyze_performance",
-        {
-            "returns": {"dataset": "returns", "column": "fund"},
-            "benchmark": {"dataset": "later", "column": "mkt"},
-        },
-    )
 
     assert missing.status == "error" and "its columns are fund, market, bond" in missing.error
-    assert misaligned.status == "error" and "cover different rows" in misaligned.error
 
 
 def test_the_referenced_tools_honour_the_contract_and_read_local_data(
@@ -120,4 +111,7 @@ def test_the_referenced_tools_honour_the_contract_and_read_local_data(
         {"returns": {"dataset": "returns", "column": "fund"}, "periods_per_year": 12},
     )
     assert record.output is not None and record.output["series_id"] == "returns.fund"
-    assert check_tool(analytics_tools(store).get("analyze_performance"), {"returns": FUND}).output
+    assert check_tool(
+        analytics_tools(store).get("analyze_performance"),
+        {"returns": FUND, "periods_per_year": 12},
+    ).output

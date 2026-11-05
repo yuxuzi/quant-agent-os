@@ -8,7 +8,9 @@ from quant_agent_os.data.datasets import (
     DirectoryDatasetStore,
     UnknownColumnError,
     UnknownDatasetError,
+    infer_periods_per_year,
     parse_dataset,
+    parse_date,
 )
 from quant_agent_os.data.tools import dataset_resources, dataset_tools
 
@@ -22,5 +24,7 @@ __all__ = [
     "UnknownDatasetError",
     "dataset_resources",
     "dataset_tools",
+    "infer_periods_per_year",
     "parse_dataset",
+    "parse_date",
 ]

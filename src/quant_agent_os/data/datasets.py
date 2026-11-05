@@ -1,10 +1,12 @@
 """Datasets: numeric tables that tools read by id, so numbers never pass through a model.
 
-A dataset is a CSV file with a header row. The first column is an index (dates, say) when its
-values are not all numbers; every other column must be numeric. An operator adds datasets with
-``quant-agent-os dataset push`` (a write, so it is a command, not a tool), and tools name them
-by id. Each dataset's fingerprint is the SHA-256 of its file, recorded as a data version so a
-result says exactly which data it came from.
+A dataset is a CSV file with a header row. The first column is its index when it is named like
+a date (``date``, ``datetime``, ``time``, ``period``), when it holds compact dates (``20240102``,
+``202401``), or when its values are not all numbers; ``--index`` names any other column. Every
+other column must be numeric, and a blank or ``NaN`` cell is kept as a missing value (NaN), never
+filled in. An operator adds datasets with ``quant-agent-os dataset push`` (a write, so it is a
+command, not a tool), and tools name them by id. Each dataset's fingerprint is the SHA-256 of its
+file, recorded as a data version so a result says exactly which data it came from.
 """
 
 from __future__ import annotations
@@ -15,6 +17,10 @@ import io
 import math
 import re
 import shutil
+import statistics
+from datetime import date, datetime
+from functools import cached_property
+from itertools import pairwise
 from pathlib import Path
 from typing import Protocol
 
@@ -24,6 +30,11 @@ DATASET_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 200_000
 MAX_COLUMNS = 500
+MAX_CACHED = 16
+INDEX_NAMES = frozenset({"date", "datetime", "time", "period"})
+MISSING_CELLS = frozenset({"", "na", "n/a", "nan", "null", "none"})
+# Median days between dates, and the periods per year they mean. Daily is decided separately.
+FREQUENCIES = (((6, 8), 52), ((25, 35), 12), ((85, 95), 4), ((175, 190), 2), ((350, 380), 1))
 
 
 class DatasetError(ValueError):
@@ -48,10 +59,14 @@ class DatasetInfo(BaseModel):
     first_index: str | None = None
     last_index: str | None = None
     fingerprint: str = Field(description="sha256 of the file; the dataset's data version")
+    periods_per_year: int | None = Field(
+        default=None, description="Inferred from the dates; None when they do not show it"
+    )
+    missing_cells: int = 0
 
 
 class Dataset(BaseModel):
-    """A dataset's values: numeric columns aligned by row, with an optional text index."""
+    """A dataset's values: numeric columns aligned by row (NaN when missing), with an index."""
 
     id: str
     columns: dict[str, list[float]]
@@ -63,6 +78,19 @@ class Dataset(BaseModel):
     def rows(self) -> int:
         """The number of rows."""
         return len(next(iter(self.columns.values()), []))
+
+    @cached_property
+    def dates(self) -> list[date] | None:
+        """The index as dates, or None when there is no index or a value is not a date."""
+        if not self.index:
+            return None
+        dates = [parse_date(value) for value in self.index]
+        return None if None in dates else dates  # type: ignore[return-value]
+
+    @property
+    def periods_per_year(self) -> int | None:
+        """The frequency its dates show, or None when they show none."""
+        return infer_periods_per_year(self.dates) if self.dates else None
 
     def column(self, name: str) -> list[float]:
         """Return the values of column ``name``, or raise `UnknownColumnError` naming the others."""
@@ -83,6 +111,10 @@ class Dataset(BaseModel):
             first_index=self.index[0] if self.index else None,
             last_index=self.index[-1] if self.index else None,
             fingerprint=self.fingerprint,
+            periods_per_year=self.periods_per_year,
+            missing_cells=sum(
+                math.isnan(value) for values in self.columns.values() for value in values
+            ),
         )
 
 
@@ -96,8 +128,50 @@ def check_dataset_id(dataset_id: str) -> str:
     return dataset_id
 
 
-def parse_dataset(dataset_id: str, data: bytes) -> Dataset:
-    """Parse CSV ``data`` into a `Dataset`, or raise `DatasetError` naming the bad row."""
+def parse_date(text: str) -> date | None:
+    """Return the date ``text`` names, or None; day-first and month-first forms are ambiguous."""
+    text = text.strip()
+    if text.isdigit():
+        if len(text) not in (6, 8):
+            return None
+        formats = ["%Y%m%d" if len(text) == 8 else "%Y%m"]
+    else:
+        formats = ["%Y/%m/%d", "%Y-%m"]
+        try:
+            return _plausible(datetime.fromisoformat(text).date())
+        except ValueError:
+            pass
+    for pattern in formats:
+        try:
+            return _plausible(datetime.strptime(text, pattern).date())
+        except ValueError:
+            continue
+    return None
+
+
+def infer_periods_per_year(dates: list[date]) -> int | None:
+    """Return the periods per year sorted ``dates`` show, or None when they show no clear one.
+
+    Daily dates mean 252 periods, or 365 when weekends make up over a tenth of them.
+    """
+    if len(dates) < 3:
+        return None
+    median = statistics.median((later - earlier).days for earlier, later in pairwise(dates))
+    if 1 <= median <= 4:
+        weekends = sum(day.weekday() >= 5 for day in dates)
+        return 365 if weekends > len(dates) / 10 else 252
+    for (low, high), periods in FREQUENCIES:
+        if low <= median <= high:
+            return periods
+    return None
+
+
+def parse_dataset(dataset_id: str, data: bytes, *, index_column: str | None = None) -> Dataset:
+    """Parse CSV ``data`` into a `Dataset`, or raise `DatasetError` naming the bad row.
+
+    ``index_column`` names the index; without it, the first column is the index when it looks
+    like one (see the module docstring).
+    """
     if len(data) > MAX_FILE_BYTES:
         raise DatasetError(f"Dataset '{dataset_id}' exceeds {MAX_FILE_BYTES} bytes.")
     try:
@@ -119,27 +193,32 @@ def parse_dataset(dataset_id: str, data: bytes) -> Dataset:
             raise DatasetError(
                 f"Dataset '{dataset_id}' line {number} has {len(row)} cells, not {len(header)}."
             )
-    has_index = not all(_is_number(row[0]) for row in body)
-    names = header[1:] if has_index else header
+    position = _index_position(dataset_id, header, body, index_column)
+    names = [name for at, name in enumerate(header) if at != position]
     columns: dict[str, list[float]] = {name: [] for name in names}
     for number, row in enumerate(body, start=2):
-        for name, cell in zip(names, row[1:] if has_index else row, strict=True):
-            value = _number(cell)
+        cells = [cell for at, cell in enumerate(row) if at != position]
+        for name, cell in zip(names, cells, strict=True):
+            value = _value(cell)
             if value is None:
                 raise DatasetError(
                     f"Dataset '{dataset_id}' line {number}, column '{name}': '{cell}' is not a "
-                    "finite number."
+                    "number or a missing value."
                 )
             columns[name].append(value)
     if not columns:
         raise DatasetError(f"Dataset '{dataset_id}' has no numeric column.")
-    return Dataset(
+    index = None if position is None else [row[position].strip() for row in body]
+    dataset = Dataset(
         id=dataset_id,
         columns=columns,
-        index_name=header[0] if has_index else None,
-        index=[row[0].strip() for row in body] if has_index else None,
+        index_name=None if position is None else header[position],
+        index=index,
         fingerprint=hashlib.sha256(data).hexdigest(),
     )
+    if index is not None:
+        _check_index(dataset_id, index, dataset.dates)
+    return dataset
 
 
 class DatasetStore(Protocol):
@@ -159,15 +238,27 @@ class DirectoryDatasetStore:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._parsed: dict[str, tuple[str | None, Dataset]] = {}
 
-    def put(self, dataset_id: str, source: Path) -> DatasetInfo:
-        """Validate ``source`` and copy it in as ``dataset_id``, replacing any earlier version."""
-        dataset = parse_dataset(check_dataset_id(dataset_id), source.read_bytes())
+    def put(self, dataset_id: str, source: Path, *, index_column: str | None = None) -> DatasetInfo:
+        """Validate ``source`` and copy it in as ``dataset_id``, replacing any earlier version.
+
+        ``index_column`` names the index column and is kept beside the file, which stays exactly
+        as given so its fingerprint matches the source.
+        """
+        dataset = parse_dataset(
+            check_dataset_id(dataset_id), source.read_bytes(), index_column=index_column
+        )
         self.root.mkdir(parents=True, exist_ok=True)
         target = self.root / f"{dataset_id}.csv"
         partial = target.with_suffix(".csv.partial")
         shutil.copyfile(source, partial)
         partial.replace(target)
+        marker = self._index_marker(dataset_id)
+        if index_column is None:
+            marker.unlink(missing_ok=True)
+        else:
+            marker.write_text(index_column, encoding="utf-8")
         return dataset.info()
 
     def get(self, dataset_id: str) -> Dataset:
@@ -179,7 +270,21 @@ class DirectoryDatasetStore:
                 f"No dataset '{dataset_id}'; "
                 + (f"the datasets are {', '.join(known)}." if known else "none have been added.")
             )
-        return parse_dataset(dataset_id, path.read_bytes())
+        data = path.read_bytes()
+        marker = self._index_marker(dataset_id)
+        index_column = marker.read_text(encoding="utf-8") if marker.is_file() else None
+        cached_column, cached = self._parsed.get(dataset_id, (None, None))
+        if (
+            cached is not None
+            and cached_column == index_column
+            and cached.fingerprint == hashlib.sha256(data).hexdigest()
+        ):
+            return cached
+        dataset = parse_dataset(dataset_id, data, index_column=index_column)
+        if len(self._parsed) >= MAX_CACHED:
+            self._parsed.pop(next(iter(self._parsed)), None)
+        self._parsed[dataset_id] = (index_column, dataset)
+        return dataset
 
     def ids(self) -> list[str]:
         """Return every dataset id, sorted."""
@@ -189,14 +294,53 @@ class DirectoryDatasetStore:
             path.stem for path in self.root.glob("*.csv") if DATASET_ID.fullmatch(path.stem)
         )
 
+    def _index_marker(self, dataset_id: str) -> Path:
+        return self.root / f"{dataset_id}.index"
 
-def _number(cell: str) -> float | None:
+
+def _plausible(day: date) -> date | None:
+    return day if 1800 <= day.year <= 2200 else None
+
+
+def _index_position(
+    dataset_id: str, header: list[str], body: list[list[str]], index_column: str | None
+) -> int | None:
+    if index_column is not None:
+        if index_column not in header:
+            raise DatasetError(
+                f"Dataset '{dataset_id}' has no column '{index_column}' to use as its index; its "
+                f"columns are {', '.join(header)}."
+            )
+        return header.index(index_column)
+    first = [row[0].strip() for row in body]
+    named = header[0].lower() in INDEX_NAMES
+    compact = all(cell.isdigit() and parse_date(cell) is not None for cell in first)
+    return 0 if named or compact or not all(_value(cell) is not None for cell in first) else None
+
+
+def _check_index(dataset_id: str, index: list[str], dates: list[date] | None) -> None:
+    if not all(index):
+        line = index.index("") + 2
+        raise DatasetError(f"Dataset '{dataset_id}' line {line} has no index value.")
+    if len(set(index)) != len(index):
+        raise DatasetError(
+            f"Dataset '{dataset_id}' repeats index values; it needs one row per date with one "
+            "column per series."
+        )
+    if dates is not None and dates != sorted(dates):
+        raise DatasetError(
+            f"Dataset '{dataset_id}' is not in date order; sort it oldest first, because returns "
+            "compound in row order."
+        )
+
+
+def _value(cell: str) -> float | None:
+    """Return a cell's number, NaN for a missing value, or None when it is neither."""
+    text = cell.strip()
+    if text.lower() in MISSING_CELLS:
+        return math.nan
     try:
-        value = float(cell.strip())
+        value = float(text)
     except ValueError:
         return None
     return value if math.isfinite(value) else None
-
-
-def _is_number(cell: str) -> bool:
-    return _number(cell) is not None

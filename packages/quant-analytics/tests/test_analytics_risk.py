@@ -15,7 +15,8 @@ from pydantic import ValidationError
 
 from quant_agent_os.testing import check_tool
 from quant_analytics import metrics, risk
-from quant_analytics.tools import RiskInput, analyze_risk
+from quant_analytics.computed import RiskInput, portfolio_risk
+from quant_analytics.tools import analytics_tools
 
 MONTHLY = 12
 # Orthogonal, zero-mean patterns: sum(a * b) = sum(a * e) = sum(b * e) = 0 over 12 periods.
@@ -123,12 +124,13 @@ def test_shares_sum_to_one_on_random_data() -> None:
 
 def test_analyze_risk_honours_the_contract_and_states_conventions() -> None:
     record = check_tool(
-        analyze_risk,
+        analytics_tools().get("analyze_risk"),
         {
             "portfolio_id": "book",
             "weights": {"a": 0.5, "b": 0.5},
             "asset_returns": {"a": A, "b": B},
             "factor_returns": {"market": A},
+            "periods_per_year": MONTHLY,
         },
     )
 
@@ -147,8 +149,10 @@ def test_analyze_risk_honours_the_contract_and_states_conventions() -> None:
 
 
 def test_without_factors_there_are_no_factor_results_or_conventions() -> None:
-    output = analyze_risk.function(
-        RiskInput(portfolio_id="book", weights={"a": 1.0}, asset_returns={"a": A})
+    output = portfolio_risk(
+        RiskInput(
+            portfolio_id="book", weights={"a": 1.0}, asset_returns={"a": A}, periods_per_year=12
+        )
     )
 
     assert output.factors is None
@@ -156,15 +160,21 @@ def test_without_factors_there_are_no_factor_results_or_conventions() -> None:
 
 
 def test_flat_short_and_collinear_inputs_are_flagged() -> None:
-    flat = analyze_risk.function(
-        RiskInput(portfolio_id="cash", weights={"c": 1.0}, asset_returns={"c": [0.001] * 4})
+    flat = portfolio_risk(
+        RiskInput(
+            portfolio_id="cash",
+            weights={"c": 1.0},
+            asset_returns={"c": [0.001] * 4},
+            periods_per_year=12,
+        )
     )
-    collinear = analyze_risk.function(
+    collinear = portfolio_risk(
         RiskInput(
             portfolio_id="book",
             weights={"a": 1.0},
             asset_returns={"a": B},
             factor_returns={"market": A, "double": [2 * value for value in A]},
+            periods_per_year=12,
         )
     )
 
@@ -195,4 +205,4 @@ def test_flat_short_and_collinear_inputs_are_flagged() -> None:
 )
 def test_bad_inputs_are_refused_with_the_reason(fields: dict[str, Any], message: str) -> None:
     with pytest.raises(ValidationError, match=message):
-        RiskInput(portfolio_id="x", **fields)
+        RiskInput(portfolio_id="x", periods_per_year=12, **fields)

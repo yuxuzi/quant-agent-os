@@ -13,14 +13,17 @@ are empyrical-reloaded's ([decision 0010](../../docs/decisions/0010-analytics-on
     portfolio's volatility;
   - OLS factor exposures;
   - each factor's share of the portfolio variance, with the specific share as the remainder.
-- `quant_analytics.tools`: the tools, which need no permissions because every input arrives in
-  the call. Each result carries the conventions, warnings for short samples, and `computed`
-  evidence.
+- `quant_analytics.computed`: typed results over those two, with conventions, warnings, and
+  `computed` evidence.
+- `quant_analytics.tools`: the tools (`analytics_tools()`). Series come as values, or as
+  references to dataset columns, which need `read_local_data`.
   - `analyze_performance` returns every metric of a series.
   - `analyze_risk` returns a portfolio's volatility, its contributions, and, with factor
     returns, its exposures.
-  - `annualized_return` and `max_drawdown` are single-metric tools for code and examples.
-    `analytics_tools()` does not serve them, since `analyze_performance` returns both.
+  - **Frequency:** `periods_per_year` is inferred from a dataset's dates. Inline values have no
+    dates, so they must pass it, and a call with neither is refused.
+  - **Alignment and gaps:** series from different datasets are joined on their dates, and rows
+    with a missing value are left out. Both are counted in the warnings; nothing is filled in.
 
 ```python
 from quant_agent_os.sdk import Platform

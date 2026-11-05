@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Analytics no longer change a number silently.** `analyze_performance`, `analyze_risk`, and
+  `research_report` used to annualise any series as monthly unless told otherwise, so daily data
+  reported a Sharpe ratio about 4.6 times too low, with no warning. They now infer the frequency
+  from the dataset's dates, warn when a given value disagrees, and refuse to guess when there are
+  no dates. **Calls with inline values must now pass `periods_per_year`.**
+- **`YYYYMMDD` and `YYYYMM` dates are dates.** They were read as a numeric column, so datasets
+  skipped the alignment check, and a benchmark one row off computed a wrong beta with status `ok`.
+- **Series from different datasets are joined on their dates**, and the rows left out are
+  reported, instead of the call being refused for any difference.
+- **Files with gaps load.** Blank and `NaN` cells are kept as missing, and the rows are left out of
+  a calculation and counted. Nothing is filled in. Repeated dates and dates out of order are now
+  refused, because returns compound in row order.
+- Returns that look like percentages get a warning.
+
+### Added
+
+- `quant-agent-os dataset push --index COLUMN` names the date column, and the command reports the
+  frequency the dates show. `list_datasets` reports it too.
+
 ## [0.1.1] - 2026-11-03
 
 A security release for remote servers: two of the security review's findings are fixed (F-1
