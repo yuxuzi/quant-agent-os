@@ -10,6 +10,9 @@ qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; restart the client
 ```
 
+`--python 3.13` matters: on Python 3.15, the `analytics` extra's `bottleneck` dependency has no
+prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work too.
+
 Replace `TAG` with a [release](https://github.com/yuxuzi/quant-agent-os/releases) that has `qaos`.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
 ingestion, `postgres` for a PostgreSQL store, `factory` for `qaos app`, or `all`.

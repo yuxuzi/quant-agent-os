@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The install command pins Python 3.13.** Without it, uv may choose 3.15, where the `analytics`
+  extra compiles `bottleneck` from source and fails if the machine has no working C compiler.
 - **The tutorial matches 0.2.0.** All its labs were run again: its setup check named a removed
   command, Lab 7's `show.py` no longer printed the open questions, and Lab 6 counted tools no longer
   served. It now uses one home, so `--store` and the other path flags are gone from its single-store
