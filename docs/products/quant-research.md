@@ -8,7 +8,7 @@ that AI clients (Claude, Copilot, Cursor) turn into cited answers.
 ```bash
 uv run qaos ingest path/to/corpus          # operator command; writes the store
 uv run qaos search "What is related to short-term reversal?"
-uv run qaos search "betting against beta" --embedder hashing   # offline mock vectors
+uv run --extra local-embeddings qaos search "betting against beta" --embedder local  # on this machine
 
 export VOYAGE_API_KEY=...   # or OPENAI_API_KEY with --embedder openai
 uv run qaos ingest path/to/corpus --embedder voyage   # default model voyage-finance-2

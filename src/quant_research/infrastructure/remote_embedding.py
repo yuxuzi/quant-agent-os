@@ -33,6 +33,8 @@ InputKind = Literal["document", "query"]
 RETRYABLE = frozenset({429, 500, 502, 503, 504})
 MAX_ATTEMPTS = 5
 CHARS_PER_TOKEN = 3  # conservative estimate for batching; providers count exactly
+# Hosted models have no measured floor, so off-topic questions can return passages with them.
+UNMEASURED_MIN_SCORE = 0.2
 
 
 class EmbeddingServiceError(EmbeddingError):
@@ -81,6 +83,7 @@ class _HttpEmbedder:
     max_batch: int
     max_batch_tokens: int
     requires_network = True
+    min_score = UNMEASURED_MIN_SCORE
 
     def __init__(
         self,

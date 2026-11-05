@@ -21,7 +21,7 @@ from quant_research.application.strategy import (
 )
 from quant_research.bootstrap import ResearchApp, open_research
 from quant_research.config import make_embedder
-from quant_research.domain.vocabulary import VocabularyError, load_vocabulary
+from quant_research.domain.vocabulary import VocabularyError
 from quant_research.infrastructure.postgres_store import (
     DEFAULT_SCHEMA,
     is_postgres_url,
@@ -66,7 +66,7 @@ def _shown(store: str) -> str:
 class EmbedderChoice(StrEnum):
     """Embedders the CLI can enable for the vector channel."""
 
-    HASHING = "hashing"
+    LOCAL = "local"
     VOYAGE = "voyage"
     OPENAI = "openai"
 
@@ -74,13 +74,15 @@ class EmbedderChoice(StrEnum):
 EmbedderOption = Annotated[
     EmbedderChoice | None,
     typer.Option(
-        "--embedder", help="Enable the vector channel: hashing (offline mock), voyage, or openai."
+        "--embedder",
+        help="Enable the vector channel: local (on this machine; needs the local-embeddings "
+        "extra), voyage, or openai.",
     ),
 ]
 ModelOption = Annotated[
     str | None,
     typer.Option(
-        "--embedding-model", help="Provider model, e.g. voyage-4 or text-embedding-3-large."
+        "--embedding-model", help="Embedding model, e.g. voyage-4 or text-embedding-3-large."
     ),
 ]
 
@@ -96,7 +98,7 @@ def _open(
 ) -> ResearchApp:
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
-        chosen = make_embedder(embedder.value, load_vocabulary(), model=model) if embedder else None
+        chosen = make_embedder(embedder.value, model=model) if embedder else None
         return open_research(
             store or get_settings().store,
             vocabulary,

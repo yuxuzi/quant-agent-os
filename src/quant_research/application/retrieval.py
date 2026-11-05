@@ -38,7 +38,6 @@ SIGNAL_TYPES: tuple[EntityType, ...] = ("signal", "factor", "strategy")
 MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
 MAX_FALLBACK_SEEDS = 3
-MIN_VECTOR_SCORE = 0.2
 # A query that names no vocabulary entity counts a keyword passage as evidence only when the
 # passage holds at least this share of the query's term weight (IDF-weighted, so rare words
 # count most). It is what lets "protein folding prediction accuracy" return nothing from a
@@ -161,8 +160,9 @@ class ResearchService:
     """Read-only queries over a knowledge store, with an optional vector channel.
 
     With an embedder and a vector index, chunks whose cosine similarity to the query is at
-    least `MIN_VECTOR_SCORE` form a fourth ranking in the fusion. ``channels`` limits which
-    rankings rank passages (for ablation studies); related entities always come from the graph.
+    least the embedder's ``min_score`` form a fourth ranking in the fusion. ``channels`` limits
+    which rankings rank passages (for ablation studies); related entities always come from the
+    graph.
     """
 
     def __init__(
@@ -348,7 +348,7 @@ class ResearchService:
             )
             return []
         hits = self.vectors.vector_search(model_id, vector, limit)
-        return [hit.chunk_id for hit in hits if hit.score >= MIN_VECTOR_SCORE]
+        return [hit.chunk_id for hit in hits if hit.score >= self.embedder.min_score]
 
     def get_passage(self, chunk_id: str) -> SourcePassage:
         """Return the full text of one chunk; raise `UnknownPassageError` if it is unknown."""

@@ -13,11 +13,11 @@ baseline that later changes must not lower.
 - **Not committed:** the PDFs are never committed or redistributed. arXiv's default licence lets
   arXiv distribute a paper, not this repository. Running `real_corpus.py fetch` downloads them
   once into `~/.cache/quant-agent-os/real-corpus`, and evaluation runs offline after that.
-- **Questions:** 28 gold questions written from the abstracts
+- **Questions:** 53 gold questions, most written from the abstracts
   ([gold.toml](../../tests/research/real_corpus/gold.toml)):
   - 19 topic questions in the papers' own terms;
   - 6 paraphrases that avoid those terms;
-  - 3 questions the corpus cannot answer.
+  - 28 questions the corpus cannot answer (3 at first, and 25 more added in C6).
 - **Labels:** each typed relation extracted from the corpus is judged by hand against the
   sentence that states it
   ([labels.toml](../../tests/research/real_corpus/labels.toml)). There are 57
@@ -110,7 +110,7 @@ Trade-off, recorded in `evaluation/baseline.json`:
 ## C5. Channel ablation (2026-11-05)
 
 Simplification plan step P4.1, reproduced by `real_corpus.py ablation`. There are 19 topic
-questions, 6 paraphrases, and 3 unanswerable questions, so one paraphrase moves its hit rate by
+questions, 6 paraphrases, and 28 off-topic questions, so one paraphrase moves its hit rate by
 0.167.
 
 | Setting | Topic hit @5 | Topic MRR | Paraphrase hit @5 | Paraphrase MRR | Abstention |
@@ -135,7 +135,7 @@ What it shows:
   each way, and leaves every aggregate within 0.005.
 - **The graph that retrieval walks is 19 edges.** The corpus has 357 edges, of which 338 are
   `related_to` at confidence 0.4. The default `min_confidence` of 0.5 skips those. Across the
-  28 questions, a client sees 7 distinct edges, all typed. Including `related_to` edges lowers both
+  53 questions, a client sees 7 distinct edges, all typed. Including `related_to` edges lowers both
   MRRs and loses a paraphrase, so the filter stays.
 - **The extracted facts are few.** 16 distinct typed facts in 21 papers: `tested_on` 7, `uses`
   5, `explained_by` 2, `correlates_with` 1, `predicts` 1. 12 of them are correct.
@@ -155,6 +155,44 @@ Limits of this measure:
 
 No retrieval default changed here. The sample is too small to justify one, and the plan uses
 this step to decide how the product is described.
+
+## C6. A local embedding model (2026-11-05)
+
+Simplification plan step P4.3: `--embedder local`, in the `local-embeddings` extra, runs
+`BAAI/bge-small-en-v1.5` through fastembed and ONNX on the machine. `real_corpus.py eval --local`
+reproduces this.
+
+| Metric | Default | Local model, floor 0.2 | Local model, floor 0.8 |
+| --- | --- | --- | --- |
+| Topic hit rate @5 / MRR | 1.0 / 0.899 | 1.0 / 1.0 | 1.0 / 1.0 |
+| Paraphrase hit rate @5 / MRR | 0.833 / 0.750 | 1.0 / 0.917 | 1.0 / 0.917 |
+| Off-topic questions answered with nothing (first 3) | 1.0 | **0.0** | 1.0 |
+| Citation validity / location validity | 1.0 / 1.0 | not recorded | 1.0 / 1.0 |
+| Ingestion, 2,264 chunks | about 10 s | 144 s | 168 s |
+
+**The floor.** The vector channel does not pass through the keyword coverage check, so at the old
+floor of 0.2 every off-topic question returned passages. Each `Embedder` now carries its own
+`min_score`, and `LocalEmbedder` offers only models with a measured one.
+
+- **How 0.8 was chosen.** On the first 3 off-topic questions the top score reached 0.764, and
+  the one paraphrase that relies on the vector channel scored 0.802. Floors of 0.78 and 0.80 lose
+  nothing; 0.82 loses that paraphrase (0.833) and lowers topic MRR to 0.974.
+- **How it was checked.** 25 more off-topic questions, 10 far from finance and 15 close to it
+  (mortgages, catastrophe bonds, audit fees), were written before any of their scores were seen.
+  All 25 returned nothing. The highest top score among them was 0.731.
+
+What this does not show:
+- **One model on one corpus.** The floor is not transferable: a different model, or a much larger
+  corpus, needs measuring again.
+- **The margin is narrow on the answering side.** 0.802 against a floor of 0.8 is one paraphrase
+  passing by 0.002. Six paraphrases can't show how many a firm's questions would lose. In one
+  informal check on a one-paragraph note, a loosely worded on-topic question returned nothing.
+- **Hosted models have no measured floor.** They keep 0.2, so off-topic questions can return
+  passages with them.
+- **The model is not pinned to a file hash.** fastembed downloads it by name from Hugging Face on
+  first use.
+
+It stays off by default, as ingestion is about 15 times slower and the extra adds 28 packages.
 
 ## Known limitations (found here, not fixed)
 

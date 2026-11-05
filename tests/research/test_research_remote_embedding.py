@@ -2,6 +2,7 @@
 
 import json
 import math
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -9,13 +10,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from hashing_embedder import HashingEmbedder, mock_embedder
 from pydantic import SecretStr
 
 from quant_agent_os.tools import Permission
 from quant_research import ResearchQuery, open_research, research_tools
 from quant_research.config import EmbeddingSettings, make_embedder
 from quant_research.domain.vocabulary import EntityMatcher, load_vocabulary
-from quant_research.infrastructure.embedding import HashingEmbedder
+from quant_research.infrastructure.local_embedding import LocalEmbedder
 from quant_research.infrastructure.remote_embedding import (
     MAX_ATTEMPTS,
     EmbeddingServiceError,
@@ -218,22 +220,19 @@ def test_factory_builds_each_embedder_and_fails_fast_without_keys() -> None:
     keys = EmbeddingSettings(voyage_api_key=KEY, openai_api_key=KEY, _env_file=None)  # type: ignore[call-arg]
     none = EmbeddingSettings(_env_file=None)  # type: ignore[call-arg]
 
-    assert isinstance(make_embedder("hashing", VOCABULARY), HashingEmbedder)
-    assert isinstance(make_embedder("voyage", VOCABULARY, settings=keys), VoyageEmbedder)
-    openai = make_embedder("openai", VOCABULARY, model="text-embedding-3-large", settings=keys)
+    assert isinstance(make_embedder("voyage", settings=keys), VoyageEmbedder)
+    openai = make_embedder("openai", model="text-embedding-3-large", settings=keys)
     assert openai.model_id == "openai:text-embedding-3-large:3072"
     with pytest.raises(EmbeddingServiceError, match="needs VOYAGE_API_KEY"):
-        make_embedder("voyage", VOCABULARY, settings=none)
+        make_embedder("voyage", settings=none)
     with pytest.raises(EmbeddingServiceError, match="needs OPENAI_API_KEY"):
-        make_embedder("openai", VOCABULARY, settings=none)
-    with pytest.raises(EmbeddingServiceError, match="no model option"):
-        make_embedder("hashing", VOCABULARY, model="x")
+        make_embedder("openai", settings=none)
 
 
 def test_hosted_embedders_make_search_declare_the_network_permission() -> None:
     with (
         open_research(":memory:", embedder=_voyage(FakeApi())) as hosted,
-        open_research(":memory:", vector=True) as local,
+        open_research(":memory:", embedder=mock_embedder()) as local,
     ):
         hosted_search = research_tools(hosted.research)[0]
         local_search = research_tools(local.research)[0]
@@ -255,7 +254,7 @@ def test_end_to_end_with_a_simulated_voyage_api(corpus_dir: Path) -> None:
 
 
 def test_searching_with_a_model_the_store_was_not_built_with_warns(corpus_dir: Path) -> None:
-    with open_research(":memory:", vector=True) as research:
+    with open_research(":memory:", embedder=mock_embedder()) as research:
         research.ingest.ingest(corpus_dir)
     with open_research(":memory:", embedder=_voyage(FakeApi())) as other:
         other.ingest.store.upsert_entities(VOCABULARY.entities)
@@ -353,3 +352,46 @@ def test_the_search_tool_timeout_covers_the_query_budget() -> None:
         search = research_tools(research.research)[0]
 
     assert search.timeout_seconds == SEARCH_TIMEOUT > QUERY_EMBEDDING_SECONDS
+
+
+class FakeLocalModel:
+    """Stands in for a fastembed model: queries and documents get different vectors."""
+
+    def embed(self, texts: list[str]) -> list[tuple[float, ...]]:
+        return [(1.0, 0.0) for _ in texts]
+
+    def query_embed(self, texts: list[str]) -> list[tuple[float, ...]]:
+        return [(0.0, 1.0) for _ in texts]
+
+
+def test_the_local_embedder_separates_queries_and_keeps_its_measured_floor() -> None:
+    embedder = LocalEmbedder(backend=FakeLocalModel())
+
+    assert embedder.embed(["a", "b"]) == [[1.0, 0.0], [1.0, 0.0]]
+    assert embedder.embed(["a"], kind="query") == [[0.0, 1.0]]
+    assert embedder.model_id == "local:BAAI/bge-small-en-v1.5"
+    assert embedder.requires_network is False
+    assert embedder.min_score == 0.8
+
+
+def test_the_local_embedder_refuses_a_model_with_no_measured_floor() -> None:
+    with pytest.raises(EmbeddingServiceError, match="No measured score floor"):
+        LocalEmbedder("sentence-transformers/all-MiniLM-L6-v2", backend=FakeLocalModel())
+
+
+def test_the_local_embedder_says_how_to_install_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "fastembed", None)
+
+    with pytest.raises(EmbeddingServiceError, match="local-embeddings"):
+        LocalEmbedder()
+
+
+def test_the_floor_comes_from_the_embedder(corpus_dir: Path) -> None:
+    class Strict(HashingEmbedder):
+        min_score = 1.01  # nothing can reach it
+
+    embedder = Strict(EntityMatcher(VOCABULARY))
+    query = ResearchQuery(query="protein folding prediction accuracy")
+    with open_research(":memory:", embedder=embedder) as research:
+        research.ingest.ingest(corpus_dir)
+        assert research.research.find_related(query).passages == []

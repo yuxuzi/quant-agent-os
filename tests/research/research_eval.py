@@ -17,6 +17,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from hashing_embedder import mock_embedder
 from pdf_fixtures import build_corpus
 
 from quant_research import ResearchApp, ResearchQuery, open_research
@@ -98,11 +99,11 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 1.0
 
 
-def run(*, vector: bool = False, embedder: Embedder | None = None) -> dict[str, float]:
+def run(*, embedder: Embedder | None = None) -> dict[str, float]:
     """Build the fixture corpus, ingest it into a fresh store, and evaluate it."""
     with (
         tempfile.TemporaryDirectory() as tmp,
-        open_research(":memory:", vector=vector, embedder=embedder) as research,
+        open_research(":memory:", embedder=embedder) as research,
     ):
         corpus = build_corpus(Path(tmp))
         research.ingest.ingest(corpus)
@@ -115,14 +116,13 @@ def _option(name: str) -> str | None:
 
 if __name__ == "__main__":
     from quant_research.config import make_embedder
-    from quant_research.domain.vocabulary import load_vocabulary
 
     metrics = run()
-    report = {"default": metrics, "hashing": run(vector=True)}
+    report = {"default": metrics, "hashing": run(embedder=mock_embedder())}
     hosted = _option("--embedder")
     if hosted in ("voyage", "openai"):
         model = _option("--embedding-model")
-        embedder = make_embedder(hosted, load_vocabulary(), model=model)  # type: ignore[arg-type]
+        embedder = make_embedder(hosted, model=model)  # type: ignore[arg-type]
         report[embedder.model_id] = run(embedder=embedder)
     print(json.dumps(report, indent=2))
     if "--update" in sys.argv:

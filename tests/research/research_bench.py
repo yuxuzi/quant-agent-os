@@ -16,6 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from hashing_embedder import mock_embedder
 from mock_world import QUESTIONS, write_world
 
 from quant_research import ResearchQuery, open_research
@@ -32,7 +33,9 @@ def bench(copies: int, *, vector: bool) -> dict[str, float]:
     """Return ingestion seconds, store counts, and query latency in milliseconds."""
     with tempfile.TemporaryDirectory() as tmp:
         corpus = write_world(Path(tmp) / "corpus", copies=copies)
-        with open_research(Path(tmp) / "kb.db", vector=vector) as research:
+        with open_research(
+            Path(tmp) / "kb.db", embedder=mock_embedder() if vector else None
+        ) as research:
             started = time.perf_counter()
             result = research.ingest.ingest(corpus)
             ingest_seconds = time.perf_counter() - started

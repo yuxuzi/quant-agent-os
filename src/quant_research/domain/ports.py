@@ -61,12 +61,14 @@ class Embedder(Protocol):
 
     ``kind`` distinguishes stored passages from search queries, which some models embed
     differently. ``requires_network`` is true when embedding sends text to a remote service, so
-    tools that embed queries must declare the ``network`` permission.
+    tools that embed queries must declare the ``network`` permission. ``min_score`` is the lowest
+    cosine similarity that counts as evidence; it differs by model.
     """
 
     model_id: str
     dimensions: int
     requires_network: bool
+    min_score: float
 
     def embed(
         self,

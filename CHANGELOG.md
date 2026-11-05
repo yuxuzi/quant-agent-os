@@ -25,8 +25,18 @@ All notable changes to this project are documented here. The format follows
   instead of one new thread per call. A call beyond that returns `busy` with `retry_after_seconds`
   (REST: 503 with `Retry-After`), and spends no quota or approval. A timed-out call keeps its slot
   until its thread returns.
+- **A local embedder.** The new `local-embeddings` extra adds `--embedder local`: semantic search
+  with `BAAI/bge-small-en-v1.5` on your machine, off by default. On the 21 real papers it raises
+  topic MRR from 0.899 to 1.0 and paraphrase hits from 0.833 to 1.0, and still abstains on all 28
+  off-topic questions. Ingestion takes about 3 minutes instead of 10 seconds. It is not in the `all`
+  extra because `onnxruntime` has no Python 3.15 wheel.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
+
+### Removed
+
+- **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
+  was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
 
 ### Fixed
 

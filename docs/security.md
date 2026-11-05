@@ -36,7 +36,8 @@ sends data to that provider:
   `network` (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). The default policy refuses it.
 
 Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` and are held as `SecretStr`. Error messages name the variable, never its value. Use
-the offline `hashing` embedder, or none, for documents that must not leave the machine.
+the `local` embedder, or none, for documents that must not leave the machine. It sends no text
+anywhere. It downloads its model files from Hugging Face on first use, into `models/` in the home.
 
 ## Serving is read-only
 

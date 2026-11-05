@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import real_corpus
+from hashing_embedder import mock_embedder
 from pdf_fixtures import write_pdf
 from real_corpus import GOLD, LABELS, PAPERS, ablation, labels, papers, questions
 
@@ -236,7 +237,7 @@ def test_ablation_scores_every_channel_setting(
     ]
     monkeypatch.setattr(real_corpus, "questions", lambda: asked)
 
-    with open_research(":memory:", vector=True) as research:
+    with open_research(":memory:", embedder=mock_embedder()) as research:
         research.ingest.ingest(corpus_dir)
         result = ablation(research)
 

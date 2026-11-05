@@ -7,6 +7,7 @@ earnings drift, and order flow.
     uv run python tests/research/real_corpus.py fetch   # once, needs network
     uv run python tests/research/real_corpus.py eval    # offline
     uv run python tests/research/real_corpus.py eval --update
+    uv run python tests/research/real_corpus.py eval --local   # with the local-embeddings extra
     uv run python tests/research/real_corpus.py ablation   # what each channel contributes
     uv run python tests/research/real_corpus.py relations  # for labelling
 
@@ -31,11 +32,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from hashing_embedder import mock_embedder
 from research_eval import location_matches
 
 from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.application.retrieval import Channel, ResearchService
+from quant_research.config import make_embedder
 from quant_research.domain.extraction import is_prose, split_sentences
+from quant_research.domain.ports import Embedder
 from quant_research.domain.vocabulary import EntityMatcher
 
 HERE = Path(__file__).parent
@@ -223,7 +227,7 @@ def extraction_metrics(research: ResearchApp) -> dict[str, Any]:
     }
 
 
-def run(cache: Path | None = None) -> dict[str, Any]:
+def run(cache: Path | None = None, embedder: Embedder | None = None) -> dict[str, Any]:
     """Ingest the cached corpus into a fresh store and return every metric."""
     cache = cache or cache_dir()
     if absent := missing(cache):
@@ -231,7 +235,7 @@ def run(cache: Path | None = None) -> dict[str, Any]:
             f"{len(absent)} papers are missing from {cache}; run `real_corpus.py fetch` first."
         )
     logging.getLogger("pypdf").setLevel(logging.ERROR)  # font notices from re-extraction
-    with open_research(":memory:") as research:
+    with open_research(":memory:", embedder=embedder) as research:
         started = time.perf_counter()
         result = research.ingest.ingest(cache)
         ingest_seconds = round(time.perf_counter() - started, 1)
@@ -336,7 +340,7 @@ def _print_ablation(cache: Path) -> None:
     if absent := missing(cache):
         raise SystemExit(f"{len(absent)} papers are missing; run `real_corpus.py fetch` first.")
     logging.getLogger("pypdf").setLevel(logging.ERROR)
-    with open_research(":memory:", vector=True) as research:
+    with open_research(":memory:", embedder=mock_embedder()) as research:
         research.ingest.ingest(cache)
         result = ablation(research)
     settings = result.pop("settings")
@@ -376,7 +380,10 @@ if __name__ == "__main__":
     elif command == "ablation":
         _print_ablation(cache_dir())
     elif command == "eval":
-        metrics = run()
+        local = "--local" in sys.argv
+        if local and "--update" in sys.argv:
+            raise SystemExit("The baseline records the default, so --local cannot update it.")
+        metrics = run(embedder=make_embedder("local") if local else None)
         print(json.dumps(metrics, indent=2))
         if "--update" in sys.argv:
             scored = {name: metrics[name] for name in SCORED}

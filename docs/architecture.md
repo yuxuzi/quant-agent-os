@@ -367,10 +367,10 @@ enabled by default.
    - **Benchmark.** On the mock world at 3,000 documents and 15,000 relations, two-hop
      queries take 14 ms at p50 and 37 ms at p95 (`research_bench.py`).
 5. **Vector channel** (optional, off by default): cosine similarity between the query
-   embedding and the chunk embeddings of the same model, keeping hits of at least 0.2. The
-   `Embedder` port has three adapters:
-   - `HashingEmbedder`, an offline mock (feature hashing over words, word pairs, and
-     vocabulary entities), used in tests;
+   embedding and the chunk embeddings of the same model, keeping hits of at least the embedder's
+   `min_score` (0.8 for the measured local model, 0.2 for hosted models, which have no measured
+   floor). The `Embedder` port has three adapters:
+   - `LocalEmbedder`, fastembed and ONNX on this machine (the `local-embeddings` extra);
    - `VoyageEmbedder`, where `voyage-finance-2` is the default and any current Voyage model is
      allowed;
    - `OpenAIEmbedder`, using `text-embedding-3-small` or `-large`.
@@ -482,7 +482,7 @@ are:
   worker threads.
 - `TextFileLoader`, for Markdown and text with front matter, and `PdfLoader`, for PDF through
   pypdf.
-- `HashingEmbedder`, the offline mock embedder. `SqliteKnowledgeStore` also implements
+- `LocalEmbedder`, the on-machine embedder. `SqliteKnowledgeStore` also implements
   `VectorIndex` with exact brute-force cosine, which is fine for thousands of chunks.
 - DuckDB was considered and not chosen for this store. It suits the later analytics and
   backtest service (columnar scans over factor and price data) better than this workload of

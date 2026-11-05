@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hashing_embedder import mock_embedder
 
 from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.application.strategy import StrategyRequest, StrategyService
@@ -77,7 +78,7 @@ def reference(corpus_dir: Path) -> Iterator[ResearchApp]:
 @pytest.fixture(scope="module")
 def vector_reference(corpus_dir: Path) -> Iterator[ResearchApp]:
     """The reference with the offline vector channel (the embedder is part of the snapshot)."""
-    app = open_research(":memory:", vector=True)
+    app = open_research(":memory:", embedder=mock_embedder())
     app.ingest.ingest(corpus_dir)
     yield app
     app.close()
@@ -110,7 +111,7 @@ def test_every_retrieval_answer_equals_the_reference(
     backend: Backend, corpus_dir: Path, vector_reference: ResearchApp
 ) -> None:
     reference = vector_reference
-    with backend.open(vector=True) as app:
+    with backend.open(embedder=mock_embedder()) as app:
         app.ingest.ingest(corpus_dir)
         store, expected = app.store, reference.store
 
@@ -154,7 +155,7 @@ def test_vectors_round_trip_and_rank_like_the_reference(
     backend: Backend, corpus_dir: Path, vector_reference: ResearchApp
 ) -> None:
     reference = vector_reference
-    with backend.open(vector=True) as app:
+    with backend.open(embedder=mock_embedder()) as app:
         result = app.ingest.ingest(corpus_dir)
         assert app.embedder is not None and result.embedded == result.chunks
         model = app.embedder.model_id
