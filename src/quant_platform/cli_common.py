@@ -26,7 +26,7 @@ from quant_research.cli import EmbedderChoice
 from quant_research.config import make_embedder
 from quant_research.infrastructure.postgres_store import is_postgres_url
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 if TYPE_CHECKING:
     from quant_app_factory import AppFactory

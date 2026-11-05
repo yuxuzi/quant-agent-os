@@ -13,7 +13,12 @@ from typer.testing import CliRunner
 from quant_research import ResearchApp, ResearchQuery, open_research
 from quant_research.cli import app as cli
 from quant_research.domain.extraction import EXTRACTOR_VERSION
-from quant_research.infrastructure.sqlite_store import EDGES_PER_TRIPLE, SqliteKnowledgeStore
+from quant_research.infrastructure.sqlite_store import (
+    EDGES_PER_TRIPLE,
+    SqliteKnowledgeStore,
+    _create_fts,
+)
+from quant_research.infrastructure.store_common import StoreError
 
 
 def test_ingestion_reports_counts_and_skips_unsupported_files() -> None:
@@ -96,19 +101,28 @@ def test_expansion_respects_hops_and_confidence(research: ResearchApp) -> None:
     assert research.store.expand([], hops=2, min_confidence=0) == []
 
 
-def test_keyword_search_without_fts5_still_ranks_matches() -> None:
-    with open_research(":memory:") as research:
-        store = SqliteKnowledgeStore(":memory:")
-        store.has_fts = False
-        research.ingest.store = store
-        research.ingest.ingest(CORPUS)
+def test_keyword_search_with_nothing_to_search_for_finds_nothing(research: ResearchApp) -> None:
+    assert research.store.keyword_search("!!!", 3) == []
 
-        hits = store.keyword_search("bid-ask bounce", 3)
 
-        assert hits
-        assert "bounce" in store.get_chunk(hits[0].chunk_id).text  # type: ignore[union-attr]
-        assert store.keyword_search("!!!", 3) == []
-        store.close()
+def test_a_sqlite_without_fts5_is_refused_with_what_to_do() -> None:
+    class NoFts5:
+        def execute(self, statement: str) -> None:
+            raise sqlite3.OperationalError("no such module: fts5")
+
+    with pytest.raises(StoreError, match="needs SQLite's FTS5"):
+        _create_fts(NoFts5())  # type: ignore[arg-type]
+
+
+def test_a_read_only_store_with_no_keyword_index_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "kb.db"
+    SqliteKnowledgeStore(path).close()
+    db = sqlite3.connect(path)
+    db.execute("DROP TABLE chunks_fts")
+    db.close()
+
+    with pytest.raises(StoreError, match="no keyword index"):
+        SqliteKnowledgeStore(path, read_only=True)
 
 
 def test_cli_ingests_and_searches(tmp_path: Path) -> None:

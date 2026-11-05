@@ -28,7 +28,7 @@ from quant_research.infrastructure.postgres_store import (
     redact_url,
 )
 from quant_research.infrastructure.remote_embedding import EmbeddingServiceError
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 app = typer.Typer(
     help="Quant Research: build and query a Graph RAG knowledge store.", no_args_is_help=True

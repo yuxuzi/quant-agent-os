@@ -22,7 +22,7 @@ from quant_platform.cli_common import console, errors
 from quant_platform.composition import DEFAULT_TOOLSETS, available_toolsets
 from quant_research import open_research
 from quant_research.infrastructure.postgres_store import is_postgres_url
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 SAMPLE = Path(__file__).parent / "sample"
 SERVER_NAME = "quant-agent-os"

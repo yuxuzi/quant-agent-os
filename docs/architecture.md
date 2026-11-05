@@ -346,8 +346,8 @@ enabled by default.
    most 3 entities in the best keyword passage, report them as direct (`hops = 0`) results, and
    warn.
 2. **Keyword channel:** BM25 over chunks (SQLite FTS5; FTS5's BM25 computed in SQL on PostgreSQL),
-   using the query's content terms with stopwords removed. Without FTS5, a term-overlap scorer
-   is used.
+   using the query's content terms with stopwords removed. A SQLite without FTS5 is refused with a
+   clear message.
 3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
    topic rank well.
 4. **Graph channel:**

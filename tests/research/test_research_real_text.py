@@ -192,10 +192,8 @@ def test_a_query_naming_an_entity_is_never_filtered(tmp_path: Path) -> None:
     assert packet.passages
 
 
-@pytest.mark.parametrize("fts", [True, False])
-def test_term_frequencies_count_chunks_per_term(tmp_path: Path, fts: bool) -> None:
+def test_term_frequencies_count_chunks_per_term(tmp_path: Path) -> None:
     store = SqliteKnowledgeStore(":memory:")
-    store.has_fts = fts
     with open_research(":memory:") as research:
         research.ingest.store = store
         research.ingest.ingest(_store_with(tmp_path))

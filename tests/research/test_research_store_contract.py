@@ -25,7 +25,7 @@ from quant_research.infrastructure.postgres_store import (
     is_postgres_url,
     redact_url,
 )
-from quant_research.infrastructure.sqlite_store import StoreError
+from quant_research.infrastructure.store_common import StoreError
 
 POSTGRES_URL = os.environ.get("QUANT_RESEARCH_TEST_POSTGRES_URL")
 QUERIES = [
