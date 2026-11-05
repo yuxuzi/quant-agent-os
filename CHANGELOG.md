@@ -29,7 +29,6 @@ All notable changes to this project are documented here. The format follows
 - A hands-on [tutorial](docs/tutorial.md): eight labs with flow charts, sample data, things to
   try, and a feedback template. Its files are in `examples/tutorial/`.
 
-
 ## [0.1.1] - 2026-11-03
 
 A security release for remote servers: two of the security review's findings are fixed (F-1

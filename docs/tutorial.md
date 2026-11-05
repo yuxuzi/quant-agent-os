@@ -214,7 +214,9 @@ uv run quant-agent-os dataset list
 
 ```text
 Added dataset fund: 36 rows, columns fund, benchmark (sha256 cab59d43f0a99633).
+Its dates show 12 periods per year.
 Added dataset portfolio: 36 rows, columns equities, bonds, gold, market, rates (sha256 137459bf5cc09216).
+Its dates show 12 periods per year.
 ```
 
 Now compute:
@@ -257,7 +259,8 @@ Risk of 60-30-10: volatility 7.15% a year
 | Change `WEIGHTS` at the top of [lab_analytics.py](../examples/tutorial/lab_analytics.py), then rerun (undo it afterwards with `git checkout examples/tutorial/lab_analytics.py`) | New risk shares |
 | Use your own returns: `uv run quant-agent-os dataset push my.csv --id fund`, with columns `fund` and `benchmark` | Your own metrics and a new data version |
 | Push only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run quant-agent-os dataset push "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Push the full file again afterwards, because later labs use it |
-| Push a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a finite number.` |
+| Push a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
+| Blank out one `fund` cell in a copy of the file, and push it as `fund` | It loads and says one cell is missing. `Warnings:` says one row was left out, and nothing is filled in |
 
 ---
 
