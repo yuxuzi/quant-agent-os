@@ -71,7 +71,7 @@ The [walkthrough](docs/walkthrough.md) goes from a clean checkout to cited answe
 Code or Claude Desktop, with the recorded runs and known limitations. In short, without a clone:
 
 ```bash
-uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.2.0"
+uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.2.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; `qaos doctor` explains anything missing
