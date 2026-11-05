@@ -155,6 +155,14 @@ class KnowledgeStore(Protocol):
         """Insert or update canonical entities."""
         ...
 
+    def prune_entities(self, keep: Iterable[str]) -> None:
+        """Delete entities outside ``keep`` that no mention or relation refers to."""
+        ...
+
+    def all_entities(self) -> list[Entity]:
+        """Return every stored entity, by id."""
+        ...
+
     def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:
         """Atomically build the snapshot from the stored document hashes and make it current.
 

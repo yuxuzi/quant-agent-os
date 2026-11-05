@@ -127,3 +127,30 @@ def test_serving_without_recording_writes_no_run_store(corpus_dir: Path, tmp_pat
         "No runs recorded"
         in CliRunner().invoke(cli, ["runs", "--runs", str(tmp_path / "runs.db")]).output
     )
+
+
+def test_ingest_takes_a_firm_vocabulary_and_refuses_a_bad_one(
+    corpus_dir: Path, tmp_path: Path
+) -> None:
+    runner = CliRunner()
+    store = tmp_path / "kb.db"
+    bad = tmp_path / "bad.toml"
+    bad.write_text('version = "x"\nentities = []\n', "utf-8")
+
+    refused = runner.invoke(
+        cli, ["ingest", str(corpus_dir), "--store", str(store), "--vocabulary", str(bad)]
+    )
+    assert refused.exit_code == 1
+    assert "bad.toml" in refused.stderr
+    assert not store.exists()
+
+    firm = tmp_path / "firm.toml"
+    firm.write_text(
+        'version = "firm-1"\n[[entities]]\nid = "signal:desk"\ntype = "signal"\nname = "Desk"\n',
+        "utf-8",
+    )
+    done = runner.invoke(
+        cli, ["ingest", str(corpus_dir), "--store", str(store), "--vocabulary", str(firm)]
+    )
+    assert done.exit_code == 0, done.output
+    assert "quant-v1+firm-1." in done.output

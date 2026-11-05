@@ -453,6 +453,25 @@ class PostgresKnowledgeStore:
             )
 
     @_locked
+    def prune_entities(self, keep: Iterable[str]) -> None:
+        """Delete entities outside ``keep`` that no mention or relation refers to."""
+        self._writable()
+        with self._db.transaction():
+            self._db.execute(
+                "DELETE FROM entities WHERE NOT id = ANY(%s) "
+                "AND id NOT IN (SELECT entity_id FROM mentions) "
+                "AND id NOT IN (SELECT subject_id FROM relations) "
+                "AND id NOT IN (SELECT object_id FROM relations)",
+                (sorted(set(keep)),),
+            )
+
+    @_locked
+    def all_entities(self) -> list[Entity]:
+        """Return every stored entity, by id."""
+        rows = self._db.execute("SELECT * FROM entities ORDER BY id")
+        return [Entity.model_validate(row) for row in rows]
+
+    @_locked
     def publish_snapshot(self, build: Callable[[list[str]], CorpusSnapshot]) -> CorpusSnapshot:
         """Build the snapshot from the current documents and publish it under one lock.
 

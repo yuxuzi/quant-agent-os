@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import tomllib
 from dataclasses import dataclass
@@ -34,15 +36,17 @@ class Match:
 
 
 BUNDLED = "quant-v1"
+FIRM_SEPARATOR = "+"
 
 
 def load_vocabulary(path: Path | None = None) -> Vocabulary:
     """Load a vocabulary TOML file, or the bundled ``quant-v1`` vocabulary by default."""
-    if path is None:
-        text = files("quant_research").joinpath(f"vocabularies/{BUNDLED}.toml").read_text("utf-8")
-    else:
-        text = path.read_text("utf-8")
     try:
+        if path is None:
+            source = files("quant_research").joinpath(f"vocabularies/{BUNDLED}.toml")
+            text = source.read_text("utf-8")
+        else:
+            text = path.read_text("utf-8")
         vocabulary = Vocabulary.model_validate(tomllib.loads(text))
     except (tomllib.TOMLDecodeError, ValueError) as error:
         raise VocabularyError(f"Invalid vocabulary {path or BUNDLED}: {error}") from error
@@ -51,6 +55,26 @@ def load_vocabulary(path: Path | None = None) -> Vocabulary:
     if duplicates:
         raise VocabularyError(f"Duplicate vocabulary ids: {', '.join(duplicates)}.")
     return vocabulary
+
+
+def merge_vocabulary(base: Vocabulary, firm: Vocabulary) -> Vocabulary:
+    """Return ``base`` plus ``firm``'s entities; a firm entity replaces one with the same id.
+
+    The version names both and a digest of the firm's entities, so editing them re-processes
+    the corpus even if the file's own version did not change.
+    """
+    canonical = json.dumps([entity.model_dump() for entity in firm.entities], sort_keys=True)
+    digest = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+    merged = {entity.id: entity for entity in [*base.entities, *firm.entities]}
+    return Vocabulary(
+        version=f"{base.version}{FIRM_SEPARATOR}{firm.version}.{digest}",
+        entities=list(merged.values()),
+    )
+
+
+def has_firm_terms(version: str) -> bool:
+    """Return whether a vocabulary version came from `merge_vocabulary`."""
+    return FIRM_SEPARATOR in version
 
 
 class EntityMatcher:

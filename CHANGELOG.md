@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 - **Parquet datasets.** With the new `parquet` extra (pandas and pyarrow), `qaos data add` takes a
   `.parquet` or `.pq` file. It is converted to CSV when added, so tools and the server are unchanged,
   and the fingerprint is the stored CSV's. The dataset limits still apply.
+- **A firm vocabulary.** `qaos ingest DIR --vocabulary firm.toml` merges your own signal and factor
+  names over the bundled vocabulary. The store keeps the result, so serving and later ingestion match
+  what ingestion saw.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
 

@@ -63,6 +63,11 @@ qaos data add returns.csv         # the id is the file's name, or use --id
   `QUANT_AGENT_OS_STORE`. Without a store, the server still starts, without the research tools,
   and says so.
 - **To try it first,** `qaos init --sample` loads a small corpus and a dataset.
+- **Your own terms.** `qaos ingest ~/research --vocabulary firm.toml` adds your signal and factor
+  names to the bundled vocabulary. The store keeps them, so serving and later ingestion use them
+  without the option, and changing the file re-processes the corpus. The format is the bundled
+  [`quant-v1.toml`](../src/quant_research/vocabularies/quant-v1.toml); an entity with a bundled id
+  replaces it.
 
 ## 3. Ask
 

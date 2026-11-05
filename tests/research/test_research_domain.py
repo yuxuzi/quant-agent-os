@@ -4,12 +4,15 @@ import pytest
 
 from quant_research.domain.chunking import MAX_CHUNK_CHARS, MIN_CHUNK_CHARS, split_passages
 from quant_research.domain.extraction import RuleExtractor
-from quant_research.domain.models import Chunk
+from quant_research.domain.models import Chunk, Entity
 from quant_research.domain.text import content_terms
 from quant_research.domain.vocabulary import (
     EntityMatcher,
+    Vocabulary,
     VocabularyError,
+    has_firm_terms,
     load_vocabulary,
+    merge_vocabulary,
 )
 
 VOCABULARY = load_vocabulary()
@@ -233,3 +236,23 @@ def test_negations_away_from_the_cue_do_not_suppress_the_relation(
     text: str, expected: tuple[str, str, str]
 ) -> None:
     assert _relations(text) == [expected]
+
+
+def test_a_firm_vocabulary_adds_entities_and_replaces_by_id() -> None:
+    entity = VOCABULARY.entities[0]
+    firm = Vocabulary(
+        version="firm-1",
+        entities=[
+            entity.model_copy(update={"aliases": ["house value"]}),
+            Entity(id="signal:desk", type="signal", name="Desk signal"),
+        ],
+    )
+
+    merged = merge_vocabulary(VOCABULARY, firm)
+    by_id = {e.id: e for e in merged.entities}
+
+    assert has_firm_terms(merged.version) and not has_firm_terms(VOCABULARY.version)
+    assert len(merged.entities) == len(VOCABULARY.entities) + 1
+    assert by_id[entity.id].aliases == ["house value"]
+    edited = firm.model_copy(update={"entities": firm.entities[:1]})
+    assert merge_vocabulary(VOCABULARY, edited).version != merged.version
