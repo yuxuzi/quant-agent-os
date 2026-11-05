@@ -43,7 +43,7 @@ def dataset_tools(store: DatasetStore) -> list[ToolSpec[Any, Any]]:
         infos = [store.get(dataset_id).info() for dataset_id in ids]
         return DatasetList(
             datasets=infos,
-            warnings=[] if infos else ["No datasets have been added; see `dataset push`."],
+            warnings=[] if infos else ["No datasets have been added; see `qaos data add`."],
             data_versions={f"dataset:{info.id}": info.fingerprint for info in infos},
         )
 

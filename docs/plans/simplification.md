@@ -10,6 +10,8 @@ wrong.
 
 **Status.** P0 is released in 0.1.2. P1 and P2 are released in 0.2.0: see decisions 0016, 0017, and
 0018; the `research` and `hosted` extras were left out because they would be empty.
+P3 is on `main`, unreleased, except Parquet (P3.3), which awaits the owner's decision on a new
+dependency.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.

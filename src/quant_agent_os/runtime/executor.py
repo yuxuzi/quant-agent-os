@@ -96,6 +96,29 @@ class ToolCallRecord(BaseModel):
     retry_after_seconds: int | None = None
     error_detail: str | None = None
 
+    def result(self) -> dict[str, Any]:
+        """Return the tool's output, or raise `ToolCallError` when the call did not succeed."""
+        if self.status != "ok":
+            raise ToolCallError(self)
+        return self.output or {}
+
+
+class ToolCallError(RuntimeError):
+    """A failed call, raised by `ToolCallRecord.result` for code that wants an exception.
+
+    Carries the ``status``, ``error``, and what to do next (``hint``, ``retryable``), and the whole
+    ``record``. The executor and interfaces never raise this: they report the record.
+    """
+
+    def __init__(self, record: ToolCallRecord) -> None:
+        hint, retryable = FAILURE_HINTS[record.status]
+        self.record = record
+        self.status: CallStatus = record.status
+        self.error = record.error
+        self.hint = hint.format(tools="see the error")
+        self.retryable = retryable
+        super().__init__(f"{record.tool} returned {record.status}: {record.error} {self.hint}")
+
 
 # Errors a caller can act on: tools raise these for bad requests, with a message meant for the
 # caller. KeyError and IndexError are lookups too, but they almost always mean a bug.

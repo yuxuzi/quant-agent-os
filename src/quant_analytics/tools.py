@@ -181,7 +181,7 @@ def _common_rows(
     if undated:
         raise ValueError(
             f"Dataset {', '.join(repr(name) for name in undated)} has no dates, so it cannot be "
-            "aligned with another dataset. Add a date column (`dataset push --index`), or put "
+            "aligned with another dataset. Add a date column (`qaos data add --index`), or put "
             "the series in one file."
         )
     use_dates = all(table.dates is not None for table in tables)

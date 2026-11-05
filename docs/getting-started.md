@@ -80,6 +80,46 @@ run `qaos catalog`.
   [clients/](../clients/README.md).
 - **A team server over REST,** in Docker, with API keys: see [deployment.md](deployment.md).
 
+## Use it from a notebook
+
+Install into the notebook's own environment, not with `uv tool install`, because a kernel cannot
+import a tool's environment. The `analytics` extra brings pandas. `open_platform` is new since
+0.2.0, so until the next release, install from `main`:
+
+```bash
+uv init --python 3.13 my-research && cd my-research     # in a project you have: uv python pin 3.13
+uv add "quant-agent-os[analytics] @ git+https://github.com/yuxuzi/quant-agent-os@main"
+```
+
+```python
+from quant_agent_os.sdk import ToolCallError
+from quant_platform import open_platform
+
+platform = open_platform()  # the home's knowledge store and datasets, and its run log
+platform.data.put("fund", returns)  # `returns` is a DataFrame with one column per series
+
+series = {"dataset": "fund", "column": "fund"}
+output = platform.call("analyze_performance", returns=series).result()
+output["metrics"]["sharpe_ratio"], output["periods_per_year"], output["warnings"]
+
+platform.call("find_related_signals", query="short-term reversal").result()["passages"]
+
+try:
+    platform.call("analyze_performance", returns={"dataset": "absent", "column": "fund"}).result()
+except ToolCallError as failure:
+    failure.status, failure.hint
+```
+
+A frame gets the same checks as a CSV file: the index gives the dates and the frequency, series
+are joined on it, and missing values are left out with a warning. Sort dates oldest first, and keep
+one column per series. `put` keeps a copy for this session and writes nothing to the home; to keep a
+dataset, use `qaos data add`. A run records the frame's fingerprint, but not the frame.
+
+`result()` returns the output or raises `ToolCallError`, while `record.status` and `record.error`
+hold the same failure if you prefer to check. Every call shows in `qaos runs`, with the same
+permissions as `qaos serve`. If the home has no knowledge store, `open_platform` warns, and the
+analytics tools still work.
+
 ## Use it from Python
 
 The SDK calls the same tools through the same executor. `Platform.report` runs named calls as one

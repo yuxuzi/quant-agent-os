@@ -51,7 +51,8 @@ class Platform:
     ) -> ToolCallRecord:
         """Call ``tool`` once and return its record; failures are recorded, never raised.
 
-        Arguments come as a mapping, as keywords, or both (keywords win).
+        Arguments come as a mapping, as keywords, or both (keywords win). ``record.result()``
+        returns the output, or raises `ToolCallError` for a failed call.
         """
         step = ToolCall(tool=tool, arguments={**(arguments or {}), **kwargs})
         return self.recorder.call(self.executor, step)

@@ -30,6 +30,7 @@ It has two products built on one core platform:
 | Skills and client packaging | Implemented: four instruction-only skills kept in step with the server by tests, a Claude Code plugin, and Cursor and VS Code bundles ([getting started](docs/getting-started.md)) |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `qaos serve` records every call (`qaos runs`) |
+| Notebook path: `open_platform`, DataFrames by reference, `record.result()` | Implemented, unreleased; see [getting started](docs/getting-started.md#use-it-from-a-notebook) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
 | Quant Research (Graph RAG) | Implemented over SQLite or PostgreSQL with pgvector (same answers; `quant-agent-os[postgres]`): ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
 | Quant App Factory | Foundation implemented: `qaos app plan/create`, `create_app` for the terminal, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
