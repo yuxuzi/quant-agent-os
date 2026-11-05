@@ -23,7 +23,7 @@ Start with the small sample corpus: six short notes on reversal, momentum, order
 and earnings drift, one of them a prompt-injection test. Step 7 uses your own documents.
 
 ```bash
-uv run quant-research ingest packages/quant-research/tests/fixtures/corpus --store ~/qr-demo/kb.db
+uv run qaos ingest src/quant_platform/sample/corpus --store ~/qr-demo/kb.db
 ```
 
 Ingestion runs offline:
@@ -36,7 +36,7 @@ Ingestion runs offline:
 ## 3. Ask from the terminal
 
 ```bash
-uv run quant-research search "What is related to short-term reversal?" --store ~/qr-demo/kb.db
+uv run qaos search "What is related to short-term reversal?" --store ~/qr-demo/kb.db
 ```
 
 ```text
@@ -60,7 +60,7 @@ Use absolute paths, because the client starts the server from its own working di
 
 ```bash
 claude mcp add quant-research -- \
-  uv run --directory "$PWD" quant-research serve-mcp --store ~/qr-demo/kb.db
+  uv run --directory "$PWD" qaos serve --toolsets research --store ~/qr-demo/kb.db
 ```
 
 ## 5. Or connect Claude Desktop
@@ -76,7 +76,7 @@ the paths with your own.
       "command": "/Users/you/.local/bin/uv",
       "args": [
         "run", "--directory", "/Users/you/quant-agent-os",
-        "quant-research", "serve-mcp", "--store", "/Users/you/qr-demo/kb.db"
+        "qaos", "serve", "--toolsets", "research", "--store", "/Users/you/qr-demo/kb.db"
       ]
     }
   }
@@ -115,7 +115,7 @@ at the default confidence, and that parameters must be set from the key passages
 a draft to review, not code. To see it in the terminal, run:
 
 ```bash
-uv run quant-research strategy "short-term reversal" --store ~/qr-demo/kb.db
+uv run qaos strategy "short-term reversal" --store ~/qr-demo/kb.db
 ```
 
 For the off-topic question, the server returns no passages and a warning that nothing in the
@@ -129,8 +129,8 @@ unless you choose a hosted `--embedder`. Its tools are marked read-only to the c
 Every MCP call is a run in `runs.db` beside the store:
 
 ```bash
-uv run quant-research runs --store ~/qr-demo/kb.db
-uv run quant-research runs <RUN_ID> --store ~/qr-demo/kb.db
+uv run qaos runs
+uv run qaos runs <RUN_ID>
 ```
 
 ```text
@@ -152,7 +152,7 @@ the corpus itself ([security.md](security.md#run-records)). Pass `--no-record` t
 ## 8. Use your own documents
 
 ```bash
-uv run quant-research ingest ~/research --store ~/research/.kb.db
+uv run qaos ingest ~/research --store ~/research/.kb.db
 ```
 
 Point the Claude configuration at the new store. Re-run `ingest` whenever you add or change
@@ -163,8 +163,8 @@ downloads 21 pinned arXiv papers once and scores retrieval and extraction offlin
 ([plans/real-corpus-eval.md](plans/real-corpus-eval.md)):
 
 ```bash
-uv run python packages/quant-research/tests/real_corpus.py fetch
-uv run python packages/quant-research/tests/real_corpus.py eval
+uv run python tests/research/real_corpus.py fetch
+uv run python tests/research/real_corpus.py eval
 ```
 
 ## 9. From Python
@@ -192,20 +192,20 @@ Or call the tools over REST, for a web app or another language. Create a key; it
 once, and only its hash is stored:
 
 ```bash
-KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call)
-uv run quant-research serve-api --store ~/qr-demo/kb.db &        # http://127.0.0.1:8000
+KEY=$(uv run qaos keys new --principal me --scope tools:list --scope tools:call)
+uv run qaos serve --http --toolsets research --store ~/qr-demo/kb.db &        # http://127.0.0.1:8000
 curl -s -H "Authorization: Bearer $KEY" -X POST \
   http://127.0.0.1:8000/v1/tools/generate_strategy/call \
   -H 'content-type: application/json' -d '{"arguments": {"focus": "short-term reversal"}}'
 ```
 
 The result is the same as the MCP result. The call is recorded as a run with actor `rest` and
-principal `me` (`quant-research runs`).
+principal `me` (`qaos runs`).
 
 ## 10. Generate a tool package
 
 Quant App Factory creates a new, tested project from a small spec. Let it ask the questions
-(`uv run quant-factory new`), or write the spec yourself:
+(`uv run qaos app new`), or write the spec yourself:
 
 ```bash
 cat > ~/qr-demo/signal-tools.toml <<'TOML'
@@ -217,8 +217,8 @@ output_dir = "."
 tool_name = "count_signals"
 quant_agent_os_source = "/path/to/quant-agent-os"   # this checkout; omit to use the git repository
 TOML
-uv run quant-factory plan ~/qr-demo/signal-tools.toml
-uv run quant-factory create ~/qr-demo/signal-tools.toml
+uv run qaos app plan ~/qr-demo/signal-tools.toml
+uv run qaos app create ~/qr-demo/signal-tools.toml
 ```
 
 What the two commands do:
@@ -247,15 +247,15 @@ edge is the expected result.
 never secrets):
 
 ```bash
-uv run quant-factory settings set identity.author "Ada Lovelace"
-uv run quant-factory settings set connections.local-prices.kind sqlite
-uv run quant-factory settings set connections.local-prices.database "$PWD/prices.db"
+uv run qaos app settings set identity.author "Ada Lovelace"
+uv run qaos app settings set connections.local-prices.kind sqlite
+uv run qaos app settings set connections.local-prices.database "$PWD/prices.db"
 ```
 
 For PostgreSQL, also set `host`, `port`, `user`, and `schema`. Set `password_env` to the
 *name* of the environment variable that holds the password, never the password itself.
 
-For a first look, `uv run quant-factory new quant-research my-lab --defaults` takes every
+For a first look, `uv run qaos app new quant-research my-lab --defaults` takes every
 default and creates the project after one confirmation (`--yes` skips it in scripts). Steps 2
 and 3 do the same with your own answers.
 
@@ -263,7 +263,7 @@ and 3 do the same with your own answers.
 that do not apply:
 
 ```bash
-uv run quant-factory new --template quant-baseline -o lab.toml
+uv run qaos app new --template quant-baseline -o lab.toml
 ```
 
 ```text
@@ -284,7 +284,7 @@ components = ["data-database"]
 **3. Create it, and check the connection.** Your yes is the recorded approval:
 
 ```bash
-uv run quant-factory create lab.toml --check-connection
+uv run qaos app create lab.toml --check-connection
 ```
 
 ```text
@@ -348,10 +348,10 @@ book rebalances monthly, so turnover is about a tenth of a daily book's.
 it by name:
 
 ```bash
-uv run quant-factory template fork quant-baseline/quant-research packs/desk-research --profile-id desk
+uv run qaos app template fork quant-baseline/quant-research packs/desk-research --profile-id desk
 #   ok  desk (31 files)
 #   Registered template 'desk-research': use template = "desk-research" in a spec.
-uv run quant-factory template check desk-research   # after each edit
+uv run qaos app template check desk-research   # after each edit
 ```
 
 Each part of the pack has one job:
@@ -359,7 +359,7 @@ Each part of the pack has one job:
 - **`template/`:** add or edit files there, and use answers as `{{ name }}`.
 - **`components/`:** add a component there.
 
-`quant-factory template add gh:your-org/quant-packs --name firm --ref v1.0.0` registers a pack
+`qaos app template add gh:your-org/quant-packs --name firm --ref v1.0.0` registers a pack
 from git, pinned to a tag and cached locally, so plans stay offline.
 
 ## Known limitations

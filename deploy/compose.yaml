@@ -5,7 +5,7 @@
 #   docker compose -f deploy/compose.yaml run --rm keys new --principal alice \
 #       --scope tools:list --scope tools:call
 #   DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm datasets \
-#       push /import/returns.csv --id returns
+#       add /import/returns.csv --id returns
 #   docker compose -f deploy/compose.yaml up -d server
 #
 # The server answers MCP at /mcp and REST at /v1 (decision 0012).
@@ -43,10 +43,10 @@ services:
   ingest:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-research", "ingest"]
+    entrypoint: ["qaos", "ingest"]
     command: ["/corpus", "--store", "/data/knowledge/kb.db"]
     volumes:
-      - ${CORPUS:-../packages/quant-research/tests/fixtures/corpus}:/corpus:ro
+      - ${CORPUS:-../src/quant_platform/sample/corpus}:/corpus:ro
       - knowledge:/data/knowledge
     network_mode: none
     cap_drop: [ALL]
@@ -55,11 +55,11 @@ services:
   datasets:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-agent-os", "dataset"]
+    entrypoint: ["qaos", "data"]
     command: ["--help"]
     volumes:
       - datasets:/data/datasets
-      - ${DATASETS_SOURCE:-./sample-data}:/import:ro
+      - ${DATASETS_SOURCE:-../src/quant_platform/sample/datasets}:/import:ro
     network_mode: none
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -67,7 +67,7 @@ services:
   keys:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-agent-os", "api-key"]
+    entrypoint: ["qaos", "keys"]
     command: ["--help"]
     volumes:
       - keys:/keys
@@ -78,7 +78,7 @@ services:
   runs:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-research", "runs", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "runs", "--runs", "/data/runs/runs.db"]
     command: []
     volumes:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
@@ -89,7 +89,7 @@ services:
   usage:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-platform", "hosted", "usage", "export", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "hosted", "usage", "export", "--runs", "/data/runs/runs.db"]
     command: []
     volumes:
       - runs:/data/runs

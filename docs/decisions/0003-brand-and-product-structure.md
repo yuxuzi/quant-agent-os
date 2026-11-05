@@ -1,6 +1,6 @@
 # 0003: Quant-Agent-OS is the brand and platform, with two products
 
-- Status: proposed
+- Status: proposed; its packaging is superseded by [0018](0018-one-wheel.md)
 - Date: 2026-10-30
 - Supersedes: the QuantFoundry umbrella and the Quant AI Assistant app in the earlier plan
 

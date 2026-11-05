@@ -49,15 +49,6 @@ starlette = "2026-10-16T00:00:00Z"
 tzdata = "2026-10-18T00:00:00Z"
 wcwidth = "2026-10-16T00:00:00Z"
 
-[manifest]
-members = [
-    "quant-agent-os",
-    "quant-agent-os-analytics",
-    "quant-agent-os-factory",
-    "quant-agent-os-platform",
-    "quant-agent-os-research",
-]
-
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -1862,157 +1853,30 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "empyrical-reloaded" },
+    { name = "fastapi" },
+    { name = "mcp" },
+    { name = "opentelemetry-api" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pypdf" },
+    { name = "pytemplate-uv" },
+    { name = "uvicorn" },
+]
+analytics = [
+    { name = "empyrical-reloaded" },
+]
 api = [
     { name = "fastapi" },
     { name = "opentelemetry-api" },
     { name = "uvicorn" },
 ]
+factory = [
+    { name = "pytemplate-uv" },
+]
 mcp = [
     { name = "mcp" },
     { name = "opentelemetry-api" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "quant-agent-os", extra = ["api", "mcp"] },
-    { name = "quant-agent-os-analytics" },
-    { name = "quant-agent-os-factory" },
-    { name = "quant-agent-os-platform", extra = ["factory"] },
-    { name = "quant-agent-os-research", extra = ["pdf", "postgres"] },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.20,<2" },
-    { name = "opentelemetry-api", marker = "extra == 'api'", specifier = ">=1.30,<2" },
-    { name = "opentelemetry-api", marker = "extra == 'mcp'", specifier = ">=1.30,<2" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-settings", specifier = ">=2.4" },
-    { name = "rich", specifier = ">=13.7" },
-    { name = "typer", specifier = ">=0.12" },
-    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30,<1" },
-]
-provides-extras = ["mcp", "api"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.11" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "quant-agent-os", extras = ["api", "mcp"], editable = "." },
-    { name = "quant-agent-os-analytics", editable = "packages/quant-analytics" },
-    { name = "quant-agent-os-factory", editable = "packages/quant-app-factory" },
-    { name = "quant-agent-os-platform", extras = ["factory"], editable = "apps/quant-platform" },
-    { name = "quant-agent-os-research", extras = ["pdf", "postgres"], editable = "packages/quant-research" },
-    { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
-name = "quant-agent-os-analytics"
-version = "0.1.2"
-source = { editable = "packages/quant-analytics" }
-dependencies = [
-    { name = "empyrical-reloaded" },
-    { name = "pydantic" },
-    { name = "quant-agent-os" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "empyrical-reloaded", specifier = ">=0.7,<0.8" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "quant-agent-os", editable = "." },
-]
-
-[[package]]
-name = "quant-agent-os-factory"
-version = "0.1.2"
-source = { editable = "packages/quant-app-factory" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pytemplate-uv" },
-    { name = "quant-agent-os" },
-    { name = "rich" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-mcp = [
-    { name = "quant-agent-os", extra = ["mcp"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pytemplate-uv", specifier = ">=3.0,<4" },
-    { name = "quant-agent-os", editable = "." },
-    { name = "quant-agent-os", extras = ["mcp"], marker = "extra == 'mcp'", editable = "." },
-    { name = "rich", specifier = ">=13.7" },
-    { name = "typer", specifier = ">=0.12" },
-]
-provides-extras = ["mcp"]
-
-[[package]]
-name = "quant-agent-os-platform"
-version = "0.1.2"
-source = { editable = "apps/quant-platform" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "quant-agent-os", extra = ["api", "mcp"] },
-    { name = "quant-agent-os-analytics" },
-    { name = "quant-agent-os-research" },
-    { name = "rich" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-factory = [
-    { name = "quant-agent-os-factory" },
-]
-pdf = [
-    { name = "quant-agent-os-research", extra = ["pdf"] },
-]
-postgres = [
-    { name = "quant-agent-os-research", extra = ["postgres"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "quant-agent-os", extras = ["api", "mcp"], editable = "." },
-    { name = "quant-agent-os-analytics", editable = "packages/quant-analytics" },
-    { name = "quant-agent-os-factory", marker = "extra == 'factory'", editable = "packages/quant-app-factory" },
-    { name = "quant-agent-os-research", editable = "packages/quant-research" },
-    { name = "quant-agent-os-research", extras = ["pdf"], marker = "extra == 'pdf'", editable = "packages/quant-research" },
-    { name = "quant-agent-os-research", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/quant-research" },
-    { name = "rich", specifier = ">=13.7" },
-    { name = "typer", specifier = ">=0.12" },
-]
-provides-extras = ["factory", "pdf", "postgres"]
-
-[[package]]
-name = "quant-agent-os-research"
-version = "0.1.2"
-source = { editable = "packages/quant-research" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "quant-agent-os" },
-    { name = "rich" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-api = [
-    { name = "quant-agent-os", extra = ["api"] },
-]
-mcp = [
-    { name = "quant-agent-os", extra = ["mcp"] },
 ]
 pdf = [
     { name = "pypdf" },
@@ -2020,20 +1884,50 @@ pdf = [
 postgres = [
     { name = "psycopg", extra = ["binary"] },
 ]
+server = [
+    { name = "fastapi" },
+    { name = "mcp" },
+    { name = "opentelemetry-api" },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "quant-agent-os", extra = ["all"] },
+    { name = "ruff" },
+]
 
 [package.metadata]
 requires-dist = [
+    { name = "empyrical-reloaded", marker = "extra == 'analytics'", specifier = ">=0.7,<0.8" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115,<1" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.20,<2" },
+    { name = "opentelemetry-api", marker = "extra == 'api'", specifier = ">=1.30,<2" },
+    { name = "opentelemetry-api", marker = "extra == 'mcp'", specifier = ">=1.30,<2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
-    { name = "quant-agent-os", editable = "." },
-    { name = "quant-agent-os", extras = ["api"], marker = "extra == 'api'", editable = "." },
-    { name = "quant-agent-os", extras = ["mcp"], marker = "extra == 'mcp'", editable = "." },
+    { name = "pytemplate-uv", marker = "extra == 'factory'", specifier = ">=3.0,<4" },
+    { name = "quant-agent-os", extras = ["analytics", "factory", "pdf", "postgres", "server"], marker = "extra == 'all'" },
+    { name = "quant-agent-os", extras = ["api", "mcp"], marker = "extra == 'server'" },
     { name = "rich", specifier = ">=13.7" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["pdf", "mcp", "api", "postgres"]
+provides-extras = ["mcp", "api", "server", "pdf", "postgres", "analytics", "factory", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.11" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "quant-agent-os", extras = ["all"] },
+    { name = "ruff", specifier = ">=0.6" },
+]
 
 [[package]]
 name = "questionary"

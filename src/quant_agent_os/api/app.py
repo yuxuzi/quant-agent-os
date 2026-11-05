@@ -27,7 +27,7 @@ from quant_agent_os.tools.registry import ToolRegistry
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-INSTALL_HINT = "install the API extra: uv add 'quant-agent-os[api]'"
+INSTALL_HINT = "install the quant-agent-os[server] extra"
 MAX_REQUEST_BYTES = 5 * 1024 * 1024
 MAX_RUNS = 100
 

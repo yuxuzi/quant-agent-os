@@ -325,7 +325,7 @@ def test_bad_key_files_and_principals_are_refused(tmp_path: Path) -> None:
     entry = f'[[keys]]\nprincipal = "a"\nsha256 = "{"0" * 64}"\nscopes = ["runs:read"]\n'
     twice.write_text(entry + entry)
 
-    with pytest.raises(ApiKeyError, match="api-key new"):
+    with pytest.raises(ApiKeyError, match="keys new"):
         load_keys(tmp_path / "absent.toml")
     with pytest.raises(ApiKeyError, match="Invalid API keys file"):
         load_keys(broken)
@@ -347,5 +347,5 @@ def test_a_missing_extra_gives_the_install_hint(
 ) -> None:
     monkeypatch.setitem(sys.modules, "fastapi", None)
 
-    with pytest.raises(ApiUnavailableError, match="quant-agent-os\\[api\\]"):
+    with pytest.raises(ApiUnavailableError, match="quant-agent-os\\[server\\]"):
         build_app(REGISTRY, KeyRing([]), store)

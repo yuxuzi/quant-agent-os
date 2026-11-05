@@ -26,7 +26,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
-      - run: uv build --all-packages
+      - run: uv build
 
   postgres:
     # The shared store contract against PostgreSQL with pgvector (B-14).
@@ -51,7 +51,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: uv sync --locked
-      - run: uv run pytest packages/quant-research/tests -rs
+      - run: uv run pytest tests/research -rs
 
   docker:
     # Builds the team-server image and runs it end to end with docker compose, on SQLite and on

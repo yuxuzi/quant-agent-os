@@ -76,7 +76,7 @@ def load_keys(path: Path) -> list[ApiKey]:
         keys = _KeyFile.model_validate(data).keys
     except FileNotFoundError as error:
         raise ApiKeyError(
-            f"No API keys file at {path}; create one with `quant-agent-os api-key new`."
+            f"No API keys file at {path}; create one with `qaos keys new`."
         ) from error
     except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
         raise ApiKeyError(f"Invalid API keys file {path}: {error}") from error

@@ -19,6 +19,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **One command, `qaos`**, replaces `quant-agent-os`, `quant-research`, `quant-factory`, and
+  `quant-platform`: `ingest`, `search`, `strategy`, `data add|list`, `keys new`, `runs`, `serve
+  [--http]`, `catalog`, `app ...`, and `hosted ...`. `serve` is the one way to start a server;
+  `quant-research serve-mcp` and `serve-api`, `quant-factory serve-mcp`, and `quant-platform
+  serve-http` are gone, and `--toolsets` serves any subset. `data add` takes its id from the file
+  name unless given `--id`. `info` became `doctor`.
+- **One wheel with extras** ([decision 0018](docs/decisions/0018-one-wheel.md)). The five
+  distributions are now one, `quant-agent-os`, with extras `analytics`, `server`, `pdf`, `postgres`,
+  `factory`, and `all`. Sources moved to `src/` and tests to `tests/`; import names did not change.
+- **One home.** `QUANT_AGENT_OS_HOME` (default `~/.quant-agent-os`) holds `config.toml`, `.env`,
+  `knowledge.db`, `datasets/`, `runs.db`, `api-keys.toml`, and `factory.toml`, and every command
+  uses it without flags. Factory runs join the one run store, replacing `factory-runs.db`.
+- **`.env` is read only from the home, never the working directory**, which a client that launches
+  the server chooses. `config.toml` may set paths and the log level, and refuses permissions: those
+  come only from the environment or the home's `.env`.
+- **One environment prefix.** `QUANT_RESEARCH_SCHEMA` and `QUANT_RESEARCH_EMBEDDING_TIMEOUT` are now
+  `QUANT_AGENT_OS_*`. `QUANT_RESEARCH_VOYAGE_API_KEY`, `QUANT_RESEARCH_OPENAI_API_KEY`, and
+  `QUANT_FACTORY_SETTINGS` are gone: use `VOYAGE_API_KEY`, `OPENAI_API_KEY`, and the home.
 - **Hosted features moved to `quant-platform hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
   `hosted serve-http` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
   `usage` are under `hosted`. The default `serve-http` serves one team with API keys. Their modules
@@ -28,6 +46,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`qaos init [--sample]`** makes the home and can load a sample corpus and dataset, now in the
+  wheel. **`qaos connect claude|cursor|vscode`** prints a client's config, or with `--write` adds
+  it to the project's file. **`qaos doctor`** checks the home, store, datasets, extras, and
+  permissions, and says how to fix what is off.
+- `qaos serve` takes `--embedder` and `--embedding-model`, so vector search works on the one server.
 - `Platform.report(goal, calls)` runs named calls as one recorded run and returns the
   evidence-linked report. `examples/your-own-model` drives the tools from your own model.
 

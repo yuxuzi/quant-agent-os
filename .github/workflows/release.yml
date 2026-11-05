@@ -1,12 +1,11 @@
 name: Release
 
-# A v* tag builds and checks the five packages and creates a GitHub release with them.
+# A v* tag builds and checks the wheel and sdist and creates a GitHub release with them.
 # Publishing to PyPI is opt-in: it runs only when the repository variable PUBLISH_TO_PYPI is
 # "true". It uses PyPI Trusted Publishing, so no API token is stored in the repository.
 # One-time setup for PyPI: add a trusted publisher for this repository with workflow
-# "release.yml" and environment "pypi" for each of the five packages (quant-agent-os,
-# quant-agent-os-research, quant-agent-os-analytics, quant-agent-os-factory, and
-# quant-agent-os-platform), and create the "pypi" environment in GitHub. See docs/releasing.md.
+# "release.yml" and environment "pypi" for quant-agent-os, and create the "pypi" environment in
+# GitHub. See docs/releasing.md.
 
 on:
   push:
@@ -26,12 +25,12 @@ jobs:
       - name: Check that the tag matches the project version
         run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv sync --locked
-      - name: Check that every package has that version and pins its siblings to it
+      - name: Check that the plugin and changelog name that version
         run: uv run pytest tests/contract/test_release.py
       - run: uv run pytest
-      - run: uv build --all-packages
-      - name: Check that all five packages were built
-        run: test "$(ls dist/*.whl | wc -l)" -eq 5
+      - run: uv build
+      - name: Check that the one wheel was built
+        run: test "$(ls dist/*.whl | wc -l)" -eq 1
       - run: uvx twine check --strict dist/*
       - uses: actions/upload-artifact@v7
         with:
@@ -61,7 +60,7 @@ jobs:
           # Relative links point into the repository at this tag.
           base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME"
           sed -i -E "s#\]\(((docs|deploy|skills|clients|packages|apps)/[^)]*|[A-Z]+\.md)\)#](${base}/\1)#g" notes.md
-      - name: Create the release with the built packages
+      - name: Create the release with the built wheel and sdist
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
@@ -72,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/quant-agent-os-platform/
+      url: https://pypi.org/project/quant-agent-os/
     permissions:
       id-token: write
     steps:

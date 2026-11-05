@@ -18,7 +18,7 @@ from quant_agent_os.sdk import Platform
 from quant_research import open_research, research_tools
 
 ROOT = Path(__file__).resolve().parents[2]
-CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
+CORPUS = ROOT / "src" / "quant_platform" / "sample" / "corpus"
 QUESTION = "What is related to short-term reversal?"
 
 

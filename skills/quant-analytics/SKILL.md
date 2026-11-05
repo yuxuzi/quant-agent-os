@@ -2,7 +2,7 @@
 name: quant-analytics
 description: Compute performance and risk metrics (Sharpe, drawdown, volatility contributions, factor exposures) of return series through the Quant-Agent-OS MCP server, passing data by reference. Use when the user asks how a fund, strategy, or portfolio performed, or what drives its risk.
 license: MIT
-compatibility: Needs the Quant-Agent-OS MCP server (quant-platform) with the analytics toolset.
+compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the analytics toolset.
 metadata:
   min-server-version: "0.1.2"
 ---
@@ -25,7 +25,7 @@ Pass series **by reference**, never by copying values:
   `factor_returns` as `{"dataset": ID, "columns": [...]}`.
 
 Inline number lists are accepted only for small examples the user typed. If the data is not
-there, the user adds it: `quant-agent-os dataset push FILE --id ID`. Adding data is never a
+there, the user adds it: `qaos data add FILE --id ID`. Adding data is never a
 tool call.
 
 **Leave `periods_per_year` out** when the data has dates: the server infers it. If it says the

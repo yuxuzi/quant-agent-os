@@ -5,7 +5,7 @@ description: Quant-Agent-OS: search the user's research corpus with citations, c
 
 # Quant-Agent-OS
 
-<!-- Generated from skills/ by apps/quant-platform/tests/client_bundles.py; do not edit. -->
+<!-- Generated from skills/ by tests/server/client_bundles.py; do not edit. -->
 
 ## quant-analytics
 
@@ -27,7 +27,7 @@ Pass series **by reference**, never by copying values:
   `factor_returns` as `{"dataset": ID, "columns": [...]}`.
 
 Inline number lists are accepted only for small examples the user typed. If the data is not
-there, the user adds it: `quant-agent-os dataset push FILE --id ID`. Adding data is never a
+there, the user adds it: `qaos data add FILE --id ID`. Adding data is never a
 tool call.
 
 **Leave `periods_per_year` out** when the data has dates: the server infers it. If it says the
@@ -64,7 +64,7 @@ skill.
 *Guide the user to a ready Quant-Agent-OS App Factory spec (quant research projects, agent tools) that they create locally, through the Quant-Agent-OS MCP server. Use when the user wants to generate a Python project, a backtest or research project, or a tool package from a template.*
 
 If these tools are not offered, the server was started without the factory toolset. The user can
-add `--toolsets research,analytics,factory`, or run `quant-factory new` in a terminal instead.
+add `--toolsets research,analytics,factory`, or run `qaos app new` in a terminal instead.
 
 The server checks specs; the user creates the project on their own machine. Nothing here
 writes files, runs code, or touches the network.
@@ -80,7 +80,7 @@ writes files, runs code, or touches the network.
 3. **Check until ready.** Send the draft as `spec` to `check_spec`, fix every problem it
    reports, and repeat until it says ready. It returns the exact files and the spec as TOML.
 4. **Hand over.** Give the user the TOML to save, and tell them to run
-   `quant-factory create FILE` themselves. Creating a project writes files and runs its checks,
+   `qaos app create FILE` themselves. Creating a project writes files and runs its checks,
    so it needs their confirmation on their machine; never claim you created it.
 
 ### Rules
@@ -133,7 +133,7 @@ claim, and say plainly when it holds nothing on the question.
   conclude from them is your interpretation; label it as such.
 - **Not investment advice.** Present findings as research evidence.
 - **Ingestion is the operator's job.** You cannot add documents. If the corpus lacks
-  something, tell the user to run `quant-research ingest`.
+  something, tell the user to run `qaos ingest`.
 
 ### When a call fails
 

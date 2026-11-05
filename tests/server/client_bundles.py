@@ -1,0 +1,80 @@
+"""Client bundles for Cursor and VS Code (Copilot), generated from the skills and the plugin.
+
+Claude Code installs the plugin (`.claude-plugin/plugin.json`), which ships `skills/` and the MCP
+server command. Clients without skills get `qaos serve` and the skills' text as a rules file
+instead. Run this after changing a skill or the server command:
+
+    uv run python tests/server/client_bundles.py
+
+`test_client_bundles.py` fails while the committed files are out of date.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from quant_platform.onboarding import Client, server_entry
+
+ROOT = Path(__file__).resolve().parents[2]
+SKILLS = ROOT / "skills"
+CLIENTS = ROOT / "clients"
+PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
+SERVER = "quant-agent-os"
+DESCRIPTION = (
+    "Quant-Agent-OS: search the user's research corpus with citations, compute performance and "
+    "risk metrics by dataset reference, draft cited strategy specs, and check App Factory specs."
+)
+GENERATED = "Generated from skills/ by tests/server/client_bundles.py; do not edit."
+
+
+def rules() -> str:
+    """Return every skill's description and instructions as one Markdown document."""
+    parts = [f"# Quant-Agent-OS\n\n<!-- {GENERATED} -->"]
+    for path in sorted(SKILLS.glob("*/SKILL.md")):
+        match = re.match(r"^---\n(.*?)\n---\n(.*)$", path.read_text("utf-8"), re.DOTALL)
+        assert match, f"{path} has no frontmatter"
+        description = re.search(r"^description: (.+)$", match.group(1), re.MULTILINE)
+        assert description, f"{path} has no description"
+        body = [line for line in match.group(2).strip().splitlines() if not line.startswith("# ")]
+        demoted = ["#" + line if line.startswith("#") else line for line in body]
+        parts.append(
+            f"## {path.parent.name}\n\n*{description.group(1)}*\n\n" + "\n".join(demoted).strip()
+        )
+    return "\n\n".join(parts) + "\n"
+
+
+def bundles() -> dict[Path, str]:
+    """Return each generated client file and its content."""
+    text = rules()
+    return {
+        CLIENTS / "cursor" / ".cursor" / "mcp.json": _json(
+            {"mcpServers": {SERVER: server_entry(Client.CURSOR)}}
+        ),
+        CLIENTS / "cursor" / ".cursor" / "rules" / "quant-agent-os.mdc": (
+            f"---\ndescription: {DESCRIPTION}\nalwaysApply: false\n---\n\n{text}"
+        ),
+        CLIENTS / "vscode" / ".vscode" / "mcp.json": _json(
+            {"servers": {SERVER: server_entry(Client.VSCODE)}}
+        ),
+        CLIENTS / "vscode" / ".github" / "instructions" / "quant-agent-os.instructions.md": (
+            f'---\napplyTo: "**"\ndescription: {DESCRIPTION}\n---\n\n{text}'
+        ),
+    }
+
+
+def _json(value: object) -> str:
+    return json.dumps(value, indent=2) + "\n"
+
+
+def main() -> None:
+    """Write every client bundle file."""
+    for path, content in bundles().items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, "utf-8")
+        print(f"wrote {path.relative_to(ROOT)}")
+
+
+if __name__ == "__main__":
+    main()

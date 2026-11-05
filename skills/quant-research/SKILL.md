@@ -2,7 +2,7 @@
 name: quant-research
 description: Search the user's own quantitative research corpus (notes, papers, PDFs) through the Quant-Agent-OS MCP server and answer with citations. Use when the user asks what their research says about a factor, signal, strategy, or method, wants passages quoted, or asks for sources.
 license: MIT
-compatibility: Needs the Quant-Agent-OS MCP server (quant-platform) with the research toolset.
+compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the research toolset.
 metadata:
   min-server-version: "0.1.0"
 ---
@@ -39,7 +39,7 @@ claim, and say plainly when it holds nothing on the question.
   conclude from them is your interpretation; label it as such.
 - **Not investment advice.** Present findings as research evidence.
 - **Ingestion is the operator's job.** You cannot add documents. If the corpus lacks
-  something, tell the user to run `quant-research ingest`.
+  something, tell the user to run `qaos ingest`.
 
 ## When a call fails
 

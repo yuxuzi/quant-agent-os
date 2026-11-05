@@ -15,10 +15,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = {
     "quant_agent_os": ROOT / "src" / "quant_agent_os",
-    "quant_analytics": ROOT / "packages" / "quant-analytics" / "src" / "quant_analytics",
-    "quant_research": ROOT / "packages" / "quant-research" / "src" / "quant_research",
-    "quant_app_factory": ROOT / "packages" / "quant-app-factory" / "src" / "quant_app_factory",
-    "quant_platform": ROOT / "apps" / "quant-platform" / "src" / "quant_platform",
+    "quant_analytics": ROOT / "src" / "quant_analytics",
+    "quant_research": ROOT / "src" / "quant_research",
+    "quant_app_factory": ROOT / "src" / "quant_app_factory",
+    "quant_platform": ROOT / "src" / "quant_platform",
 }
 # quant_platform is the composition root: it may import every product, and nothing imports it.
 PRODUCTS = {"quant_analytics", "quant_research", "quant_app_factory"}

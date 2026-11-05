@@ -1,28 +1,36 @@
-"""The team-server image must see every workspace member's metadata, or `uv sync --locked` fails."""
+"""The team-server image must see what `uv sync --locked` needs, or its build fails."""
 
-import glob
-import tomllib
 from pathlib import Path
+
+import pytest
+import yaml
+from typer.testing import CliRunner
+
+from quant_platform.cli import app
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _members() -> list[str]:
-    patterns = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["tool"]["uv"][
-        "workspace"
-    ]["members"]
-    return sorted(
-        Path(path).relative_to(ROOT).as_posix()
-        for pattern in patterns
-        for path in glob.glob(str(ROOT / pattern))
-        if (Path(path) / "pyproject.toml").is_file()
-    )
-
-
-def test_the_dockerfile_copies_and_dockerignore_admits_every_members_pyproject() -> None:
+def test_the_dockerfile_copies_and_dockerignore_admits_the_project() -> None:
     dockerfile = (ROOT / "deploy" / "Dockerfile").read_text("utf-8")
     ignore = (ROOT / ".dockerignore").read_text("utf-8").splitlines()
 
-    for member in _members():
-        assert f"COPY {member}/pyproject.toml {member}/" in dockerfile, member
-        assert {f"!{member}/pyproject.toml", f"!{member}/"} & set(ignore), member
+    for line in ("COPY pyproject.toml uv.lock ./", "COPY README.md LICENSE ./", "COPY src src"):
+        assert line in dockerfile
+    assert {"!pyproject.toml", "!uv.lock", "!README.md", "!LICENSE", "!src/"} <= set(ignore)
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.postgres.yaml"])
+def test_every_compose_service_runs_a_real_qaos_command(name: str) -> None:
+    services = yaml.safe_load((ROOT / "deploy" / name).read_text("utf-8"))["services"]
+    commands = {
+        (*service.get("entrypoint", ["qaos"]), *service.get("command", ()))
+        for service in services.values()
+        if "build" in service or ("image" in service and "QAOS_IMAGE" in service["image"])
+    }
+
+    assert commands
+    for command in commands:
+        assert command[0] == "qaos", command
+        words = [word for word in command[1:] if not word.startswith("-")][:2]
+        assert CliRunner().invoke(app, [*words[:1], "--help"]).exit_code == 0, command

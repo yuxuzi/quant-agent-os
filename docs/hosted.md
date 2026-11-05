@@ -3,7 +3,7 @@
 Most firms do not need this page: [deployment.md](deployment.md) runs one server for one team, with
 API keys. This page is for a vendor serving several customers from one server
 ([decision 0017](decisions/0017-hosted-behind-a-command-group.md)). Everything here runs through
-`quant-platform hosted`, and the default commands never load it.
+`qaos hosted`, and the default commands never load it.
 
 Before any public endpoint, do the steps in
 [security-review.md](security-review.md#before-a-public-endpoint).
@@ -16,15 +16,15 @@ and permissions:
 ```bash
 quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos \
   --toolsets research,analytics --issuer https://login.acme.example
-quant-research ingest /corpus/acme --store postgresql://qaos_ingest@postgres/qaos --schema qr_acme
-quant-agent-os dataset push returns.csv --id returns --tenant acme
-quant-agent-os api-key new --principal acme-bot --scope tools:list --scope tools:call --tenant acme
-quant-platform hosted serve-http --tenants ~/.quant-agent-os/tenants.toml --host 0.0.0.0
+qaos ingest /corpus/acme --store postgresql://qaos_ingest@postgres/qaos --schema qr_acme
+qaos data add returns.csv --id returns --tenant acme
+qaos keys new --principal acme-bot --scope tools:list --scope tools:call --tenant acme
+qaos hosted serve --tenants ~/.quant-agent-os/tenants.toml --host 0.0.0.0
 ```
 
 - **The tenants file** (`--tenants`, or `QUANT_AGENT_OS_TENANTS_FILE`) lists each tenant's
   store, schema, datasets directory, toolsets, permissions, and pinned issuer.
-  `quant-platform hosted tenant list` shows it with passwords hidden, and `tenant disable` stops
+  `qaos hosted tenant list` shows it with passwords hidden, and `tenant disable` stops
   serving a tenant at the next restart while keeping its data.
 - **On PostgreSQL** each tenant's corpus is its own schema, `qr_<tenant>` by default. The
   roles that `deploy/postgres/init-roles.sh` creates already let the server's read-only role
@@ -45,7 +45,7 @@ client_secret_env = "ACME_INTROSPECTION_SECRET"   # set this variable on the ser
 ```
 
 ```bash
-ACME_INTROSPECTION_SECRET=... quant-platform hosted serve-http --tenants tenants.toml \
+ACME_INTROSPECTION_SECRET=... qaos hosted serve --tenants tenants.toml \
   --resource-url https://qaos.example.com/mcp --allowed-host qaos.example.com
 ```
 
@@ -94,8 +94,8 @@ hosted embedder) wait for an approval. To let people approve them without leavin
 client, give the server its public base URL and issue approver keys:
 
 ```bash
-quant-agent-os api-key new --principal lead --scope runs:approve --tenant acme
-quant-platform hosted serve-http --tenants tenants.toml --approval-url https://qaos.example.com
+qaos keys new --principal lead --scope runs:approve --tenant acme
+qaos hosted serve --tenants tenants.toml --approval-url https://qaos.example.com
 ```
 
 The client then shows a link to `https://qaos.example.com/approve/<id>`. There, an approver
