@@ -19,7 +19,7 @@ the repository variable `PUBLISH_TO_PYPI` is `true`. Releases are GitHub-only: t
 not to publish to PyPI, so the package names are not registered there.
 
 Without PyPI, install from the tag, for example
-`uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@vX.Y.Z"`,
+`uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@vX.Y.Z"`,
 or use the Claude Code plugin, which runs from the repository.
 
 ## One-time setup for PyPI
