@@ -1,16 +1,36 @@
 # Configuration
 
-Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from an optional
-`.env` file in the working directory. `.env` is git-ignored; never commit it.
+Everything the platform keeps is in one home: `QUANT_AGENT_OS_HOME`, by default
+`~/.quant-agent-os`. Every command uses it with no flags.
+
+| File | Holds |
+| --- | --- |
+| `config.toml` | Optional settings: `log_level`, `store`, `datasets_dir`, `runs_file`, and `api_keys_file`. |
+| `.env` | Optional environment variables, such as provider keys. Never commit it. |
+| `knowledge.db` | The research knowledge store. |
+| `datasets/` | Datasets that tools read by id. |
+| `runs.db` | The audit: every recorded run, from the server and from `qaos app`. |
+| `api-keys.toml` | Hashes of API keys for `qaos serve --http`. |
+| `factory.toml`, `packs/` | App Factory settings and fetched template packs. |
+| `tenants.toml` | Tenants for `qaos hosted`. |
+
+A setting comes from a `QUANT_AGENT_OS_*` environment variable, then the home's `.env`, then
+`config.toml`. A `.env` in the working directory is never read, because a client that launches the
+server chooses that directory. `config.toml` refuses anything else, including permissions, so
+permissions come only from the environment or the home's `.env`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `QUANT_AGENT_OS_GRANTED_PERMISSIONS` | `["read_local_data"]` | JSON list of granted tool permissions. |
 | `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `[]` | JSON list of consequential permissions approved for every call (a standing approval). Leave it empty unless one permission must run unattended, such as `network` for a hosted embedder. |
 | `QUANT_AGENT_OS_LOG_LEVEL` | `INFO` | Logging level. |
+| `QUANT_AGENT_OS_STORE` | `knowledge.db` in the home | SQLite path or `postgresql://` URL. |
+| `QUANT_AGENT_OS_DATASETS_DIR` | `datasets/` in the home | Datasets directory. |
+| `QUANT_AGENT_OS_RUNS_FILE` | `runs.db` in the home | Run store. |
+| `QUANT_AGENT_OS_API_KEYS_FILE` | `api-keys.toml` in the home | API keys file. |
+| `QUANT_AGENT_OS_SCHEMA` | `quant_research` | PostgreSQL schema that `qaos ingest` and `qaos search` use. |
 
-`uv run quant-agent-os info` shows the active values. Secrets are reported only as `set` or
-`unset`.
+`qaos doctor` checks the setup and shows what is off, with no secret values.
 
 ## Bring your own
 
@@ -24,29 +44,27 @@ Settings are read from environment variables prefixed `QUANT_AGENT_OS_` and from
 
 ### MCP server
 
-`quant-research serve-mcp --store PATH` serves the research tools over stdio. It applies
+`qaos serve` serves the default toolsets over stdio, and `--toolsets` chooses others. It applies
 `QUANT_AGENT_OS_GRANTED_PERMISSIONS` (read-only by default) and
 `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It warns on stderr when a tool needs a permission that
 is not granted, or one that needs approval for every call. For example, a hosted embedder needs
 `network` both granted and pre-approved, because MCP clients cannot approve calls.
-Install the transport with the `mcp` extra (`quant-agent-os[mcp]` or
-`quant-agent-os-research[mcp]`); the development environment includes it.
+It needs the `server` extra (`quant-agent-os[server]`); the development environment includes it.
 
-Every call is recorded as a run in `runs.db` beside the store. Change the file with
-`--runs PATH`, or turn recording off with `--no-record`. List recent runs with
-`quant-research runs --store PATH`, and show one run's calls and audit trail with
-`quant-research runs RUN_ID --store PATH`.
+Every call is recorded as a run in the home's `runs.db`. Change the file with `--runs PATH`, or
+turn recording off with `--no-record`. List recent runs with `qaos runs`, and show one run's calls
+and audit trail with `qaos runs RUN_ID`.
 
 ### Quant Research embeddings
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `VOYAGE_API_KEY` (or `QUANT_RESEARCH_VOYAGE_API_KEY`) | unset | Voyage AI key for `--embedder voyage`; a secret. |
-| `OPENAI_API_KEY` (or `QUANT_RESEARCH_OPENAI_API_KEY`) | unset | OpenAI key for `--embedder openai`; a secret. |
-| `QUANT_RESEARCH_EMBEDDING_TIMEOUT` | `30` | Seconds per embedding request (at most 300). |
+| `VOYAGE_API_KEY` | unset | Voyage AI key for `--embedder voyage`; a secret. |
+| `OPENAI_API_KEY` | unset | OpenAI key for `--embedder openai`; a secret. |
+| `QUANT_AGENT_OS_EMBEDDING_TIMEOUT` | `30` | Seconds per embedding request (at most 300). |
 
 Pick the model with `--embedding-model`, for example `voyage-4`, `voyage-4-large`, or
-`text-embedding-3-large`. Ingest and search must use the same embedder and model.
+`text-embedding-3-large`. Ingest, search, and `qaos serve` must use the same embedder and model.
 
 ## Supported integrations
 
@@ -61,15 +79,15 @@ work.
 
 ### Quant App Factory
 
-`quant-factory plan SPEC.toml` previews a project: the profile, the reasons, the dependencies,
+`qaos app plan SPEC.toml` previews a project: the profile, the reasons, the dependencies,
 and the exact files. pytemplate-uv renders the preview into a temporary directory, never the
 target.
 
-`quant-factory create SPEC.toml` shows the same preview and asks you to confirm. Your
+`qaos app create SPEC.toml` shows the same preview and asks you to confirm. Your
 confirmation is the approval for that exact spec. It then creates the project and runs the
 project's checks (`uv sync`, ruff, mypy, pytest).
 
-Runs and approvals are recorded in `~/.quant-agent-os/factory-runs.db` (`--runs PATH`). It
+Runs and approvals are recorded in the home's `runs.db` (`--runs PATH`). It
 needs `uv`, and network access only for the generated project's `uv sync`.
 
 An app spec is TOML:
@@ -106,7 +124,7 @@ cost_bps = "3"                   # also max_horizon (IC decay)
 
 `kind` is a shortcut kept for existing specs: `kind = "agent-tool"`, `"python-cli"`,
 `"fastapi-service"`, or `"quant-research"` stands for the matching template and profile.
-`quant-factory new` writes `template` and `profile`, and so do these docs.
+`qaos app new` writes `template` and `profile`, and so do these docs.
 
 The research parameters themselves (signal, lookback, trade lag, quantiles, costs, rebalance
 schedule, and delisting return) live in the generated project's `config.toml`, not in the spec:
@@ -117,11 +135,11 @@ each builds `quant-research` and warns.
 ## Factory settings
 
 [Decision 0008](decisions/0008-factory-settings.md), backlog B-24. App Factory reuses these
-settings in specs and in `quant-factory new`. Secrets are stored only as environment-variable
+settings in specs and in `qaos app new`. Secrets are stored only as environment-variable
 names:
 
 ```toml
-# ~/.quant-agent-os/factory.toml
+# factory.toml in the home
 [identity]                 # falls back to git config
 author = "Your Name"
 email = "you@example.com"
@@ -136,14 +154,14 @@ schema = "prices"
 read_only = true
 password_env = "RESEARCH_PG_PASSWORD"   # the variable's name, never the password
 
-[templates.firm-backtest]  # added by `quant-factory template add`
+[templates.firm-backtest]  # added by `qaos app template add`
 source = "gh:firm/quant-packs"
 ref = "v1.2.0"
 ```
 
-Edit the file directly, or use `quant-factory settings show|set|remove`, for example
-`quant-factory settings set connections.research-pg.password_env RESEARCH_PG_PASSWORD`.
-`QUANT_FACTORY_SETTINGS` points to another file. Values that look like secrets are refused,
+Edit the file directly, or use `qaos app settings show|set|remove`, for example
+`qaos app settings set connections.research-pg.password_env RESEARCH_PG_PASSWORD`.
+Values that look like secrets are refused,
 and so are unknown fields.
 
 `[identity]` fills a spec's missing author, email, and license; missing ones fall back to
@@ -151,14 +169,14 @@ and so are unknown fields.
 
 ### Templates
 
-- **`quant-factory template list`** shows the built-in and registered templates.
-- **`quant-factory template fork quant-baseline/quant-research DIR [--profile-id ID]`** copies a
+- **`qaos app template list`** shows the built-in and registered templates.
+- **`qaos app template fork quant-baseline/quant-research DIR [--profile-id ID]`** copies a
   built-in profile into your own pack, checks it, and registers it under the directory's name
   (`--name` to choose).
-- **`quant-factory template check NAME_OR_DIR`** loads a pack and plans every profile with
+- **`qaos app template check NAME_OR_DIR`** loads a pack and plans every profile with
   default answers.
-- **`quant-factory template add DIR --name NAME`** registers a local pack.
-- **`quant-factory template add gh:org/repo --name NAME --ref TAG`** fetches a git pack once,
+- **`qaos app template add DIR --name NAME`** registers a local pack.
+- **`qaos app template add gh:org/repo --name NAME --ref TAG`** fetches a git pack once,
   at that tag, into `packs/` beside `factory.toml`, so plans stay offline.
 
 A spec then says `template = "NAME"` with `profile = "..."`.
@@ -169,18 +187,18 @@ The `data-database` component of `quant-research` loads prices with one
 read-only query from PostgreSQL, SQLite, or DuckDB.
 - **Naming a connection.** `connection = "research-pg"` in a spec adds the component and fills
   its answers from `factory.toml`, and the spec's own answers win.
-  `quant-factory new` offers saved connections, and offers to save a new one.
+  `qaos app new` offers saved connections, and offers to save a new one.
 - **What the generated app reads.** It reads its credentials only from `DATABASE_URL` (a full
   URL, which wins) or `DATABASE_PASSWORD`, listed in its `.env.example`. Its
   `check-connection` command connects, then exits.
-- **The factory's check.** `quant-factory create --check-connection` runs that check after the
+- **The factory's check.** `qaos app create --check-connection` runs that check after the
   project's own checks.
   - It passes only the variables the spec's settings reference, such as
     `DATABASE_PASSWORD = "env:RESEARCH_PG_PASSWORD"`.
   - It redacts their values from the output, including URL-encoded forms.
   - It runs only for projects from built-in templates, so your secret never reaches pack code
     you have not reviewed.
-- **Retrying.** `quant-factory check SPEC [--check-connection]` re-runs the checks of a
+- **Retrying.** `qaos app check SPEC [--check-connection]` re-runs the checks of a
   project that already exists, with its own approval.
 - **TLS.** PostgreSQL connections verify the server certificate (`db_sslmode`, default
   `verify-full`). Point `PGSSLROOTCERT` at your CA certificate, or add `sslrootcert=system` to
@@ -188,13 +206,13 @@ read-only query from PostgreSQL, SQLite, or DuckDB.
 
 ### Guided specs
 
-- **In the terminal:** `quant-factory new [--template T] [--profile P] [-o spec.toml]` asks
+- **In the terminal:** `qaos app new [--template T] [--profile P] [-o spec.toml]` asks
   the template's own questions. It skips those that do not apply, and asks for secret
   settings as environment-variable names. It writes the spec, checks it, and offers to create
   the project.
-- **From Claude:** `quant-factory serve-mcp` serves `describe_template`, `check_spec`, and
-  `plan_app` over stdio. Claude can then guide you to a ready spec and give you its TOML.
+- **From Claude:** `qaos serve --toolsets factory` serves `describe_template` and `check_spec` over
+  stdio. Claude can then guide you to a ready spec and give you its TOML.
   You still create from the terminal, because MCP clients cannot approve `create_app` yet.
 
 A server started by Claude Desktop does not see your shell's environment, so run
-`quant-factory create` from a terminal when a connection check needs those variables.
+`qaos app create` from a terminal when a connection check needs those variables.

@@ -1,4 +1,4 @@
-# quant-agent-os-analytics
+# Quant Analytics
 
 **Quant Analytics** holds performance and risk metrics with documented conventions, and
 registers them as Quant-Agent-OS tools. It imports no LLM library. The performance formulas

@@ -138,7 +138,7 @@ sees the same corpus. A team that needs separation within a firm uses separate t
 | Tenancy and serving | `tenancy.py`, `serving.py` | Tenant ids; `Surface` (one tenant's executor, resources, prompts, runs) and `Tenancy`, which REST and HTTP MCP route each caller to ([0013](decisions/0013-identity-and-tenancy.md)) | Confirmed (B-34) |
 | Approvals in the client | `quant_platform/hosted/approval_desk.py`, `approval_page.py` | Approval requests for waiting HTTP calls, the approval page (approver keys, four eyes), resume in the original run; stdio confirmation in the client ([0014](decisions/0014-approvals-in-the-client.md)) | Confirmed (B-35) |
 | OAuth | `quant_platform/hosted/oauth.py` | OAuth 2.1 resource server: introspection, audience, issuer-pinned tenants, Protected Resource Metadata | Confirmed (B-34) |
-| Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `quant-agent-os dataset push` | Confirmed (B-31) |
+| Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `qaos data add` | Confirmed (B-31) |
 | CLI | `cli.py` | `info`, `--version` | Confirmed |
 | Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
 | Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
@@ -190,14 +190,14 @@ SDK / CLI  ─┤      (no logic)        permissions·approval                  
 
 ### 4.3 Package ownership and allowed imports
 
-| Package | Owns | May import | Distribution |
+| Package | Owns | May import | Extra (one wheel, [decision 0018](decisions/0018-one-wheel.md)) |
 | --- | --- | --- | --- |
-| `quant_agent_os` (repo root) | Core | pydantic, typer, rich; optional extras | `quant-agent-os` |
-| `quant_research` (`src/quant_research`) | Quant Research | `quant_agent_os` public API | `quant-agent-os-research` (name open) |
-| `quant_app_factory` (`src/quant_app_factory`) | Quant App Factory | `quant_agent_os` public API | `quant-agent-os-factory` (name open) |
-| `quant_analytics` (`src/quant_analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `quant-agent-os-analytics` (name open) |
-| `quant_platform` (`src/quant_platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `quant-agent-os-platform` (name open) |
-| `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | `pytemplate-uv` |
+| `quant_agent_os` (`src/quant_agent_os`) | Core | pydantic, typer, rich; optional extras | base |
+| `quant_research` (`src/quant_research`) | Quant Research | `quant_agent_os` public API | none |
+| `quant_app_factory` (`src/quant_app_factory`) | Quant App Factory | `quant_agent_os` public API | `factory` |
+| `quant_analytics` (`src/quant_analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `analytics` |
+| `quant_platform` (`src/quant_platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `server` |
+| `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | its own package, through `factory` |
 
 Rules:
 - Core imports no product.
@@ -285,7 +285,7 @@ relationship, not from vector similarity alone.
 
 ```text
  operator (CLI / SDK; never an agent tool in the MVP)
-   │  quant-research ingest ./corpus
+   │  qaos ingest ./corpus
    ▼
  Loaders ─▶ Chunker ─▶ Extractors ───────────────▶ Entity resolution ─▶ KnowledgeStore
  md, txt,    passages    rule-based (vocabulary,     canonical ids,        documents, chunks,
@@ -545,13 +545,13 @@ B-23–B-26.
 templates: built-in (agent-tool, quant-baseline) · bundled (python, fastapi) · user pack (path)
    │
    ▼
-describe_template ──▶ person, via Claude or `quant-factory new` ──▶ spec.toml (the draft)
+describe_template ──▶ person, via Claude or `qaos app new` ──▶ spec.toml (the draft)
    ▲                                                                   │
    └──────────── check_spec: problems, or ready + exact files ◀────────┘
                   (pytemplate.api.plan is the judge)
    │ ready
    ▼
-quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (+ check-connection) ─▶ report
+qaos app create spec.toml ─▶ approval ─▶ create_app ─▶ checks (+ check-connection) ─▶ report
                 ▲
        factory.toml: identity, connections (environment-variable names), registered packs
 ```
@@ -564,7 +564,7 @@ quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (
   - Runtime settings come from the `settings` components declare (for example
     `DATABASE_URL`) and are read by the generated app. Secret ones accept only `env:NAME`.
 - **Creation in this phase.** Claude can describe, guide, and check. The person confirms
-  creation with `quant-factory create`, because MCP clients cannot approve yet (O-13).
+  creation with `qaos app create`, because MCP clients cannot approve yet (O-13).
 - **Database guidance** is the `data-database` component:
   - it asks for the database kind, a saved or new connection, and the environment variable
     that holds the password or URL;
@@ -580,7 +580,7 @@ quant-factory create spec.toml ─▶ approval ─▶ create_app ─▶ checks (
     and a `LIMITATIONS.md`;
   - there is no trading code.
 - **Making templates:**
-  - `quant-factory template fork` copies a baseline profile into a user pack, which people
+  - `qaos app template fork` copies a baseline profile into a user pack, which people
     edit by hand or with Claude Code;
   - `template check` validates it;
   - generic authoring is pytemplate-uv's own roadmap.
@@ -620,18 +620,18 @@ Further rules:
 - `pytemplate-uv` releases and plans are its own repository's business.
 - **User packs** (proposed).
   - B-23: a spec names a local pack directory.
-  - B-26: `quant-factory template add` registers a git pack pinned to a ref and caches it under
+  - B-26: `qaos app template add` registers a git pack pinned to a ref and caches it under
     `~/.quant-agent-os/packs/`, so plans read the cache and need no network access.
 
 ## 10. Interface strategy: MCP, REST, SDK, CLI
 
 | Interface | Audience | Built on | Status |
 | --- | --- | --- | --- |
-| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter: tools, resources, and prompts; `quant-platform serve-mcp` for every toolset, or a product's own `serve-mcp` | Confirmed |
-| MCP (HTTP) | Remote clients of a team or hosted server | `quant_agent_os.mcp.http` (stateless Streamable HTTP, API keys, per-method scopes) beside REST: `quant-platform serve-http` serves `/mcp` and `/v1` on one port | Confirmed (B-33) |
+| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter: tools, resources, and prompts; `qaos serve` for every toolset, or a product's own `qaos serve` | Confirmed |
+| MCP (HTTP) | Remote clients of a team or hosted server | `quant_agent_os.mcp.http` (stateless Streamable HTTP, API keys, per-method scopes) beside REST: `qaos serve --http` serves `/mcp` and `/v1` on one port | Confirmed (B-33) |
 | Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
-| CLI | Operators | Typer: `quant-agent-os info`/`serve-mcp`; `quant-research ingest`/`search`; `factory plan/create` | Partly confirmed |
-| REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `quant-research serve-api` | Confirmed (B-18) |
+| CLI | Operators | Typer: `qaos doctor`/`qaos serve`; `qaos ingest`/`search`; `factory plan/create` | Partly confirmed |
+| REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `qaos serve --http --toolsets research` | Confirmed (B-18) |
 
 The rules that apply to every interface:
 - Interfaces contain no business logic.
@@ -685,8 +685,8 @@ tests.
 - `audit_events` is append-only (SQLite triggers reject UPDATE and DELETE), with columns
   `run_id`, `actor`, `event`, `subject`, `at`, and `details`. The details hold ids, hashes,
   and statuses, never inputs or secrets. This table is the future basis for usage metering.
-- `quant-research serve-mcp` records to `runs.db` beside the knowledge store by default
-  (`--runs`, `--no-record`). `quant-research runs [RUN_ID]` lists runs or shows one.
+- `qaos serve --toolsets research` records to `runs.db` beside the knowledge store by default
+  (`--runs`, `--no-record`). `qaos runs [RUN_ID]` lists runs or shows one.
 
 **Proposed:**
 - a digest of the public settings, and package versions in `RunMetadata`.
@@ -737,8 +737,8 @@ See [security.md](security.md) for details.
 | Mode | What runs | Status |
 | --- | --- | --- |
 | Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
-| Local MCP server | `uv run --directory <repo> quant-research serve-mcp --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `quant-research ingest` | Confirmed |
-| Team server | Docker image running `serve-api` over SQLite or PostgreSQL + pgvector (a read-only role), REST with API-key auth, both smoke-tested in CI ([deployment.md](deployment.md)); MCP over HTTP later | Confirmed (B-19, B-14) |
+| Local MCP server | `uv run --directory <repo> qaos serve --toolsets research --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `qaos ingest` | Confirmed |
+| Team server | Docker image running `qaos serve --http` over SQLite or PostgreSQL + pgvector (a read-only role), REST with API-key auth, both smoke-tested in CI ([deployment.md](deployment.md)); MCP over HTTP later | Confirmed (B-19, B-14) |
 | Hosted | Managed, multi-tenant | Out of scope; commercial option later |
 
 Not planned without a concrete need: a message broker, a distributed workflow engine,

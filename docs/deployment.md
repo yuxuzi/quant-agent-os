@@ -6,7 +6,7 @@ Both need an API key. Every call is recorded with the caller's name, and nobody 
 operator can change the corpus or the datasets.
 
 What runs:
-- **One container** runs `quant-platform serve-http`: MCP at `/mcp` and REST at `/v1`, on one
+- **One container** runs `qaos serve --http`: MCP at `/mcp` and REST at `/v1`, on one
   port, with one set of keys ([decisions 0011](decisions/0011-rest-api-and-api-keys.md) and
   [0012](decisions/0012-remote-mcp-over-http.md)).
 - **Four volumes** hold the data. `knowledge` holds the SQLite knowledge store, `datasets` the
@@ -28,9 +28,9 @@ Everything below runs from the repository root. You need Docker with Compose v2.
 docker compose -f deploy/compose.yaml build
 ```
 
-The build installs the locked dependencies (`uv sync --locked`) for the platform server with
+The build installs the locked dependencies (`uv sync --locked`) for the server with
 its research and analytics toolsets and the `pdf` and `postgres` extras, and nothing else: no
-dev tools, and no App Factory, which is an optional extra (`quant-agent-os-platform[factory]`).
+dev tools, and no App Factory, which is an optional extra (`quant-agent-os[factory]`).
 It uses a pinned Python 3.13 base image and a pinned uv, both by digest.
 
 ## 2. Ingest your corpus (operator)
@@ -75,7 +75,7 @@ named `date`, `datetime`, `time`, or `period`, holds `20240102` or `202401` valu
 numbers; `--index` names any other column. The tools infer the frequency from the dates and join
 datasets on them. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
 values, so the numbers never pass through a model. Without `DATASETS_SOURCE`, the import
-directory is `deploy/sample-data`. Pushing the same id again replaces the dataset; its new
+directory is `src/quant_platform/sample/datasets`. Pushing the same id again replaces the dataset; its new
 fingerprint shows in each result's data versions. The server reads datasets per request, so no
 restart is needed.
 
@@ -134,7 +134,7 @@ docker compose -f deploy/compose.yaml run --rm usage --from 2026-11-01 --to 2026
 ```
 
 Calls that ended `ok`, `error`, or `timeout` are billable; refusals and invalid input are
-recorded but not billable. Without a run store (`serve-mcp --no-record`) nothing is metered.
+recorded but not billable. Without a run store (`qaos serve --no-record`) nothing is metered.
 
 ## 7. Expose it to your team
 
@@ -172,7 +172,7 @@ export, add the SDK and an exporter and start the server under `opentelemetry-in
 ```bash
 OTEL_SERVICE_NAME=quant-agent-os OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 \
   uv run --with opentelemetry-distro --with opentelemetry-exporter-otlp \
-  opentelemetry-instrument quant-platform hosted serve-http --tenants tenants.toml
+  opentelemetry-instrument qaos hosted serve --tenants tenants.toml
 ```
 
 `opentelemetry-instrument` also traces the HTTP libraries it finds, and those spans record

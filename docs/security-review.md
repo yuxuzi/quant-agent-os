@@ -15,7 +15,7 @@ lists what is still open.
 
 ## The surface
 
-`quant-platform hosted serve-http` serves everything below on one port; the default `serve-http` serves all but the approval page and OAuth metadata. Local stdio (`serve-mcp`) is
+`qaos hosted serve` serves everything below on one port; the default `serve --http` serves all but the approval page and OAuth metadata. Local stdio (`qaos serve`) is
 out of scope: it trusts the user who started it.
 
 | Route | Who may call it | Guarded by |

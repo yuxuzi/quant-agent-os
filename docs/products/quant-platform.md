@@ -16,9 +16,9 @@ report in one call. Each resource is read through its tool, so it gets the same 
 validation, limits, and run record.
 
 ```bash
-quant-agent-os dataset push returns.csv --id returns      # numbers stay out of the model
-uv run quant-platform catalog --store .kb.db               # what a client will see
-claude mcp add quant-agent-os -- uv run --directory "$PWD" quant-platform serve-mcp --store "$PWD/.kb.db"
+qaos data add returns.csv --id returns      # numbers stay out of the model
+uv run qaos catalog --store .kb.db               # what a client will see
+claude mcp add quant-agent-os -- uv run --directory "$PWD" qaos serve --store "$PWD/.kb.db"
 ```
 
 `--toolsets research,analytics,factory` chooses what to serve (all by default). The research

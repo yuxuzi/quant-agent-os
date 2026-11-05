@@ -35,13 +35,12 @@ sends data to that provider:
   (`QUANT_AGENT_OS_GRANTED_PERMISSIONS`) and either approves each call or pre-approves
   `network` (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). The default policy refuses it.
 
-Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` (or the `QUANT_RESEARCH_`-prefixed
-variants) and are held as `SecretStr`. Error messages name the variable, never its value. Use
+Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` and are held as `SecretStr`. Error messages name the variable, never its value. Use
 the offline `hashing` embedder, or none, for documents that must not leave the machine.
 
 ## Serving is read-only
 
-`quant-research serve-mcp` and `quant-research search` open the store with SQLite's
+`qaos serve --toolsets research` and `qaos search` open the store with SQLite's
 `mode=ro`. They create, migrate, and write nothing, so a read-only mount works. A store at
 another schema version is refused with the command that upgrades it. Each answer reads inside
 one transaction, so it never mixes two versions of the corpus. Hosted query embedding is
@@ -51,7 +50,7 @@ provider again.
 
 ## Run records
 
-`serve-mcp` records every call as a run in `runs.db` beside the knowledge store. Pass
+`qaos serve` records every call as a run in `runs.db` beside the knowledge store. Pass
 `--runs PATH` to put it elsewhere, or `--no-record` to keep none. The SDK `Platform` keeps runs
 in memory unless it is given a run store. What each part of a record holds:
 - **Calls.** A call record holds the tool's arguments and output, which for research tools
@@ -63,17 +62,17 @@ in memory unless it is given a run store. What each part of a record holds:
 - **Usage events.** One per recorded call, written in the same transaction
   ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
   principal, tool, status, duration, and the sizes of the arguments and output, never their
-  content. `quant-platform hosted usage export` reads them; it is an operator command, not a tool.
+  content. `qaos hosted usage export` reads them; it is an operator command, not a tool.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
 
 ## REST interface
 
-[Decision 0011](decisions/0011-rest-api-and-api-keys.md). `quant-research serve-api` serves the
-same tools as `serve-mcp` over HTTP, which other machines may reach, so:
+[Decision 0011](decisions/0011-rest-api-and-api-keys.md). `qaos serve --http --toolsets research` serves the
+same tools as `qaos serve` over HTTP, which other machines may reach, so:
 - **Every route but `/healthz` needs an API key.** Send it as `Authorization: Bearer <key>`.
-  `quant-agent-os api-key new` prints a key once. The keys file
+  `qaos keys new` prints a key once. The keys file
   (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256
   hashes and is created with mode 0600. To revoke a key, delete its entry or set
   `disabled = true`, then restart the server. The server does not start without an enabled key.
@@ -81,7 +80,7 @@ same tools as `serve-mcp` over HTTP, which other machines may reach, so:
   - `tools:list` lists the tools and `tools:call` calls them.
   - `runs:read` reads every run in the store, including retrieved passages, so grant it like
     access to the corpus.
-  - The permission policy is the same as `serve-mcp`'s, read-only by default.
+  - The permission policy is the same as `qaos serve`'s, read-only by default.
   - There is no approval route. A consequential call returns `approval_required`, and the
     operator approves it through the SDK on the same run store.
 - **Every call is audited.** Each call is a run with actor `rest` and the key's principal, on
@@ -95,7 +94,7 @@ same tools as `serve-mcp` over HTTP, which other machines may reach, so:
 
 ## MCP over HTTP
 
-[Decision 0012](decisions/0012-remote-mcp-over-http.md). `quant-platform serve-http` serves MCP
+[Decision 0012](decisions/0012-remote-mcp-over-http.md). `qaos serve --http` serves MCP
 at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 - **Every MCP request needs an API key.** A missing or unknown key gets 401 with
   `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, where
@@ -116,7 +115,7 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 ## Tenants and OAuth
 
 [Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
-(`quant-platform hosted serve-http --tenants FILE`):
+(`qaos hosted serve --tenants FILE`):
 - **The tenant comes from the credential only.** An API key's entry names its tenant
   (`api-key new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
   or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
@@ -194,10 +193,10 @@ toolsets, calls a minute, billable calls a month, and output size:
   - Without one, the call records `approval_required`, runs nothing, and the run waits in
     `awaiting_approval`.
   - The operator approves through the SDK (`Platform.approve`, then `Platform.resume`) or by
-    confirming `quant-factory create`.
+    confirming `qaos app create`.
   - Models, MCP clients, and REST clients can never create approvals.
 - **Approving without leaving the client** ([decision 0014](decisions/0014-approvals-in-the-client.md)):
-  - **Over HTTP** (`hosted serve-http --approval-url`), a waiting call opens an approval request,
+  - **Over HTTP** (`hosted serve --http --approval-url`), a waiting call opens an approval request,
     and the client is sent to `/approve/<id>` (MCP URL elicitation). The request is bound to
     the tenant, run, tool, input hash, and requester; its id has 128 random bits; it expires
     after 15 minutes and is decided once.
@@ -215,7 +214,7 @@ toolsets, calls a minute, billable calls a month, and output size:
     forms a minute (429 after that). Both counts are kept per server process.
   - **The retried, identical call** runs once, in the original run. A changed argument is a
     new hash and needs a new approval.
-  - **Locally**, creating a project is a terminal command, `quant-factory create`, whose prompt
+  - **Locally**, creating a project is a terminal command, `qaos app create`, whose prompt
     is the approval. No MCP server offers it.
 - **Standing approvals.** An operator can pre-approve a permission for every call with
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
@@ -241,7 +240,7 @@ settings file, and generated apps hold environment-variable names, never secret 
 - **Programs.** By default, programs receive no secrets. The one exception is a generated
   app's `check-connection` command:
   - it receives only the variables the spec references, through `run_command`'s `extra_env`;
-  - it runs during the operator's approved create, or an approved `quant-factory check`;
+  - it runs during the operator's approved create, or an approved `qaos app check`;
   - it runs only for projects from built-in templates, whose connection code App Factory
     ships;
   - the values, including URL-encoded forms, are redacted from its captured output.

@@ -1,11 +1,23 @@
 # Getting started
 
 Quant-Agent-OS reaches your AI client as one MCP server plus four skills that teach the client
-how to use it. In Claude Code, one plugin installs both.
+how to use it. You need [uv](https://docs.astral.sh/uv/). From nothing to a first answer:
 
-## 1. Install the plugin (Claude Code)
+```bash
+uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@TAG"
+qaos ingest ~/research            # or `qaos init --sample` to try it first
+qaos data add returns.csv
+qaos connect claude --write       # or cursor, vscode; restart the client
+```
 
-You need [uv](https://docs.astral.sh/uv/) and Claude Code. In a terminal:
+Replace `TAG` with a [release](https://github.com/yuxuzi/quant-agent-os/releases) that has `qaos`.
+`qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
+ingestion, `postgres` for a PostgreSQL store, `factory` for `qaos app`, or `all`.
+
+## 1. Add the skills (Claude Code)
+
+`qaos connect` gives the client the server. The skills teach it how to use the server, and in
+Claude Code a plugin installs both, so it can replace `qaos connect`. In a terminal:
 
 ```bash
 claude plugin marketplace add yuxuzi/quant-agent-os
@@ -19,7 +31,7 @@ Or inside a session (Claude Code 2.1.275 or later):
 ```
 
 The plugin brings:
-- **The MCP server.** `quant-platform serve-mcp` serves research and analytics tools, with
+- **The MCP server.** `qaos serve` serves research and analytics tools, with
   resources and prompts. It runs locally through `uv` on Python 3.13, and on first
   start uv installs its locked dependencies.
 - **Four skills,** loaded when a task needs them:
@@ -29,25 +41,24 @@ The plugin brings:
   - `quant-app-factory` for project specs you create locally, when the server is started with
     `--toolsets research,analytics,factory`.
 
-The server is read-only by default and records every call in `~/.quant-agent-os/runs.db`.
+The server is read-only by default and records every call in the home's `runs.db` (`qaos runs`).
 
 ## 2. Give it your data (operator commands)
 
 Ingesting documents and adding datasets are commands you run, never tools the model can call.
-They need a clone of the repository:
+
 
 ```bash
-git clone https://github.com/yuxuzi/quant-agent-os && cd quant-agent-os && uv sync
-uv run quant-research ingest ~/research --store ~/.quant-agent-os/knowledge.db
-uv run quant-agent-os dataset push returns.csv --id returns
+qaos ingest ~/research
+qaos data add returns.csv         # the id is the file's name, or use --id
 ```
 
-- **The knowledge store.** The server finds `~/.quant-agent-os/knowledge.db` by itself. For a
-  store elsewhere, including a `postgresql://` URL, set `QUANT_AGENT_OS_STORE`. Without a
-  store, the server still starts, without the research tools, and says so.
-- **Datasets** go to `~/.quant-agent-os/datasets`, or to `QUANT_AGENT_OS_DATASETS_DIR`.
-- **To try it first,** ingest the sample corpus in
-  `src/quant_platform/sample/corpus`.
+- **One home.** Everything lives in `~/.quant-agent-os`, or in `QUANT_AGENT_OS_HOME`, and every
+  command uses it with no flags ([configuration](configuration.md)).
+- **The knowledge store.** For a store elsewhere, including a `postgresql://` URL, set
+  `QUANT_AGENT_OS_STORE`. Without a store, the server still starts, without the research tools,
+  and says so.
+- **To try it first,** `qaos init --sample` loads a small corpus and a dataset.
 
 ## 3. Ask
 
@@ -57,18 +68,13 @@ uv run quant-agent-os dataset push returns.csv --id returns
 
 Answers cite your documents by file and line. Metrics come from the server, with their
 conventions, and are never computed by the model. To see exactly what the client is offered,
-run `uv run quant-platform catalog`.
+run `qaos catalog`.
 
 ## Other clients
 
-- **Cursor and VS Code (Copilot).** Copy a bundle from [clients/](../clients/README.md). It has
-  the same server command, with the skills as a rules file.
-- **Claude Code without the plugin.** Run from the clone:
-
-  ```bash
-  claude mcp add quant-agent-os -- uv run --directory "$PWD" --package quant-agent-os-platform quant-platform serve-mcp
-  ```
-
+- **Cursor and VS Code (Copilot).** `qaos connect cursor --write` or `qaos connect vscode
+  --write` adds the server to the project. For the skills, copy the rules file from
+  [clients/](../clients/README.md).
 - **A team server over REST,** in Docker, with API keys: see [deployment.md](deployment.md).
 
 ## Use it from Python

@@ -2,7 +2,7 @@
 name: quant-app-factory
 description: Guide the user to a ready Quant-Agent-OS App Factory spec (quant research projects, agent tools) that they create locally, through the Quant-Agent-OS MCP server. Use when the user wants to generate a Python project, a backtest or research project, or a tool package from a template.
 license: MIT
-compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the factory toolset; creating the project needs the quant-factory CLI on the user's machine.
+compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the factory toolset; creating the project needs the qaos app CLI on the user's machine.
 metadata:
   min-server-version: "0.1.0"
 ---

@@ -206,9 +206,9 @@ Add the two sample datasets. Adding data is a command **you** run, and never a t
 can call.
 
 ```bash
-uv run quant-agent-os dataset push examples/tutorial/data/fund_returns.csv --id fund
-uv run quant-agent-os dataset push examples/tutorial/data/portfolio_returns.csv --id portfolio
-uv run quant-agent-os dataset list
+uv run qaos data add examples/tutorial/data/fund_returns.csv --id fund
+uv run qaos data add examples/tutorial/data/portfolio_returns.csv --id portfolio
+uv run qaos data list
 ```
 
 ```text
@@ -256,8 +256,8 @@ Risk of 60-30-10: volatility 7.15% a year
 | Try this | What you should see |
 | --- | --- |
 | Change `WEIGHTS` at the top of [lab_analytics.py](../examples/tutorial/lab_analytics.py), then rerun (undo it afterwards with `git checkout examples/tutorial/lab_analytics.py`) | New risk shares |
-| Use your own returns: `uv run quant-agent-os dataset push my.csv --id fund`, with columns `fund` and `benchmark` | Your own metrics and a new data version |
-| Push only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run quant-agent-os dataset push "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Push the full file again afterwards, because later labs use it |
+| Use your own returns: `uv run qaos data add my.csv --id fund`, with columns `fund` and `benchmark` | Your own metrics and a new data version |
+| Push only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run qaos data add "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Push the full file again afterwards, because later labs use it |
 | Push a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
 | Blank out one `fund` cell in a copy of the file, and push it as `fund` | It loads and says one cell is missing. `Warnings:` says one row was left out, and nothing is filled in |
 
@@ -293,7 +293,7 @@ flowchart TD
 ### Build the store
 
 ```bash
-uv run quant-research ingest src/quant_platform/sample/corpus --store "$KB"
+uv run qaos ingest src/quant_platform/sample/corpus --store "$KB"
 ```
 
 ```text
@@ -305,7 +305,7 @@ warning: Skipped chart.png: supported types are .markdown, .md, .pdf, .txt.
 ### Ask a question
 
 ```bash
-uv run quant-research search "What is related to short-term reversal?" --store "$KB"
+uv run qaos search "What is related to short-term reversal?" --store "$KB"
 ```
 
 ```text
@@ -327,7 +327,7 @@ gives its file and lines, so you can open the file and check, plus the channels 
 ### See what the corpus does not know
 
 ```bash
-uv run quant-research search "protein folding" --store "$KB"
+uv run qaos search "protein folding" --store "$KB"
 ```
 
 ```text
@@ -339,7 +339,7 @@ Finding nothing is the correct answer here. The tool returns no evidence rather 
 ### Draft a strategy spec, then improve it
 
 ```bash
-uv run quant-research strategy "short-term reversal" --store "$KB"
+uv run qaos strategy "short-term reversal" --store "$KB"
 ```
 
 ```text
@@ -361,8 +361,8 @@ teach it something by adding [a note](../examples/tutorial/data/notes/my-reversa
 ```bash
 mkdir -p "$TUT/notes"
 cp examples/tutorial/data/notes/my-reversal-note.md "$TUT/notes/"
-uv run quant-research ingest "$TUT/notes" --store "$KB"
-uv run quant-research strategy "short-term reversal" --store "$KB"
+uv run qaos ingest "$TUT/notes" --store "$KB"
+uv run qaos strategy "short-term reversal" --store "$KB"
 ```
 
 Three new rows appear, citing your note, and the universe and test-method questions disappear:
@@ -381,7 +381,7 @@ Now call the same tool from Python. The SDK records the call, as MCP does:
 
 ```bash
 uv run python examples/quant-research/sdk_demo.py "$KB" "momentum crashes"
-uv run quant-research runs --store "$KB"
+uv run qaos runs
 ```
 
 ```text
@@ -394,15 +394,15 @@ Run 5139...: completed, snapshot snap:32c1a82b3273c76a, input sha256 0c0b...
 5139...  2026-11-03 22:50:59  sdk   completed  snap:32c1a82b3273c76a  find_related_signals
 ```
 
-To see one run's calls and audit trail, run `uv run quant-research runs <RUN_ID> --store "$KB"`.
+To see one run's calls and audit trail, run `uv run qaos runs <RUN_ID>`.
 
 ### Play with it
 
 | Try this | What you should see |
 | --- | --- |
-| `uv run quant-research search "carry" --store "$KB"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
-| `uv run quant-research search "inventory risk" --store "$KB"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
-| `uv run quant-research search "reversal" --hops 2 --store "$KB"` | More entities, found two graph steps away |
+| `uv run qaos search "carry" --store "$KB"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
+| `uv run qaos search "inventory risk" --store "$KB"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
+| `uv run qaos search "reversal" --hops 2 --store "$KB"` | More entities, found two graph steps away |
 | Add `--min-confidence 0.4` to the `strategy` command | More rows, from weaker links |
 | Add a line such as `Momentum predicts time-series momentum.` to your note, then run `ingest` again | Only the changed file is re-read, with one more relation |
 | Run `ingest "$TUT/notes"` twice without changes | `Added 0, unchanged 1` and the same snapshot id |
@@ -487,7 +487,7 @@ Edit `$TUT/my_tool.py`, then run it again.
 | **Challenge:** also return the total loss during the longest streak | Your tool, your design. Tell us how it went |
 
 To start a real tool package with these checks already wired in, see
-`uv run quant-factory new agent-tool my-tools` ([walkthrough §10](walkthrough.md#10-generate-a-tool-package)).
+`uv run qaos app new agent-tool my-tools` ([walkthrough §10](walkthrough.md#10-generate-a-tool-package)).
 
 ---
 
@@ -586,7 +586,7 @@ your model provider.
 sequenceDiagram
     actor You
     participant Claude as Claude Code
-    participant Server as quant-platform serve-mcp
+    participant Server as qaos serve
     participant Store as Knowledge and datasets
     You->>Claude: "What supports short-term reversal? Cite it."
     Claude->>Server: find_related_signals(query)
@@ -603,14 +603,14 @@ sequenceDiagram
 First, see what the client will be offered:
 
 ```bash
-uv run quant-platform catalog
+uv run qaos catalog
 ```
 
 You should see 11 tools, 6 resources, and 4 prompts, including `find_related_signals`,
 `analyze_performance`, and `research_report`. Then register the server, from the repository root:
 
 ```bash
-claude mcp add qaos-tutorial -- uv run --directory "$REPO" quant-platform serve-mcp \
+claude mcp add qaos-tutorial -- uv run --directory "$REPO" qaos serve \
   --store "$KB" --datasets "$TUT/datasets" --runs "$TUT/runs.db"
 ```
 
@@ -633,7 +633,7 @@ tools. The server returns evidence, and it never writes answers itself.
 ### See the calls
 
 ```bash
-uv run quant-research runs --store "$KB"
+uv run qaos runs
 ```
 
 Each call you just triggered is listed with actor `mcp`.
@@ -653,14 +653,14 @@ the answers, and tell us if the difference is visible.
 ## Lab 7: A server with two tenants
 
 The first part runs one team's server. The tenants and plans later in this lab are for a vendor
-hosting many customers, so they use `quant-platform hosted` ([hosted.md](hosted.md)).
+hosting many customers, so they use `qaos hosted` ([hosted.md](hosted.md)).
 
 **Goal:** run the platform as a service: first with one API key, then with two customers who
 can't see each other's data, then with a quota. It all stays on your machine.
 
 ```mermaid
 flowchart TD
-    K1["Key for alice"] --> H["serve-http<br/>checks the key"]
+    K1["Key for alice"] --> H["serve --http<br/>checks the key"]
     K2["Key for gina"] --> H
     H -->|"No or bad key"| R["401 refused"]
     H -->|"tenant: acme"| A["acme's catalog<br/>research + analytics"]
@@ -674,8 +674,8 @@ flowchart TD
 ### Part 1: one server, one key
 
 ```bash
-KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call --scope runs:read)
-uv run quant-platform serve-http --port 8765 --runs "$TUT/http-runs.db" > "$TUT/server.log" 2>&1 &
+KEY=$(uv run qaos keys new --principal me --scope tools:list --scope tools:call --scope runs:read)
+uv run qaos serve --http --port 8765 --runs "$TUT/http-runs.db" > "$TUT/server.log" 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
 ```
@@ -739,19 +739,19 @@ Give each tenant its own data, and give `globex` research only:
 
 ```bash
 mkdir -p "$TUT/tenants"
-uv run quant-research ingest src/quant_platform/sample/corpus --store "$TUT/tenants/acme.db"
-uv run quant-research ingest "$TUT/notes" --store "$TUT/tenants/globex.db"
-uv run quant-agent-os dataset push examples/tutorial/data/fund_returns.csv --id fund --dir "$TUT/tenants/datasets" --tenant acme
+uv run qaos ingest src/quant_platform/sample/corpus --store "$TUT/tenants/acme.db"
+uv run qaos ingest "$TUT/notes" --store "$TUT/tenants/globex.db"
+uv run qaos data add examples/tutorial/data/fund_returns.csv --id fund --dir "$TUT/tenants/datasets" --tenant acme
 
 export QUANT_AGENT_OS_TENANTS_FILE="$TUT/tenants.toml"
-uv run quant-platform hosted tenant add acme --store "$TUT/tenants/acme.db" --toolsets research,analytics
-uv run quant-platform hosted tenant add globex --store "$TUT/tenants/globex.db" --toolsets research
-uv run quant-platform hosted tenant list
+uv run qaos hosted tenant add acme --store "$TUT/tenants/acme.db" --toolsets research,analytics
+uv run qaos hosted tenant add globex --store "$TUT/tenants/globex.db" --toolsets research
+uv run qaos hosted tenant list
 
-ALICE=$(uv run quant-agent-os api-key new --principal alice --tenant acme --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
-GINA=$(uv run quant-agent-os api-key new --principal gina --tenant globex --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
+ALICE=$(uv run qaos keys new --principal alice --tenant acme --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
+GINA=$(uv run qaos keys new --principal gina --tenant globex --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
 
-uv run quant-platform hosted serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
+uv run qaos hosted serve --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
 ```
@@ -813,15 +813,15 @@ cat >> "$TUT/tenants.toml" <<'TOML'
 toolsets = ["research"]
 calls_per_minute = 2
 TOML
-uv run quant-platform hosted tenant add globex --store "$TUT/tenants/globex.db" --plan trial
+uv run qaos hosted tenant add globex --store "$TUT/tenants/globex.db" --plan trial
 
-uv run quant-platform hosted serve-http --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
+uv run qaos hosted serve --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
 
 ask "$GINA"; ask "$GINA"; ask "$GINA"
 kill $SERVER
-uv run quant-platform hosted usage export --runs "$TUT/tenants/runs.db" --by tool
+uv run qaos hosted usage export --runs "$TUT/tenants/runs.db" --by tool
 ```
 
 The third call is refused (the wait time varies), and the usage export separates billable calls
@@ -850,7 +850,7 @@ unset QUANT_AGENT_OS_TENANTS_FILE
 | Try this | What you should see |
 | --- | --- |
 | Create a key with only `--scope tools:list`, then use it to call a tool | Listing works, and the call is refused: `This API key lacks the 'tools:call' scope.` |
-| `uv run quant-platform hosted tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
+| `uv run qaos hosted tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
 | Connect Claude over HTTP while the Part 1 server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 11 tools, over HTTP |
 
 > This setup is for learning on loopback. Before you put a server on a network, read
@@ -863,7 +863,7 @@ unset QUANT_AGENT_OS_TENANTS_FILE
 
 **Goal:** go from one command to a tested research project. This lab needs network access. It
 writes the project to the folder you run it from and records your approval in
-`~/.quant-agent-os/factory-runs.db`.
+`~/.quant-agent-os/runs.db`.
 
 ```mermaid
 flowchart TD
@@ -883,7 +883,7 @@ flowchart TD
 
 ```bash
 mkdir -p "$TUT/work" && cd "$TUT/work"
-uv run --project "$REPO" quant-factory new quant-research my-lab --defaults
+uv run --project "$REPO" qaos app new quant-research my-lab --defaults
 ```
 
 Answer yes at the prompt. Your yes is the recorded approval.
@@ -949,7 +949,7 @@ rm -rf "$TUT"
 
 If you did Lab 6 or the HTTP step in Lab 7, also run `claude mcp remove qaos-tutorial` and
 `claude mcp remove qaos-http`. Lab 8's approval record stays in
-`~/.quant-agent-os/factory-runs.db`, because the audit trail is append-only.
+`~/.quant-agent-os/runs.db`, because the audit trail is append-only.
 
 ## If something goes wrong
 
@@ -983,21 +983,21 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | | You, the operator (commands) | An AI client (tools) |
 | --- | --- | --- |
 | **Data** | `dataset push` | `list_datasets`, `analyze_performance`, `analyze_risk` |
-| **Documents** | `quant-research ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
-| **Projects** | `quant-factory create`, `quant-factory new` | `describe_template`, `check_spec` (with the factory toolset) |
+| **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
+| **Projects** | `qaos app create`, `qaos app new` | `describe_template`, `check_spec` (with the factory toolset) |
 | **Access** | `api-key new`, `hosted tenant add` | None |
 
 | I want to | Command |
 | --- | --- |
-| Add a dataset | `uv run quant-agent-os dataset push file.csv --id name` |
-| Build or update a knowledge store | `uv run quant-research ingest DIR --store FILE` |
-| Ask a question | `uv run quant-research search "question" --store FILE` |
-| Draft a cited strategy spec | `uv run quant-research strategy "topic" --store FILE` |
-| See recorded runs | `uv run quant-research runs --store FILE` |
-| See what a client is offered | `uv run quant-platform catalog` |
-| Serve over MCP (stdio) or HTTP | `uv run quant-platform serve-mcp`, `uv run quant-platform serve-http` |
-| Create an API key | `uv run quant-agent-os api-key new --principal NAME --scope tools:call` |
-| Start a project | `uv run quant-factory new quant-research NAME --defaults` |
+| Add a dataset | `uv run qaos data add file.csv --id name` |
+| Build or update a knowledge store | `uv run qaos ingest DIR --store FILE` |
+| Ask a question | `uv run qaos search "question" --store FILE` |
+| Draft a cited strategy spec | `uv run qaos strategy "topic" --store FILE` |
+| See recorded runs | `uv run qaos runs` |
+| See what a client is offered | `uv run qaos catalog` |
+| Serve over MCP (stdio) or HTTP | `uv run qaos serve`, `uv run qaos serve --http` |
+| Create an API key | `uv run qaos keys new --principal NAME --scope tools:call` |
+| Start a project | `uv run qaos app new quant-research NAME --defaults` |
 
 **Where to go next:** [walkthrough](walkthrough.md) for your own documents and data,
 [architecture](architecture.md) for how it fits together, [configuration](configuration.md) for

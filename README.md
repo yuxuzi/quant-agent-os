@@ -20,19 +20,19 @@ It has two products built on one core platform:
 | Area | State |
 | --- | --- |
 | Core: tool contract, registry, permissions, bounded executor, evidence reports | Implemented |
-| Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
-| Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
-| Remote MCP, tenants, and OAuth | Implemented: `quant-platform serve-http` serves MCP over Streamable HTTP and REST from one app with API keys; `quant-platform hosted` adds a catalog per tenant and OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
+| Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `qaos serve --toolsets research` serves the research tools |
+| Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `qaos serve --http --toolsets research`, `qaos keys new` |
+| Remote MCP, tenants, and OAuth | Implemented: `qaos serve --http` serves MCP over Streamable HTTP and REST from one app with API keys; `qaos hosted` adds a catalog per tenant and OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
 | Approvals in the client | Implemented: a consequential call asks the user in the client (stdio) or sends them to an approval page (HTTP) ([decision 0014](docs/decisions/0014-approvals-in-the-client.md)) |
-| Metering, plans, and quotas | Implemented: a usage event per call, `quant-platform hosted usage export`, plans with toolsets, rate limits, and monthly quotas per tenant ([decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)) |
+| Metering, plans, and quotas | Implemented: a usage event per call, `qaos hosted usage export`, plans with toolsets, rate limits, and monthly quotas per tenant ([decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)) |
 | Tool compatibility | Implemented: semver tool versions checked against `tool-versions.lock`, deprecations, `qaos://server/info` ([tools changelog](docs/tools-changelog.md)) |
 | Team server in Docker | Implemented on SQLite or PostgreSQL + pgvector ([docs/deployment.md](docs/deployment.md)); both smoke-tested by `docker compose up` in CI |
 | Skills and client packaging | Implemented: four instruction-only skills kept in step with the server by tests, a Claude Code plugin, and Cursor and VS Code bundles ([getting started](docs/getting-started.md)) |
 | Core: run provenance (run and call ids, input hashes, registry digest, data versions) | Implemented |
-| Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
+| Core: run store with append-only audit, SDK `Platform` facade | Implemented; `qaos serve` records every call (`qaos runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
-| Quant Research (Graph RAG) | Implemented over SQLite or PostgreSQL with pgvector (same answers; `quant-agent-os-research[postgres]`): ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
-| Quant App Factory | Foundation implemented: `quant-factory plan/create`, `create_app` for the terminal, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
+| Quant Research (Graph RAG) | Implemented over SQLite or PostgreSQL with pgvector (same answers; `quant-agent-os[postgres]`): ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
+| Quant App Factory | Foundation implemented: `qaos app plan/create`, `create_app` for the terminal, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
 | Quant Analytics | Implemented: `analyze_performance` on empyrical-reloaded (Sharpe, Sortino, Calmar, drawdown, VaR, alpha/beta, tracking error, IR) and `analyze_risk` (volatility contributions, factor exposures, variance shares), with conventions pinned by known-answer tests ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)) |
 
 The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
@@ -46,7 +46,7 @@ uv sync --locked
 uv run python examples/portfolio-research/portfolio_research.py   # offline end-to-end demo
 uv run python examples/quant-research/research_demo.py            # Graph RAG demo, offline
 uv run python examples/quant-research/sdk_demo.py                 # SDK call and its recorded run
-uv run quant-agent-os info                                        # active settings, secrets hidden
+uv run qaos doctor                                                # checks the setup, secrets hidden
 uv run pytest
 ```
 
@@ -68,39 +68,32 @@ Inside a session (Claude Code 2.1.275 or later):
 (Copilot), copy a bundle from [clients/](clients/README.md).
 
 The [walkthrough](docs/walkthrough.md) goes from a clean checkout to cited answers in Claude
-Code or Claude Desktop, with the recorded runs and known limitations. In short: ingest your
-notes and papers once, then register the read-only research server with your MCP
-client. Use absolute paths, because the client starts the server from its own directory.
+Code or Claude Desktop, with the recorded runs and known limitations. In short, without a clone:
 
 ```bash
-uv run quant-research ingest ~/research --store ~/research/.kb.db
-claude mcp add quant-research -- \
-  uv run --directory /path/to/quant-agent-os quant-research serve-mcp --store ~/research/.kb.db
+uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@TAG"
+qaos ingest ~/research            # or `qaos init --sample` to try it first
+qaos data add returns.csv
+qaos connect claude --write       # or cursor, vscode; `qaos doctor` explains anything missing
 ```
 
-Claude Desktop uses the same command in `claude_desktop_config.json`. Give the full path to
-`uv` (`which uv`), because Desktop does not read your shell's `PATH`:
-
-```json
-{"mcpServers": {"quant-research": {"command": "/Users/you/.local/bin/uv", "args": ["run",
-  "--directory", "/path/to/quant-agent-os", "quant-research", "serve-mcp", "--store",
-  "/Users/you/research/.kb.db"]}}}
-```
+Claude Desktop reads `claude_desktop_config.json`: `qaos connect claude` prints the entry to put
+there, with the command's full path, because Desktop does not read your shell's `PATH`.
 
 Ask a research question, and Claude calls `find_related_signals` and `get_source_passage` and
-cites file, page, and line ranges. Ask for a strategy, and `generate_strategy` returns a spec
+cites file, page, and line ranges. Ask for a strategy, and `research_report` returns a spec
 whose every item cites its passages, with open questions for what the corpus leaves out. The
 server is read-only, writes nothing to the store, and sends nothing off the machine unless you
 choose a hosted `--embedder`. Each call is recorded
-in `runs.db` beside the store (`quant-research runs`). A hosted embedder also
+in `runs.db` beside the store (`qaos runs`). A hosted embedder also
 needs the `network` permission (see [docs/security.md](docs/security.md)).
 
 Web apps and other languages can call the same tools over REST with an API key (install the
 `api` extra):
 
 ```bash
-KEY=$(uv run quant-agent-os api-key new --principal me --scope tools:list --scope tools:call)
-uv run quant-research serve-api --store ~/research/.kb.db &      # http://127.0.0.1:8000
+KEY=$(uv run qaos keys new --principal me --scope tools:list --scope tools:call)
+uv run qaos serve --http --toolsets research --store ~/research/.kb.db &      # http://127.0.0.1:8000
 curl -H "Authorization: Bearer $KEY" -X POST http://127.0.0.1:8000/v1/tools/find_related_signals/call \
   -H 'content-type: application/json' -d '{"arguments": {"query": "short-term reversal"}}'
 ```
@@ -111,7 +104,7 @@ One command starts a project with every default. Your confirmation is the record
 and the generated project's own checks run before it is reported done:
 
 ```bash
-uv run quant-factory new quant-research my-lab --defaults   # asks once, then creates and checks
+uv run qaos app new quant-research my-lab --defaults   # asks once, then creates and checks
 ```
 
 Or describe the app in a small TOML spec, preview it, then create it:
@@ -125,13 +118,13 @@ description = "Signal tools for Quant-Agent-OS"
 output_dir = "."
 tool_name = "count_signals"
 TOML
-uv run quant-factory plan signal-tools.toml     # what it builds; --verbose lists every file
-uv run quant-factory create signal-tools.toml   # asks, creates, runs uv sync/ruff/mypy/pytest
+uv run qaos app plan signal-tools.toml     # what it builds; --verbose lists every file
+uv run qaos app create signal-tools.toml   # asks, creates, runs uv sync/ruff/mypy/pytest
 ```
 
 An `agent-tool` package comes with one typed example tool, a registry, and tests that run the
 platform's contract checks. A `quant-research` project holds a signal study, a backtest, and
-a report in one place, with bias tests, and can load prices from a database. `uv run quant-factory new` asks the questions
+a report in one place, with bias tests, and can load prices from a database. `uv run qaos app new` asks the questions
 for you. See [docs/walkthrough.md](docs/walkthrough.md#10-generate-a-tool-package) and
 [§11](docs/walkthrough.md#11-a-quant-project-from-your-own-data-with-guidance).
 

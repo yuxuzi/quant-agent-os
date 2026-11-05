@@ -20,10 +20,10 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
 - **Hosted features** (`quant_platform.hosted`): tenants, plans, usage, OAuth, and the approval page,
-  run only through `quant-platform hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
+  run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
-  `quant-platform serve-mcp` serves them as one MCP server.
+  `qaos serve` serves them as one MCP server.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
@@ -40,6 +40,11 @@ third-party library of App Factory ([decision 0006](docs/decisions/0006-pytempla
 
 Read [docs/architecture.md](docs/architecture.md) and the plan in
 [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes.
+
+One wheel holds all five import names ([decision 0018](docs/decisions/0018-one-wheel.md)), and
+`qaos` (`quant_platform.cli`) is the one command. Each product's `cli.py` is a Typer app it mounts,
+and each `tools.py` holds what serving needs, so serving imports no command module. Importing
+`quant_platform.cli` must work with no extra installed; a test checks that.
 
 `uv` and `uvx` are the only required tools; never use pip, virtualenv activation, or make.
 
@@ -108,7 +113,7 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
 - **Data by reference.** Tools take dataset ids and resource URIs; inline values are for small
   examples only, so numbers do not travel through the model.
 - **Writes to the user's machine stay local.** Server tools compute, retrieve, and validate.
-  Creating files, as `quant-factory create` does, is a command the user runs.
+  Creating files, as `qaos app create` does, is a command the user runs.
 - **Efficiency is measured.** A change to the tool surface or the skills reports its delta in
   the agent-efficiency evaluation; rebaseline only for an intended change.
 - **Offline tests.** Tests run offline. Anything that needs a network is opt-in and never part of

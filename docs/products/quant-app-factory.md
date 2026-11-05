@@ -1,4 +1,4 @@
-# quant-agent-os-factory
+# Quant App Factory
 
 **Quant App Factory** is the application-engineering product of Quant-Agent-OS. It turns a
 typed application spec into a scaffolded, checked, packaged Python project. It uses
@@ -30,15 +30,15 @@ spec can name a connection saved in `factory.toml` (`connection = "research-pg"`
 ## Use
 
 ```bash
-uv run quant-factory new quant-research my-lab --defaults   # one command: spec, project, checks
-uv run quant-factory new                # answer the template's questions; writes a ready spec
-uv run quant-factory plan app.toml      # writes nothing; --verbose lists every file
-uv run quant-factory create app.toml    # asks; your yes is the recorded, single-use approval
-uv run quant-factory check app.toml     # re-run an existing project's checks
-uv run quant-factory settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
-uv run quant-factory serve-mcp          # describe_template, check_spec, plan_app for Claude
-uv run quant-factory template fork quant-baseline/quant-research packs/mine   # make it yours
-uv run quant-factory template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
+uv run qaos app new quant-research my-lab --defaults   # one command: spec, project, checks
+uv run qaos app new                # answer the template's questions; writes a ready spec
+uv run qaos app plan app.toml      # writes nothing; --verbose lists every file
+uv run qaos app create app.toml    # asks; your yes is the recorded, single-use approval
+uv run qaos app check app.toml     # re-run an existing project's checks
+uv run qaos app settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
+uv run qaos serve --toolsets factory          # describe_template, check_spec, plan_app for Claude
+uv run qaos app template fork quant-baseline/quant-research packs/mine   # make it yours
+uv run qaos app template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
 ```
 
 Secrets never go in a spec or `factory.toml`. Use `env:NAME` in a spec's `[settings]`, and
