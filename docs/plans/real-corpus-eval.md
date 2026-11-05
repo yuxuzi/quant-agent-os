@@ -8,25 +8,26 @@ baseline that later changes must not lower.
 ## Corpus
 
 - **Papers:** 21 arXiv papers on factors, momentum, low volatility, earnings drift, order
-  flow, and asset-pricing methods ([papers.toml](../../packages/quant-research/tests/real_corpus/papers.toml)).
+  flow, and asset-pricing methods ([papers.toml](../../tests/research/real_corpus/papers.toml)).
 - **Pinning:** each paper is pinned by version and sha256.
 - **Not committed:** the PDFs are never committed or redistributed. arXiv's default licence lets
   arXiv distribute a paper, not this repository. Running `real_corpus.py fetch` downloads them
   once into `~/.cache/quant-agent-os/real-corpus`, and evaluation runs offline after that.
 - **Questions:** 28 gold questions written from the abstracts
-  ([gold.toml](../../packages/quant-research/tests/real_corpus/gold.toml)):
+  ([gold.toml](../../tests/research/real_corpus/gold.toml)):
   - 19 topic questions in the papers' own terms;
   - 6 paraphrases that avoid those terms;
   - 3 questions the corpus cannot answer.
 - **Labels:** each typed relation extracted from the corpus is judged by hand against the
   sentence that states it
-  ([labels.toml](../../packages/quant-research/tests/real_corpus/labels.toml)). There are 57
+  ([labels.toml](../../tests/research/real_corpus/labels.toml)). There are 57
   facts covering both extractor versions.
 
 ```bash
-uv run python packages/quant-research/tests/real_corpus.py fetch      # once, needs network
-uv run python packages/quant-research/tests/real_corpus.py eval       # offline
-uv run python packages/quant-research/tests/real_corpus.py relations  # facts to label
+uv run python tests/research/real_corpus.py fetch      # once, needs network
+uv run python tests/research/real_corpus.py eval       # offline
+uv run python tests/research/real_corpus.py ablation   # what each channel contributes
+uv run python tests/research/real_corpus.py relations  # facts to label
 ```
 
 This evaluation is opt-in, like the benchmark. Default CI checks only that the files agree with
@@ -106,6 +107,55 @@ Trade-off, recorded in `evaluation/baseline.json`:
   embedding model, as decision 0004 already requires.
 - **Fixture passage precision:** rose from 0.758 to 0.771.
 
+## C5. Channel ablation (2026-11-05)
+
+Simplification plan step P4.1, reproduced by `real_corpus.py ablation`. There are 19 topic
+questions, 6 paraphrases, and 3 unanswerable questions, so one paraphrase moves its hit rate by
+0.167.
+
+| Setting | Topic hit @5 | Topic MRR | Paraphrase hit @5 | Paraphrase MRR | Abstention |
+| --- | --- | --- | --- | --- | --- |
+| **Default** (keyword, mention, graph) | 1.0 | 0.899 | 0.833 | 0.750 | 1.0 |
+| Without graph | 1.0 | 0.947 | 0.667 | 0.667 | 1.0 |
+| Without mention | 1.0 | 0.895 | 0.833 | 0.750 | 1.0 |
+| Without keyword | 0.737 | 0.462 | 0.500 | 0.367 | 1.0 |
+| Keyword only | 1.0 | 1.0 | 0.667 | 0.667 | 1.0 |
+| Mention only | 0.684 | 0.546 | 0.333 | 0.200 | 1.0 |
+| Graph only | 0.053 | 0.053 | 0.333 | 0.250 | 1.0 |
+| Default + `related_to` edges (`min_confidence=0`) | 1.0 | 0.866 | 0.667 | 0.583 | 1.0 |
+| Default + mock hashing vector | 1.0 | 0.897 | 0.833 | 0.667 | **0.0** |
+
+What it shows:
+- **Keyword search does the ranking.** It alone puts a relevant paper first on all 19 topic
+  questions. Adding the other channels lowers topic MRR from 1.0 to 0.899.
+- **The graph channel is a small trade.** It rescues one paraphrase ("Which strategies earn
+  returns without crash risk?") and pushes two topic questions down, from rank 1 to 3 and from
+  rank 2 to 4.
+- **The mention channel barely matters beside the others.** Removing it moves six ranks, three
+  each way, and leaves every aggregate within 0.005.
+- **The graph that retrieval walks is 19 edges.** The corpus has 357 edges, of which 338 are
+  `related_to` at confidence 0.4. The default `min_confidence` of 0.5 skips those. Across the
+  28 questions, a client sees 7 distinct edges, all typed. Including `related_to` edges lowers both
+  MRRs and loses a paraphrase, so the filter stays.
+- **The extracted facts are few.** 16 distinct typed facts in 21 papers: `tested_on` 7, `uses`
+  5, `explained_by` 2, `correlates_with` 1, `predicts` 1. 12 of them are correct.
+- **The vector channel skips abstention.** With the mock embedder, every off-topic question
+  returns passages, because the coverage check applies only to keyword hits. A real embedder
+  has to pass this measure as well as beat paraphrase 0.833 (P4.3).
+
+Limits of this measure:
+- `channels` limits only how passages are fused. With "keyword" off, the keyword index still
+  chooses fallback seeds and still decides abstention, so "without keyword" and "graph only"
+  flatter those settings.
+- It scores passage ranking at document level. It says nothing about `related` entities and
+  cited paths, which are what the graph adds for a client, and the gold set has no multi-hop
+  question. In the mock world, multi-hop evidence recall is 1.0 with or without the graph
+  channel, and evidence precision rises from 0.854 to 0.896.
+- The topic questions use the papers' own terms, which favours keyword search.
+
+No retrieval default changed here. The sample is too small to justify one, and the plan uses
+this step to decide how the product is described.
+
 ## Known limitations (found here, not fixed)
 
 - **Generic words in the vocabulary.** "Profitability" and "momentum" are also ordinary
@@ -114,8 +164,7 @@ Trade-off, recorded in `evaluation/baseline.json`:
   (out of scope).
 - **pypdf spacing artefacts.** Words split by kerning ("ot her", "e ffect") are not rejoined.
 - **Most edges are `related_to`.** Real papers rarely state a relation in the cue phrases the
-  rules know, so 95% of edges are `related_to`. The graph's value on real papers comes mainly
-  from co-mention structure and citations, not typed facts.
+  rules know, so 95% of edges are `related_to`, and default retrieval does not walk them (see C5).
 - **Small labelled set.** 57 facts across 21 papers is a small sample. Precision of 0.75 has
   a wide confidence interval.
 - **Not checked yet:** two-column layouts and multi-page tables were not examined separately.

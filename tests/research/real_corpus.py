@@ -7,6 +7,7 @@ earnings drift, and order flow.
     uv run python tests/research/real_corpus.py fetch   # once, needs network
     uv run python tests/research/real_corpus.py eval    # offline
     uv run python tests/research/real_corpus.py eval --update
+    uv run python tests/research/real_corpus.py ablation   # what each channel contributes
     uv run python tests/research/real_corpus.py relations  # for labelling
 
 PDFs are cached in ``$QUANT_RESEARCH_REAL_CORPUS`` (default
@@ -33,6 +34,7 @@ from typing import Any
 from research_eval import location_matches
 
 from quant_research import ResearchApp, ResearchQuery, open_research
+from quant_research.application.retrieval import Channel, ResearchService
 from quant_research.domain.extraction import is_prose, split_sentences
 from quant_research.domain.vocabulary import EntityMatcher
 
@@ -45,6 +47,8 @@ K = 5
 ARXIV_PDF = "https://arxiv.org/pdf/{id}"
 USER_AGENT = "quant-agent-os-evaluation (https://github.com/yuxuzi/quant-agent-os)"
 PAUSE_SECONDS = 3.0  # arXiv asks automated clients to keep to about one request every 3 s
+# The channels a default install fuses; the vector channel needs an embedder.
+DEFAULT_CHANNELS: frozenset[Channel] = frozenset({"keyword", "mention", "graph"})
 
 
 @dataclass(frozen=True)
@@ -253,6 +257,104 @@ SCORED = (
 )
 
 
+def channel_scores(service: ResearchService, min_confidence: float = 0.5) -> dict[str, Any]:
+    """Score the gold questions through ``service``, keeping each one's first relevant rank."""
+    ranks: dict[str, list[float]] = {"topic": [], "paraphrase": []}
+    abstained: list[float] = []
+    first_ranks: dict[str, int | None] = {}
+    for question in questions():
+        packet = service.find_related(
+            ResearchQuery(query=question["query"], k=K, min_confidence=min_confidence)
+        )
+        if question["kind"] == "unanswerable":
+            abstained.append(float(not packet.passages))
+            continue
+        found = [_paper_id(p.source.source_id) for p in packet.passages]
+        first = next((n for n, doc in enumerate(found, 1) if doc in question["documents"]), None)
+        ranks[question["kind"]].append(1 / first if first else 0.0)
+        first_ranks[question["query"]] = first
+    return {
+        "topic_hit_rate": _mean([float(r > 0) for r in ranks["topic"]]),
+        "topic_mrr": _mean(ranks["topic"]),
+        "paraphrase_hit_rate": _mean([float(r > 0) for r in ranks["paraphrase"]]),
+        "paraphrase_mrr": _mean(ranks["paraphrase"]),
+        "abstention_accuracy": _mean(abstained),
+        "_first_ranks": first_ranks,
+    }
+
+
+def surfaced_links(service: ResearchService) -> dict[str, int]:
+    """Count the distinct graph edges the gold questions show a client, and the typed ones."""
+    links = {
+        (link.subject, link.predicate, link.object, link.chunk_id)
+        for question in questions()
+        for entity in service.find_related(ResearchQuery(query=question["query"], k=K)).related
+        for link in [*entity.path, *entity.links]
+    }
+    return {
+        "surfaced_links": len(links),
+        "surfaced_typed_links": sum(link[1] != "related_to" for link in links),
+    }
+
+
+def ablation(research: ResearchApp) -> dict[str, Any]:
+    """Score the default channels, each removed, each alone, and two changes to the default.
+
+    ``channels`` limits only the fusion of passages: seeds still come from the keyword index and
+    the vocabulary, and related entities still come from the graph, whichever rankings are off.
+    The default ``min_confidence`` of 0.5 skips ``related_to`` edges (confidence 0.4), so one
+    setting lowers it to show what those edges do; the other adds the mock vector channel.
+    """
+    store, vocabulary = research.store, research.vocabulary
+    settings: dict[str, frozenset[Channel]] = {"default": DEFAULT_CHANNELS}
+    for channel in sorted(DEFAULT_CHANNELS):
+        settings[f"without {channel}"] = DEFAULT_CHANNELS - {channel}
+    for channel in sorted(DEFAULT_CHANNELS):
+        settings[f"{channel} only"] = frozenset({channel})
+    scores = {
+        name: channel_scores(ResearchService(store, vocabulary, channels=channels))
+        for name, channels in settings.items()
+    }
+    scores["default + related_to edges"] = channel_scores(
+        ResearchService(store, vocabulary), min_confidence=0.0
+    )
+    scores["default + hashing vector"] = channel_scores(
+        ResearchService(store, vocabulary, embedder=research.embedder, vectors=store)
+    )
+    return {
+        "settings": scores,
+        **surfaced_links(ResearchService(store, vocabulary)),
+        "typed_facts_by_predicate": dict(
+            sorted(Counter(fact[2] for fact in typed_relations(research)).items())
+        ),
+        **corpus_metrics(research),
+    }
+
+
+def _print_ablation(cache: Path) -> None:
+    """Print the ablation as a table, then every question whose rank a setting changed."""
+    if absent := missing(cache):
+        raise SystemExit(f"{len(absent)} papers are missing; run `real_corpus.py fetch` first.")
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
+    with open_research(":memory:", vector=True) as research:
+        research.ingest.ingest(cache)
+        result = ablation(research)
+    settings = result.pop("settings")
+    print("| Setting | Topic hit | Topic MRR | Paraphrase hit | Paraphrase MRR | Abstention |")
+    print("| --- | --- | --- | --- | --- | --- |")
+    for name, s in settings.items():
+        print(
+            f"| {name} | {s['topic_hit_rate']} | {s['topic_mrr']} | {s['paraphrase_hit_rate']} "
+            f"| {s['paraphrase_mrr']} | {s['abstention_accuracy']} |"
+        )
+    default = settings["default"]["_first_ranks"]
+    for name, s in settings.items():
+        for query, rank in s["_first_ranks"].items():
+            if rank != default[query]:
+                print(f"{name}: rank {default[query]} -> {rank}: {query}")
+    print(json.dumps(result, indent=2))
+
+
 def _print_relations(cache: Path) -> None:
     """Print every typed fact with its sentence, for labelling in labels.toml."""
     if absent := missing(cache):
@@ -271,6 +373,8 @@ if __name__ == "__main__":
         fetch(cache_dir())
     elif command == "relations":
         _print_relations(cache_dir())
+    elif command == "ablation":
+        _print_ablation(cache_dir())
     elif command == "eval":
         metrics = run()
         print(json.dumps(metrics, indent=2))
@@ -279,4 +383,4 @@ if __name__ == "__main__":
             BASELINE.write_text(json.dumps(scored, indent=2, sort_keys=True) + "\n", "utf-8")
             print(f"Baseline written to {BASELINE}.")
     else:
-        raise SystemExit(f"Unknown command {command!r}; use fetch, eval, or relations.")
+        raise SystemExit(f"Unknown command {command!r}; use fetch, eval, ablation, or relations.")

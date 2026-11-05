@@ -7,8 +7,9 @@ small hand-written case, so they run offline.
 from pathlib import Path
 
 import pytest
+import real_corpus
 from pdf_fixtures import write_pdf
-from real_corpus import GOLD, LABELS, PAPERS, labels, papers, questions
+from real_corpus import GOLD, LABELS, PAPERS, ablation, labels, papers, questions
 
 from quant_research import ResearchQuery, open_research
 from quant_research.domain.chunking import (
@@ -224,3 +225,34 @@ def test_real_corpus_files_are_consistent() -> None:
         question["documents"] for question in questions() if question["kind"] != "unanswerable"
     )
     assert all(path.is_file() for path in (PAPERS, GOLD, LABELS))
+
+
+def test_ablation_scores_every_channel_setting(
+    corpus_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = [
+        {"query": "momentum", "kind": "topic", "documents": ["MISSING"]},
+        {"query": "protein folding", "kind": "unanswerable", "documents": []},
+    ]
+    monkeypatch.setattr(real_corpus, "questions", lambda: asked)
+
+    with open_research(":memory:", vector=True) as research:
+        research.ingest.ingest(corpus_dir)
+        result = ablation(research)
+
+    assert set(result["settings"]) == {
+        "default",
+        "without keyword",
+        "without mention",
+        "without graph",
+        "keyword only",
+        "mention only",
+        "graph only",
+        "default + related_to edges",
+        "default + hashing vector",
+    }
+    for scores in result["settings"].values():
+        assert scores["topic_hit_rate"] == 0.0  # no passage comes from the missing document
+        assert scores["_first_ranks"] == {"momentum": None}
+    assert result["settings"]["default"]["abstention_accuracy"] == 1.0
+    assert result["surfaced_typed_links"] <= result["surfaced_links"]
