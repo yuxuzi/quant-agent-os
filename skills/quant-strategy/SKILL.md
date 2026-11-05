@@ -4,7 +4,7 @@ description: Turn the user's research corpus into a cited strategy specification
 license: MIT
 compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the research toolset; metrics in reports also need the analytics toolset.
 metadata:
-  min-server-version: "0.1.2"
+  min-server-version: "0.2.0"
 ---
 
 # From signal to cited spec to report

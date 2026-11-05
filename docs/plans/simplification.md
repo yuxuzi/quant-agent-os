@@ -8,8 +8,8 @@ decision records. The core ideas are good. The problem is that it grew a vendor'
 machinery before it had a smooth single-user path, and one number it computes can be silently
 wrong.
 
-**Status.** P0 is released in 0.1.2. P1 is done: see decisions 0016 and 0017. P2 is done: see
-decision 0018; the `research` and `hosted` extras were left out because they would be empty.
+**Status.** P0 is released in 0.1.2. P1 and P2 are released in 0.2.0: see decisions 0016, 0017, and
+0018; the `research` and `hosted` extras were left out because they would be empty.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.

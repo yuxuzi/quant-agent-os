@@ -13,7 +13,7 @@ It has two products built on one core platform:
   through a replaceable adapter.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is
-> alpha research software (0.1.2; 0.1.0 was the first MVP release), not investment advice.
+> alpha research software (0.2.0; 0.1.0 was the first MVP release), not investment advice.
 
 ## Status
 
@@ -71,7 +71,7 @@ The [walkthrough](docs/walkthrough.md) goes from a clean checkout to cited answe
 Code or Claude Desktop, with the recorded runs and known limitations. In short, without a clone:
 
 ```bash
-uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@TAG"
+uv tool install "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.2.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; `qaos doctor` explains anything missing

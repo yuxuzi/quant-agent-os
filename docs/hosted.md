@@ -14,7 +14,7 @@ One server can serve several teams or customers, each with its own corpus, datas
 and permissions:
 
 ```bash
-quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos \
+qaos hosted tenant add acme --store postgresql://qaos_reader@postgres/qaos \
   --toolsets research,analytics --issuer https://login.acme.example
 qaos ingest /corpus/acme --store postgresql://qaos_ingest@postgres/qaos --schema qr_acme
 qaos data add returns.csv --id returns --tenant acme
@@ -72,7 +72,7 @@ toolsets = ["research"]       # optional: narrows the plan, never widens it
 ```
 
 ```bash
-quant-platform tenant add acme --store postgresql://qaos_reader@postgres/qaos --plan team
+qaos hosted tenant add acme --store postgresql://qaos_reader@postgres/qaos --plan team
 ```
 
 - **No plan, no limits.** A tenant without a plan is served as before.

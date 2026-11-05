@@ -4,7 +4,7 @@ description: Guide the user to a ready Quant-Agent-OS App Factory spec (quant re
 license: MIT
 compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the factory toolset; creating the project needs the qaos app CLI on the user's machine.
 metadata:
-  min-server-version: "0.1.0"
+  min-server-version: "0.2.0"
 ---
 
 # Drafting an App Factory spec
