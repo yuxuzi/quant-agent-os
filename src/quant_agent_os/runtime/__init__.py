@@ -2,7 +2,12 @@
 
 from quant_agent_os.runtime.approvals import Approval, ApprovalLedger, MemoryApprovalLedger
 from quant_agent_os.runtime.call import ToolCall
-from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor, failure_details
+from quant_agent_os.runtime.executor import (
+    ToolCallError,
+    ToolCallRecord,
+    ToolExecutor,
+    failure_details,
+)
 from quant_agent_os.runtime.quotas import Refusal, UsageGate
 
 __all__ = [
@@ -11,6 +16,7 @@ __all__ = [
     "MemoryApprovalLedger",
     "Refusal",
     "ToolCall",
+    "ToolCallError",
     "ToolCallRecord",
     "ToolExecutor",
     "UsageGate",

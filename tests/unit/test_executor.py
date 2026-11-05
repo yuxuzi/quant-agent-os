@@ -6,7 +6,7 @@ from typing import get_args
 import pytest
 from pydantic import BaseModel
 
-from quant_agent_os.runtime import ToolCall, ToolExecutor, failure_details
+from quant_agent_os.runtime import ToolCall, ToolCallError, ToolExecutor, failure_details
 from quant_agent_os.runtime.executor import FAILURE_HINTS, CallStatus
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -153,3 +153,41 @@ def test_failure_details_refuse_a_successful_call() -> None:
 
     with pytest.raises(ValueError, match="failed call"):
         failure_details(record, [])
+
+
+def test_result_returns_the_output_of_a_successful_call() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": 4}))
+
+    assert record.result() == {"value": 8}
+
+
+def test_result_raises_the_status_and_hint_of_a_failed_call() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": "many"}))
+
+    with pytest.raises(ToolCallError, match="invalid_input") as caught:
+        record.result()
+
+    assert caught.value.status == "invalid_input"
+    assert caught.value.error == record.error
+    assert caught.value.hint == FAILURE_HINTS["invalid_input"][0]
+    assert caught.value.retryable is True
+    assert caught.value.record is record
+
+
+@pytest.mark.parametrize("tool_name", ["missing", "broken", "slow"])
+def test_every_failed_call_raises_with_a_finished_hint(tool_name: str) -> None:
+    record = EXECUTOR.execute(ToolCall(tool=tool_name, arguments={"value": 1}))
+
+    with pytest.raises(ToolCallError) as caught:
+        record.result()
+
+    assert record.status != "ok"
+    assert "{" not in caught.value.hint
+    assert record.tool in str(caught.value)
+
+
+def test_a_failed_call_is_recorded_not_raised_until_result_is_asked_for() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="broken", arguments={"value": 1}))
+
+    assert record.status == "error"
+    assert record.output is None
