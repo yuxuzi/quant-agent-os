@@ -19,7 +19,7 @@ from quant_agent_os.api import KeyRing, add_key, build_app, load_keys
 from quant_agent_os.mcp import call_tool
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.runs import MemoryRunStore
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import PermissionPolicy, ResourceSpec
 
@@ -122,7 +122,7 @@ def test_http_results_equal_direct_and_stdio_calls_and_name_the_caller(server: A
         return tools, result
 
     tools, result = _session(app, issued["alice"], check)
-    direct = EXECUTOR.execute(PlanStep(tool="annualized_return", arguments=ARGUMENTS))
+    direct = EXECUTOR.execute(ToolCall(tool="annualized_return", arguments=ARGUMENTS))
 
     assert sorted(item.name for item in tools) == ["annualized_return", "max_drawdown"]
     assert result.isError is False

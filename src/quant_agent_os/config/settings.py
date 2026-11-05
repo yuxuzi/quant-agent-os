@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
-from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from quant_agent_os.tools.permissions import READ_ONLY, Permission, PermissionPolicy
 
 
 class Settings(BaseSettings):
-    """Bring-your-own configuration. Secrets are `SecretStr` and never appear in repr or logs."""
+    """Bring-your-own configuration. Any secret here must be a `SecretStr`, kept out of logs."""
 
     model_config = SettingsConfigDict(
         env_prefix="QUANT_AGENT_OS_",
@@ -22,11 +20,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    model_provider: Literal["fake"] = "fake"
-    model_name: str | None = None
-    api_key: SecretStr | None = None
-
-    max_plan_steps: int = Field(default=8, ge=1, le=50)
     granted_permissions: frozenset[Permission] = READ_ONLY
     preapproved_permissions: frozenset[Permission] = frozenset()
     log_level: str = "INFO"
@@ -42,10 +35,6 @@ class Settings(BaseSettings):
     def public_summary(self) -> dict[str, str]:
         """Return settings that are safe to display; secrets are reported only as set/unset."""
         return {
-            "model_provider": self.model_provider,
-            "model_name": self.model_name or "(none)",
-            "api_key": "set" if self.api_key else "unset",
-            "max_plan_steps": str(self.max_plan_steps),
             "granted_permissions": ", ".join(sorted(p.value for p in self.granted_permissions)),
             "preapproved_permissions": ", ".join(
                 sorted(p.value for p in self.preapproved_permissions)

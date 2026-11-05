@@ -10,7 +10,6 @@ import pytest
 from pydantic import BaseModel, SecretStr
 
 from quant_agent_os.mcp import call_tool
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.runs import (
     MemoryRunStore,
     RunRecorder,
@@ -20,9 +19,8 @@ from quant_agent_os.runs import (
     redact,
 )
 from quant_agent_os.runs.store import SCHEMA_VERSION
-from quant_agent_os.runtime import PlanStep, ToolExecutor
-from quant_agent_os.runtime.orchestrator import Orchestrator, PlanningError
-from quant_agent_os.sdk import Platform, ProviderRequiredError
+from quant_agent_os.runtime import ToolCall, ToolExecutor
+from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, tool
 
 
@@ -51,15 +49,6 @@ EXECUTOR = ToolExecutor(REGISTRY, PermissionPolicy())
 SECRET = "sk-live-0123456789"
 
 
-def _plan(*steps: tuple[str, str]) -> str:
-    return json.dumps(
-        {
-            "goal": "g",
-            "steps": [{"tool": name, "arguments": {"query": query}} for name, query in steps],
-        }
-    )
-
-
 @pytest.fixture(params=["memory", "sqlite"])
 def store(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[RunStore]:
     run_store: RunStore = (
@@ -74,7 +63,7 @@ def store(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[RunStore]:
 
 def test_a_call_is_recorded_as_a_run_with_its_call_and_audit_trail(store: RunStore) -> None:
     record = RunRecorder(store, actor="mcp").call(
-        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "reversal"})
+        EXECUTOR, ToolCall(tool="lookup", arguments={"query": "reversal"})
     )
 
     stored = store.get_run(record.run_id or "")
@@ -98,7 +87,7 @@ def test_a_call_is_recorded_as_a_run_with_its_call_and_audit_trail(store: RunSto
 
 
 def test_a_failed_call_is_a_failed_run(store: RunStore) -> None:
-    record = RunRecorder(store).call(EXECUTOR, PlanStep(tool="broken", arguments={"query": "x"}))
+    record = RunRecorder(store).call(EXECUTOR, ToolCall(tool="broken", arguments={"query": "x"}))
 
     stored = store.get_run(record.run_id or "")
 
@@ -110,8 +99,8 @@ def test_a_failed_call_is_a_failed_run(store: RunStore) -> None:
 
 def test_runs_are_listed_newest_first_and_unknown_runs_are_none(store: RunStore) -> None:
     recorder = RunRecorder(store)
-    first = recorder.call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "a"}))
-    second = recorder.call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "b"}))
+    first = recorder.call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "a"}))
+    second = recorder.call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "b"}))
 
     assert [run.run_id for run in store.list_runs()] == [second.run_id, first.run_id]
     assert len(store.list_runs(limit=1)) == 1
@@ -119,9 +108,9 @@ def test_runs_are_listed_newest_first_and_unknown_runs_are_none(store: RunStore)
 
 
 def test_reads_filtered_by_tenant_see_only_that_tenants_runs(store: RunStore) -> None:
-    local = RunRecorder(store).call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "a"}))
+    local = RunRecorder(store).call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "a"}))
     acme = RunRecorder(store, tenant="acme").call(
-        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "b"})
+        EXECUTOR, ToolCall(tool="lookup", arguments={"query": "b"})
     )
 
     assert [run.run_id for run in store.list_runs(tenant="acme")] == [acme.run_id]
@@ -134,7 +123,7 @@ def test_reads_filtered_by_tenant_see_only_that_tenants_runs(store: RunStore) ->
 
 def test_audit_events_hold_ids_and_statuses_never_inputs(store: RunStore) -> None:
     record = RunRecorder(store).call(
-        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "confidential thesis"})
+        EXECUTOR, ToolCall(tool="lookup", arguments={"query": "confidential thesis"})
     )
 
     stored = store.get_run(record.run_id or "")
@@ -147,7 +136,7 @@ def test_secrets_never_reach_the_run_store_file(tmp_path: Path) -> None:
     path = tmp_path / "runs.db"
     run_store = SqliteRunStore(path)
     RunRecorder(run_store).call(
-        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q", "api_key": SECRET})
+        EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q", "api_key": SECRET})
     )
     run_store.close()
 
@@ -175,7 +164,7 @@ def test_redaction_covers_secret_types_and_secret_named_keys() -> None:
 def test_sqlite_runs_survive_reopening(tmp_path: Path) -> None:
     path = tmp_path / "runs.db"
     first = SqliteRunStore(path)
-    record = RunRecorder(first).call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q"}))
+    record = RunRecorder(first).call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q"}))
     first.close()
 
     reopened = SqliteRunStore(path)
@@ -192,7 +181,7 @@ def test_sqlite_runs_survive_reopening(tmp_path: Path) -> None:
 def test_the_audit_trail_is_append_only(tmp_path: Path, statement: str) -> None:
     path = tmp_path / "runs.db"
     run_store = SqliteRunStore(path)
-    RunRecorder(run_store).call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q"}))
+    RunRecorder(run_store).call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q"}))
     run_store.close()
 
     with sqlite3.connect(path) as db, pytest.raises(sqlite3.DatabaseError, match="append-only"):
@@ -220,50 +209,40 @@ def test_a_store_failure_is_logged_and_never_fails_the_call(
 ) -> None:
     with caplog.at_level(logging.WARNING, logger="quant_agent_os.runs"):
         record = RunRecorder(_FailingStore()).call(
-            EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q"})
+            EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q"})
         )
 
     assert record.status == "ok"
     assert "disk full" in caplog.text
 
 
-# The orchestrator and MCP
+# Reports and MCP
 
 
-def test_an_orchestrated_run_records_every_call() -> None:
-    run_store = MemoryRunStore()
-    orchestrator = Orchestrator(
-        REGISTRY,
-        FakeModelProvider([_plan(("lookup", "a"), ("lookup", "b"))]),
-        recorder=RunRecorder(run_store),
-    )
+def test_a_report_records_its_calls_as_one_run() -> None:
+    calls = [ToolCall(tool="lookup", arguments={"query": q}) for q in "ab"]
 
-    report = orchestrator.run("Look up two things")
-    stored = run_store.get_run(report.metadata.run_id)
+    with Platform(REGISTRY) as platform:
+        report = platform.report("Look up two things", calls)
+        stored = platform.get_run(report.metadata.run_id)
 
     assert stored is not None
-    assert (stored.run.kind, stored.run.status, stored.run.provider) == (
-        "plan",
-        "completed",
-        "fake",
-    )
+    assert (stored.run.kind, stored.run.status) == ("plan", "completed")
     assert stored.run.goal == "Look up two things"
     assert [call.call_id for call in stored.calls] == [c.call_id for c in report.tool_calls]
     assert stored.run.data_versions == report.metadata.data_versions
 
 
-def test_a_rejected_plan_is_recorded_as_a_failed_run() -> None:
-    run_store = MemoryRunStore()
-    orchestrator = Orchestrator(
-        REGISTRY, FakeModelProvider(["not json"]), recorder=RunRecorder(run_store)
-    )
+def test_a_failed_call_becomes_a_warning_and_the_later_calls_still_run() -> None:
+    calls = [ToolCall(tool="delete_everything"), ToolCall(tool="lookup", arguments={"query": "a"})]
 
-    with pytest.raises(PlanningError):
-        orchestrator.run("g")
+    with Platform(REGISTRY) as platform:
+        report = platform.report("g", calls)
+        stored = platform.get_run(report.metadata.run_id)
 
-    (run,) = run_store.list_runs()
-    assert run.status == "failed"
-    assert run.error is not None and "invalid plan" in run.error
+    assert [call.status for call in report.tool_calls] == ["unknown_tool", "ok"]
+    assert not report.succeeded and "delete_everything: unknown_tool" in report.warnings[0]
+    assert stored is not None and stored.run.status == "failed"
 
 
 def test_mcp_calls_are_recorded_when_a_recorder_is_given() -> None:
@@ -295,18 +274,6 @@ def test_platform_and_mcp_return_the_same_output() -> None:
     mcp = call_tool(EXECUTOR, "lookup", {"query": "same"})
 
     assert mcp["structuredContent"] == sdk.output
-
-
-def test_platform_run_needs_a_provider_and_records_the_plan() -> None:
-    with Platform(REGISTRY) as platform, pytest.raises(ProviderRequiredError):
-        platform.run("g")
-
-    with Platform(REGISTRY, provider=FakeModelProvider([_plan(("lookup", "a"))])) as platform:
-        report = platform.run("g")
-        stored = platform.get_run(report.metadata.run_id)
-
-    assert stored is not None and stored.run.kind == "plan"
-    assert len(stored.calls) == 1
 
 
 def test_a_version_1_run_store_is_upgraded_in_place(tmp_path: Path) -> None:
@@ -357,7 +324,7 @@ def test_the_principal_is_recorded_on_the_run_and_every_event(make_store: object
     recorder = RunRecorder(store, actor="rest", principal="alice")
     executor = ToolExecutor(ToolRegistry([lookup]), PermissionPolicy())
 
-    record = recorder.call(executor, PlanStep(tool="lookup", arguments={"query": "q"}))
+    record = recorder.call(executor, ToolCall(tool="lookup", arguments={"query": "q"}))
 
     stored = store.get_run(record.run_id or "")
     assert stored is not None

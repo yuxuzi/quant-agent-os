@@ -15,7 +15,7 @@ from quant_agent_os.runs import (
     RunStore,
     SqliteRunStore,
 )
-from quant_agent_os.runtime import Approval, MemoryApprovalLedger, PlanStep, ToolExecutor
+from quant_agent_os.runtime import Approval, MemoryApprovalLedger, ToolCall, ToolExecutor
 from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import (
     CONSEQUENTIAL,
@@ -140,7 +140,7 @@ def test_resuming_without_an_approval_changes_nothing(platform: Platform) -> Non
 def test_an_approval_is_bound_to_its_run_tool_and_input() -> None:
     ledger = MemoryApprovalLedger()
     executor = ToolExecutor(ToolRegistry([write_note]), GRANTED, approvals=ledger)
-    step = PlanStep(tool="write_note", arguments={"text": "approved"})
+    step = ToolCall(tool="write_note", arguments={"text": "approved"})
     waiting = executor.execute(step, run_id="run-1")
     ledger.grant(
         Approval(
@@ -152,7 +152,7 @@ def test_an_approval_is_bound_to_its_run_tool_and_input() -> None:
     )
 
     other_input = executor.execute(
-        PlanStep(tool="write_note", arguments={"text": "changed"}), run_id="run-1"
+        ToolCall(tool="write_note", arguments={"text": "changed"}), run_id="run-1"
     )
     other_run = executor.execute(step, run_id="run-2")
     no_run = executor.execute(step)

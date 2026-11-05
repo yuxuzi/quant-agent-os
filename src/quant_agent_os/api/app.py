@@ -18,8 +18,8 @@ from quant_agent_os.mcp.adapters import tool_definitions
 from quant_agent_os.runs.models import RunRecord, StoredRun
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runs.store import RunStore
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import CallStatus, ToolExecutor, failure_details
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.serving import SingleTenant, Surface, Tenancy
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
@@ -162,7 +162,7 @@ def build_app(
             raise HTTPException(
                 422, 'The body must be a JSON object: {"arguments": {...}}.'
             ) from None
-        step = PlanStep(tool=name, arguments=arguments)
+        step = ToolCall(tool=name, arguments=arguments)
         if surface.run_store is None:
             record = await run_in_threadpool(executor.execute, step)
         else:

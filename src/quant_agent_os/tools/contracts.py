@@ -36,8 +36,9 @@ def parse_version(version: str) -> tuple[int, int, int]:
 class Deprecation:
     """A deprecated tool's replacement and the date it may be removed (decision 0015, Q-16).
 
-    A breaking change ships as a new tool name; the old one stays, deprecated, for at least 90
-    days and one minor platform release.
+    Optional while the compatibility window is suspended (docs/tools-changelog.md). When it
+    applies, a breaking change ships as a new tool name, and the old one stays deprecated for at
+    least 90 days and one minor platform release.
     """
 
     replacement: str

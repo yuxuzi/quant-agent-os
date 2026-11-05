@@ -21,11 +21,6 @@ CI runs the same commands on Windows, macOS, and Linux for Python 3.11–3.15.
 3. Register it explicitly in a `ToolRegistry`.
 4. Contract tests must pass: complete schemas, and MCP output equal to the direct call.
 
-## Adding a model provider
-
-Implement `ModelProvider` in an adapter module with an optional dependency. Add offline tests
-with recorded responses; live tests must be opt-in.
-
 ## Architecture changes
 
 Record significant decisions as a new file in `docs/decisions/` (`NNNN-short-title.md`: context,

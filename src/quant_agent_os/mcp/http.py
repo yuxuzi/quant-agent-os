@@ -26,8 +26,8 @@ from quant_agent_os.mcp.server import (
     build_server,
 )
 from quant_agent_os.runs.recorder import RunRecorder
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.serving import Tenancy
 
 if TYPE_CHECKING:
@@ -119,7 +119,7 @@ def tenant_route(tenancy: Tenancy, desk: ApprovalDesk | None = None) -> Route:
 
 def _gate(desk: ApprovalDesk, caller: Caller) -> ApprovalGate:
     def gate(
-        executor: ToolExecutor, step: PlanStep, recorder: RunRecorder
+        executor: ToolExecutor, step: ToolCall, recorder: RunRecorder
     ) -> tuple[ToolCallRecord, tuple[str, str] | None]:
         record, opened = desk.call(
             executor, step, tenant=caller.tenant, principal=caller.principal, recorder=recorder

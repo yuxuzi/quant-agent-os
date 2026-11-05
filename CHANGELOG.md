@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **The orchestrator** ([decision 0016](docs/decisions/0016-clients-orchestrate.md)):
+  `Orchestrator`, `Platform.run`, `ModelProvider`, `FakeModelProvider`, `Plan`, the `plan-schema`
+  command, and the `QUANT_AGENT_OS_MODEL_PROVIDER`, `_MODEL_NAME`, `_API_KEY`, and
+  `_MAX_PLAN_STEPS` settings, which had no effect. Only a fake model could ever drive it; clients
+  do the planning. `PlanStep` is now `ToolCall`, in `quant_agent_os.runtime`.
+
+### Added
+
+- `Platform.report(goal, calls)` runs named calls as one recorded run and returns the
+  evidence-linked report. `examples/your-own-model` drives the tools from your own model.
+
 ## [0.1.2] - 2026-11-05
 
 A correctness release: analytics could report wrong numbers with no warning. **If you ran

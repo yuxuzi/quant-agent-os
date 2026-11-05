@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from quant_agent_os.data import DirectoryDatasetStore
-from quant_agent_os.runtime import PlanStep, ToolCallRecord, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolCallRecord, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy
 from quant_analytics import metrics
 from quant_analytics.tools import analytics_tools
@@ -63,7 +63,7 @@ def store(tmp_path: Path) -> DirectoryDatasetStore:
 
 def _call(store: DirectoryDatasetStore, tool: str, **arguments: Any) -> ToolCallRecord:
     executor = ToolExecutor(analytics_tools(store), PermissionPolicy())
-    return executor.execute(PlanStep(tool=tool, arguments=arguments))
+    return executor.execute(ToolCall(tool=tool, arguments=arguments))
 
 
 def _ok(record: ToolCallRecord) -> dict[str, Any]:

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from quant_agent_os.data import DirectoryDatasetStore
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import Permission, PermissionPolicy
 from quant_analytics.tools import analytics_tools
@@ -38,7 +38,7 @@ def store(tmp_path: Path) -> DirectoryDatasetStore:
 
 def _call(store: DirectoryDatasetStore, tool: str, arguments: dict[str, Any]) -> Any:
     executor = ToolExecutor(analytics_tools(store), PermissionPolicy())
-    return executor.execute(PlanStep(tool=tool, arguments=arguments))
+    return executor.execute(ToolCall(tool=tool, arguments=arguments))
 
 
 def test_performance_by_reference_equals_performance_by_value(store: DirectoryDatasetStore) -> None:

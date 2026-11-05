@@ -6,7 +6,7 @@ import pytest
 from portfolio_tools import build_registry
 
 from quant_agent_os.mcp import call_tool, tool_definitions
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy
 
 REGISTRY = build_registry()
@@ -33,7 +33,7 @@ def test_mcp_definitions_mirror_the_registry() -> None:
 
 @pytest.mark.parametrize("name", ["annualized_return", "max_drawdown"])
 def test_mcp_calls_return_exactly_the_direct_result(name: str) -> None:
-    direct = EXECUTOR.execute(PlanStep(tool=name, arguments=ARGUMENTS)).output
+    direct = EXECUTOR.execute(ToolCall(tool=name, arguments=ARGUMENTS)).output
     via_mcp = call_tool(EXECUTOR, name, ARGUMENTS)
 
     assert via_mcp["isError"] is False

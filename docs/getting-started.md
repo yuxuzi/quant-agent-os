@@ -73,30 +73,28 @@ run `uv run quant-platform catalog`.
 
 ## Use it from Python
 
-The SDK calls the same tools through the same executor. A fake provider returns a scripted
-plan, and two deterministic tools compute metrics on synthetic returns:
+The SDK calls the same tools through the same executor. `Platform.report` runs named calls as one
+recorded run, and two deterministic tools compute metrics on synthetic returns, with no model:
 
 ```bash
 uv run python examples/portfolio-research/portfolio_research.py
 ```
 
 ```python
-import json
-
 from portfolio_tools import build_registry  # examples/portfolio-research
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.reporting import render_markdown
-from quant_agent_os.runtime.orchestrator import Orchestrator
+from quant_agent_os.runtime import ToolCall
+from quant_agent_os.sdk import Platform
 
-plan = {
-    "goal": "Drawdown check",
-    "steps": [
-        {"tool": "max_drawdown", "arguments": {"series_id": "demo", "returns": [0.1, -0.5, 0.2]}},
-    ],
-}
-orchestrator = Orchestrator(build_registry(), FakeModelProvider([json.dumps(plan)]))
-print(render_markdown(orchestrator.run("Drawdown check")))
+drawdown = ToolCall(
+    tool="max_drawdown", arguments={"series_id": "demo", "returns": [0.1, -0.5, 0.2]}
+)
+with Platform(build_registry()) as platform:
+    print(render_markdown(platform.report("Drawdown check", [drawdown])))
 ```
+
+To drive the tools from your own model, use your vendor's tool loop over `tool_definitions` and
+`Platform.call`, as [examples/your-own-model](../examples/your-own-model/drive_tools.py) shows.
 
 ## Develop
 

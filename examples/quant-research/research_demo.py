@@ -8,17 +8,15 @@ clean. Tool calls go through `quant_agent_os.mcp`, the adapter an MCP server tra
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from quant_agent_os.mcp import call_tool, tool_definitions
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.reporting import render_markdown
-from quant_agent_os.runtime import ToolExecutor
-from quant_agent_os.runtime.orchestrator import Orchestrator
+from quant_agent_os.runtime import ToolCall, ToolExecutor
+from quant_agent_os.sdk import Platform
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_research import open_research, research_tools
 
@@ -49,12 +47,9 @@ def main() -> None:
             source = passage["source"]
             print(f"  [{passage['chunk_id']}] {source['source_id']}, {source['location']}")
 
-        plan = {
-            "goal": question,
-            "steps": [{"tool": "find_related_signals", "arguments": {"query": question}}],
-        }
-        orchestrator = Orchestrator(registry, FakeModelProvider([json.dumps(plan)]))
-        print("\n" + render_markdown(orchestrator.run(question)))
+        with Platform(registry) as platform:
+            search = ToolCall(tool="find_related_signals", arguments={"query": question})
+            print("\n" + render_markdown(platform.report(question, [search])))
 
 
 if __name__ == "__main__":

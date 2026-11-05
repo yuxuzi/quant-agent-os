@@ -1,5 +1,5 @@
-"""Python SDK: the `Platform` facade over the registry, executor, orchestrator, and run store."""
+"""Python SDK: the `Platform` facade over the registry, executor, reports, and run store."""
 
-from quant_agent_os.sdk.platform import Platform, ProviderRequiredError
+from quant_agent_os.sdk.platform import Platform
 
-__all__ = ["Platform", "ProviderRequiredError"]
+__all__ = ["Platform"]

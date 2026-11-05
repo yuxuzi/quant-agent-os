@@ -6,7 +6,7 @@ from typing import get_args
 import pytest
 from pydantic import BaseModel
 
-from quant_agent_os.runtime import PlanStep, ToolExecutor, failure_details
+from quant_agent_os.runtime import ToolCall, ToolExecutor, failure_details
 from quant_agent_os.runtime.executor import FAILURE_HINTS, CallStatus
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -66,11 +66,11 @@ EXECUTOR = ToolExecutor(
 
 
 def run(tool_name: str, **arguments: object) -> str:
-    return EXECUTOR.execute(PlanStep(tool=tool_name, arguments=arguments)).status
+    return EXECUTOR.execute(ToolCall(tool=tool_name, arguments=arguments)).status
 
 
 def test_successful_call_records_output_and_version() -> None:
-    record = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 21}))
+    record = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": 21}))
 
     assert record.status == "ok"
     assert record.output == {"value": 42}
@@ -89,7 +89,7 @@ def test_failures_are_recorded_not_raised() -> None:
 
 @pytest.mark.parametrize("index", [0, 1])
 def test_a_caller_error_returns_its_message(index: int) -> None:
-    record = EXECUTOR.execute(PlanStep(tool="raising", arguments={"value": index}))
+    record = EXECUTOR.execute(ToolCall(tool="raising", arguments={"value": index}))
 
     raised = RAISED[index]
     assert record.error == f"{type(raised).__name__}: {raised}"
@@ -98,7 +98,7 @@ def test_a_caller_error_returns_its_message(index: int) -> None:
 
 @pytest.mark.parametrize("index", [2, 3, 4, 5])
 def test_an_internal_error_returns_a_generic_message_and_keeps_the_detail(index: int) -> None:
-    record = EXECUTOR.execute(PlanStep(tool="raising", arguments={"value": index}))
+    record = EXECUTOR.execute(ToolCall(tool="raising", arguments={"value": index}))
 
     raised = RAISED[index]
     assert record.status == "error"
@@ -111,8 +111,8 @@ def test_an_internal_error_returns_a_generic_message_and_keeps_the_detail(index:
 
 
 def test_records_carry_provenance_ids_and_a_stable_input_hash() -> None:
-    first = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 2}), run_id="run-1")
-    second = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 2}))
+    first = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": 2}), run_id="run-1")
+    second = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": 2}))
 
     assert first.run_id == "run-1"
     assert first.call_id != second.call_id
@@ -121,7 +121,7 @@ def test_records_carry_provenance_ids_and_a_stable_input_hash() -> None:
 
 
 def test_invalid_input_is_hashed_from_the_raw_arguments() -> None:
-    record = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": "x"}))
+    record = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": "x"}))
 
     assert record.status == "invalid_input"
     assert record.input_sha256 is not None
@@ -133,7 +133,7 @@ def test_every_failure_status_has_a_hint() -> None:
 
 def test_failure_details_say_what_to_do_next() -> None:
     def details(tool_name: str, **arguments: object) -> dict[str, object]:
-        record = EXECUTOR.execute(PlanStep(tool=tool_name, arguments=arguments))
+        record = EXECUTOR.execute(ToolCall(tool=tool_name, arguments=arguments))
         return failure_details(record, ["double", "slow"])
 
     assert details("missing")["hint"] == "Call one of the available tools: double, slow."
@@ -149,7 +149,7 @@ def test_failure_details_say_what_to_do_next() -> None:
 
 
 def test_failure_details_refuse_a_successful_call() -> None:
-    record = EXECUTOR.execute(PlanStep(tool="double", arguments={"value": 1}))
+    record = EXECUTOR.execute(ToolCall(tool="double", arguments={"value": 1}))
 
     with pytest.raises(ValueError, match="failed call"):
         failure_details(record, [])

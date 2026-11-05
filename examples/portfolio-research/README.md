@@ -1,19 +1,18 @@
 # Portfolio research (offline example)
 
-This example shows the whole MVP workflow shape on synthetic data:
+This example shows the whole workflow shape on synthetic data, with no model and no network:
 
 1. A request and data come from `sample_config.toml`.
-2. A fake provider returns a scripted plan (no LLM, no network).
-3. The orchestrator validates the plan against the registry and step limit.
-4. Two deterministic tools compute annualized return and maximum drawdown.
-5. A report is rendered with findings, sources, warnings, limitations, and provenance.
+2. `Platform.report` runs the configured calls as one recorded run.
+3. Two deterministic tools compute annualized return and maximum drawdown.
+4. A report is rendered with findings, sources, warnings, limitations, and provenance.
 
 ```bash
 uv run python examples/portfolio-research/portfolio_research.py
 ```
 
-Try a series with fewer than 12 returns to see the insufficient-data warnings, or put an
-unknown tool in `metrics` to see the plan rejected before anything runs.
+Try a series with fewer than 12 returns to see the insufficient-data warning, or put an unknown
+tool in `metrics` to see it reported as a warning.
 
-The tools in `portfolio_tools.py` stand in for the standalone portfolio analytics package. In
-QuantFoundry, analytics live in their own package, and QuantAgentOS registers them as tools.
+The tools in `portfolio_tools.py` are small on purpose. The platform's full analytics are
+`quant_analytics.tools`.

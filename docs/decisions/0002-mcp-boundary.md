@@ -12,7 +12,7 @@ business logic in MCP servers would duplicate code and bypass the tool contract.
 
 - Core logic lives in plain Python functions registered as `ToolSpec`s.
 - `quant_agent_os.mcp` maps the registry to MCP `tools/list` definitions and executes `tools/call`
-  through the same `ToolExecutor` the orchestrator uses.
+  through the same `ToolExecutor` as every other interface.
 - The adapter has no SDK dependency; a transport (milestone Q5) only forwards requests.
 - Direct in-process calls stay available.
 

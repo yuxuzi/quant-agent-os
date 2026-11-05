@@ -1,11 +1,10 @@
-"""Run the portfolio-research example offline: scripted plan, deterministic tools, Markdown report.
+"""Run the portfolio-research example offline: named calls, deterministic tools, a Markdown report.
 
 Usage: uv run python examples/portfolio-research/portfolio_research.py [CONFIG]
 """
 
 from __future__ import annotations
 
-import json
 import sys
 import tomllib
 from pathlib import Path
@@ -13,9 +12,9 @@ from typing import Any
 
 from portfolio_tools import build_registry
 
-from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.reporting import Report, render_markdown
-from quant_agent_os.runtime.orchestrator import Orchestrator
+from quant_agent_os.runtime import ToolCall
+from quant_agent_os.sdk import Platform
 
 DEFAULT_CONFIG = Path(__file__).with_name("sample_config.toml")
 
@@ -27,24 +26,22 @@ def load_config(path: Path) -> dict[str, Any]:
 
 
 def run(config: dict[str, Any]) -> Report:
-    """Run the configured request with a fake provider that returns the scripted plan."""
+    """Compute the configured metrics as one recorded run, and return its report."""
     request = config["request"]
     series = config["series"]
-    steps = [
-        {
-            "tool": name,
-            "arguments": {
+    calls = [
+        ToolCall(
+            tool=name,
+            arguments={
                 "series_id": series["id"],
                 "returns": series["returns"],
                 "periods_per_year": series["periods_per_year"],
             },
-            "purpose": f"Compute {name.replace('_', ' ')}",
-        }
+        )
         for name in request["metrics"]
     ]
-    provider = FakeModelProvider([json.dumps({"goal": request["goal"], "steps": steps})])
-    orchestrator = Orchestrator(build_registry(), provider, max_steps=config["limits"]["max_steps"])
-    return orchestrator.run(request["goal"])
+    with Platform(build_registry()) as platform:
+        return platform.report(request["goal"], calls)
 
 
 def main() -> None:

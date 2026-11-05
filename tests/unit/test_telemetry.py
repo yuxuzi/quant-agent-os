@@ -11,7 +11,7 @@ from typing import Any, get_args
 import pytest
 from pydantic import BaseModel
 
-from quant_agent_os.runtime import PlanStep, ToolExecutor, telemetry
+from quant_agent_os.runtime import ToolCall, ToolExecutor, telemetry
 from quant_agent_os.runtime.executor import CallStatus
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
@@ -94,11 +94,11 @@ EXECUTOR = ToolExecutor(
 
 
 def call(tool_name: str, **arguments: object) -> str:
-    return EXECUTOR.execute(PlanStep(tool=tool_name, arguments=arguments)).status
+    return EXECUTOR.execute(ToolCall(tool=tool_name, arguments=arguments)).status
 
 
 def test_a_call_is_one_span_one_count_and_one_duration(seen: Instruments) -> None:
-    record = EXECUTOR.execute(PlanStep(tool="lookup", arguments={"query": "momentum"}))
+    record = EXECUTOR.execute(ToolCall(tool="lookup", arguments={"query": "momentum"}))
 
     (span,) = seen.spans
     assert span.name == "execute_tool lookup" and span.status is None

@@ -8,9 +8,7 @@ changelog is [CHANGELOG.md](../CHANGELOG.md).
 
 - **Major:** a breaking change to the input schema (a new required field, a removed or renamed
   field, a narrowed type), to the output schema, to the permissions, or to the meaning of a
-  result. A breaking change ships as a **new tool name** (for example `search_passages_v2`);
-  the old tool is marked deprecated, names its replacement, and stays for at least 90 days and
-  one minor platform release. Removing it is a major platform release.
+  result.
 - **Minor:** additions only, such as an optional input, a new output field, or a new enum value.
 - **Patch:** fixes that change neither schema, such as a clearer description.
 
@@ -20,6 +18,12 @@ fail when they change without a big enough version bump. After raising the versi
 
 Clients read the served versions from `qaos://server/info`.
 
+**No compatibility window yet.** While the project is young, a tool may change or be removed in any
+release, under its existing name, with an entry here. The rule from
+[decision 0015](decisions/0015-metering-quotas-and-entitlements.md) (a new tool name, and at least
+90 days and a major release before removal) is suspended until the owner decides the project is
+mature enough. Version bumps and the lock still apply, so every change stays visible.
+
 ## 0.1.2
 
 | Tool | Version | Change |
@@ -28,10 +32,6 @@ Clients read the served versions from `qaos://server/info`.
 | `analyze_risk` | 2.0.0 | The same, for assets and factors. |
 | `research_report` | 2.0.0 | `periods_per_year` is inferred the same way. |
 | `list_datasets` | 1.1.0 | Adds `periods_per_year` and `missing_cells` to each dataset. |
-
-**Exception to the new-name rule.** These breaking changes keep their tool names. The old default
-produced wrong numbers with no warning (monthly annualisation of daily data), so keeping the old
-tool available for 90 days would keep serving the error. The rule is unchanged for other changes.
 
 ## 0.1.1
 

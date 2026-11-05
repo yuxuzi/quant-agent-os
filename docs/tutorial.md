@@ -109,16 +109,16 @@ uv run quant-agent-os --version
 
 ## Lab 1: Your first report
 
-**Goal:** see one complete cycle, with no AI involved. A fake model returns a scripted plan, so
-the result is the same every time.
+**Goal:** see one complete cycle, with no AI involved. A script names the tool calls, so the
+result is the same every time. In real use, your AI client chooses the calls.
 
 ```mermaid
 flowchart LR
-    G["Goal"] --> P["Model proposes<br/>a plan"]
-    P --> V{"Plan valid?<br/>known tools,<br/>step limit"}
-    V -->|No| X["Refused:<br/>nothing runs"]
-    V -->|Yes| E["Executor runs<br/>each step"]
-    E --> R["Report: findings,<br/>warnings, limitations,<br/>provenance"]
+    G["Goal"] --> C["Tool calls<br/>from the config"]
+    C --> E["Executor checks<br/>and runs each call"]
+    E -->|Refused or failed| W["A warning<br/>in the report"]
+    E -->|OK| R["Report: findings,<br/>warnings, limitations,<br/>provenance"]
+    W --> R
 ```
 
 ### Run it
@@ -175,8 +175,7 @@ uv run python examples/portfolio-research/portfolio_research.py "$TUT/my_portfol
 | Change this in the file | What you should see |
 | --- | --- |
 | Keep only 3 values in `returns` | Warnings: `Only 3 observations ...; results are unreliable below 12.` |
-| Add `"guess_the_future"` to `metrics` | Refused: `The plan uses a tool that is not available: 'guess_the_future'.` (it ends a Python traceback) |
-| Set `max_steps = 1` | Refused: `The plan has 2 steps; the limit is 1.` |
+| Add `"guess_the_future"` to `metrics` | Warnings: `guess_the_future: unknown_tool - Unknown tool 'guess_the_future'...`; the other metrics still run |
 
 **The lesson:** a plan is checked before anything runs, and weak data produces a warning, not
 false confidence.
@@ -545,11 +544,13 @@ uv run python examples/tutorial/lab_guardrails.py
 4. The approval was for that one call, so the next call asks again
    status: approval_required
 
-5. A plan naming a tool that is not registered
-   refused: The plan uses a tool that is not available: 'delete_everything'.
+5. A tool that is not registered
+   status: unknown_tool
+   error:  Unknown tool 'delete_everything'. Available: send_order.
 
-6. A plan longer than the step limit
-   refused: The plan has 3 steps; the limit is 2.
+6. Input that does not match the tool's schema
+   status: invalid_input
+   error:  quantity: Input should be a valid integer, unable to parse string as an integer
 ```
 
 ### What just happened
@@ -568,7 +569,6 @@ run the copy.
 | Change | What you should see |
 | --- | --- |
 | Change `quantity` in `ORDER` to `"lots"` | Section 1 is still `denied`, and section 2 is `invalid_input`: permissions come first, then input, then approval. Section 3 then stops with a traceback, because nothing is awaiting approval |
-| Change `max_steps=2` to `max_steps=3` in section 6 | No refusal in section 6: the plan now fits the limit |
 | Replace `Permission.EXTERNAL_ACTION` in `@tool` with `Permission.READ_LOCAL_DATA` | Sections 1 and 2 return `ok`, because reading is granted by default and needs no approval. Section 3 then stops with a traceback, because nothing is awaiting approval |
 
 **Found a way past a gate?** That is the most valuable feedback there is. Please report it

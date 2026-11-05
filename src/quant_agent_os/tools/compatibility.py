@@ -71,8 +71,8 @@ def check_lock(lock: dict[str, dict[str, Any]], specs: Iterable[ToolSpec[Any, An
     current = {spec.name: lock_entry(spec) for spec in specs}
     for name in sorted(set(lock) - set(current)):
         problems.append(
-            f"{name} is in the lock but not served; removing a tool needs a major platform "
-            "release and a deprecation window (decision 0015). Update the lock if intended."
+            f"{name} is in the lock but not served. Update the lock if intended, and add the "
+            "removal to docs/tools-changelog.md."
         )
     for name, entry in sorted(current.items()):
         if name not in lock:

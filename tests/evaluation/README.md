@@ -3,9 +3,7 @@
 Evaluations measure quality, not just correctness. Milestones add them as they land:
 
 - **Q4, research retrieval:** citation accuracy on a fixture corpus with a recorded baseline,
-  plus prompt-injection fixtures that must not change the plan or tool selection.
-- **Q6, orchestration:** plan validity and report completeness over a fixed set of requests,
-  run with the fake provider by default and with a real provider only when explicitly enabled.
+  plus prompt-injection fixtures that must not change what a run calls.
 - **P1.1, agent efficiency** (`agent_efficiency.py`): what a client pays to do typical tasks
   over the MCP servers. Per server: tools, definition bytes, and instruction bytes the model sees
   every turn. Per task: calls, argument bytes, result bytes, and success. A scripted client

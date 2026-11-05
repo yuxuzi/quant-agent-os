@@ -30,8 +30,8 @@ from quant_agent_os.mcp.adapters import (
     tool_definitions,
 )
 from quant_agent_os.runs.recorder import RunRecorder
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools.catalog import PromptArgumentError, PromptSpec, ResourceSpec
 
@@ -52,7 +52,7 @@ class AccessDeniedError(PermissionError):
 # Runs a call for one caller, opening an approval request if it waits for one (decision
 # 0014); returns the record and, for a new request, its id and the approval page's address.
 ApprovalGate = Callable[
-    [ToolExecutor, PlanStep, RunRecorder], tuple[ToolCallRecord, tuple[str, str] | None]
+    [ToolExecutor, ToolCall, RunRecorder], tuple[ToolCallRecord, tuple[str, str] | None]
 ]
 
 
@@ -137,7 +137,7 @@ def build_server(
         )
 
     async def confirmed(
-        executor: ToolExecutor, step: PlanStep, record: ToolCallRecord
+        executor: ToolExecutor, step: ToolCall, record: ToolCallRecord
     ) -> ToolCallRecord:
         """Ask the client to confirm a waiting call; run it in its run if confirmed."""
         assert recorder is not None and record.run_id is not None
@@ -187,7 +187,7 @@ def build_server(
     async def handle_call(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
         served = serve("tools:call")
         executor = served.surface.executor
-        step = PlanStep(tool=name, arguments=arguments)
+        step = ToolCall(tool=name, arguments=arguments)
         if served.approvals is not None and served.recorder is not None:
             record, opened = await anyio.to_thread.run_sync(
                 served.approvals, executor, step, served.recorder

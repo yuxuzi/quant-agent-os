@@ -20,7 +20,7 @@ from quant_agent_os.runs import (
     summarize,
 )
 from quant_agent_os.runs.store import SCHEMA_VERSION
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, tool
 
 
@@ -63,14 +63,14 @@ def store(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[RunStore]:
 
 
 def _call(recorder: RunRecorder, tool_name: str, query: str = "q") -> None:
-    recorder.call(EXECUTOR, PlanStep(tool=tool_name, arguments={"query": query}))
+    recorder.call(EXECUTOR, ToolCall(tool=tool_name, arguments={"query": query}))
 
 
 def test_a_recorded_call_has_one_usage_event(store: RunStore) -> None:
     recorder = RunRecorder(
         store, actor="rest", principal="alice", tenant="acme", toolsets={"lookup": "research"}
     )
-    record = recorder.call(EXECUTOR, PlanStep(tool="lookup", arguments={"query": "abc"}))
+    record = recorder.call(EXECUTOR, ToolCall(tool="lookup", arguments={"query": "abc"}))
 
     [usage] = store.list_usage(*EVER)
 
@@ -96,7 +96,7 @@ def test_a_recorded_call_has_one_usage_event(store: RunStore) -> None:
 def test_calls_that_used_the_server_are_billable_and_refusals_are_not(
     store: RunStore, tool_name: str, arguments: dict[str, str], status: str, billable: bool
 ) -> None:
-    RunRecorder(store).call(EXECUTOR, PlanStep(tool=tool_name, arguments=arguments))
+    RunRecorder(store).call(EXECUTOR, ToolCall(tool=tool_name, arguments=arguments))
 
     [usage] = store.list_usage(*EVER)
 
@@ -119,7 +119,7 @@ def test_usage_holds_sizes_never_arguments_or_outputs(tmp_path: Path) -> None:
 def test_usage_is_sized_before_redaction(store: RunStore) -> None:
     secret = "sk-live-0123456789"
     RunRecorder(store).call(
-        EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q", "api_key": secret})
+        EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q", "api_key": secret})
     )
 
     [usage] = store.list_usage(*EVER)
@@ -141,7 +141,7 @@ def test_usage_is_read_by_tenant_and_half_open_window(store: RunStore) -> None:
 def test_a_call_and_its_usage_are_written_in_one_transaction(tmp_path: Path) -> None:
     with SqliteRunStore(tmp_path / "runs.db") as store:
         record = RunRecorder(store).call(
-            EXECUTOR, PlanStep(tool="lookup", arguments={"query": "q"})
+            EXECUTOR, ToolCall(tool="lookup", arguments={"query": "q"})
         )
         [usage] = store.list_usage(*EVER)
         again = record.model_copy(update={"call_id": "another"})

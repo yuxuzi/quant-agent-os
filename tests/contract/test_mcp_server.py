@@ -23,7 +23,7 @@ from quant_agent_os.mcp import (
     served_resources,
     tool_definitions,
 )
-from quant_agent_os.runtime import PlanStep, ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import (
     Permission,
     PermissionPolicy,
@@ -81,7 +81,7 @@ def test_tool_results_equal_direct_executor_calls() -> None:
         return await session.call_tool("annualized_return", ARGUMENTS)
 
     result = _session(check)
-    direct = EXECUTOR.execute(PlanStep(tool="annualized_return", arguments=ARGUMENTS))
+    direct = EXECUTOR.execute(ToolCall(tool="annualized_return", arguments=ARGUMENTS))
 
     assert result.isError is False
     assert result.structuredContent == direct.output
@@ -211,7 +211,7 @@ def test_resources_are_read_through_their_tool_with_the_same_output() -> None:
         return templates, read
 
     templates, read = _catalog_session(check, resources=[ENTRY, PAGE])
-    direct = CATALOG_EXECUTOR.execute(PlanStep(tool="lookup", arguments={"key": "abc"}))
+    direct = CATALOG_EXECUTOR.execute(ToolCall(tool="lookup", arguments={"key": "abc"}))
 
     assert [item.uriTemplate for item in templates] == ["test://entry/{key}", "test://page/{url}"]
     assert read.contents[0].text == json.dumps(direct.output, sort_keys=True)

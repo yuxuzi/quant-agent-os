@@ -13,8 +13,8 @@ from quant_agent_os.runs.models import AuditEvent, RunKind, RunRecord, RunStatus
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import RunStore, RunStoreError
 from quant_agent_os.runtime.approvals import Approval
+from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
-from quant_agent_os.runtime.plan import PlanStep
 from quant_agent_os.tenancy import DEFAULT_TENANT
 
 logger = logging.getLogger("quant_agent_os.runs")
@@ -82,7 +82,7 @@ class RunRecorder:
         self.tenant = tenant
         self.toolsets = toolsets or {}
 
-    def call(self, executor: ToolExecutor, step: PlanStep) -> ToolCallRecord:
+    def call(self, executor: ToolExecutor, step: ToolCall) -> ToolCallRecord:
         """Execute ``step`` as a one-call run and record it."""
         run = self.start("call", step.tool, registry_digest=executor.registry.digest())
         record = executor.execute(step, run_id=run.run_id)
@@ -132,7 +132,7 @@ class RunRecorder:
         return approvals
 
     def resume(
-        self, executor: ToolExecutor, run_id: str, steps: list[PlanStep] | None = None
+        self, executor: ToolExecutor, run_id: str, steps: list[ToolCall] | None = None
     ) -> list[ToolCallRecord]:
         """Run the calls ``run_id`` is waiting on, in that run, and record how it ends.
 
@@ -148,7 +148,7 @@ class RunRecorder:
                 f"Run {run_id} is {stored.run.status}, not awaiting an approval."
             )
         waiting = steps or [
-            PlanStep(tool=call.tool, arguments=call.arguments) for call in _waiting(stored.calls)
+            ToolCall(tool=call.tool, arguments=call.arguments) for call in _waiting(stored.calls)
         ]
         records = [executor.execute(step, run_id=run_id) for step in waiting]
         for record in records:
@@ -169,7 +169,6 @@ class RunRecorder:
         goal: str,
         *,
         registry_digest: str,
-        provider: str | None = None,
         run_id: str | None = None,
     ) -> RunRecord:
         """Record that a run started and return it."""
@@ -182,7 +181,6 @@ class RunRecorder:
             principal=self.principal,
             tenant=self.tenant,
             platform_version=__version__,
-            provider=provider,
             registry_digest=registry_digest,
             started_at=datetime.now(UTC),
         )

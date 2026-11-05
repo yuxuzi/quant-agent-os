@@ -58,8 +58,14 @@ def test_guardrails_lab_shows_every_refusal_in_order(
     output = run_lab(monkeypatch, capsys, "lab_guardrails.py")
 
     statuses = re.findall(r"status: (\w+)", output)
-    assert statuses == ["denied", "approval_required", "ok", "approval_required"]
-    assert output.count("refused:") == 2
+    assert statuses == [
+        "denied",
+        "approval_required",
+        "ok",
+        "approval_required",
+        "unknown_tool",
+        "invalid_input",
+    ]
 
 
 @pytest.mark.parametrize(
