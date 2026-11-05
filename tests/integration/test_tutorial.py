@@ -42,6 +42,24 @@ def test_analytics_lab_prints_the_numbers_the_tutorial_shows(
         assert line in TUTORIAL.read_text(encoding="utf-8")
 
 
+def test_analytics_lab_finds_the_datasets_in_the_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(tmp_path))
+    store = DirectoryDatasetStore(tmp_path / "datasets")
+    store.put("fund", LABS / "data" / "fund_returns.csv")
+    store.put("portfolio", LABS / "data" / "portfolio_returns.csv")
+
+    assert "sharpe_ratio         1.1043" in run_lab(monkeypatch, capsys, "lab_analytics.py")
+
+
+def test_tutorial_names_no_removed_command() -> None:
+    text = TUTORIAL.read_text(encoding="utf-8")
+
+    for removed in ("quant-agent-os --version", "dataset push", "api-key new", "serve-mcp"):
+        assert removed not in text
+
+
 def test_first_tool_lab_passes_the_contract_and_refuses_bad_input(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -75,6 +93,7 @@ def test_guardrails_lab_shows_every_refusal_in_order(
         ({"detail": "No key."}, "refused: No key."),
         ({"status": "denied", "error": "No.", "hint": "Stop."}, "error: No."),
         ({"status": "ok", "output": {"metrics": {"sharpe_ratio": 1.5}}}, "sharpe_ratio: 1.5000"),
+        ({"status": "ok", "output": {"spec": {"open_questions": ["a"]}}}, "open questions: 1"),
         ([], "no runs"),
     ],
 )

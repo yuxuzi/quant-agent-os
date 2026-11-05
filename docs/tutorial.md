@@ -9,9 +9,9 @@ something, and see what happens. At the end, [tell us what to improve](#give-fee
   install, only Labs 6 and 8 use the network. All the sample data is synthetic.
 - **Time:** about 90 minutes for everything, and each lab stands alone after setup.
 
-The outputs were recorded on version 0.1.1 on 2026-11-03, and the analytics labs again on 0.1.2; 0.2.0 renamed the commands to `qaos`. Run ids and timings will differ, and
-tables wrap to your terminal's width. Some outputs are shortened. This is research software, not
-investment advice.
+Everything was run on version 0.2.0 on 2026-11-05, except that Lab 6's server was checked with an
+MCP client rather than Claude Code itself. Run ids and timings will differ, and tables wrap to your
+terminal's width. Some outputs are shortened. This is research software, not investment advice.
 
 > **Can't see the diagrams?** GitHub draws them. In VS Code, install the *Markdown Preview
 > Mermaid Support* extension.
@@ -77,7 +77,7 @@ flowchart TD
 
 | Lab | You will learn | Needs |
 | --- | --- | --- |
-| [1. First report](#lab-1-your-first-report) | The plan, tool, and report cycle | Setup |
+| [1. First report](#lab-1-your-first-report) | The tool-call and report cycle | Setup |
 | [2. Metrics on your data](#lab-2-metrics-on-your-data) | Datasets by reference, stated conventions | Setup |
 | [3. Knowledge base](#lab-3-a-knowledge-base-with-citations) | Ingestion, citations, the graph, strategy specs | Setup |
 | [4. Write a tool](#lab-4-write-your-own-tool) | The tool contract and `check_tool` | Setup |
@@ -95,14 +95,19 @@ uv sync --locked
 source examples/tutorial/env.sh
 ```
 
-If you already have a clone, skip the first two lines. `env.sh` keeps your work in one folder, `~/qaos-tutorial`, so it stays apart from any real
-Quant-Agent-OS data you have. **Run every command from the repository root. In each new terminal,
+If you already have a clone, skip the first two lines. `env.sh` sets `QUANT_AGENT_OS_HOME` to
+`~/qaos-tutorial`, so your work stays apart from any real Quant-Agent-OS data you have, and every
+command finds it without flags. **Run every command from the repository root. In each new terminal,
 run the `source` line again.**
 
 Check that it works:
 
 ```bash
-uv run quant-agent-os --version
+uv run qaos --version
+```
+
+```text
+qaos 0.2.0
 ```
 
 ---
@@ -148,8 +153,10 @@ _None._
 
 | Step | Tool | Version | Status | ms |
 | --- | --- | --- | --- | --- |
-| 1 | annualized_return | 1.0.0 | ok | 1.091 |
-| 2 | max_drawdown | 1.0.0 | ok | 0.15 |
+| 1 | annualized_return | 1.0.0 | ok | 0.268 |
+| 2 | max_drawdown | 1.0.0 | ok | 0.125 |
+
+Run `dc90024c758e41fbb3b37f1e4741be83`: platform 0.2.0, registry `1f84e6bfc1cd`, 2026-11-05T16:21:40.587599+00:00 to 2026-11-05T16:21:40.590275+00:00.
 ```
 
 ### What just happened
@@ -177,8 +184,8 @@ uv run python examples/portfolio-research/portfolio_research.py "$TUT/my_portfol
 | Keep only 3 values in `returns` | Warnings: `Only 3 observations ...; results are unreliable below 12.` |
 | Add `"guess_the_future"` to `metrics` | Warnings: `guess_the_future: unknown_tool - Unknown tool 'guess_the_future'...`; the other metrics still run |
 
-**The lesson:** a plan is checked before anything runs, and weak data produces a warning, not
-false confidence.
+**The lesson:** a call that can't run is refused and reported without stopping the others, and weak
+data produces a warning, not false confidence.
 
 ---
 
@@ -193,7 +200,7 @@ sequenceDiagram
     participant Store as Dataset store
     participant Client as Client or script
     participant Tool as analyze_performance
-    You->>Store: dataset push (validate, fingerprint)
+    You->>Store: qaos data add (validate, fingerprint)
     Client->>Tool: returns = {dataset: "fund", column: "fund"}
     Tool->>Store: read the column
     Store-->>Tool: values and fingerprint
@@ -257,9 +264,9 @@ Risk of 60-30-10: volatility 7.15% a year
 | --- | --- |
 | Change `WEIGHTS` at the top of [lab_analytics.py](../examples/tutorial/lab_analytics.py), then rerun (undo it afterwards with `git checkout examples/tutorial/lab_analytics.py`) | New risk shares |
 | Use your own returns: `uv run qaos data add my.csv --id fund`, with columns `fund` and `benchmark` | Your own metrics and a new data version |
-| Push only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run qaos data add "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Push the full file again afterwards, because later labs use it |
-| Push a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
-| Blank out one `fund` cell in a copy of the file, and push it as `fund` | It loads and says one cell is missing. `Warnings:` says one row was left out, and nothing is filled in |
+| Add only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run qaos data add "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Add the full file again afterwards, because later labs use it |
+| Add a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
+| Blank out one `fund` cell in a copy of the file, and add it as `fund` | It loads and says one cell is missing. `Warnings:` says one row was left out, and nothing is filled in |
 
 ---
 
@@ -293,19 +300,19 @@ flowchart TD
 ### Build the store
 
 ```bash
-uv run qaos ingest src/quant_platform/sample/corpus --store "$KB"
+uv run qaos ingest src/quant_platform/sample/corpus
 ```
 
 ```text
 Added 6, unchanged 0, skipped 1: 9 chunks, 45 mentions, 32 relations, 0 embeddings.
-Corpus snapshot snap:8cddf9d734e07c1c in .../qaos-tutorial/kb.db.
+Corpus snapshot snap:8cddf9d734e07c1c in .../qaos-tutorial/knowledge.db.
 warning: Skipped chart.png: supported types are .markdown, .md, .pdf, .txt.
 ```
 
 ### Ask a question
 
 ```bash
-uv run qaos search "What is related to short-term reversal?" --store "$KB"
+uv run qaos search "What is related to short-term reversal?"
 ```
 
 ```text
@@ -327,7 +334,7 @@ gives its file and lines, so you can open the file and check, plus the channels 
 ### See what the corpus does not know
 
 ```bash
-uv run qaos search "protein folding" --store "$KB"
+uv run qaos search "protein folding"
 ```
 
 ```text
@@ -339,7 +346,7 @@ Finding nothing is the correct answer here. The tool returns no evidence rather 
 ### Draft a strategy spec, then improve it
 
 ```bash
-uv run qaos strategy "short-term reversal" --store "$KB"
+uv run qaos strategy "short-term reversal"
 ```
 
 ```text
@@ -361,8 +368,8 @@ teach it something by adding [a note](../examples/tutorial/data/notes/my-reversa
 ```bash
 mkdir -p "$TUT/notes"
 cp examples/tutorial/data/notes/my-reversal-note.md "$TUT/notes/"
-uv run qaos ingest "$TUT/notes" --store "$KB"
-uv run qaos strategy "short-term reversal" --store "$KB"
+uv run qaos ingest "$TUT/notes"
+uv run qaos strategy "short-term reversal"
 ```
 
 Three new rows appear, citing your note, and the universe and test-method questions disappear:
@@ -390,8 +397,8 @@ Q: momentum crashes
   related: Short-term reversal (signal, score 0.70)
   cited:   momentum-crashes.md, lines 10-14, § Momentum, reversal, and crashes
   cited:   momentum-crashes.md, lines 16-20, § Momentum, reversal, and crashes
-Run 5139...: completed, snapshot snap:32c1a82b3273c76a, input sha256 0c0b...
-5139...  2026-11-03 22:50:59  sdk   completed  snap:32c1a82b3273c76a  find_related_signals
+Run 4066...: completed, snapshot snap:32c1a82b3273c76a, input sha256 0c0b...
+4066...  2026-11-05 16:21:43  sdk   completed  snap:32c1a82b3273c76a  find_related_signals
 ```
 
 To see one run's calls and audit trail, run `uv run qaos runs <RUN_ID>`.
@@ -400,9 +407,9 @@ To see one run's calls and audit trail, run `uv run qaos runs <RUN_ID>`.
 
 | Try this | What you should see |
 | --- | --- |
-| `uv run qaos search "carry" --store "$KB"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
-| `uv run qaos search "inventory risk" --store "$KB"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
-| `uv run qaos search "reversal" --hops 2 --store "$KB"` | More entities, found two graph steps away |
+| `uv run qaos search "carry"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
+| `uv run qaos search "inventory risk"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
+| `uv run qaos search "reversal" --hops 2` | More entities, found two graph steps away |
 | Add `--min-confidence 0.4` to the `strategy` command | More rows, from weaker links |
 | Add a line such as `Momentum predicts time-series momentum.` to your note, then run `ingest` again | Only the changed file is re-read, with one more relation |
 | Run `ingest "$TUT/notes"` twice without changes | `Added 0, unchanged 1` and the same snapshot id |
@@ -606,12 +613,11 @@ First, see what the client will be offered:
 uv run qaos catalog
 ```
 
-You should see 11 tools, 6 resources, and 4 prompts, including `find_related_signals`,
+You should see 7 tools, 3 resources, and 3 prompts, including `find_related_signals`,
 `analyze_performance`, and `research_report`. Then register the server, from the repository root:
 
 ```bash
-claude mcp add qaos-tutorial -- uv run --directory "$REPO" qaos serve \
-  --store "$KB" --datasets "$TUT/datasets" --runs "$TUT/runs.db"
+claude mcp add qaos-tutorial -e QUANT_AGENT_OS_HOME="$TUT" -- uv run --directory "$REPO" qaos serve
 ```
 
 Start `claude` in the same folder and run `/mcp` to confirm that `qaos-tutorial` is connected.
@@ -834,6 +840,7 @@ hint: The tenant reached a limit of its plan. Wait retry_after_seconds before ca
 ```
 
 ```text
+5 calls from 2026-11-01T00:00:00+00:00 to 2026-11-05T16:21:57.039590+00:00.
 tenant,group,toolset,calls,billable_calls,duration_ms,input_bytes,output_bytes
 acme,find_related_signals,research,1,1,...
 globex,find_related_signals,research,4,3,...
@@ -851,7 +858,7 @@ unset QUANT_AGENT_OS_TENANTS_FILE
 | --- | --- |
 | Create a key with only `--scope tools:list`, then use it to call a tool | Listing works, and the call is refused: `This API key lacks the 'tools:call' scope.` |
 | `uv run qaos hosted tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
-| Connect Claude over HTTP while the Part 1 server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 11 tools, over HTTP |
+| Connect Claude over HTTP while the Part 1 server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 7 tools, over HTTP |
 
 > This setup is for learning on loopback. Before you put a server on a network, read
 > [deployment.md](deployment.md) and the open findings in
@@ -862,8 +869,7 @@ unset QUANT_AGENT_OS_TENANTS_FILE
 ## Lab 8: Generate a quant project
 
 **Goal:** go from one command to a tested research project. This lab needs network access. It
-writes the project to the folder you run it from and records your approval in
-`~/.quant-agent-os/runs.db`.
+writes the project to the folder you run it from and records your approval in the home's `runs.db`.
 
 ```mermaid
 flowchart TD
@@ -889,14 +895,17 @@ uv run --project "$REPO" qaos app new quant-research my-lab --defaults
 Answer yes at the prompt. Your yes is the recorded approval.
 
 ```text
+Wrote my-lab.toml.
 my-lab (quant-baseline/quant-research) -> .../qaos-tutorial/work/my-lab
   35 files; components: data-csv, metrics; checks: uv sync, ruff check, ruff format, mypy, pytest
+Create it? It writes files, runs uv, and downloads packages [y/N]: y
 Created .../qaos-tutorial/work/my-lab with pytemplate-uv==3.0.0.
-  ok  uv sync
-  ok  uv run ruff check .
-  ok  uv run ruff format --check .
-  ok  uv run mypy my_lab tests
-  ok  uv run pytest
+  ok  uv sync  (0.2 s)
+  ok  uv run ruff check .  (0.4 s)
+  ok  uv run ruff format --check .  (0.0 s)
+  ok  uv run mypy my_lab tests  (3.0 s)
+  ok  uv run pytest  (6.1 s)
+Run 26b99499b1fb4a6c8ca5a1bf6cf8b315 recorded in .../qaos-tutorial/runs.db.
 ```
 
 ### Run the research
@@ -948,8 +957,7 @@ rm -rf "$TUT"
 ```
 
 If you did Lab 6 or the HTTP step in Lab 7, also run `claude mcp remove qaos-tutorial` and
-`claude mcp remove qaos-http`. Lab 8's approval record stays in
-`~/.quant-agent-os/runs.db`, because the audit trail is append-only.
+`claude mcp remove qaos-http`.
 
 ## If something goes wrong
 
@@ -969,7 +977,7 @@ flowchart TD
 | Symptom | Fix |
 | --- | --- |
 | `warning: no knowledge store, so the research toolset is not served` | Do Lab 3, and `source examples/tutorial/env.sh` in this terminal |
-| `analyze_performance error: ... No dataset 'fund'` | Do the `dataset push` commands in Lab 2 |
+| `analyze_performance error: ... No dataset 'fund'` | Do the `qaos data add` commands in Lab 2 |
 | `the server does not start`, or `curl` waits forever in Lab 7 | Read `$TUT/server.log`. In Part 2, check that `QUANT_AGENT_OS_TENANTS_FILE` is set, and press Ctrl+C to stop waiting |
 | A single-tenant server still acts on the tenants file | Run `unset QUANT_AGENT_OS_TENANTS_FILE` |
 | Install fails while building a package, on a very new Python | Use an older one: `uv sync --locked --python 3.13` |
@@ -982,17 +990,17 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 
 | | You, the operator (commands) | An AI client (tools) |
 | --- | --- | --- |
-| **Data** | `dataset push` | `list_datasets`, `analyze_performance`, `analyze_risk` |
+| **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk` |
 | **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
 | **Projects** | `qaos app create`, `qaos app new` | `describe_template`, `check_spec` (with the factory toolset) |
-| **Access** | `api-key new`, `hosted tenant add` | None |
+| **Access** | `qaos keys new`, `qaos hosted tenant add` | None |
 
 | I want to | Command |
 | --- | --- |
 | Add a dataset | `uv run qaos data add file.csv --id name` |
-| Build or update a knowledge store | `uv run qaos ingest DIR --store FILE` |
-| Ask a question | `uv run qaos search "question" --store FILE` |
-| Draft a cited strategy spec | `uv run qaos strategy "topic" --store FILE` |
+| Build or update a knowledge store | `uv run qaos ingest DIR` |
+| Ask a question | `uv run qaos search "question"` |
+| Draft a cited strategy spec | `uv run qaos strategy "topic"` |
 | See recorded runs | `uv run qaos runs` |
 | See what a client is offered | `uv run qaos catalog` |
 | Serve over MCP (stdio) or HTTP | `uv run qaos serve`, `uv run qaos serve --http` |
@@ -1067,7 +1075,4 @@ help:
 - Retrieval and graph features know only the [bundled vocabulary](walkthrough.md#known-limitations),
   and semantic search needs a hosted embedder.
 - App Factory scaffolds and checks your project, but it does not write your research code yet.
-- `search` and `ingest` have their own `--store` flag and don't read `QUANT_AGENT_OS_STORE`, which
-  is why the tutorial passes `--store "$KB"` every time.
-- Lab 1's refused plans end in a Python traceback rather than a clean message.
 - `ingest` reports a changed file as `Added 1` rather than as changed.

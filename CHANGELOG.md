@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The tutorial matches 0.2.0.** All its labs were run again: its setup check named a removed
+  command, Lab 7's `show.py` no longer printed the open questions, and Lab 6 counted tools no longer
+  served. It now uses one home, so `--store` and the other path flags are gone from its single-store
+  labs.
+
 ## [0.2.0] - 2026-11-05
 
 One install, one command, one home, and a smaller surface. **This release breaks existing setups,

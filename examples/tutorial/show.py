@@ -34,8 +34,8 @@ def describe(data: Any) -> list[str]:
         lines.append("cited: " + ", ".join(sources))
     if output.get("metrics"):
         lines.append(f"sharpe_ratio: {output['metrics']['sharpe_ratio']:.4f}")
-    if output.get("open_questions"):
-        lines.append(f"open questions: {len(output['open_questions'])}")
+    if output.get("spec"):
+        lines.append(f"open questions: {len(output['spec']['open_questions'])}")
     return lines
 
 
