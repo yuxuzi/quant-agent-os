@@ -35,7 +35,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1 - sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\", qaos_call_status=~\"error|timeout\"}[30d])) / sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\"}[30d]))"
+          "expr": "1 - sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\", qaos_call_status=~\"error|timeout|busy\"}[30d])) / sum(increase(qaos_tool_calls_total{qaos_tenant=~\"$tenant\"}[30d]))"
         }
       ]
     },

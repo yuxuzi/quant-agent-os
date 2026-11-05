@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
 - **API key expiry and reload.** `qaos keys new --expires-in-days N` sets an `expires` time on a
   key. A running HTTP server re-reads the keys file when it changes, so issuing or revoking a key
   needs no restart. **While the file is missing or invalid, the server accepts no key.**
+- **A `busy` call status.** Each executor runs at most 16 tool calls at once in one bounded pool,
+  instead of one new thread per call. A call beyond that returns `busy` with `retry_after_seconds`
+  (REST: 503 with `Retry-After`), and spends no quota or approval. A timed-out call keeps its slot
+  until its thread returns.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
 

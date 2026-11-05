@@ -14,7 +14,7 @@ from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import RunStore, RunStoreError
 from quant_agent_os.runtime.approvals import Approval
 from quant_agent_os.runtime.call import ToolCall
-from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
+from quant_agent_os.runtime.executor import NOT_STARTED, ToolCallRecord, ToolExecutor
 from quant_agent_os.tenancy import DEFAULT_TENANT
 
 logger = logging.getLogger("quant_agent_os.runs")
@@ -258,14 +258,14 @@ class RunRecorder:
 
 
 def _latest(records: list[ToolCallRecord]) -> dict[tuple[str, str | None], ToolCallRecord]:
-    """Return each call's latest attempt (same tool and input); a quota refusal does not
-    supersede an attempt that is waiting for an approval."""
+    """Return each call's latest attempt (same tool and input); a call refused before it
+    started does not supersede an attempt that is waiting for an approval."""
     latest: dict[tuple[str, str | None], ToolCallRecord] = {}
     for record in records:
         key = (record.tool, record.input_sha256)
         earlier = latest.get(key)
         waiting = earlier is not None and earlier.status == "approval_required"
-        if not (record.status == "quota_exceeded" and waiting):
+        if not (record.status in NOT_STARTED and waiting):
             latest[key] = record
     return latest
 

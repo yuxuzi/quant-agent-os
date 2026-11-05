@@ -250,14 +250,15 @@ lacks. Every field has a default, so existing tools keep working.
 Approval is **derived, not declared**. A tool needs approval when it declares a consequential
 permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
 `CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`,
-`unknown_tool`, `timeout`, `error`).
+`busy`, `unknown_tool`, `timeout`, `error`).
 
 ### 5.3 Request lifecycle (confirmed)
 
 1. **Choose.** The client, or the caller's code, decides which tools to call. The platform has no
    planner ([decision 0016](decisions/0016-clients-orchestrate.md)).
-2. **Execute.** For each call, the executor checks permissions, validates the input, asks the
-   tenant's plan limits to admit the call (`quota_exceeded` if not, decision 0015), checks for an
+2. **Execute.** For each call, the executor checks permissions, validates the input, takes one of its
+   16 slots (`busy` if none is free), asks the tenant's plan limits to admit the call
+   (`quota_exceeded` if not, decision 0015), checks for an
    approval when the tool is consequential (`approval_required` if not, and the run waits), runs
    the tool with a timeout, then validates the output and enforces its size limit. Failures become
    records, not exceptions.

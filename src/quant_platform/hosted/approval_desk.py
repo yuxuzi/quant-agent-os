@@ -31,7 +31,12 @@ from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunRecorder
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import RunStore
 from quant_agent_os.runtime.call import ToolCall
-from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor, canonical_sha256
+from quant_agent_os.runtime.executor import (
+    NOT_STARTED,
+    ToolCallRecord,
+    ToolExecutor,
+    canonical_sha256,
+)
 from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools.registry import UnknownToolError
 
@@ -92,7 +97,7 @@ class ApprovalDesk:
                         records = recorder.resume(executor, found.run_id, [step])
                     except NotAwaitingApprovalError:
                         records = []
-                    if records and records[-1].status == "quota_exceeded":
+                    if records and records[-1].status in NOT_STARTED:
                         # Refused before it started: the approval stays for the next retry.
                         self.run_store.move_request(found.request_id, "approved", source="used")
                     if records:

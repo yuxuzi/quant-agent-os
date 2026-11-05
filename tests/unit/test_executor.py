@@ -1,13 +1,15 @@
 """Unit tests for bounded tool execution."""
 
+import threading
 import time
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from pydantic import BaseModel
 
 from quant_agent_os.runtime import ToolCall, ToolCallError, ToolExecutor, failure_details
-from quant_agent_os.runtime.executor import FAILURE_HINTS, CallStatus
+from quant_agent_os.runtime.executor import BUSY_RETRY_SECONDS, FAILURE_HINTS, CallStatus
+from quant_agent_os.runtime.quotas import Refusal
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
 
 
@@ -191,3 +193,75 @@ def test_a_failed_call_is_recorded_not_raised_until_result_is_asked_for() -> Non
 
     assert record.status == "error"
     assert record.output is None
+
+
+def _blocking_executor(release: threading.Event, **options: Any) -> tuple[ToolExecutor, ToolCall]:
+    @tool(name="blocked", description="Wait for the test.", timeout_seconds=0.05)
+    def blocked(params: Value) -> Value:
+        release.wait(10)
+        return params
+
+    executor = ToolExecutor(ToolRegistry([blocked]), PermissionPolicy(), **options)
+    return executor, ToolCall(tool="blocked", arguments={"value": 1})
+
+
+def test_a_timed_out_call_keeps_its_slot_until_its_thread_returns() -> None:
+    release = threading.Event()
+    executor, call = _blocking_executor(release, max_concurrent_calls=1)
+    try:
+        assert executor.execute(call).status == "timeout"
+
+        refused = executor.execute(call)
+        assert refused.status == "busy"
+        assert refused.retry_after_seconds == BUSY_RETRY_SECONDS
+        assert failure_details(refused, [])["retryable"] is True
+    finally:
+        release.set()
+    deadline = time.monotonic() + 5
+    status = "busy"
+    while status == "busy" and time.monotonic() < deadline:
+        status = executor.execute(call).status
+    assert status == "ok"  # the slot came back when the thread returned
+
+
+def test_threads_stay_bounded_however_many_calls_hang() -> None:
+    release = threading.Event()
+    executor, call = _blocking_executor(release, max_concurrent_calls=2)
+    before = threading.active_count()
+    try:
+        statuses = [executor.execute(call).status for _ in range(6)]
+        assert statuses == ["timeout", "timeout", "busy", "busy", "busy", "busy"]
+        assert threading.active_count() - before <= 2
+    finally:
+        release.set()
+
+
+def test_a_busy_refusal_spends_no_quota() -> None:
+    class Counting:
+        admitted = 0
+
+        def admit(self, tool: str) -> None:
+            self.admitted += 1
+            return None
+
+    release = threading.Event()
+    usage = Counting()
+    executor, call = _blocking_executor(release, max_concurrent_calls=1, usage=usage)
+    try:
+        assert executor.execute(call).status == "timeout"
+        assert executor.execute(call).status == "busy"
+        assert usage.admitted == 1
+    finally:
+        release.set()
+
+
+def test_a_slot_is_returned_when_a_call_is_refused_before_it_runs() -> None:
+    class Refusing:
+        def admit(self, tool: str) -> Refusal:
+            return Refusal(message="over", retry_after_seconds=1)
+
+    release = threading.Event()
+    release.set()
+    executor, call = _blocking_executor(release, max_concurrent_calls=1, usage=Refusing())
+
+    assert [executor.execute(call).status for _ in range(3)] == ["quota_exceeded"] * 3

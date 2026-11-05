@@ -2,6 +2,7 @@
 
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,7 @@ from quant_agent_os.api import (
 from quant_agent_os.mcp import call_tool, tool_definitions
 from quant_agent_os.runs import MemoryRunStore, RunRecorder
 from quant_agent_os.runtime import ToolCall, ToolExecutor
-from quant_agent_os.serving import Surface
+from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, tool
 
 ARGUMENTS = {"series_id": "s", "returns": [0.01, -0.02, 0.03], "periods_per_year": 12}
@@ -349,3 +350,33 @@ def test_a_missing_extra_gives_the_install_hint(
 
     with pytest.raises(ApiUnavailableError, match="quant-agent-os\\[server\\]"):
         build_app(REGISTRY, KeyRing([]), store)
+
+
+def test_a_busy_server_answers_503_with_retry_after(
+    keys_file: tuple[Path, dict[str, str]], store: MemoryRunStore
+) -> None:
+    release = threading.Event()
+
+    @tool(name="blocked", description="Wait for the test.", timeout_seconds=0.05)
+    def blocked(params: Query) -> Query:
+        release.wait(10)
+        return params
+
+    path, issued = keys_file
+    executor = ToolExecutor(
+        ToolRegistry([blocked]), PermissionPolicy(), approvals=store, max_concurrent_calls=1
+    )
+    tenancy = SingleTenant(Surface(executor, run_store=store))
+    client = TestClient(build_app(None, KeyRing(load_keys(path)), None, tenancy=tenancy))
+    try:
+        call = {"headers": _auth(issued["alice"]), "json": {"arguments": {"url": "u"}}}
+        assert client.post("/v1/tools/blocked/call", **call).json()["status"] == "timeout"
+
+        refused = client.post("/v1/tools/blocked/call", **call)
+
+        assert refused.status_code == 503
+        assert refused.headers["Retry-After"] == "5"
+        assert refused.json()["status"] == "busy"
+        assert refused.json()["retryable"] is True
+    finally:
+        release.set()

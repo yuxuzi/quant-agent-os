@@ -183,7 +183,7 @@ request paths, including approval-page request ids. Send telemetry only to a col
 trust with that, or turn those libraries off with `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS`.
 
 Two service-level indicators, per tenant and tool:
-- **Availability.** The share of calls that did not end `error` or `timeout`. Refusals
+- **Availability.** The share of calls that did not end `error`, `timeout`, or `busy`. Refusals
   (`denied`, `approval_required`, `quota_exceeded`, `invalid_input`) are the server working as
   intended, so they count as good.
 - **Latency.** The 95th percentile of `qaos.tool.duration` per tool. Search with a hosted
