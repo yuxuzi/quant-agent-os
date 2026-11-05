@@ -16,8 +16,7 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_platform.cli import app as cli
 from quant_platform.composition import instructions_for
-from quant_platform.http import build_http_app
-from quant_platform.tenants import (
+from quant_platform.hosted.tenants import (
     Plan,
     TenantCatalogs,
     TenantConfig,
@@ -27,6 +26,7 @@ from quant_platform.tenants import (
     load_tenants_file,
     save_tenants,
 )
+from quant_platform.http import build_http_app
 from quant_research import open_research
 
 BASE = "http://127.0.0.1:8000"
@@ -117,13 +117,16 @@ def test_tenant_add_takes_a_known_plan_and_keeps_the_plans(tmp_path: Path) -> No
     path.write_text(PLANS)
     runner = CliRunner()
 
-    added = runner.invoke(cli, ["tenant", "add", "acme", "--plan", "team", "--tenants", str(path)])
+    added = runner.invoke(
+        cli, ["hosted", "tenant", "add", "acme", "--plan", "team", "--tenants", str(path)]
+    )
     unknown = runner.invoke(
-        cli, ["tenant", "add", "beta", "--plan", "gold", "--tenants", str(path)]
+        cli, ["hosted", "tenant", "add", "beta", "--plan", "gold", "--tenants", str(path)]
     )
     widened = runner.invoke(
         cli,
         [
+            "hosted",
             "tenant",
             "add",
             "gamma",
@@ -135,7 +138,7 @@ def test_tenant_add_takes_a_known_plan_and_keeps_the_plans(tmp_path: Path) -> No
             str(path),
         ],
     )
-    listed = runner.invoke(cli, ["tenant", "list", "--tenants", str(path)])
+    listed = runner.invoke(cli, ["hosted", "tenant", "list", "--tenants", str(path)])
     whole = load_tenants_file(path)
 
     assert added.exit_code == 0 and whole.tenants["acme"].plan == "team"

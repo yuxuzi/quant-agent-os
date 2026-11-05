@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
 
 
-def test_one_server_offers_every_toolset_and_records_each_call(tmp_path: Path) -> None:
+def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: Path) -> None:
     store, runs, datasets = tmp_path / "kb.db", tmp_path / "runs.db", tmp_path / "datasets"
     ingested = CliRunner().invoke(research_cli, ["ingest", str(CORPUS), "--store", str(store)])
     assert ingested.exit_code == 0, ingested.output
@@ -68,7 +68,8 @@ def test_one_server_offers_every_toolset_and_records_each_call(tmp_path: Path) -
     assert initialised.serverInfo.version == version("quant-agent-os-platform")
     assert [str(resource.uri) for resource in fixed] == ["qaos://server/info"]
     assert json.loads(info.contents[0].text)["platform_version"] == initialised.serverInfo.version
-    assert {"research_report", "analyze_performance", "check_spec"} <= {t.name for t in tools}
+    assert {"research_report", "analyze_performance"} <= {t.name for t in tools}
+    assert "check_spec" not in {t.name for t in tools}  # App Factory is asked for by name
     assert "qaos://passage/{chunk_id}" in {t.uriTemplate for t in templates}
     assert "report_on_signal" in {p.name for p in prompts}
     assert report.isError is False

@@ -1,6 +1,8 @@
 """The platform server (plan steps P2.1, P2.4, P2.5): one catalog, research_report, and prompts."""
 
 import json
+import subprocess
+import sys
 from importlib.metadata import version
 from typing import Any
 
@@ -10,6 +12,7 @@ from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 from typer.testing import CliRunner
 
+import quant_platform.cli as platform_cli
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server
 from quant_agent_os.runtime import ToolCall, ToolExecutor
@@ -18,6 +21,7 @@ from quant_agent_os.tools import PermissionPolicy, ToolRegistry
 from quant_app_factory import AppFactory, PytemplateUvScaffolder
 from quant_platform import Catalog, compose
 from quant_platform.cli import app as cli
+from quant_platform.cli_common import parse_toolsets
 from quant_research import ResearchApp
 
 FUND = [0.012, -0.004, 0.021, -0.015, 0.008, 0.017, -0.006, 0.011, 0.002, -0.009, 0.014, 0.005]
@@ -40,19 +44,16 @@ def test_one_catalog_serves_every_toolset(
     assert [spec.name for spec in catalog.tools] == [
         "find_related_signals",
         "get_source_passage",
-        "generate_strategy",
         "analyze_performance",
         "analyze_risk",
         "list_datasets",
         "research_report",
         "describe_template",
         "check_spec",
-        "plan_app",
         "server_info",
     ]
     assert [r.uri_template for r in catalog.resources] == [
         "qaos://passage/{chunk_id}",
-        "qaos://strategy/{focus}",
         "qaos://dataset/{dataset_id}",
         "qaos://template/{template}",
         "qaos://template/{template}/{profile}",
@@ -68,14 +69,12 @@ def test_one_catalog_serves_every_toolset(
     assert catalog.toolsets == {
         "find_related_signals": "research",
         "get_source_passage": "research",
-        "generate_strategy": "research",
         "analyze_performance": "analytics",
         "analyze_risk": "analytics",
         "list_datasets": "analytics",
         "research_report": "research",
         "describe_template": "factory",
         "check_spec": "factory",
-        "plan_app": "factory",
         "server_info": "platform",
     }
 
@@ -115,7 +114,7 @@ def test_research_report_is_cited_deterministic_and_honours_the_contract(
     record = check_tool(report, {"focus": "momentum"})
     assert record.output is not None
     assert [step["tool"] for step in record.output["steps"]] == ["generate_strategy"]
-    assert record.output["evidence"] and record.output["open_questions"]
+    assert record.output["evidence"] and record.output["spec"]["open_questions"]
     assert all(e["kind"] == "retrieved" for e in record.output["evidence"])
     assert "corpus_snapshot" in record.data_versions
 
@@ -222,3 +221,28 @@ def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
 
     assert composition.available_toolsets() == ["research", "analytics"]
     assert asked.exit_code == 2 and "quant-agent-os-platform[factory]" in asked.output
+
+
+def test_app_factory_is_served_only_when_asked_for() -> None:
+    assert parse_toolsets(None) == ["research", "analytics"]
+    assert parse_toolsets("research,factory") == ["research", "factory"]
+
+
+def test_the_default_commands_never_load_the_hosted_modules() -> None:
+    """Tenants, plans, OAuth, and the approval page stay off a self-hosted firm's path."""
+    code = (
+        "import sys, quant_platform.cli\n"
+        "names = [n for n in sys.modules if n.startswith('quant_platform.hosted.')]\n"
+        "print(sorted(names))"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+
+    assert done.stdout.strip() == "['quant_platform.hosted.cli']"
+
+
+def test_the_default_server_takes_no_hosted_options() -> None:
+    shown = CliRunner(env={"COLUMNS": "200"}).invoke(platform_cli.app, ["serve-http", "--help"])
+
+    assert shown.exit_code == 0
+    for option in ("--tenants", "--approval-url", "--resource-url"):
+        assert option not in shown.output

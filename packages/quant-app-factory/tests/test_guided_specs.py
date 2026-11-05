@@ -356,5 +356,5 @@ def test_serve_mcp_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
     initialised, tools, checked = anyio.run(main)
 
     assert initialised.serverInfo.name == "quant-factory"
-    assert sorted(tools) == ["check_spec", "describe_template", "plan_app"]
+    assert sorted(tools) == ["check_spec", "describe_template"]
     assert checked.structuredContent["check"]["ready"] is True

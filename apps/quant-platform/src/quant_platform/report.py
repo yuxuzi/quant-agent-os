@@ -18,6 +18,9 @@ from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec, tool
 from quant_analytics.tools import ColumnRef
+from quant_research.application.strategy import StrategySpec
+
+STRATEGY_STEP = "generate_strategy"
 
 
 class ReportRequest(BaseModel):
@@ -45,11 +48,13 @@ class ReportStep(BaseModel):
 
 
 class ResearchReport(BaseModel):
-    """Cited findings about the focus, its open questions, and any computed metrics."""
+    """Cited findings about the focus, its specification, and any computed metrics."""
 
     focus: str
     steps: list[ReportStep]
-    open_questions: list[str] = Field(default_factory=list)
+    spec: StrategySpec | None = Field(
+        default=None, description="The cited strategy specification, to review or save"
+    )
     metrics: dict[str, float | None] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -67,22 +72,23 @@ def research_report_tool(
     """Return `research_report` over ``tools``, which must include `generate_strategy`."""
     registry = ToolRegistry(tools)
     executor = ToolExecutor(registry, policy)
-    used = [name for name in ("generate_strategy", "analyze_performance") if name in registry]
+    used = [name for name in (STRATEGY_STEP, "analyze_performance") if name in registry]
     measures = "analyze_performance" in registry
 
     @tool(
         name="research_report",
         description=(
-            "One-call report on a signal, factor, or strategy: what the corpus says (cited), "
-            "its open questions, and, given a returns column, its performance metrics."
+            "One-call report on a signal, factor, or strategy: a cited strategy specification "
+            "from the corpus, its open questions, and, given a returns column, its performance "
+            "metrics. A spec to review, not code and not advice."
         ),
         permissions=frozenset().union(*(registry.get(name).permissions for name in used)),
         timeout_seconds=60.0,
         max_output_bytes=300_000,
-        version="2.0.0",
+        version="3.0.0",
     )
     def research_report(params: ReportRequest) -> ResearchReport:
-        steps = [ToolCall(tool="generate_strategy", arguments={"focus": params.focus})]
+        steps = [ToolCall(tool=STRATEGY_STEP, arguments={"focus": params.focus})]
         if params.returns is not None:
             if not measures:
                 raise ValueError("This server has no analytics toolset; omit returns.")
@@ -107,7 +113,7 @@ def research_report_tool(
         return ResearchReport(
             focus=params.focus,
             steps=[ReportStep(tool=r.tool, status=r.status, error=r.error) for r in records],
-            open_questions=strategy.get("spec", {}).get("open_questions", []),
+            spec=strategy.get("spec"),
             metrics=performance.get("metrics", {}),
             limitations=report.limitations,
             warnings=report.warnings,

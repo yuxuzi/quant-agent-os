@@ -9,22 +9,17 @@ metadata:
 
 # From signal to cited spec to report
 
-Both tools are deterministic and read-only. They build a specification from the corpus, not
+`research_report` is deterministic and read-only. It builds a specification from the corpus, not
 code and not advice, and every item cites the passages that state it.
 
-## Choose the tool
-
-- **`research_report`** is the default. One call gives the cited evidence, the open questions,
-  and the limitations for one `focus`. Add `returns` as `{"dataset": ID, "column": NAME}` (and
-  optionally `benchmark` and `periods_per_year`) to include that series' performance metrics.
-  Prefer it to composing the calls yourself.
-- **`generate_strategy`** returns only the `StrategySpec`, for when the user wants to edit or
-  save it. It is also readable as the resource `qaos://strategy/{focus}`.
+One call gives the cited `spec` with its `open_questions`, the evidence, and the limitations for
+one `focus`. Add `returns` as `{"dataset": ID, "column": NAME}` (and optionally `benchmark`) to include
+that series' performance metrics. Prefer it to composing calls yourself.
 
 ## Focus
 
 `focus` is a signal, factor, or strategy name, such as "trend following", or an entity id
-such as `signal:carry`. If the tool says the name is unknown, search first with
+such as `signal:carry`. If it says the name is unknown, search first with
 `find_related_signals` (see the `quant-research` skill) and use a name it returns. One spec
 covers one focus; if the user names several, make one spec each.
 
@@ -47,8 +42,3 @@ To build a project from the spec, the user can draft an App Factory spec with th
 `quant-app-factory` skill.
 
 The `report_on_signal` prompt runs this workflow in clients without skills.
-
-## Server version
-
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.

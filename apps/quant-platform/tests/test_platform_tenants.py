@@ -25,8 +25,7 @@ from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.runs import MemoryRunStore
 from quant_platform.cli import app as cli
 from quant_platform.composition import instructions_for
-from quant_platform.http import build_http_app
-from quant_platform.tenants import (
+from quant_platform.hosted.tenants import (
     TenantCatalogs,
     TenantConfig,
     TenantsFileError,
@@ -36,6 +35,7 @@ from quant_platform.tenants import (
     save_tenants,
     separate_approver,
 )
+from quant_platform.http import build_http_app
 from quant_research import open_research
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -239,6 +239,7 @@ def test_the_tenant_commands_add_list_and_disable(tmp_path: Path) -> None:
     added = runner.invoke(
         cli,
         [
+            "hosted",
             "tenant",
             "add",
             "acme",
@@ -250,9 +251,9 @@ def test_the_tenant_commands_add_list_and_disable(tmp_path: Path) -> None:
             str(path),
         ],
     )
-    listed = runner.invoke(cli, ["tenant", "list", "--tenants", str(path)])
-    disabled = runner.invoke(cli, ["tenant", "disable", "acme", "--tenants", str(path)])
-    refused = runner.invoke(cli, ["tenant", "add", "Bad Name", "--tenants", str(path)])
+    listed = runner.invoke(cli, ["hosted", "tenant", "list", "--tenants", str(path)])
+    disabled = runner.invoke(cli, ["hosted", "tenant", "disable", "acme", "--tenants", str(path)])
+    refused = runner.invoke(cli, ["hosted", "tenant", "add", "Bad Name", "--tenants", str(path)])
 
     assert added.exit_code == 0 and "--schema qr_acme" in added.output
     assert listed.exit_code == 0 and "acme" in listed.output and "hunter2" not in listed.output
@@ -278,7 +279,7 @@ def test_authorization_servers_survive_edits_and_pin_issuers(tmp_path: Path) -> 
     path.write_text(OAUTH_FILE)
 
     added = CliRunner().invoke(
-        cli, ["tenant", "add", "beta", "--toolsets", "analytics", "--tenants", str(path)]
+        cli, ["hosted", "tenant", "add", "beta", "--toolsets", "analytics", "--tenants", str(path)]
     )
     whole = load_tenants_file(path)
 
@@ -299,7 +300,7 @@ def test_serve_http_needs_the_resource_url_and_the_secret_for_oauth(
     path = tmp_path / "tenants.toml"
     path.write_text(OAUTH_FILE)
     add_key(tmp_path / "keys.toml", "svc", ["tools:list"], tenant="acme")
-    base = ["serve-http", "--tenants", str(path), "--keys", str(tmp_path / "keys.toml")]
+    base = ["hosted", "serve-http", "--tenants", str(path), "--keys", str(tmp_path / "keys.toml")]
     monkeypatch.delenv("QAOS_TEST_ACME_SECRET", raising=False)
 
     no_url = CliRunner().invoke(cli, base)

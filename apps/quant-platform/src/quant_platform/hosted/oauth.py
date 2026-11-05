@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr
 
 from quant_agent_os.api.keys import KEY_PREFIX, SCOPES
 from quant_agent_os.mcp.http import TENANT_CLAIM
-from quant_agent_os.runtime.quotas import TokenBucket
+from quant_platform.hosted.limits import TokenBucket
 
 if TYPE_CHECKING:
     import httpx

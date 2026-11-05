@@ -9,6 +9,7 @@ from client_bundles import PLUGIN, ROOT, SERVER, bundles, server_args
 from typer.testing import CliRunner
 
 from quant_platform import cli as platform_cli
+from quant_platform import cli_common
 from quant_research.cli import app as research_cli
 
 CORPUS = ROOT / "packages" / "quant-research" / "tests" / "fixtures" / "corpus"
@@ -48,11 +49,9 @@ def test_the_plugin_serves_this_platform_version_with_its_skills() -> None:
     args = manifest["mcpServers"][SERVER]["args"]
 
     assert manifest["version"] == version("quant-agent-os-platform")
-    # The factory toolset is an extra (decision 0012); the quant-app-factory skill needs it.
+    # App Factory is opt-in, so the plugin does not install it.
     assert args[args.index("--package") + 1 :] == [
         "quant-agent-os-platform",
-        "--extra",
-        "factory",
         "quant-platform",
         "serve-mcp",
     ]
@@ -65,7 +64,7 @@ def test_the_plugin_serves_this_platform_version_with_its_skills() -> None:
 
 @pytest.fixture
 def no_default_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(platform_cli, "DEFAULT_STORE", tmp_path / "absent" / "knowledge.db")
+    monkeypatch.setattr(cli_common, "DEFAULT_STORE", tmp_path / "absent" / "knowledge.db")
     monkeypatch.delenv("QUANT_AGENT_OS_STORE", raising=False)
 
 

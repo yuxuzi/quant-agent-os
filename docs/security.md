@@ -63,7 +63,7 @@ in memory unless it is given a run store. What each part of a record holds:
 - **Usage events.** One per recorded call, written in the same transaction
   ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
   principal, tool, status, duration, and the sizes of the arguments and output, never their
-  content. `quant-platform usage export` reads them; it is an operator command, not a tool.
+  content. `quant-platform hosted usage export` reads them; it is an operator command, not a tool.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
@@ -116,7 +116,7 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 ## Tenants and OAuth
 
 [Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
-(`quant-platform serve-http --tenants FILE`):
+(`quant-platform hosted serve-http --tenants FILE`):
 - **The tenant comes from the credential only.** An API key's entry names its tenant
   (`api-key new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
   or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
@@ -197,7 +197,7 @@ toolsets, calls a minute, billable calls a month, and output size:
     confirming `quant-factory create`.
   - Models, MCP clients, and REST clients can never create approvals.
 - **Approving without leaving the client** ([decision 0014](decisions/0014-approvals-in-the-client.md)):
-  - **Over HTTP** (`serve-http --approval-url`), a waiting call opens an approval request,
+  - **Over HTTP** (`hosted serve-http --approval-url`), a waiting call opens an approval request,
     and the client is sent to `/approve/<id>` (MCP URL elicitation). The request is bound to
     the tenant, run, tool, input hash, and requester; its id has 128 random bits; it expires
     after 15 minutes and is decided once.
@@ -215,9 +215,8 @@ toolsets, calls a minute, billable calls a month, and output size:
     forms a minute (429 after that). Both counts are kept per server process.
   - **The retried, identical call** runs once, in the original run. A changed argument is a
     new hash and needs a new approval.
-  - **Locally**, `quant-factory serve-mcp --confirm-in-client` (stdio, opt-in, with a run
-    store) asks the client to confirm each call instead. It is recorded as approved by
-    `client-confirmation`, and is never available over HTTP.
+  - **Locally**, creating a project is a terminal command, `quant-factory create`, whose prompt
+    is the approval. No MCP server offers it.
 - **Standing approvals.** An operator can pre-approve a permission for every call with
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
   it records `standing:<permission>`.

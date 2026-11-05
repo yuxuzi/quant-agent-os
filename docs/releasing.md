@@ -54,8 +54,9 @@ No API token is stored in the repository.
 
 ## Compatibility promises
 
-- **Tools** follow semver (decision 0015): a breaking change ships as a new tool name, and the
-  old one stays, deprecated, for at least 90 days and one minor platform release.
+- **Tools** follow semver, and each change is in the [tools changelog](tools-changelog.md). For
+  now, a tool may change or be removed in any release; decision 0015's deprecation window is
+  suspended until the project is mature enough.
 - **Before 1.0**, a minor platform release may change Python APIs, configuration, and storage.
   The run store and knowledge store upgrade in place, and an older binary refuses a newer
   store.

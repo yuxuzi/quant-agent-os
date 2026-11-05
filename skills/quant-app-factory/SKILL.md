@@ -9,6 +9,9 @@ metadata:
 
 # Drafting an App Factory spec
 
+If these tools are not offered, the server was started without the factory toolset. The user can
+add `--toolsets research,analytics,factory`, or run `quant-factory new` in a terminal instead.
+
 The server checks specs; the user creates the project on their own machine. Nothing here
 writes files, runs code, or touches the network.
 
@@ -22,9 +25,7 @@ writes files, runs code, or touches the network.
    defaults. Do not ask for anything the template does not need.
 3. **Check until ready.** Send the draft as `spec` to `check_spec`, fix every problem it
    reports, and repeat until it says ready. It returns the exact files and the spec as TOML.
-4. **Optionally preview.** `plan_app` shows the profile, components, reasons, dependencies,
-   checks, and files. It writes nothing.
-5. **Hand over.** Give the user the TOML to save, and tell them to run
+4. **Hand over.** Give the user the TOML to save, and tell them to run
    `quant-factory create FILE` themselves. Creating a project writes files and runs its checks,
    so it needs their confirmation on their machine; never claim you created it.
 
@@ -37,11 +38,6 @@ writes files, runs code, or touches the network.
   invent options.
 - **Follow the errors.** Failures carry `hint` and `retryable`; on `denied` or
   `approval_required`, tell the user and do not retry.
-
-## Server version
-
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
 
 ## Related
 

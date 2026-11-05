@@ -66,10 +66,10 @@ echo "== authentication and a real call"
 code="$(curl -s -o /dev/null -w '%{http_code}' "$base/v1/tools")"
 [[ "$code" == "401" ]] || fail "an unauthenticated request got $code, not 401"
 auth=(-H "Authorization: Bearer $key")
-curl -fsS "${auth[@]}" "$base/v1/tools" | grep -q '"generate_strategy"' || fail "tools not listed"
+curl -fsS "${auth[@]}" "$base/v1/tools" | grep -q '"research_report"' || fail "tools not listed"
 result="$(curl -fsS "${auth[@]}" -X POST -H 'content-type: application/json' \
   -d '{"arguments": {"focus": "short-term reversal"}}' \
-  "$base/v1/tools/generate_strategy/call")"
+  "$base/v1/tools/research_report/call")"
 grep -q '"status":"ok"' <<<"$result" || fail "the call did not succeed: $result"
 run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$result")"
 curl -fsS "${auth[@]}" "$base/v1/runs/$run_id" | grep -q '"principal":"smoke"' \

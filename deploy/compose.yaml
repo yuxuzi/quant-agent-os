@@ -89,7 +89,7 @@ services:
   usage:
     <<: *image
     profiles: [operator]
-    entrypoint: ["quant-platform", "usage", "export", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["quant-platform", "hosted", "usage", "export", "--runs", "/data/runs/runs.db"]
     command: []
     volumes:
       - runs:/data/runs

@@ -47,6 +47,7 @@ def test_usage_export_writes_one_tenants_calls_in_the_window_as_jsonl(tmp_path: 
     result = CliRunner().invoke(
         cli,
         [
+            "hosted",
             "usage",
             "export",
             "--runs",
@@ -72,7 +73,7 @@ def test_usage_export_totals_by_tool_as_csv(tmp_path: Path) -> None:
     runs = _runs(tmp_path)
 
     result = CliRunner().invoke(
-        cli, ["usage", "export", "--runs", str(runs), *NOVEMBER, "--by", "tool"]
+        cli, ["hosted", "usage", "export", "--runs", str(runs), *NOVEMBER, "--by", "tool"]
     )
 
     assert result.exit_code == 0, result.output
@@ -87,8 +88,10 @@ def test_usage_export_totals_by_tool_as_csv(tmp_path: Path) -> None:
 def test_usage_export_refuses_a_missing_store_and_bad_choices(tmp_path: Path) -> None:
     runner = CliRunner()
 
-    missing = runner.invoke(cli, ["usage", "export", "--runs", str(tmp_path / "none.db")])
-    bad_by = runner.invoke(cli, ["usage", "export", "--runs", str(_runs(tmp_path)), "--by", "week"])
+    missing = runner.invoke(cli, ["hosted", "usage", "export", "--runs", str(tmp_path / "none.db")])
+    bad_by = runner.invoke(
+        cli, ["hosted", "usage", "export", "--runs", str(_runs(tmp_path)), "--by", "week"]
+    )
 
     assert missing.exit_code == 1 and "no run store" in missing.output
     assert not (tmp_path / "none.db").exists()

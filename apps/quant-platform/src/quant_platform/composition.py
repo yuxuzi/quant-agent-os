@@ -23,7 +23,7 @@ from quant_platform.prompts import (
     REPORT_ON_SIGNAL,
     RESEARCH_SIGNAL,
 )
-from quant_platform.report import research_report_tool
+from quant_platform.report import STRATEGY_STEP, research_report_tool
 from quant_research import research_resources, research_tools
 from quant_research.application.retrieval import ResearchService
 from quant_research.cli import MCP_INSTRUCTIONS as RESEARCH_INSTRUCTIONS
@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
 Toolset = Literal["research", "analytics", "factory"]
 TOOLSETS: tuple[Toolset, ...] = ("research", "analytics", "factory")
+# App Factory is asked for by name: it costs every research question context, and it cannot create.
+DEFAULT_TOOLSETS: tuple[Toolset, ...] = ("research", "analytics")
 ANALYTICS_INSTRUCTIONS = (
     "Quant Analytics computes performance and risk metrics with stated conventions. Call "
     "list_datasets and pass series as {dataset, column} rather than copying values; report "
@@ -82,7 +84,8 @@ def compose(
 ) -> Catalog:
     """Return the catalog for the given products; each one given is a toolset served.
 
-    ``research`` serves the research toolset and `research_report`; ``datasets`` serves
+    ``research`` serves the research toolset and `research_report`, whose strategy step is not
+    served on its own; ``datasets`` serves
     analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
     Every catalog also serves `server_info` (``qaos://server/info``, decision 0015).
@@ -97,9 +100,12 @@ def compose(
         tools.extend(specs)
         toolsets.update((spec.name, toolset) for spec in specs)
 
+    internal: list[ToolSpec[Any, Any]] = []
     if research is not None:
-        add("research", research_tools(research))
-        resources += research_resources()
+        specs = research_tools(research)
+        internal = [spec for spec in specs if spec.name == STRATEGY_STEP]
+        add("research", [spec for spec in specs if spec.name != STRATEGY_STEP])
+        resources += [spec for spec in research_resources() if spec.tool != STRATEGY_STEP]
         prompts.append(RESEARCH_SIGNAL)
         served.append("research")
     if datasets is not None:
@@ -108,7 +114,7 @@ def compose(
         prompts.append(ANALYZE_RETURNS)
         served.append("analytics")
     if research is not None:
-        add("research", [research_report_tool(list(tools), policy)])
+        add("research", [research_report_tool([*tools, *internal], policy)])
         prompts.append(REPORT_ON_SIGNAL)
     if factory is not None:
         from quant_app_factory import factory_resources

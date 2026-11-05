@@ -16,16 +16,16 @@ from pydantic import SecretStr
 
 from quant_agent_os.api import KeyRing, add_key, build_app, load_keys
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
-from quant_agent_os.mcp.oauth import (
+from quant_agent_os.runs import MemoryRunStore
+from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.serving import Surface
+from quant_agent_os.tools import PermissionPolicy
+from quant_platform.hosted.oauth import (
     AuthorizationServer,
     FirstOf,
     IntrospectionVerifier,
     protected_resource_routes,
 )
-from quant_agent_os.runs import MemoryRunStore
-from quant_agent_os.runtime import ToolExecutor
-from quant_agent_os.serving import Surface
-from quant_agent_os.tools import PermissionPolicy
 
 RESOURCE = "https://qaos.example/mcp"
 ACME = "https://login.acme.example"

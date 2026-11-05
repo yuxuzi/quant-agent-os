@@ -82,7 +82,6 @@ def build_server(
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
     route: Route | None = None,
-    confirm_in_client: bool = False,
 ) -> Server[Any, Any]:
     """Return an MCP server whose tools are the executor's allowed tools.
 
@@ -91,13 +90,7 @@ def build_server(
     every tool call and resource read is persisted as a one-call run. Over HTTP, ``route``
     replaces ``executor``, ``recorder``, ``resources``, and ``prompts``: it checks each
     request's scope and returns its caller's tenant surface and recorder (decision 0013).
-
-    With ``confirm_in_client`` (stdio only, and only with a ``recorder``), a call that waits for
-    an approval asks the client to confirm it (form elicitation); a yes is recorded as approved
-    by ``client-confirmation`` and the call runs in its run (decision 0014).
     """
-    if confirm_in_client and (route is not None or recorder is None):
-        raise ValueError("confirm_in_client is for stdio with a recorder (a run store).")
     try:
         import anyio
         from mcp import types
@@ -135,37 +128,6 @@ def build_server(
             served.recorder,
             served.approvals,
         )
-
-    async def confirmed(
-        executor: ToolExecutor, step: ToolCall, record: ToolCallRecord
-    ) -> ToolCallRecord:
-        """Ask the client to confirm a waiting call; run it in its run if confirmed."""
-        assert recorder is not None and record.run_id is not None
-        needs = ", ".join(
-            sorted(
-                permission.value for permission in executor.registry.get(record.tool).permissions
-            )
-        )
-        answer = await server.request_context.session.elicit_form(
-            message=(
-                f"Run {record.tool} once? It needs {needs}. "
-                f"Input SHA-256 {(record.input_sha256 or '')[:16]}."
-            ),
-            requestedSchema={
-                "type": "object",
-                "properties": {"approve": {"type": "boolean", "title": "Run it once"}},
-                "required": ["approve"],
-            },
-        )
-        if answer.action != "accept" or not (answer.content or {}).get("approve"):
-            return record
-        run_id = record.run_id
-
-        def approve_and_resume() -> ToolCallRecord:
-            recorder.approve(run_id, approved_by="client-confirmation")
-            return recorder.resume(executor, run_id, [step])[-1]
-
-        return await anyio.to_thread.run_sync(approve_and_resume)
 
     @server.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]
     async def list_tools() -> list[types.Tool]:
@@ -205,11 +167,6 @@ def build_server(
                     ],
                     message=f"Approval needed: open {url}, then run the same call again.",
                 )
-            result = call_result(executor, record)
-        elif confirm_in_client and recorder is not None:
-            record = await anyio.to_thread.run_sync(recorder.call, executor, step)
-            if record.status == "approval_required":
-                record = await confirmed(executor, step, record)
             result = call_result(executor, record)
         else:
             result = await anyio.to_thread.run_sync(
@@ -290,7 +247,6 @@ async def serve_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
-    confirm_in_client: bool = False,
 ) -> None:
     """Serve the executor's tools (and any resources and prompts) over stdin and stdout."""
     server = build_server(
@@ -300,7 +256,6 @@ async def serve_stdio(
         recorder=recorder,
         resources=resources,
         prompts=prompts,
-        confirm_in_client=confirm_in_client,
     )
     from mcp.server.stdio import stdio_server
 
@@ -316,7 +271,6 @@ def run_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
-    confirm_in_client: bool = False,
 ) -> None:
     """Blocking entry point for console commands; raises `MCPUnavailableError` without the extra."""
     try:
@@ -332,6 +286,5 @@ def run_stdio(
             recorder=recorder,
             resources=resources,
             prompts=prompts,
-            confirm_in_client=confirm_in_client,
         )
     )

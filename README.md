@@ -22,9 +22,9 @@ It has two products built on one core platform:
 | Core: tool contract, registry, permissions, bounded executor, evidence reports | Implemented |
 | Core: MCP adapter and stdio server | Implemented (`quant-agent-os[mcp]`); `quant-research serve-mcp` serves the research tools |
 | Core: REST interface with scoped API keys | Implemented (`quant-agent-os[api]`, [decision 0011](docs/decisions/0011-rest-api-and-api-keys.md)); `quant-research serve-api`, `quant-agent-os api-key new` |
-| Remote MCP, tenants, and OAuth | Implemented: `quant-platform serve-http` serves MCP over Streamable HTTP and REST from one app, a catalog per tenant, API keys or OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
+| Remote MCP, tenants, and OAuth | Implemented: `quant-platform serve-http` serves MCP over Streamable HTTP and REST from one app with API keys; `quant-platform hosted` adds a catalog per tenant and OAuth 2.1 tokens ([decisions 0012](docs/decisions/0012-remote-mcp-over-http.md), [0013](docs/decisions/0013-identity-and-tenancy.md)) |
 | Approvals in the client | Implemented: a consequential call asks the user in the client (stdio) or sends them to an approval page (HTTP) ([decision 0014](docs/decisions/0014-approvals-in-the-client.md)) |
-| Metering, plans, and quotas | Implemented: a usage event per call, `quant-platform usage export`, plans with toolsets, rate limits, and monthly quotas per tenant ([decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)) |
+| Metering, plans, and quotas | Implemented: a usage event per call, `quant-platform hosted usage export`, plans with toolsets, rate limits, and monthly quotas per tenant ([decision 0015](docs/decisions/0015-metering-quotas-and-entitlements.md)) |
 | Tool compatibility | Implemented: semver tool versions checked against `tool-versions.lock`, deprecations, `qaos://server/info` ([tools changelog](docs/tools-changelog.md)) |
 | Team server in Docker | Implemented on SQLite or PostgreSQL + pgvector ([docs/deployment.md](docs/deployment.md)); both smoke-tested by `docker compose up` in CI |
 | Skills and client packaging | Implemented: four instruction-only skills kept in step with the server by tests, a Claude Code plugin, and Cursor and VS Code bundles ([getting started](docs/getting-started.md)) |
@@ -32,7 +32,7 @@ It has two products built on one core platform:
 | Core: run store with append-only audit, SDK `Platform` facade | Implemented; `serve-mcp` records every call (`quant-research runs`) |
 | Core: approvals for consequential permissions, subprocess runner | Implemented ([decision 0005](docs/decisions/0005-approval-gates.md)): single-use approvals per call, standing approvals opt-in |
 | Quant Research (Graph RAG) | Implemented over SQLite or PostgreSQL with pgvector (same answers; `quant-agent-os-research[postgres]`): ingestion, keyword, mention, and graph retrieval, cited evidence packets, read-only tools, evaluation on fixtures and [21 real papers](docs/plans/real-corpus-eval.md) ([architecture §6–7](docs/architecture.md)) |
-| Quant App Factory | Foundation implemented: `quant-factory plan/create`, `plan_app`/`create_app` tools, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
+| Quant App Factory | Foundation implemented: `quant-factory plan/create`, `create_app` for the terminal, an `agent-tool` template pack, pytemplate-uv 3.0 as the scaffolder; model-drafted specs and code generation are planned |
 | Quant Analytics | Implemented: `analyze_performance` on empyrical-reloaded (Sharpe, Sortino, Calmar, drawdown, VaR, alpha/beta, tracking error, IR) and `analyze_risk` (volatility contributions, factor exposures, variance shares), with conventions pinned by known-answer tests ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)) |
 
 The roadmap, gap analysis, and backlog are in [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md).
@@ -214,7 +214,7 @@ docs/   architecture, configuration, security, getting started, decisions, roadm
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Security](docs/security.md)
-- [Team server in Docker](docs/deployment.md)
+- [Team server in Docker](docs/deployment.md), and [hosting many customers](docs/hosted.md)
 - [Architecture decisions](docs/decisions/)
 - [Tools changelog](docs/tools-changelog.md) and [Releasing](docs/releasing.md)
 - [Contributing](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for AI coding agents
