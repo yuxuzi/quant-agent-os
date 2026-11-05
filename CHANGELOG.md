@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-05
+
+A correctness release: analytics could report wrong numbers with no warning. **If you ran
+`analyze_performance`, `analyze_risk`, or `research_report` on daily or weekly data without passing
+`periods_per_year`, or compared datasets dated like `20240102`, please recompute those results.**
+
 ### Fixed
 
 - **Analytics no longer change a number silently.** `analyze_performance`, `analyze_risk`, and

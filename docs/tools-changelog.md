@@ -20,7 +20,7 @@ fail when they change without a big enough version bump. After raising the versi
 
 Clients read the served versions from `qaos://server/info`.
 
-## Unreleased
+## 0.1.2
 
 | Tool | Version | Change |
 | --- | --- | --- |
