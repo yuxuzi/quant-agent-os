@@ -14,6 +14,17 @@ All notable changes to this project are documented here. The format follows
   `_MAX_PLAN_STEPS` settings, which had no effect. Only a fake model could ever drive it; clients
   do the planning. `PlanStep` is now `ToolCall`, in `quant_agent_os.runtime`.
 
+### Added
+
+- `Platform.report(goal, calls)` runs named calls as one recorded run and returns the
+  evidence-linked report. `examples/your-own-model` drives the tools from your own model.
+
+## [0.1.2] - 2026-11-05
+
+A correctness release: analytics could report wrong numbers with no warning. **If you ran
+`analyze_performance`, `analyze_risk`, or `research_report` on daily or weekly data without passing
+`periods_per_year`, or compared datasets dated like `20240102`, please recompute those results.**
+
 ### Fixed
 
 - **Analytics no longer change a number silently.** `analyze_performance`, `analyze_risk`, and
@@ -32,8 +43,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `Platform.report(goal, calls)` runs named calls as one recorded run and returns the
-  evidence-linked report. `examples/your-own-model` drives the tools from your own model.
 - `quant-agent-os dataset push --index COLUMN` names the date column, and the command reports the
   frequency the dates show. `list_datasets` reports it too.
 - A hands-on [tutorial](docs/tutorial.md): eight labs with flow charts, sample data, things to

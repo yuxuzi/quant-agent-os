@@ -4,7 +4,7 @@ description: Compute performance and risk metrics (Sharpe, drawdown, volatility 
 license: MIT
 compatibility: Needs the Quant-Agent-OS MCP server (quant-platform) with the analytics toolset.
 metadata:
-  min-server-version: "0.1.0"
+  min-server-version: "0.1.2"
 ---
 
 # Performance and risk metrics

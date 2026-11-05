@@ -24,7 +24,7 @@ release, under its existing name, with an entry here. The rule from
 90 days and a major release before removal) is suspended until the owner decides the project is
 mature enough. Version bumps and the lock still apply, so every change stays visible.
 
-## Unreleased
+## 0.1.2
 
 | Tool | Version | Change |
 | --- | --- | --- |
