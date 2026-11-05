@@ -5,7 +5,7 @@ import math
 
 import pytest
 from portfolio_research import DEFAULT_CONFIG, load_config, run
-from portfolio_tools import ReturnsInput, build_registry, max_drawdown
+from portfolio_tools import SeriesInput, build_registry, max_drawdown
 
 from quant_agent_os.providers import FakeModelProvider
 from quant_agent_os.reporting import render_markdown
@@ -90,9 +90,7 @@ def test_planning_prompt_lists_only_registered_tools() -> None:
 
 def test_max_drawdown_known_answer() -> None:
     # Wealth path 1.10 -> 0.55 -> 0.66: the worst decline is 0.55 / 1.10 - 1 = -50%.
-    result = max_drawdown.function(
-        ReturnsInput(series_id="s", returns=[0.1, -0.5, 0.2], periods_per_year=12)
-    )
+    result = max_drawdown.function(SeriesInput(series_id="s", returns=[0.1, -0.5, 0.2]))
 
     assert result.value == pytest.approx(-0.5)
 

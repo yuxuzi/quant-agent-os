@@ -17,7 +17,7 @@ from quant_agent_os.evidence import Evidence
 from quant_agent_os.reporting.generator import build_report
 from quant_agent_os.runtime import Plan, PlanStep, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, ToolSpec, tool
-from quant_analytics.referenced import ColumnRef
+from quant_analytics.tools import ColumnRef
 
 
 class ReportRequest(BaseModel):
