@@ -111,4 +111,5 @@ uv run mypy                      # strict
 activation is needed. After changing a skill, regenerate the client bundles with
 `uv run python apps/quant-platform/tests/client_bundles.py`.
 
-Next: read [architecture.md](architecture.md), then [configuration.md](configuration.md).
+Next: play with the [tutorial](tutorial.md), then read [architecture.md](architecture.md) and
+[configuration.md](configuration.md).

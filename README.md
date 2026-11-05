@@ -50,6 +50,9 @@ uv run quant-agent-os info                                        # active setti
 uv run pytest
 ```
 
+New here? The [tutorial](docs/tutorial.md) is a set of short labs to play with, and it asks for
+your feedback at the end.
+
 ## Use it from Claude
 
 The quickest way is the Claude Code plugin. It installs the platform MCP server and the four
@@ -205,6 +208,7 @@ docs/   architecture, configuration, security, getting started, decisions, roadm
 
 ## Documentation
 
+- [Tutorial: hands-on labs with examples and flow charts](docs/tutorial.md)
 - [Walkthrough: cited answers in Claude](docs/walkthrough.md)
 - [Getting started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
