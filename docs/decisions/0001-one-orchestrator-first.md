@@ -1,6 +1,6 @@
 # 0001: One bounded orchestrator before any multi-agent design
 
-- Status: accepted
+- Status: superseded by [0016](0016-clients-orchestrate.md)
 - Date: 2026-10-28
 
 ## Context
