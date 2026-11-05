@@ -48,8 +48,8 @@ tell the user what is needed and do not retry.
 
 ## Server version
 
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+If a tool you expect is missing, `server_info` (or `qaos://server/info`) lists what this server
+offers; tell the user, and do not guess.
 
 ## Related
 

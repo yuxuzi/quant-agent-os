@@ -19,15 +19,13 @@ from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import McpError
-from mcp.shared.memory import create_connected_server_and_client_session
 from pydantic import BaseModel
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, build_app, load_keys
 from quant_agent_os.api.approval_page import approval_routes
 from quant_agent_os.approval_desk import ApprovalDesk
-from quant_agent_os.mcp import build_server
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
-from quant_agent_os.runs import MemoryRunStore, RunRecorder
+from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import Refusal, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
@@ -288,70 +286,3 @@ def test_denied_changed_or_expired_calls_do_not_run(server: Any) -> None:
 def test_an_approver_key_can_never_call_tools(tmp_path: Path) -> None:
     with pytest.raises(ApiKeyError, match="runs:approve cannot also have tools:call"):
         add_key(tmp_path / "keys.toml", "eve", ["tools:call", "runs:approve"])
-
-
-# Local stdio: confirmation in the client, only when the operator opts in.
-
-
-def _stdio_call(answer: types.ElicitResult | None, *, confirm: bool = True) -> Any:
-    store = MemoryRunStore()
-    executor = ToolExecutor(REGISTRY, ELIGIBLE, approvals=store)
-    recorder = RunRecorder(store, actor="mcp")
-    server = build_server(executor, name="test", recorder=recorder, confirm_in_client=confirm)
-    asked: list[str] = []
-
-    async def respond(context: Any, params: types.ElicitRequestParams) -> types.ElicitResult:
-        asked.append(params.message)
-        assert answer is not None
-        return answer
-
-    async def main() -> Any:
-        async with create_connected_server_and_client_session(
-            server, elicitation_callback=respond
-        ) as session:
-            return await session.call_tool("save_note", {"text": "local"})
-
-    return anyio.run(main), asked, store
-
-
-def test_a_local_operator_can_confirm_in_the_client() -> None:
-    WRITES.clear()
-    result, asked, store = _stdio_call(
-        types.ElicitResult(action="accept", content={"approve": True})
-    )
-
-    assert result.isError is False and WRITES == ["local"]
-    assert asked and "write_local_data" in asked[0]
-    (run,) = store.list_runs(5)
-    stored = store.get_run(run.run_id)
-    assert stored is not None and stored.run.status == "completed"
-    granted = [e for e in stored.events if e.event == "approval.granted"]
-    assert granted and granted[0].details["approved_by"] == "client-confirmation"
-
-
-@pytest.mark.parametrize(
-    "answer",
-    [
-        types.ElicitResult(action="decline"),
-        types.ElicitResult(action="accept", content={"approve": False}),
-    ],
-)
-def test_a_declined_confirmation_runs_nothing(answer: types.ElicitResult) -> None:
-    WRITES.clear()
-    result, _, _ = _stdio_call(answer)
-
-    assert result.isError and "approval_required" in result.content[0].text
-    assert WRITES == []
-
-
-def test_without_the_opt_in_nothing_is_asked() -> None:
-    WRITES.clear()
-    result, asked, _ = _stdio_call(None, confirm=False)
-
-    assert result.isError and asked == [] and WRITES == []
-
-
-def test_confirmation_is_refused_over_http_and_without_a_run_store() -> None:
-    executor = ToolExecutor(REGISTRY, ELIGIBLE)
-    with pytest.raises(ValueError, match="stdio with a recorder"):
-        build_server(executor, name="test", confirm_in_client=True)

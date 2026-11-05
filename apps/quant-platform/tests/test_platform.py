@@ -10,6 +10,7 @@ from mcp.client.session import ClientSession
 from mcp.shared.memory import create_connected_server_and_client_session
 from typer.testing import CliRunner
 
+import quant_platform.cli as platform_cli
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server
 from quant_agent_os.runtime import ToolCall, ToolExecutor
@@ -40,19 +41,16 @@ def test_one_catalog_serves_every_toolset(
     assert [spec.name for spec in catalog.tools] == [
         "find_related_signals",
         "get_source_passage",
-        "generate_strategy",
         "analyze_performance",
         "analyze_risk",
         "list_datasets",
         "research_report",
         "describe_template",
         "check_spec",
-        "plan_app",
         "server_info",
     ]
     assert [r.uri_template for r in catalog.resources] == [
         "qaos://passage/{chunk_id}",
-        "qaos://strategy/{focus}",
         "qaos://dataset/{dataset_id}",
         "qaos://template/{template}",
         "qaos://template/{template}/{profile}",
@@ -68,14 +66,12 @@ def test_one_catalog_serves_every_toolset(
     assert catalog.toolsets == {
         "find_related_signals": "research",
         "get_source_passage": "research",
-        "generate_strategy": "research",
         "analyze_performance": "analytics",
         "analyze_risk": "analytics",
         "list_datasets": "analytics",
         "research_report": "research",
         "describe_template": "factory",
         "check_spec": "factory",
-        "plan_app": "factory",
         "server_info": "platform",
     }
 
@@ -115,7 +111,7 @@ def test_research_report_is_cited_deterministic_and_honours_the_contract(
     record = check_tool(report, {"focus": "momentum"})
     assert record.output is not None
     assert [step["tool"] for step in record.output["steps"]] == ["generate_strategy"]
-    assert record.output["evidence"] and record.output["open_questions"]
+    assert record.output["evidence"] and record.output["spec"]["open_questions"]
     assert all(e["kind"] == "retrieved" for e in record.output["evidence"])
     assert "corpus_snapshot" in record.data_versions
 
@@ -222,3 +218,8 @@ def test_without_the_factory_extra_the_factory_toolset_is_not_offered(
 
     assert composition.available_toolsets() == ["research", "analytics"]
     assert asked.exit_code == 2 and "quant-agent-os-platform[factory]" in asked.output
+
+
+def test_app_factory_is_served_only_when_asked_for() -> None:
+    assert platform_cli._toolsets(None) == ["research", "analytics"]
+    assert platform_cli._toolsets("research,factory") == ["research", "factory"]

@@ -48,6 +48,7 @@ from quant_app_factory.infrastructure.settings_file import (
 )
 from quant_app_factory.tools import CHECK_PERMISSIONS, CREATE_PERMISSIONS, factory_tools
 
+SERVED_TOOLS = frozenset({"describe_template", "check_spec"})
 app = typer.Typer(
     help="Quant App Factory: generate tested, packaged Python applications.", no_args_is_help=True
 )
@@ -751,14 +752,8 @@ MCP_INSTRUCTIONS = (
 
 
 def served_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
-    """Return the tools `serve-mcp` serves: every factory tool except create and check."""
-    return [spec for spec in factory_tools(factory) if spec.name not in ("create_app", "check_app")]
-
-
-CONFIRM_INSTRUCTIONS = (
-    " This server can also create_app and check_app: each call asks the user to confirm it in "
-    "the client before anything is written or run."
-)
+    """Return the tools a server offers: guidance only, because the user creates in a terminal."""
+    return [spec for spec in factory_tools(factory) if spec.name in SERVED_TOOLS]
 
 
 @app.command("serve-mcp")
@@ -767,46 +762,28 @@ def serve_mcp(
     record: Annotated[
         bool, typer.Option("--record/--no-record", help="Persist every call as a run.")
     ] = True,
-    confirm_in_client: Annotated[
-        bool,
-        typer.Option(
-            "--confirm-in-client",
-            help="Also serve create_app and check_app; the client asks the user to confirm "
-            "each call (decision 0014). Local stdio only; needs the run store.",
-        ),
-    ] = False,
 ) -> None:
-    """Serve the guiding tools (describe_template, check_spec, plan_app) over stdio.
+    """Serve the guiding tools (describe_template, check_spec) over stdio.
 
-    By default create_app and check_app are not served, and people create from the terminal.
-    With --confirm-in-client they are: each call waits for an approval that the user gives in
-    the client, recorded as approved by client-confirmation, and the files are written on this
-    machine. Messages go to stderr because stdout carries the protocol.
+    Creating a project writes files and runs its checks, so people do that from the terminal with
+    `quant-factory create`. Messages go to stderr because stdout carries the protocol.
     """
-    factory = default_factory()
-    tools = factory_tools(factory) if confirm_in_client else served_tools(factory)
-    policy = (
-        PermissionPolicy(granted=READ_ONLY | CREATE_PERMISSIONS | CHECK_PERMISSIONS)
-        if confirm_in_client
-        else PermissionPolicy()
-    )
-    if confirm_in_client and not record:
-        raise _fail("--confirm-in-client records every approval, so it needs --record.")
     run_store: SqliteRunStore | None = None
     try:
         if record:
             try:
                 run_store = SqliteRunStore(_runs_path(runs))
             except RunStoreError as error:
-                if confirm_in_client:
-                    raise _fail(error) from error
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         run_stdio(
-            ToolExecutor(ToolRegistry(tools), policy, approvals=run_store),
+            ToolExecutor(
+                ToolRegistry(served_tools(default_factory())),
+                PermissionPolicy(),
+                approvals=run_store,
+            ),
             name="quant-factory",
-            instructions=MCP_INSTRUCTIONS + (CONFIRM_INSTRUCTIONS if confirm_in_client else ""),
+            instructions=MCP_INSTRUCTIONS,
             recorder=RunRecorder(run_store, actor="mcp") if run_store else None,
-            confirm_in_client=confirm_in_client,
         )
     except MCPUnavailableError as error:
         raise _fail(error) from error

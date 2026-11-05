@@ -48,11 +48,9 @@ def test_the_plugin_serves_this_platform_version_with_its_skills() -> None:
     args = manifest["mcpServers"][SERVER]["args"]
 
     assert manifest["version"] == version("quant-agent-os-platform")
-    # The factory toolset is an extra (decision 0012); the quant-app-factory skill needs it.
+    # App Factory is opt-in, so the plugin does not install it.
     assert args[args.index("--package") + 1 :] == [
         "quant-agent-os-platform",
-        "--extra",
-        "factory",
         "quant-platform",
         "serve-mcp",
     ]

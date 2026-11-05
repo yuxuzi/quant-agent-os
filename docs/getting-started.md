@@ -19,14 +19,15 @@ Or inside a session (Claude Code 2.1.275 or later):
 ```
 
 The plugin brings:
-- **The MCP server.** `quant-platform serve-mcp` serves research, analytics, and App Factory
-  tools, with resources and prompts. It runs locally through `uv` on Python 3.13, and on first
+- **The MCP server.** `quant-platform serve-mcp` serves research and analytics tools, with
+  resources and prompts. It runs locally through `uv` on Python 3.13, and on first
   start uv installs its locked dependencies.
 - **Four skills,** loaded when a task needs them:
   - `quant-research` for cited answers from your corpus;
   - `quant-analytics` for metrics by dataset reference;
   - `quant-strategy` for cited strategy specs and reports;
-  - `quant-app-factory` for project specs you create locally.
+  - `quant-app-factory` for project specs you create locally, when the server is started with
+    `--toolsets research,analytics,factory`.
 
 The server is read-only by default and records every call in `~/.quant-agent-os/runs.db`.
 
@@ -53,7 +54,6 @@ uv run quant-agent-os dataset push returns.csv --id returns
 - "What does my research say about short-term reversal? Cite the passages."
 - "Report on trend following, with the metrics of the fund column in the returns dataset."
 - "What drives the risk of my portfolio in the holdings dataset?"
-- "Help me draft a quant research project spec."
 
 Answers cite your documents by file and line. Metrics come from the server, with their
 conventions, and are never computed by the model. To see exactly what the client is offered,
@@ -66,7 +66,7 @@ run `uv run quant-platform catalog`.
 - **Claude Code without the plugin.** Run from the clone:
 
   ```bash
-  claude mcp add quant-agent-os -- uv run --directory "$PWD" --package quant-agent-os-platform --extra factory quant-platform serve-mcp
+  claude mcp add quant-agent-os -- uv run --directory "$PWD" --package quant-agent-os-platform quant-platform serve-mcp
   ```
 
 - **A team server over REST,** in Docker, with API keys: see [deployment.md](deployment.md).

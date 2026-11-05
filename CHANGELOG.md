@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The format follows
   command, and the `QUANT_AGENT_OS_MODEL_PROVIDER`, `_MODEL_NAME`, `_API_KEY`, and
   `_MAX_PLAN_STEPS` settings, which had no effect. Only a fake model could ever drive it; clients
   do the planning. `PlanStep` is now `ToolCall`, in `quant_agent_os.runtime`.
+- **`generate_strategy` and `plan_app` are no longer served by the platform.** `research_report`
+  now returns the cited `spec`, and `check_spec` returns the exact files.
+- **`quant-factory serve-mcp --confirm-in-client`.** Creating a project is a terminal command.
+
+### Changed
+
+- **App Factory is off by default on the platform server**, and the plugin no longer installs it.
+  Add it with `--toolsets research,analytics,factory`. `quant-factory` is unchanged.
 
 ### Added
 

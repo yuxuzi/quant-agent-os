@@ -24,6 +24,16 @@ release, under its existing name, with an entry here. The rule from
 90 days and a major release before removal) is suspended until the owner decides the project is
 mature enough. Version bumps and the lock still apply, so every change stays visible.
 
+## Unreleased
+
+| Tool | Version | Change |
+| --- | --- | --- |
+| `generate_strategy` | removed | `research_report` returns the same `spec`, and the resource `qaos://strategy/{focus}` is gone too. `quant-research serve-mcp` still serves it. |
+| `plan_app` | removed | `check_spec` returns the problems or the exact files. `quant-factory plan` stays. |
+| `research_report` | 3.0.0 | Adds `spec`, the cited strategy specification. `open_questions` moves into it. |
+
+App Factory's tools are served only with `--toolsets ...,factory`.
+
 ## 0.1.2
 
 | Tool | Version | Change |

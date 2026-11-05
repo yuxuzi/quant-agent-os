@@ -53,11 +53,6 @@ dates show no frequency, ask the user (252 daily, 52 weekly, 12 monthly); do not
 Failures carry `hint` and `retryable`. An `invalid_input` error names the field to fix. On
 `denied` or `approval_required`, tell the user and do not retry.
 
-### Server version
-
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
-
 ### Related
 
 The `analyze_returns` prompt runs the performance workflow in clients without skills. For a
@@ -67,6 +62,9 @@ skill.
 ## quant-app-factory
 
 *Guide the user to a ready Quant-Agent-OS App Factory spec (quant research projects, agent tools) that they create locally, through the Quant-Agent-OS MCP server. Use when the user wants to generate a Python project, a backtest or research project, or a tool package from a template.*
+
+If these tools are not offered, the server was started without the factory toolset. The user can
+add `--toolsets research,analytics,factory`, or run `quant-factory new` in a terminal instead.
 
 The server checks specs; the user creates the project on their own machine. Nothing here
 writes files, runs code, or touches the network.
@@ -81,9 +79,7 @@ writes files, runs code, or touches the network.
    defaults. Do not ask for anything the template does not need.
 3. **Check until ready.** Send the draft as `spec` to `check_spec`, fix every problem it
    reports, and repeat until it says ready. It returns the exact files and the spec as TOML.
-4. **Optionally preview.** `plan_app` shows the profile, components, reasons, dependencies,
-   checks, and files. It writes nothing.
-5. **Hand over.** Give the user the TOML to save, and tell them to run
+4. **Hand over.** Give the user the TOML to save, and tell them to run
    `quant-factory create FILE` themselves. Creating a project writes files and runs its checks,
    so it needs their confirmation on their machine; never claim you created it.
 
@@ -96,11 +92,6 @@ writes files, runs code, or touches the network.
   invent options.
 - **Follow the errors.** Failures carry `hint` and `retryable`; on `denied` or
   `approval_required`, tell the user and do not retry.
-
-### Server version
-
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
 
 ### Related
 
@@ -151,8 +142,8 @@ tell the user what is needed and do not retry.
 
 ### Server version
 
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.
+If a tool you expect is missing, `server_info` (or `qaos://server/info`) lists what this server
+offers; tell the user, and do not guess.
 
 ### Related
 
@@ -163,22 +154,17 @@ warn the user that this skill may be out of date. Use a deprecated tool's named 
 
 *Turn the user's research corpus into a cited strategy specification or a one-call research report for one signal, factor, or strategy, through the Quant-Agent-OS MCP server. Use when the user wants a strategy spec, a report on a signal, or open questions before building a backtest.*
 
-Both tools are deterministic and read-only. They build a specification from the corpus, not
+`research_report` is deterministic and read-only. It builds a specification from the corpus, not
 code and not advice, and every item cites the passages that state it.
 
-### Choose the tool
-
-- **`research_report`** is the default. One call gives the cited evidence, the open questions,
-  and the limitations for one `focus`. Add `returns` as `{"dataset": ID, "column": NAME}` (and
-  optionally `benchmark` and `periods_per_year`) to include that series' performance metrics.
-  Prefer it to composing the calls yourself.
-- **`generate_strategy`** returns only the `StrategySpec`, for when the user wants to edit or
-  save it. It is also readable as the resource `qaos://strategy/{focus}`.
+One call gives the cited `spec` with its `open_questions`, the evidence, and the limitations for
+one `focus`. Add `returns` as `{"dataset": ID, "column": NAME}` (and optionally `benchmark`) to include
+that series' performance metrics. Prefer it to composing calls yourself.
 
 ### Focus
 
 `focus` is a signal, factor, or strategy name, such as "trend following", or an entity id
-such as `signal:carry`. If the tool says the name is unknown, search first with
+such as `signal:carry`. If it says the name is unknown, search first with
 `find_related_signals` (see the `quant-research` skill) and use a name it returns. One spec
 covers one focus; if the user names several, make one spec each.
 
@@ -201,8 +187,3 @@ To build a project from the spec, the user can draft an App Factory spec with th
 `quant-app-factory` skill.
 
 The `report_on_signal` prompt runs this workflow in clients without skills.
-
-### Server version
-
-Read `qaos://server/info` (`server_info`) once per session. If its `platform_major` is not 0,
-warn the user that this skill may be out of date. Use a deprecated tool's named replacement.

@@ -34,6 +34,7 @@ from quant_agent_os.serving import Tenancy
 from quant_agent_os.tenancy import check_tenant
 from quant_agent_os.tools import READ_ONLY, Permission, ToolRegistry
 from quant_platform.composition import (
+    DEFAULT_TOOLSETS,
     FACTORY_EXTRA,
     TOOLSETS,
     Catalog,
@@ -81,8 +82,8 @@ DEFAULT_STORE = Path.home() / ".quant-agent-os" / "knowledge.db"
 ToolsetsOption = Annotated[
     str | None,
     typer.Option(
-        help=f"Comma-separated toolsets to serve: {', '.join(TOOLSETS)} (default: every "
-        "installed one)."
+        help=f"Comma-separated toolsets to serve: {', '.join(TOOLSETS)} (default: "
+        f"{', '.join(DEFAULT_TOOLSETS)})."
     ),
 ]
 StoreOption = Annotated[
@@ -109,7 +110,7 @@ DatasetsOption = Annotated[
 
 def _toolsets(value: str | None) -> list[Toolset]:
     if value is None:
-        return available_toolsets()
+        return list(DEFAULT_TOOLSETS)
     chosen = [item.strip() for item in value.split(",") if item.strip()]
     unknown = sorted(set(chosen) - set(TOOLSETS))
     if unknown or not chosen:

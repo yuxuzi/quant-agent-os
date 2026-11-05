@@ -137,8 +137,8 @@ async def search_and_cite(client: Client) -> bool:
 
 async def draft_strategy(client: Client) -> bool:
     """Draft a cited strategy specification for one signal."""
-    draft = await client.call("generate_strategy", {"focus": "momentum"})
-    return bool(draft) and not client.result.errors
+    report = await client.call("research_report", {"focus": "momentum"})
+    return bool(report.get("spec")) and not client.result.errors
 
 
 async def analyze_a_series(client: Client) -> bool:
@@ -236,31 +236,45 @@ def _size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
-async def _evaluate(catalog: Catalog, workdir: str) -> dict[str, Any]:
-    executor = ToolExecutor(ToolRegistry(catalog.tools), PermissionPolicy())
+async def _definitions(catalog: Catalog) -> dict[str, int]:
+    """Return what a client is offered by a server for ``catalog``, as bytes per turn."""
     server = build_server(
-        executor,
+        ToolExecutor(ToolRegistry(catalog.tools), PermissionPolicy()),
         name="quant-agent-os",
         instructions=catalog.instructions,
         resources=catalog.resources,
         prompts=catalog.prompts,
     )
-    tasks: dict[str, dict[str, Any]] = {}
     async with create_connected_server_and_client_session(server) as session:
         listed = [
             tool.model_dump(mode="json", exclude_none=True)
             for tool in (await session.list_tools()).tools
         ]
-        definitions = {
-            "tools": len(listed),
-            "definition_bytes": sum(
-                _size({key: tool[key] for key in MODEL_VISIBLE if key in tool}) for tool in listed
-            ),
-            "instruction_bytes": len(catalog.instructions.encode("utf-8")),
-            "client_only_bytes": sum(
-                _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
-            ),
-        }
+    return {
+        "tools": len(listed),
+        "definition_bytes": sum(
+            _size({key: tool[key] for key in MODEL_VISIBLE if key in tool}) for tool in listed
+        ),
+        "instruction_bytes": len(catalog.instructions.encode("utf-8")),
+        "client_only_bytes": sum(
+            _size({key: tool[key] for key in CLIENT_ONLY if key in tool}) for tool in listed
+        ),
+    }
+
+
+async def _evaluate(default: Catalog, everything: Catalog, workdir: str) -> dict[str, Any]:
+    """Measure the default server's offer and the one with App Factory, and run every task."""
+    definitions = await _definitions(default)
+    with_factory = await _definitions(everything)
+    server = build_server(
+        ToolExecutor(ToolRegistry(everything.tools), PermissionPolicy()),
+        name="quant-agent-os",
+        instructions=everything.instructions,
+        resources=everything.resources,
+        prompts=everything.prompts,
+    )
+    tasks: dict[str, dict[str, Any]] = {}
+    async with create_connected_server_and_client_session(server) as session:
         skills = skill_metrics()
         for task_name, task in TASKS.items():
             result = TaskResult()
@@ -288,7 +302,7 @@ async def _evaluate(catalog: Catalog, workdir: str) -> dict[str, Any]:
         "skill_bytes": sum(item["skill_bytes"] for item in skills.values()),
     }
     return {
-        "servers": {"platform": definitions},
+        "servers": {"platform": definitions, "platform-with-factory": with_factory},
         "skills": skills,
         "tasks": tasks,
         "totals": totals,
@@ -319,13 +333,16 @@ def run() -> dict[str, Any]:
     workdir = tempfile.TemporaryDirectory()
     try:
         research.ingest.ingest(CORPUS)
-        catalog = compose(
-            policy=PermissionPolicy(),
+        store = _datasets(Path(workdir.name))
+        policy = PermissionPolicy()
+        default = compose(policy=policy, research=research.research, datasets=store)
+        everything = compose(
+            policy=policy,
             research=research.research,
-            datasets=_datasets(Path(workdir.name)),
+            datasets=store,
             factory=AppFactory(PytemplateUvScaffolder()),
         )
-        return anyio.run(_evaluate, catalog, workdir.name)
+        return anyio.run(_evaluate, default, everything, workdir.name)
     finally:
         research.close()
         workdir.cleanup()

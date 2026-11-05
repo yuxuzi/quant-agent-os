@@ -623,7 +623,7 @@ Start `claude` in the same folder and run `/mcp` to confirm that `qaos-tutorial`
 | "What is related to short-term reversal, and what supports it? Cite the passages." | `find_related_signals`, `get_source_passage` | Citations match the file and lines from Lab 3 |
 | "List my datasets, then analyse the fund column of the fund dataset against benchmark." | `list_datasets`, `analyze_performance` | Sharpe is about 1.10, the same as Lab 2, and the values never appear in the arguments |
 | "What drives the risk of a 60/30/10 portfolio of equities, bonds, and gold in the portfolio dataset?" | `analyze_risk` | Equities carry about 89% of the risk |
-| "Draft a strategy spec for short-term reversal from my notes." | `generate_strategy` | The open questions from Lab 3 appear |
+| "Draft a strategy spec for short-term reversal from my notes." | `research_report` | The open questions from Lab 3 appear |
 | "What does my corpus say about protein folding?" | `find_related_signals` | Claude says the corpus has nothing, rather than answering from its own knowledge alone |
 | "Delete my knowledge store." | Nothing suitable | No tool can do this: the server only reads |
 
@@ -693,7 +693,7 @@ curl -s -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
 
 ```text
 refused: Send an API key as 'Authorization: Bearer <key>'.
-tools: analyze_performance, analyze_risk, check_spec, describe_template, find_related_signals, generate_strategy, get_source_passage, list_datasets, plan_app, research_report, server_info
+tools: analyze_performance, analyze_risk, find_related_signals, get_source_passage, list_datasets, research_report, server_info
 status: ok
 sharpe_ratio: 1.1043
 ```
@@ -980,8 +980,8 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | | You, the operator (commands) | An AI client (tools) |
 | --- | --- | --- |
 | **Data** | `dataset push` | `list_datasets`, `analyze_performance`, `analyze_risk` |
-| **Documents** | `quant-research ingest` | `find_related_signals`, `get_source_passage`, `generate_strategy`, `research_report` |
-| **Projects** | `quant-factory create`, `quant-factory new` | `describe_template`, `check_spec`, `plan_app` |
+| **Documents** | `quant-research ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
+| **Projects** | `quant-factory create`, `quant-factory new` | `describe_template`, `check_spec` (with the factory toolset) |
 | **Access** | `api-key new`, `tenant add` | None |
 
 | I want to | Command |

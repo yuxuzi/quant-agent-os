@@ -215,9 +215,8 @@ toolsets, calls a minute, billable calls a month, and output size:
     forms a minute (429 after that). Both counts are kept per server process.
   - **The retried, identical call** runs once, in the original run. A changed argument is a
     new hash and needs a new approval.
-  - **Locally**, `quant-factory serve-mcp --confirm-in-client` (stdio, opt-in, with a run
-    store) asks the client to confirm each call instead. It is recorded as approved by
-    `client-confirmation`, and is never available over HTTP.
+  - **Locally**, creating a project is a terminal command, `quant-factory create`, whose prompt
+    is the approval. No MCP server offers it.
 - **Standing approvals.** An operator can pre-approve a permission for every call with
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
   it records `standing:<permission>`.
