@@ -39,7 +39,7 @@ _NAMED_SUBSCHEMAS = frozenset({"properties", "$defs", "definitions", "patternPro
 
 
 def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
-    """Return MCP ``tools/list`` entries for every tool the policy allows.
+    """Return MCP ``tools/list`` entries for every tool served to the current caller.
 
     ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
     rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
@@ -63,7 +63,7 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
             | ({"qaos/deprecated": spec.descriptor()["deprecated"]} if spec.deprecated else {}),
         }
         for spec in executor.registry.specs()
-        if executor.policy.allows_tool(spec.name)
+        if executor.serves(spec.name)
     ]
 
 
@@ -113,9 +113,7 @@ def call_result(executor: ToolExecutor, record: ToolCallRecord) -> dict[str, Any
             "structuredContent": record.output,
             "isError": False,
         }
-    available = [
-        spec.name for spec in executor.registry.specs() if executor.policy.allows_tool(spec.name)
-    ]
+    available = [spec.name for spec in executor.registry.specs() if executor.serves(spec.name)]
     details = failure_details(record, available)
     return {
         "content": [
@@ -127,13 +125,13 @@ def call_result(executor: ToolExecutor, record: ToolCallRecord) -> dict[str, Any
 
 
 def served_resources(executor: ToolExecutor, resources: list[ResourceSpec]) -> list[ResourceSpec]:
-    """Return the resources whose tool is registered and allowed, checking each template.
+    """Return the resources whose tool is served to the current caller, checking each template.
 
     Raises `ToolContractError` when a template variable is not an argument of its tool.
     """
     served: list[ResourceSpec] = []
     for resource in resources:
-        if resource.tool not in executor.registry or not executor.policy.allows_tool(resource.tool):
+        if resource.tool not in executor.registry or not executor.serves(resource.tool):
             continue
         fields = executor.registry.get(resource.tool).input_model.model_fields
         unknown = [name for name in resource.variables if name not in fields]

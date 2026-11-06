@@ -211,6 +211,7 @@ class RunRecorder:
                 "input_sha256": record.input_sha256,
                 "duration_ms": record.duration_ms,
                 "approval": record.approval,
+                **({"refused": record.refused} if record.refused else {}),
             },
         )
 

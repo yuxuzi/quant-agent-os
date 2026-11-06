@@ -24,7 +24,6 @@ from typing import NoReturn
 from pydantic import ValidationError
 
 from quant_agent_os.api.keys import KeyRing
-from quant_agent_os.mcp.http import Caller
 from quant_agent_os.mcp.server import ApprovalGate
 from quant_agent_os.runs.models import ApprovalRequest, AuditEvent
 from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunRecorder
@@ -38,6 +37,7 @@ from quant_agent_os.runtime.executor import (
     canonical_sha256,
 )
 from quant_agent_os.tenancy import DEFAULT_TENANT
+from quant_agent_os.tools.access import Caller
 from quant_agent_os.tools.registry import UnknownToolError
 
 REQUEST_LIFETIME = timedelta(minutes=15)
