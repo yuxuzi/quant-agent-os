@@ -55,6 +55,22 @@ def test_read_only_refuses_missing_and_outdated_stores(tmp_path: Path, built: Pa
         SqliteKnowledgeStore(built, read_only=True)
 
 
+def test_a_newer_store_is_refused_and_left_alone(built: Path) -> None:
+    """An older binary, rolled back onto an upgraded store, must not stamp it as its own version."""
+    db = sqlite3.connect(built)
+    db.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    db.commit()
+    db.close()
+
+    for read_only in (True, False):
+        with pytest.raises(StoreError, match="newer than .* Do not ingest"):
+            SqliteKnowledgeStore(built, read_only=read_only)
+
+    db = sqlite3.connect(built)
+    assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION + 1
+    db.close()
+
+
 def test_search_and_serve_do_not_create_a_store(tmp_path: Path) -> None:
     runner = CliRunner()
     missing = tmp_path / "absent.db"

@@ -74,7 +74,7 @@ All notable changes to this project are documented here. The format follows
   keyword search by a second, simpler path. Python builds from uv include FTS5.
 - **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
   was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
-- **The `usage` service in `deploy/compose.yaml`.** A single firm's server does not meter; usage export stays
+- **The `usage` service in `deploy/compose.yaml`.** A single firm's server has no need of it; usage export stays
   a hosted feature, as `qaos hosted usage export`.
 
 ### Fixed
@@ -95,6 +95,9 @@ All notable changes to this project are documented here. The format follows
 - **The team-server guide taught a command that does not exist.** Adding a dataset is `datasets add`, not
   `datasets push`, and the backup advice now names the `datasets` volume. The doc test now resolves each
   `docker compose run` line in the guide and the compose files against the service and the real commands.
+- **`qaos ingest` no longer downgrades a newer knowledge store.** An older version ingesting into a store from
+  a newer one stamped the file with its own schema version, as the read-only error told operators to do. It now
+  refuses, on SQLite as PostgreSQL already did, and says to upgrade or restore instead.
 
 ## [0.2.0] - 2026-11-05
 

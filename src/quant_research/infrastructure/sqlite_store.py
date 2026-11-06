@@ -157,6 +157,10 @@ class SqliteKnowledgeStore(StoreLifecycle):
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
+        version = self._db.execute("PRAGMA user_version").fetchone()[0]
+        if version > SCHEMA_VERSION:
+            self._db.close()
+            raise StoreError(_newer_store(path, version))
         self._db.execute("PRAGMA foreign_keys = ON")
         _migrate(self._db)
         self._db.executescript(_SCHEMA)
@@ -544,6 +548,14 @@ def _migrate(db: sqlite3.Connection) -> None:
     db.execute("COMMIT")
 
 
+def _newer_store(location: str | Path, version: int) -> str:
+    return (
+        f"The store at {location} has schema version {version}, newer than the "
+        f"{SCHEMA_VERSION} this version reads. Do not ingest into it: upgrade quant-agent-os, "
+        "or restore the backup taken before the upgrade."
+    )
+
+
 def _open_read_only(path: str | Path) -> sqlite3.Connection:
     if str(path) == ":memory:":
         raise StoreError("A read-only store needs a file; ingest into one first.")
@@ -558,6 +570,9 @@ def _open_read_only(path: str | Path) -> sqlite3.Connection:
     if version == SCHEMA_VERSION and not _has_table(db, "chunks_fts"):
         db.close()
         raise StoreError(f"The store at {location} has no keyword index. {NO_FTS5}")
+    if version > SCHEMA_VERSION:
+        db.close()
+        raise StoreError(_newer_store(location, version))
     if version != SCHEMA_VERSION:
         db.close()
         raise StoreError(

@@ -256,10 +256,7 @@ class PostgresKnowledgeStore(StoreLifecycle):
             self._db.execute("SELECT pg_advisory_xact_lock(hashtext(current_schema()))")
             version = self._version()
             if version is not None and version > SCHEMA_VERSION:
-                raise StoreError(
-                    f"The store in schema {self.schema} at {self.location} has schema version "
-                    f"{version}; this version reads {SCHEMA_VERSION}. Upgrade quant-research."
-                )
+                raise StoreError(self._newer_store(version))
             self._db.execute(_TABLES)
             if self._vector_available():
                 self._db.execute(_EMBEDDINGS)
@@ -289,12 +286,21 @@ class PostgresKnowledgeStore(StoreLifecycle):
                 f"No knowledge store in schema {self.schema} at {self.location}; run qaos ingest."
             )
         version = self._version()
+        if version is not None and version > SCHEMA_VERSION:
+            raise StoreError(self._newer_store(version))
         if version != SCHEMA_VERSION:
             raise StoreError(
                 f"The store in schema {self.schema} at {self.location} has schema version "
                 f"{version}, and this version reads {SCHEMA_VERSION}. Run qaos ingest "
                 "on it once to upgrade it."
             )
+
+    def _newer_store(self, version: int) -> str:
+        return (
+            f"The store in schema {self.schema} at {self.location} has schema version {version}, "
+            f"newer than the {SCHEMA_VERSION} this version reads. Do not ingest into it: upgrade "
+            "quant-agent-os, or restore the backup taken before the upgrade."
+        )
 
     def _version(self) -> int | None:
         if not self._table_exists("meta"):
