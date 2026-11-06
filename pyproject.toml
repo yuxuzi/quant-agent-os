@@ -123,7 +123,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["examples/portfolio-research", "scripts"]
+pythonpath = ["examples/firm-tools", "examples/portfolio-intelligence", "examples/portfolio-research", "scripts"]
 filterwarnings = [
     "error::ResourceWarning",
     "error::pytest.PytestUnraisableExceptionWarning",

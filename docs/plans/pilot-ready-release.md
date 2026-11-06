@@ -78,7 +78,7 @@ public `main` stays under the licence it merged under.
 | --- | --- | --- | --- |
 | 1 | **O-4: the licence from 0.3.0 onwards** | **Decided:** the Business Source License 1.1, [decision 0019](../decisions/0019-business-source-license.md), applied in its own PR | Counsel reviews it before first commercial use |
 | 2 | **Name availability (B-22)** | The README still says the name is unchecked, and a pilot is commercial use | Check before S3's demonstration is shown to anyone |
-| 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. Recorded as decision 0020 in S1.5 | Build as written below |
+| 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. S1 is recorded as decision 0020, and S2 as decision 0021 | Build as written below |
 
 ## S1: Serve a firm's own tools (M)
 
@@ -102,7 +102,7 @@ passes, since skills cover only the platform's own tools. No change to the platf
 
 | Step | Work |
 | --- | --- |
-| S2.1 | `Caller(principal, tenant, groups)` in Core, moved from `mcp/http.py`. Keys gain optional `groups`; `qaos keys new --group`. `ToolExecutor.execute(step, run_id=, caller=)`, passed by REST and HTTP MCP. stdio and the SDK pass none: they trust whoever started them, as now |
+| S2.1 | `Caller(principal, tenant, groups)` in Core, moved from `mcp/http.py`. Keys gain optional `groups`; `qaos keys new --group`. REST and HTTP MCP bind the caller once per request, and the executor carries it onto the tool's thread. stdio and the SDK bind none: they trust whoever started them, as now |
 | S2.2 | An `AccessPolicy` port in Core: `allows(caller, action, resource) -> bool`, with actions `tool.call` and `dataset.read`. With no policy configured, behaviour is exactly as today |
 | S2.3 | Tool-level check in the executor, after the existing policy check. A refusal records `denied` with the principal and the audit event. `tools/list` and `GET /v1/tools` show a caller only what it may call |
 | S2.4 | Dataset-level check at the read: a `GuardedDatasetStore` around the store, reading the caller from a `ContextVar`. `ids()` filters; `get()` refuses. Runs through `copy_context()` at `self._pool.submit`, because tools run on a pool thread, and `research_report`'s nested calls must keep the caller |
@@ -115,7 +115,7 @@ passes, since skills cover only the platform's own tools. No change to the platf
 retrieved and computed, so S6 says to grant it only to auditors. Approvals are untouched. The corpus is
 all-or-nothing per caller, through tool-level rules.
 
-**Exit:** the matrix passes on both interfaces and both stores; the policy file's failure mode is tested;
+**Exit:** the matrix passes on both interfaces; the policy file's failure mode is tested;
 the concurrency path is tested with parallel callers with different entitlements, because a leaked
 `ContextVar` would be a silent cross-user read. Report the efficiency delta (`tools/list` output is unchanged
 with no policy).
@@ -131,6 +131,8 @@ datasets, a few synthetic research notes, one firm tool from S1, and two users f
 | S3.2 | `demo.py`: starts a real HTTP server on a temporary home and drives it over MCP with no model, one printed step each: discover tools; authenticate; compute risk and exposures by reference; retrieve cited research; build the evidence-linked report; refuse an unauthorized dataset; ask something the corpus cannot answer and abstain; show the run and its audit trail |
 | S3.3 | `tests/integration/test_portfolio_demo.py` runs it offline in default CI, and asserts each step |
 | S3.4 | `docs/demo.md`: the same story with a real client, a presenter's script of at most 10 minutes, and the prompts to use. It says which output comes from the client's model and which from the tools. Linked from getting started |
+
+`examples/portfolio-research/` stays: six test files and the tutorial use its tools, so S3.1 adds the demonstration beside it.
 
 **Exit:** 20 consecutive clean runs on a fresh clone; a timed run with Claude under 10 minutes; a reader of
 `docs/demo.md` can run it with no other help.

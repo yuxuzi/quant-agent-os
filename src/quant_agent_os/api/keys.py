@@ -7,6 +7,7 @@ A keys file is TOML with one ``[[keys]]`` table per key::
     sha256 = "<64 hex characters>"
     scopes = ["tools:list", "tools:call"]
     expires = 2027-01-31T00:00:00Z  # optional
+    groups = ["growth-desk"]        # optional; what an access policy reads (decision 0021)
 
 Keys are 32 random bytes, so a plain SHA-256 is enough to store them; nothing here needs the
 ``api`` extra.
@@ -24,7 +25,7 @@ import tomllib
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Annotated, Literal, get_args
 
 from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_validator
 
@@ -50,6 +51,7 @@ class ApiKey(BaseModel):
     tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     disabled: bool = False
     expires: AwareDatetime | None = None
+    groups: frozenset[Annotated[str, Field(pattern=PRINCIPAL_PATTERN)]] = frozenset()
 
     @property
     def expired(self) -> bool:
@@ -104,11 +106,12 @@ def add_key(
     *,
     tenant: str = DEFAULT_TENANT,
     expires: datetime | None = None,
+    groups: Iterable[str] = (),
 ) -> str:
     """Generate a key, append its hash to ``path`` (created with mode 0600), and return it.
 
     The key itself is returned once and never written anywhere. A key acts only within its
-    ``tenant``, and until ``expires`` if given.
+    ``tenant``, and until ``expires`` if given. ``groups`` are what an access policy reads.
     """
     key = new_key()
     try:
@@ -118,6 +121,7 @@ def add_key(
             scopes=frozenset(scopes),
             tenant=tenant,
             expires=expires,
+            groups=frozenset(groups),
         )
     except ValidationError as error:
         problems = "; ".join(
@@ -129,12 +133,14 @@ def add_key(
         load_keys(path)  # refuse to append to a file the server could not read
     path.parent.mkdir(parents=True, exist_ok=True)
     scope_list = ", ".join(f'"{scope}"' for scope in sorted(entry.scopes))
-    # The principal and tenant patterns and the hex hash need no TOML escaping.
+    # The principal, group, and tenant patterns and the hex hash need no TOML escaping.
+    group_list = ", ".join(f'"{group}"' for group in sorted(entry.groups))
     block = (
         f'\n[[keys]]\nprincipal = "{entry.principal}"\nsha256 = "{entry.sha256}"\n'
         f"scopes = [{scope_list}]\n"
         + (f'tenant = "{entry.tenant}"\n' if entry.tenant != DEFAULT_TENANT else "")
         + (f"expires = {entry.expires.isoformat()}\n" if entry.expires else "")
+        + (f"groups = [{group_list}]\n" if entry.groups else "")
     )
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(descriptor, "a", encoding="utf-8") as handle:

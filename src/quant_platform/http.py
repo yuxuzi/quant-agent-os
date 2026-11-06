@@ -21,7 +21,9 @@ if TYPE_CHECKING:
 def single_tenant(catalog: Catalog, run_store: RunStore, policy: PermissionPolicy) -> Tenancy:
     """Return a one-tenant server for ``catalog`` (the default tenant), recording in
     ``run_store``, which is also its approval ledger."""
-    executor = ToolExecutor(ToolRegistry(catalog.tools), policy, approvals=run_store)
+    executor = ToolExecutor(
+        ToolRegistry(catalog.tools), policy, approvals=run_store, access=catalog.access
+    )
     return SingleTenant(
         Surface(executor, catalog.resources, catalog.prompts, run_store, catalog.toolsets)
     )

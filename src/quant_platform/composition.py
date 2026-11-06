@@ -2,7 +2,8 @@
 
 This is the only place that imports every product (decision 0003 keeps them independent of
 each other). Each toolset contributes its own tools, resources, prompts, and a paragraph of
-server instructions; `research_report` is added when the research toolset is served. The
+server instructions; `research_report` is added when the research toolset is served. A firm's own
+tools join through ``extra_tools``, named in its own code and never discovered (decision 0020). The
 analytics and factory toolsets need extras (``quant-agent-os[analytics]``, ``[factory]``), so each
 is imported only when it is served.
 """
@@ -10,12 +11,18 @@ is imported only when it is served.
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
-from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
-from quant_agent_os.tools.server_info import server_info_resource, server_info_tool
+from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
+from quant_agent_os.tools import AccessPolicy, PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
+from quant_agent_os.tools.registry import DuplicateToolError
+from quant_agent_os.tools.server_info import (
+    SERVER_INFO_TOOL,
+    server_info_resource,
+    server_info_tool,
+)
 from quant_platform.prompts import (
     ANALYZE_RETURNS,
     DRAFT_APP_SPEC,
@@ -71,7 +78,8 @@ def available_toolsets() -> list[Toolset]:
 class Catalog:
     """Everything one server offers: tools, resources, prompts, and its instructions.
 
-    ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015).
+    ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015), and
+    ``policy`` and ``access`` are what it was composed under, which serving it applies.
     """
 
     tools: list[ToolSpec[Any, Any]] = field(default_factory=list)
@@ -79,6 +87,8 @@ class Catalog:
     prompts: list[PromptSpec] = field(default_factory=list)
     instructions: str = PLATFORM_INSTRUCTIONS
     toolsets: dict[str, str] = field(default_factory=dict)
+    policy: PermissionPolicy = field(default_factory=PermissionPolicy)
+    access: AccessPolicy | None = None
 
 
 def compose(
@@ -87,6 +97,9 @@ def compose(
     research: ResearchService | None = None,
     datasets: DatasetStore | None = None,
     factory: AppFactory | None = None,
+    extra_tools: Sequence[ToolSpec[Any, Any]] = (),
+    extra_instructions: str | None = None,
+    access: AccessPolicy | None = None,
 ) -> Catalog:
     """Return the catalog for the given products; each one given is a toolset served.
 
@@ -94,15 +107,28 @@ def compose(
     served on its own; ``datasets`` serves
     analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
-    Every catalog also serves `server_info` (``qaos://server/info``, decision 0015).
+    ``extra_tools`` are a firm's own, served as the toolset ``firm`` under the same executor
+    checks, and ``extra_instructions`` tells clients about them. Every catalog also serves
+    `server_info` (``qaos://server/info``, decision 0015). With ``access``, each caller reaches
+    only the tools and datasets it allows (decision 0021); give extra tools a
+    `GuardedDatasetStore` too. Raises `DuplicateToolError` when an extra tool reuses a served
+    name: it never replaces a platform tool.
     """
+    if (
+        access is not None
+        and datasets is not None
+        and not isinstance(datasets, GuardedDatasetStore)
+    ):
+        datasets = GuardedDatasetStore(datasets, access)
     tools: list[ToolSpec[Any, Any]] = []
     resources: list[ResourceSpec] = []
     prompts: list[PromptSpec] = []
     served: list[Toolset] = []
     toolsets: dict[str, str] = {}
 
-    def add(toolset: Toolset | Literal["platform"], specs: list[ToolSpec[Any, Any]]) -> None:
+    def add(
+        toolset: Toolset | Literal["firm", "platform"], specs: list[ToolSpec[Any, Any]]
+    ) -> None:
         tools.extend(specs)
         toolsets.update((spec.name, toolset) for spec in specs)
 
@@ -131,9 +157,24 @@ def compose(
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
-    add("platform", [server_info_tool(platform_version(), list(tools))])
+    _check_extra_names(extra_tools, {spec.name for spec in tools})
+    add("firm", list(extra_tools))
+    add("platform", [server_info_tool(platform_version(), list(tools), access)])
     resources.append(server_info_resource())
-    return Catalog(tools, resources, prompts, instructions_for(served), toolsets)
+    instructions = instructions_for(served)
+    if extra_instructions:
+        instructions = f"{instructions}\n\n{extra_instructions}"
+    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access)
+
+
+def _check_extra_names(extra: Sequence[ToolSpec[Any, Any]], served: set[str]) -> None:
+    taken = served | {SERVER_INFO_TOOL}
+    for spec in extra:
+        if spec.name in taken:
+            raise DuplicateToolError(
+                f"Tool '{spec.name}' has a name this server already serves; rename the firm's tool."
+            )
+        taken.add(spec.name)
 
 
 def instructions_for(toolsets: list[Toolset]) -> str:

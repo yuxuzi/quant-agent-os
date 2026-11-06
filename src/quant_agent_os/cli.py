@@ -61,6 +61,10 @@ def key_new(
         int | None,
         typer.Option(min=1, help="Stop accepting the key after this many days. Default: never."),
     ] = None,
+    group: Annotated[
+        list[str] | None,
+        typer.Option(help="Repeat for each group an access file gives rights to (decision 0021)."),
+    ] = None,
 ) -> None:
     """Create an API key: print it once and append only its hash to the keys file."""
     unknown = sorted(set(scope) - set(SCOPES))
@@ -73,7 +77,7 @@ def key_new(
     scopes: list[Scope] = [item for item in SCOPES if item in scope]
     try:
         expires = datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
-        key = add_key(path, principal, scopes, tenant=tenant, expires=expires)
+        key = add_key(path, principal, scopes, tenant=tenant, expires=expires, groups=group or [])
     except (ApiKeyError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error

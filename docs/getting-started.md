@@ -173,6 +173,15 @@ with Platform(build_registry()) as platform:
 To drive the tools from your own model, use your vendor's tool loop over `tool_definitions` and
 `Platform.call`, as [examples/your-own-model](../examples/your-own-model/drive_tools.py) shows.
 
+## See it all together
+
+[The Portfolio Intelligence demonstration](demo.md) puts a firm's own tool, data, research, access
+rules, and audit trail on one server, with a ten-minute script for showing it to someone:
+
+```bash
+uv run python examples/portfolio-intelligence/demo.py
+```
+
 ## Develop
 
 ```bash

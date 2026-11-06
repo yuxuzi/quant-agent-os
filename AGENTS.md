@@ -23,7 +23,8 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
-  `qaos serve` serves them as one MCP server, and `open_platform()` opens them from a notebook.
+  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_http`, and
+  `open_platform()` opens them from a notebook.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
@@ -59,7 +60,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
-| Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
+| Offline demos | `uv run python examples/portfolio-intelligence/demo.py`, `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
 | Regenerate client bundles (after changing a skill) | `uv run python scripts/client_bundles.py` |
 | Update the tool lock (after a tool version bump) | `uv run python scripts/tool_lock.py --update` |
@@ -73,7 +74,8 @@ the real results.
 ## Layout and layering
 
 `src/quant_agent_os/`, importing downward only:
-1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions; `tenancy.py` (tenant ids).
+1. `tools/`: contract (`ToolSpec`, `@tool`), registry, permissions, per-caller access;
+   `tenancy.py` (tenant ids).
 2. `runtime/call.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: tool
    calls, approvals, the subprocess runner, and bounded execution.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
@@ -93,6 +95,9 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
   ([decision 0016](docs/decisions/0016-clients-orchestrate.md)). No multi-agent features.
 - **Business logic stays out of MCP.** MCP code only adapts the registry
   ([decision 0002](docs/decisions/0002-mcp-boundary.md)).
+- **Per-caller access fails closed.** With an access policy, no bound caller, a failed check, or an invalid
+  file is a refusal, and a refused dataset looks like a missing one
+  ([decision 0021](docs/decisions/0021-per-caller-access.md)).
 - **Read-only by default.** Never widen `READ_ONLY` or default permissions. New capabilities must
   declare `Permission`s. Consequential permissions need per-call approval
   ([decision 0005](docs/decisions/0005-approval-gates.md)). Never create approvals from tool
@@ -104,7 +109,8 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
   is labelled `interpretation`.
 - **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
 - **Explicit registration.** No dynamic plugin discovery or code loading, and no tool
-  marketplace. The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
+  marketplace. A firm's tools are named in its own server's code
+  ([decision 0020](docs/decisions/0020-a-firms-own-server.md)). The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
   the skills for clients; it adds no tools.
 - **MCP is the capability boundary; skills are guidance.** Skills contain instructions only, never
   scripts, so every action goes through a tool and the executor's permissions, approvals,

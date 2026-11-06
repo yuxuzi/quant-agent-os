@@ -493,6 +493,7 @@ Edit `$TUT/my_tool.py`, then run it again.
 | Pass `returns=[]` in `SAMPLE` | `check_tool` reports that the status is `invalid_input`, expected `ok` |
 | **Challenge:** also return the total loss during the longest streak | Your tool, your design. Tell us how it went |
 
+To serve your tool beside the platform's, see [add your own tools](deployment.md#8-add-your-own-tools).
 To start a real tool package with these checks already wired in, see
 `uv run qaos app new agent-tool my-tools` ([Quant App Factory](products/quant-app-factory.md)).
 

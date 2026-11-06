@@ -55,10 +55,11 @@ jobs:
 
   docker:
     # Builds the team-server image and runs it end to end with docker compose, on SQLite and on
-    # PostgreSQL with pgvector (B-19, B-14).
+    # PostgreSQL with pgvector (B-19, B-14), then builds and runs a firm's image on top of it.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - run: deploy/smoke-test.sh sqlite
       - run: deploy/smoke-test.sh postgres
+      - run: deploy/firm-image-test.sh

@@ -32,7 +32,7 @@ def _serve(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> tuple[Any, dict[
     def fake_run(app: Any, *, host: str, port: int) -> None:
         served.update(app=app, host=host, port=port)
 
-    monkeypatch.setattr("quant_platform.cli.run_http", fake_run)
+    monkeypatch.setattr("quant_platform.serve.run_http", fake_run)
     return CliRunner().invoke(cli, ["serve", "--http", "--toolsets", "research", *args]), served
 
 
@@ -50,7 +50,7 @@ def test_http_serves_research_results_equal_to_mcp(
         _check(app, key, expected)
         checked.append(f"{host}:{port}")
 
-    monkeypatch.setattr("quant_platform.cli.run_http", serve)
+    monkeypatch.setattr("quant_platform.serve.run_http", serve)
     result = CliRunner().invoke(
         cli, ["serve", "--http", "--toolsets", "research", "--store", store, "--keys", str(keys)]
     )

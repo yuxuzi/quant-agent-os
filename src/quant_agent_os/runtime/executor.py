@@ -9,6 +9,7 @@ import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from contextvars import copy_context
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -19,6 +20,7 @@ from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.quotas import UsageGate
 from quant_agent_os.runtime.telemetry import call_span
 from quant_agent_os.tenancy import DEFAULT_TENANT
+from quant_agent_os.tools.access import AccessPolicy, collecting_refusals, note_refusal, permits
 from quant_agent_os.tools.permissions import (
     CONSEQUENTIAL,
     PermissionDeniedError,
@@ -53,8 +55,8 @@ FAILURE_HINTS: dict[CallStatus, tuple[str, bool]] = {
     ),
     "unknown_tool": ("Call one of the available tools: {tools}.", True),
     "denied": (
-        "The server's operator has not granted this tool's permissions. Do not retry; tell the "
-        "user which permission it needs.",
+        "The server's operator has not allowed this call. Do not retry; tell the user what the "
+        "error says.",
         False,
     ),
     "approval_required": (
@@ -91,7 +93,9 @@ class ToolCallRecord(BaseModel):
     so identical calls can be recognised across runs. ``approval`` names what allowed a
     consequential call: an approval id, or ``standing:<permission>,...`` for permissions the
     operator pre-approved. ``error_detail`` keeps the exception text of an internal failure for
-    the operator; interfaces never return it to a caller (security review F-5).
+    the operator; interfaces never return it to a caller (security review F-5). ``refused`` lists
+    what an access policy refused during the call (decision 0021), for the audit trail only: it
+    is never returned to a caller, because a refused dataset must look like a missing one.
     """
 
     tool: str
@@ -109,6 +113,7 @@ class ToolCallRecord(BaseModel):
     approval: str | None = None
     retry_after_seconds: int | None = None
     error_detail: str | None = None
+    refused: list[str] = Field(default_factory=list)
 
     def result(self) -> dict[str, Any]:
         """Return the tool's output, or raise `ToolCallError` when the call did not succeed."""
@@ -155,6 +160,9 @@ class ToolExecutor:
     are valid must be admitted before any approval is used or the tool starts; a refusal
     records ``quota_exceeded``. ``max_output_bytes`` caps every tool's own output limit.
 
+    With ``access`` (decision 0021), a call needs the current caller to be allowed the tool, and
+    no bound caller is a refusal. The caller is carried onto the thread the tool runs on.
+
     Every call is traced and counted through OpenTelemetry (`telemetry.call_span`) under
     ``tenant``, the tenant this executor serves.
     """
@@ -169,6 +177,7 @@ class ToolExecutor:
         max_output_bytes: int | None = None,
         tenant: str = DEFAULT_TENANT,
         max_concurrent_calls: int = MAX_CONCURRENT_CALLS,
+        access: AccessPolicy | None = None,
     ) -> None:
         self.registry = registry
         self.policy = policy
@@ -176,17 +185,24 @@ class ToolExecutor:
         self.usage = usage
         self.max_output_bytes = max_output_bytes
         self.tenant = tenant
+        self.access = access
         self._pool = ThreadPoolExecutor(max_concurrent_calls, thread_name_prefix="tool")
         self._slots = threading.BoundedSemaphore(max_concurrent_calls)
+
+    def serves(self, tool_name: str) -> bool:
+        """Return whether the policy allows ``tool_name``, and the access policy, this caller."""
+        return self.policy.allows_tool(tool_name) and (
+            self.access is None or permits(self.access, "tool.call", tool_name)
+        )
 
     def execute(self, step: ToolCall, *, run_id: str | None = None) -> ToolCallRecord:
         """Run ``step`` and return its record; failures are recorded, never raised."""
         # An unregistered name comes from the caller, so it never becomes a span or metric label.
         traced = step.tool if step.tool in self.registry else "unknown"
-        with call_span(traced, self.tenant) as finish:
+        with call_span(traced, self.tenant) as finish, collecting_refusals() as refused:
             record = self._execute(step, run_id)
             finish(record.status, record.tool_version, record.duration_ms)
-        return record
+        return record.model_copy(update={"refused": list(refused)}) if refused else record
 
     def _execute(self, step: ToolCall, run_id: str | None) -> ToolCallRecord:
         started_at = datetime.now(UTC)
@@ -217,6 +233,15 @@ class ToolExecutor:
             self.policy.check(spec.name, spec.permissions)
         except PermissionDeniedError as error:
             return record("denied", tool_version=spec.version, error=str(error))
+        if self.access is not None and not permits(self.access, "tool.call", spec.name):
+            note_refusal("tool.call", spec.name)
+            return record(
+                "denied",
+                tool_version=spec.version,
+                error=(
+                    f"Your access does not include tool '{spec.name}'; ask the server's operator."
+                ),
+            )
         try:
             params = spec.input_model.model_validate(step.arguments)
         except ValidationError as error:
@@ -270,7 +295,7 @@ class ToolExecutor:
 
         future: Future[Any] | None = None
         try:
-            future = self._pool.submit(spec.function, params)
+            future = self._pool.submit(copy_context().run, spec.function, params)
             future.add_done_callback(lambda _: self._slots.release())
             result = future.result(timeout=spec.timeout_seconds)
         except FutureTimeoutError:

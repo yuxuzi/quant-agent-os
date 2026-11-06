@@ -21,6 +21,7 @@ from quant_agent_os.runs.store import RunStore
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import CallStatus, ToolExecutor, failure_details
 from quant_agent_os.serving import SingleTenant, Surface, Tenancy
+from quant_agent_os.tools.access import Caller, acting_as
 from quant_agent_os.tools.permissions import PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
 
@@ -126,6 +127,9 @@ def build_app(
             raise HTTPException(403, f"Tenant '{key.tenant}' is not served here.")
         return surface
 
+    def caller_of(key: ApiKey) -> Caller:
+        return Caller(key.principal, key.tenant, key.groups)
+
     def runs_of(key: ApiKey) -> RunStore:
         surface = surface_of(key)
         if surface.run_store is None:
@@ -138,7 +142,8 @@ def build_app(
 
     @app.get("/v1/tools")
     def list_tools(key: Annotated[ApiKey, requires("tools:list")]) -> list[dict[str, Any]]:
-        return tool_definitions(surface_of(key).executor)
+        with acting_as(caller_of(key)):
+            return tool_definitions(surface_of(key).executor)
 
     @app.post("/v1/tools/{name}/call", response_model=CallResponse)
     async def call(
@@ -146,12 +151,8 @@ def build_app(
     ) -> Any:
         surface = surface_of(key)
         executor = surface.executor
-        served = [
-            spec.name
-            for spec in executor.registry.specs()
-            if executor.policy.allows_tool(spec.name)
-        ]
-        if name not in served:
+        # A tool this caller may not reach is still a call: it is refused and recorded.
+        if name not in executor.registry or not executor.policy.allows_tool(name):
             raise HTTPException(404, f"No tool named '{name}' is served here.")
         body = await _read_body(request, max_request_bytes)
         if body is None:
@@ -163,17 +164,19 @@ def build_app(
                 422, 'The body must be a JSON object: {"arguments": {...}}.'
             ) from None
         step = ToolCall(tool=name, arguments=arguments)
-        if surface.run_store is None:
-            record = await run_in_threadpool(executor.execute, step)
-        else:
-            recorder = RunRecorder(
-                surface.run_store,
-                actor="rest",
-                principal=key.principal,
-                tenant=key.tenant,
-                toolsets=surface.toolsets,
-            )
-            record = await run_in_threadpool(recorder.call, executor, step)
+        with acting_as(caller_of(key)):
+            served = [spec.name for spec in executor.registry.specs() if executor.serves(spec.name)]
+            if surface.run_store is None:
+                record = await run_in_threadpool(executor.execute, step)
+            else:
+                recorder = RunRecorder(
+                    surface.run_store,
+                    actor="rest",
+                    principal=key.principal,
+                    tenant=key.tenant,
+                    toolsets=surface.toolsets,
+                )
+                record = await run_in_threadpool(recorder.call, executor, step)
         failure = failure_details(record, served) if record.status != "ok" else {}
         response = CallResponse(
             run_id=record.run_id,
