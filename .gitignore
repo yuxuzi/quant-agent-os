@@ -96,3 +96,6 @@ docs/_build/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Private planning notes
+docs/[Bb]usiness_[Pp]lan.md

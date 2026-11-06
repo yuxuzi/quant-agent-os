@@ -5,6 +5,8 @@ What is still open. How the system works is in [architecture.md](architecture.md
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
 The most recent plan was [simplification.md](plans/archive/simplification.md).
 
+The current plan is [0.3.0, ready for a first pilot](plans/pilot-ready-release.md).
+
 ## Open backlog
 
 | Item | State | Next step |
