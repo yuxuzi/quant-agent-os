@@ -20,7 +20,8 @@ There are two variants, and they give the same answers for the same corpus:
 - **PostgreSQL with pgvector** (`deploy/compose.postgres.yaml`) suits larger corpora, existing
   database operations, and backups. See [PostgreSQL](#postgresql) below. The same steps apply.
 
-Everything below runs from the repository root. You need Docker with Compose v2.
+Everything below runs from the repository root. You need Docker with Compose v2. With no network on the
+server, see [install with no network](operations.md#install-with-no-network).
 
 ## 1. Build
 
@@ -69,7 +70,7 @@ docker compose -f deploy/compose.yaml run --rm -T keys new --principal alice \
 
 ```bash
 DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm datasets \
-  push /import/returns.csv --id returns
+  add /import/returns.csv --id returns
 ```
 
 A dataset is a CSV file: a header row, an index column (dates, oldest first), then numeric
@@ -78,7 +79,7 @@ named `date`, `datetime`, `time`, or `period`, holds `20240102` or `202401` valu
 numbers; `--index` names any other column. The tools infer the frequency from the dates and join
 datasets on them. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
 values, so the numbers never pass through a model. Without `DATASETS_SOURCE`, the import
-directory is `src/quant_platform/sample/datasets`. Pushing the same id again replaces the dataset; its new
+directory is `src/quant_platform/sample/datasets`. Adding the same id again replaces the dataset; its new
 fingerprint shows in each result's data versions. The server reads datasets per request, so no
 restart is needed.
 
@@ -126,32 +127,20 @@ docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its ca
 REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
 events are append-only.
 
-Every recorded call also has a usage event ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)):
-its tenant, tool, toolset, status, duration, and input and output sizes, never its arguments or
-output. Export it per call or as totals:
-
-```bash
-docker compose -f deploy/compose.yaml run --rm usage --tenant acme --by day   # this month, CSV
-docker compose -f deploy/compose.yaml run --rm usage --from 2026-11-01 --to 2026-12-01 \
-    --by tool --format jsonl
-```
-
-Calls that ended `ok`, `error`, or `timeout` are billable; refusals and invalid input are
-recorded but not billable. Without a run store (`qaos serve --no-record`) nothing is metered.
-
 ## 7. Expose it to your team
 
 Keep the published port on loopback, and put a reverse proxy in front. The proxy should:
 - terminate TLS;
-- apply rate limits (the server has none yet; quotas come with plan step P7);
+- apply rate limits (this server has none; plan quotas are a [hosted](hosted.md) feature);
 - forward the `Authorization` header unchanged.
 
 MCP refuses a `Host` or `Origin` it does not know (DNS-rebinding protection). Add the public
-name clients use to the server's command: `--allowed-host research.example.com`.
+name clients use to the server's command, in a compose override: `--allowed-host research.example.com`.
 
-The server sends no CORS headers, so browsers on other origins cannot call it directly. Back
-up the `knowledge`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
-ingesting again; the `runs` volume is your audit trail.
+The server sends no CORS headers, so browsers on other origins cannot call it directly.
+
+Before you rely on it, read [operations](operations.md): backups, upgrades, rollback, and what to do
+when a store refuses to open.
 
 ## 8. Add your own tools
 
@@ -315,7 +304,9 @@ the server.
 - checks health, a 401 without a key, a real REST call, and the principal on the recorded run;
 - checks MCP at `/mcp`: a 401 without a key, a foreign `Host` refused, the tool list, a
   `research_report` call with metrics from the dataset, and the call recorded as `mcp-http`;
-- checks that the server cannot write its knowledge store.
+- checks that the server cannot write its knowledge store;
+- runs `doctor`, checks that its output holds no secrets, then backs up, loses the data, restores it, and
+  finds the recorded run again.
 
 It uses its own compose project and port 18000, and it removes its volumes afterwards. On
 PostgreSQL it also checks that the server's role is refused writes by permission, with
@@ -325,6 +316,11 @@ throwaway passwords.
 deploy/smoke-test.sh            # SQLite
 deploy/smoke-test.sh postgres   # PostgreSQL with pgvector
 ```
+
+`deploy/upgrade-test.sh` rehearses [operations](operations.md): it builds v0.2.0, seeds it, backs up, upgrades to
+this commit, and checks that old runs and answers survive. Then it rolls back, restores, and checks again.
+Run it before you trust an upgrade, on either variant, as with the smoke test. It builds two images, so it
+takes longer, and it runs by hand rather than on every pull request.
 
 `deploy/firm-image-test.sh` is the same check for [your own tools](#8-add-your-own-tools), and CI runs
 it too. It builds the example's image on the platform's, runs it with the compose file's restrictions,

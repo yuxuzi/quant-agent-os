@@ -98,7 +98,8 @@ examples/  scripts/  tests/  docs/
   [Quant Analytics](docs/products/quant-analytics.md),
   [Quant App Factory](docs/products/quant-app-factory.md)
 - [Configuration](docs/configuration.md), [security](docs/security.md), and a
-  [team server in Docker](docs/deployment.md); [hosting many customers](docs/hosted.md)
+  [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md);
+  [hosting many customers](docs/hosted.md)
 - [Architecture](docs/architecture.md), [decisions](docs/decisions/), and
   [open backlog](docs/ENGINEERING_REVIEW_PLAN.md)
 - [Tools changelog](docs/tools-changelog.md) and [releasing](docs/releasing.md)

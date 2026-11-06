@@ -52,6 +52,16 @@ All notable changes to this project are documented here. The format follows
   extra because `onnxruntime` has no Python 3.15 wheel.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
+- **A `doctor` service in both compose files,** so `qaos doctor` checks the deployed volumes. It now shows the
+  version, really opens the run store (a store the server would refuse used to read `ok`), and checks an access
+  file. Its output holds no secrets, so it can go in a support ticket, and a test checks that.
+- **Backups, upgrades, and rollback for a team server.** [Operations](docs/operations.md) covers each volume, what
+  to do when a store refuses to open, and rollback, which is a restore of the backup taken before the upgrade. New
+  `backup` and `restore` compose services stream the volumes as a tar, one volume or all. `restore` reads the whole
+  archive before it changes anything.
+- **An upgrade drill and a no-network install.** `deploy/upgrade-test.sh` builds a real tagged release, seeds it,
+  upgrades to this commit, rolls back, and checks that runs and answers survive, on SQLite or PostgreSQL. Operations
+  covers `docker save` and `docker load`, what needs network and when, and `QAOS_POSTGRES_IMAGE` for a loaded image.
 
 ### Changed
 
@@ -74,6 +84,8 @@ All notable changes to this project are documented here. The format follows
   keyword search by a second, simpler path. Python builds from uv include FTS5.
 - **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
   was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
+- **The `usage` service in `deploy/compose.yaml`.** A single firm's server has no need of it; usage export stays
+  a hosted feature, as `qaos hosted usage export`.
 
 ### Fixed
 
@@ -90,6 +102,13 @@ All notable changes to this project are documented here. The format follows
   command, Lab 7's `show.py` no longer printed the open questions, and Lab 6 counted tools no longer
   served. It now uses one home, so `--store` and the other path flags are gone from its single-store
   labs.
+- **The team-server guide taught a command that does not exist.** Adding a dataset is `datasets add`, not
+  `datasets push`, and the backup advice now names the `datasets` volume. The doc test now resolves each
+  `docker compose run` line in the guide and the compose files against the service and the real commands.
+- **`qaos ingest` no longer downgrades a newer knowledge store.** An older version ingesting into a store from
+  a newer one stamped the file with its own schema version, as the read-only error told operators to do. It now
+  refuses, on SQLite as PostgreSQL already did, and says to upgrade or restore instead.
+- **An invalid API keys file no longer puts key hashes in the error.** The message repeated the input.
 
 ## [0.2.0] - 2026-11-05
 

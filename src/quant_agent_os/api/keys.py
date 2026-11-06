@@ -91,7 +91,12 @@ def load_keys(path: Path) -> list[ApiKey]:
         raise ApiKeyError(
             f"No API keys file at {path}; create one with `qaos keys new`."
         ) from error
-    except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
+    except ValidationError as error:  # its plain text repeats the input, which holds key hashes
+        problems = "; ".join(
+            f"{'.'.join(map(str, item['loc']))}: {item['msg']}" for item in error.errors()
+        )
+        raise ApiKeyError(f"Invalid API keys file {path}: {problems}") from error
+    except (OSError, tomllib.TOMLDecodeError) as error:
         raise ApiKeyError(f"Invalid API keys file {path}: {error}") from error
     hashes = [key.sha256 for key in keys]
     if len(set(hashes)) != len(hashes):

@@ -147,6 +147,10 @@ datasets, a few synthetic research notes, one firm tool from S1, and two users f
 | S4.4 | A `doctor` compose service, so `qaos doctor` checks the deployed volumes. Its output goes in support tickets, so it must hold no secrets (a test checks) |
 | S4.5 | Air-gapped install: build at the customer's tag, then `docker save` and `docker load`. Document what needs network and when. Publishing an image to a registry is a CI change and is not assumed |
 
+The default compose file drops the `usage` service: usage export stays a hosted feature, and S5.4 gives a firm its
+audit export. `deploy/smoke-test.sh` proves `doctor`, backup, and restore on every pull request. `deploy/upgrade-test.sh`
+runs by hand until CI adds it.
+
 **Exit:** someone following only `deployment.md` and `operations.md` installs on a clean machine with both
 variants, then upgrades and rolls back, with no undocumented step. Note where they got stuck and fix the doc. Adding the drill to CI needs asking.
 

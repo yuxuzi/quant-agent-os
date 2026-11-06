@@ -86,12 +86,67 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
 
-  usage:
+  # Checks what the deployed server would open, changes nothing, and prints no secrets, so its
+  # output can go in a support ticket. It sees only the settings given here: set a wider
+  # QUANT_AGENT_OS_GRANTED_PERMISSIONS or an access file on it as you do on the server.
+  doctor:
     <<: *image
     profiles: [operator]
-    entrypoint: ["qaos", "hosted", "usage", "export", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "doctor"]
+    command: []
+    environment:
+      QUANT_AGENT_OS_HOME: /data
+      QUANT_AGENT_OS_STORE: /data/knowledge/kb.db
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # Writes a tar of the volumes to stdout, or of the ones named: `run --rm -T backup data/runs`.
+  # Stop the server first, so the SQLite files are at rest (docs/operations.md).
+  backup:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["tar", "-C", "/", "-cf", "-"]
+    command: ["data/knowledge", "data/datasets", "data/runs", "keys"]
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs:ro
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # Reads a backup from stdin and replaces the volumes it holds: `run --rm -T restore < file`.
+  # It checks the whole archive before it deletes anything. Stop the server first.
+  restore:
+    <<: *image
+    profiles: [operator]
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        cat >/tmp/restore.tar
+        tar -tf /tmp/restore.tar >/tmp/members
+        grep -qE '^(data/(knowledge|datasets|runs)|keys)/' /tmp/members || {
+          echo "error: this is not an archive from the backup service. Nothing was changed." >&2
+          exit 1
+        }
+        for dir in data/knowledge data/datasets data/runs keys; do
+          if grep -q "^$$dir/" /tmp/members; then find "/$$dir" -mindepth 1 -delete; fi
+        done
+        tar -C / -xf /tmp/restore.tar
     command: []
     volumes:
+      - knowledge:/data/knowledge
+      - datasets:/data/datasets
+      - keys:/keys
       - runs:/data/runs
     network_mode: none
     cap_drop: [ALL]
