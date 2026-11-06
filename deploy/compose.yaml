@@ -86,6 +86,27 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
 
+  # Checks what the deployed server would open, changes nothing, and prints no secrets, so its
+  # output can go in a support ticket. It sees only the settings given here: set a wider
+  # QUANT_AGENT_OS_GRANTED_PERMISSIONS or an access file on it as you do on the server.
+  doctor:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["qaos", "doctor"]
+    command: []
+    environment:
+      QUANT_AGENT_OS_HOME: /data
+      QUANT_AGENT_OS_STORE: /data/knowledge/kb.db
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
 volumes:
   knowledge:
   datasets:

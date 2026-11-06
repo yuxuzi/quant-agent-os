@@ -109,6 +109,28 @@ services:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
     network_mode: none
 
+  # Checks what the deployed server would open, changes nothing, and prints no secrets, so its
+  # output can go in a support ticket. It sees only the settings given here: set a wider
+  # QUANT_AGENT_OS_GRANTED_PERMISSIONS or an access file on it as you do on the server.
+  doctor:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["qaos", "doctor"]
+    command: []
+    environment:
+      PGPASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
+      QUANT_AGENT_OS_HOME: /data
+      QUANT_AGENT_OS_STORE: postgresql://qaos_reader@postgres:5432/qaos
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    networks: [backend]  # internal: PostgreSQL only, no internet
+
 networks:
   backend:
     internal: true

@@ -52,6 +52,9 @@ All notable changes to this project are documented here. The format follows
   extra because `onnxruntime` has no Python 3.15 wheel.
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
+- **A `doctor` service in both compose files,** so `qaos doctor` checks the deployed volumes. It now shows the
+  version, really opens the run store (a store the server would refuse used to read `ok`), and checks an access
+  file. Its output holds no secrets, so it can go in a support ticket, and a test checks that.
 
 ### Changed
 
@@ -98,6 +101,7 @@ All notable changes to this project are documented here. The format follows
 - **`qaos ingest` no longer downgrades a newer knowledge store.** An older version ingesting into a store from
   a newer one stamped the file with its own schema version, as the read-only error told operators to do. It now
   refuses, on SQLite as PostgreSQL already did, and says to upgrade or restore instead.
+- **An invalid API keys file no longer puts key hashes in the error.** The message repeated the input.
 
 ## [0.2.0] - 2026-11-05
 
