@@ -125,7 +125,8 @@ docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its ca
 ```
 
 REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
-events are append-only.
+events are append-only. To send the trail to your own log system, or to stop keeping old runs, see
+[retention and export](operations.md#retention-and-export).
 
 ## 7. Expose it to your team
 

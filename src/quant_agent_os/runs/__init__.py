@@ -1,5 +1,6 @@
 """Persisted runs, tool calls, usage events, and append-only audit events (B-08, B-36)."""
 
+from quant_agent_os.runs.export import audit_lines
 from quant_agent_os.runs.models import (
     BILLABLE,
     ApprovalRequest,
@@ -15,6 +16,7 @@ from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunNotFoundEr
 from quant_agent_os.runs.redaction import redact
 from quant_agent_os.runs.store import (
     MemoryRunStore,
+    Pruned,
     RunStore,
     RunStoreError,
     SqliteRunStore,
@@ -28,6 +30,7 @@ __all__ = [
     "AuditEvent",
     "MemoryRunStore",
     "NotAwaitingApprovalError",
+    "Pruned",
     "RequestStatus",
     "RunKind",
     "RunNotFoundError",
@@ -41,6 +44,7 @@ __all__ = [
     "UsageEvent",
     "UsageGrouping",
     "UsageTotal",
+    "audit_lines",
     "check_run_store",
     "redact",
     "summarize",

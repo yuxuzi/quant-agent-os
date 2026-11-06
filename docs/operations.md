@@ -146,6 +146,34 @@ docker compose -f deploy/compose.yaml run --rm -T doctor
 
 On PostgreSQL, also restore the dump, as in [restore](#restore). Remove the `QAOS_IMAGE` line when you upgrade again.
 
+## Retention and export
+
+**Runs are kept until you remove them.** Nothing removes them on its own, and they can hold retrieved passages and
+computed results, so decide how long you keep them.
+
+```bash
+docker compose -f deploy/compose.yaml run --rm runs prune --older-than 90d
+```
+
+- **What goes:** ended runs started before then, with their calls, arguments, outputs, and retrieved text. The freed
+  space in the file is overwritten.
+- **What stays:** audit events and usage events, which hold ids, hashes, and sizes rather than content. So you can
+  still show who called what and when, not what came back. The removal itself adds a `runs.pruned` audit event.
+- **What it cannot reach:** backups you already took, and what you already exported. Stop the server first if you need
+  the removed text gone at once, or the write-ahead log can hold it until the next checkpoint, and the command warns you.
+- **Scripts** add `--yes` and `-T`. It asks first otherwise.
+
+To send the audit trail to your own log system:
+
+```bash
+docker compose -f deploy/compose.yaml run --rm -T runs export --from 2026-11-01 --to 2026-12-01 > audit.jsonl
+```
+
+Each line is one call or one audit event. A call has its time, run and call ids, tenant, actor, principal, platform
+version, tool and tool version, input hash, data versions, status, duration, approval, and anything an access policy
+refused. It leaves out arguments, outputs, and internal error text, so your log system learns no content. Export before
+you prune: a pruned call is not exported, though its audit events are.
+
 ## Install with no network
 
 Build on a machine with network, at the release you want, and carry the images across:

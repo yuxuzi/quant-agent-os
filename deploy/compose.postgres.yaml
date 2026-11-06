@@ -105,8 +105,10 @@ services:
   runs:
     <<: [*image, *hardened]
     profiles: [operator]
-    entrypoint: ["qaos", "runs", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "runs"]
     command: []
+    environment:
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
     volumes:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
     network_mode: none

@@ -13,7 +13,7 @@ from rich.table import Table
 from quant_agent_os import __version__
 from quant_agent_os.api import ApiKeyError, ApiUnavailableError
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT
-from quant_agent_os.cli import data_app, keys_app, show_runs
+from quant_agent_os.cli import data_app, keys_app, runs_app
 from quant_agent_os.config import ConfigFileError, get_settings
 from quant_agent_os.mcp import MCPUnavailableError
 from quant_agent_os.runs import RunStoreError
@@ -43,7 +43,7 @@ app.add_typer(data_app, name="data")
 app.add_typer(keys_app, name="keys")
 app.add_typer(factory_app, name="app", help="App Factory: generate tested Python applications.")
 app.add_typer(hosted_app, name="hosted")
-app.command("runs")(show_runs)
+app.add_typer(runs_app, name="runs")
 app.command()(connect)
 app.command()(doctor)
 app.command()(init)
