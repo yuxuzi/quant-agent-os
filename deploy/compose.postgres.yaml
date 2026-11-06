@@ -27,7 +27,9 @@ x-hardened: &hardened
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+    # QAOS_POSTGRES_IMAGE is for an air-gapped install, where `docker load` drops the digest
+    # (docs/operations.md).
+    image: ${QAOS_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6}
     restart: unless-stopped
     environment:
       POSTGRES_DB: qaos

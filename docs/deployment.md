@@ -20,7 +20,8 @@ There are two variants, and they give the same answers for the same corpus:
 - **PostgreSQL with pgvector** (`deploy/compose.postgres.yaml`) suits larger corpora, existing
   database operations, and backups. See [PostgreSQL](#postgresql) below. The same steps apply.
 
-Everything below runs from the repository root. You need Docker with Compose v2.
+Everything below runs from the repository root. You need Docker with Compose v2. With no network on the
+server, see [install with no network](operations.md#install-with-no-network).
 
 ## 1. Build
 
@@ -315,6 +316,11 @@ throwaway passwords.
 deploy/smoke-test.sh            # SQLite
 deploy/smoke-test.sh postgres   # PostgreSQL with pgvector
 ```
+
+`deploy/upgrade-test.sh` rehearses [operations](operations.md): it builds v0.2.0, seeds it, backs up, upgrades to
+this commit, and checks that old runs and answers survive. Then it rolls back, restores, and checks again.
+Run it before you trust an upgrade, on either variant, as with the smoke test. It builds two images, so it
+takes longer, and it runs by hand rather than on every pull request.
 
 `deploy/firm-image-test.sh` is the same check for [your own tools](#8-add-your-own-tools), and CI runs
 it too. It builds the example's image on the platform's, runs it with the compose file's restrictions,

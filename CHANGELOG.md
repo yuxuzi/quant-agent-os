@@ -59,6 +59,9 @@ All notable changes to this project are documented here. The format follows
   to do when a store refuses to open, and rollback, which is a restore of the backup taken before the upgrade. New
   `backup` and `restore` compose services stream the volumes as a tar, one volume or all. `restore` reads the whole
   archive before it changes anything.
+- **An upgrade drill and a no-network install.** `deploy/upgrade-test.sh` builds a real tagged release, seeds it,
+  upgrades to this commit, rolls back, and checks that runs and answers survive, on SQLite or PostgreSQL. Operations
+  covers `docker save` and `docker load`, what needs network and when, and `QAOS_POSTGRES_IMAGE` for a loaded image.
 
 ### Changed
 

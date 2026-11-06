@@ -123,6 +123,9 @@ Each store upgrades itself or tells you what to do:
 
 **From v0.2.0** no store changes: the knowledge store stays at schema 3, the run store at 5, and PostgreSQL at 1.
 
+To rehearse all of this first, including the rollback, on a machine with Docker, run `deploy/upgrade-test.sh` or
+`deploy/upgrade-test.sh postgres`. It starts from a real tagged release, and cleans up after itself.
+
 ## Roll back
 
 **A rollback is a restore of the backup you took before the upgrade.** Do not point the old version at volumes the
@@ -142,6 +145,52 @@ docker compose -f deploy/compose.yaml run --rm -T doctor
 ```
 
 On PostgreSQL, also restore the dump, as in [restore](#restore). Remove the `QAOS_IMAGE` line when you upgrade again.
+
+## Install with no network
+
+Build on a machine with network, at the release you want, and carry the images across:
+
+```bash
+git checkout vX.Y.Z
+docker compose -f deploy/compose.yaml build
+docker tag quant-agent-os:local quant-agent-os:X.Y.Z
+docker save quant-agent-os:X.Y.Z | gzip > quant-agent-os-X.Y.Z.tar.gz
+git archive vX.Y.Z | gzip > quant-agent-os-source-X.Y.Z.tar.gz
+```
+
+For PostgreSQL, carry its image too. The compose file pins it by digest, and `docker load` can drop the digest, so
+give it a local name:
+
+```bash
+postgres_image="$(grep -o 'pgvector/pgvector:[^}]*' deploy/compose.postgres.yaml)"
+docker pull "$postgres_image"
+docker tag "$postgres_image" qaos-postgres:pg17
+docker save qaos-postgres:pg17 | gzip > qaos-postgres-pg17.tar.gz
+```
+
+On the server, check each file against a checksum you took on the first machine, then load the images and unpack
+the source. Name the images in `deploy/.env`, so that nothing tries to build or pull them:
+
+```bash
+docker load < quant-agent-os-X.Y.Z.tar.gz
+tar -xzf quant-agent-os-source-X.Y.Z.tar.gz
+echo 'QAOS_IMAGE=quant-agent-os:X.Y.Z' >> deploy/.env
+docker compose -f deploy/compose.yaml run --rm -T doctor
+```
+
+For PostgreSQL, also load its archive, and add `QAOS_POSTGRES_IMAGE=qaos-postgres:pg17` to `deploy/.env`. The rest of
+[the guide](deployment.md) applies, without its build step. To upgrade, carry a new image the same way, and follow
+[upgrade](#upgrade), naming the new image in `deploy/.env` in place of its build step. Your old image is the one to
+go back to.
+
+| Step | Needs network? |
+| --- | --- |
+| Building the image: base images, then packages locked in `uv.lock` | **Yes,** on the build machine |
+| Pulling the PostgreSQL image | **Yes,** on the build machine |
+| Ingesting, adding datasets, issuing keys, backups, `doctor` | No. These services run with no network, or on PostgreSQL's internal one |
+| Serving keyword search and analytics | No outgoing connections. Clients reach the published port |
+| A hosted embedder (`--embedder voyage` or `openai`) | **Yes,** and it needs the `network` permission. Leave it off |
+| A local embedder (`--embedder local`) | Not in this image. It is an optional extra, and downloads its model on first use |
 
 ## When a store refuses to open
 
