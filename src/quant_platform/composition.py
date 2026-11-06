@@ -15,8 +15,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from quant_agent_os.data import DatasetStore, dataset_resources, dataset_tools
-from quant_agent_os.tools import PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
+from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
+from quant_agent_os.tools import AccessPolicy, PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
 from quant_agent_os.tools.registry import DuplicateToolError
 from quant_agent_os.tools.server_info import (
     SERVER_INFO_TOOL,
@@ -79,7 +79,7 @@ class Catalog:
     """Everything one server offers: tools, resources, prompts, and its instructions.
 
     ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015), and
-    ``policy`` is the policy it was composed under, which serving it applies.
+    ``policy`` and ``access`` are what it was composed under, which serving it applies.
     """
 
     tools: list[ToolSpec[Any, Any]] = field(default_factory=list)
@@ -88,6 +88,7 @@ class Catalog:
     instructions: str = PLATFORM_INSTRUCTIONS
     toolsets: dict[str, str] = field(default_factory=dict)
     policy: PermissionPolicy = field(default_factory=PermissionPolicy)
+    access: AccessPolicy | None = None
 
 
 def compose(
@@ -98,6 +99,7 @@ def compose(
     factory: AppFactory | None = None,
     extra_tools: Sequence[ToolSpec[Any, Any]] = (),
     extra_instructions: str | None = None,
+    access: AccessPolicy | None = None,
 ) -> Catalog:
     """Return the catalog for the given products; each one given is a toolset served.
 
@@ -107,9 +109,17 @@ def compose(
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
     ``extra_tools`` are a firm's own, served as the toolset ``firm`` under the same executor
     checks, and ``extra_instructions`` tells clients about them. Every catalog also serves
-    `server_info` (``qaos://server/info``, decision 0015). Raises `DuplicateToolError` when an
-    extra tool reuses a served name: it never replaces a platform tool.
+    `server_info` (``qaos://server/info``, decision 0015). With ``access``, each caller reaches
+    only the tools and datasets it allows (decision 0021); give extra tools a
+    `GuardedDatasetStore` too. Raises `DuplicateToolError` when an extra tool reuses a served
+    name: it never replaces a platform tool.
     """
+    if (
+        access is not None
+        and datasets is not None
+        and not isinstance(datasets, GuardedDatasetStore)
+    ):
+        datasets = GuardedDatasetStore(datasets, access)
     tools: list[ToolSpec[Any, Any]] = []
     resources: list[ResourceSpec] = []
     prompts: list[PromptSpec] = []
@@ -149,12 +159,12 @@ def compose(
         served.append("factory")
     _check_extra_names(extra_tools, {spec.name for spec in tools})
     add("firm", list(extra_tools))
-    add("platform", [server_info_tool(platform_version(), list(tools))])
+    add("platform", [server_info_tool(platform_version(), list(tools), access)])
     resources.append(server_info_resource())
     instructions = instructions_for(served)
     if extra_instructions:
         instructions = f"{instructions}\n\n{extra_instructions}"
-    return Catalog(tools, resources, prompts, instructions, toolsets, policy)
+    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access)
 
 
 def _check_extra_names(extra: Sequence[ToolSpec[Any, Any]], served: set[str]) -> None:
