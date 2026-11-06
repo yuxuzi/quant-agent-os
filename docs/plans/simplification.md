@@ -12,7 +12,7 @@ wrong.
 0018; the `research` and `hosted` extras were left out because they would be empty.
 P3 is complete and unreleased. Parquet (P3.3) was approved on 2026-11-05 and uses pyarrow, because
 pandas 3.1 deprecates its fastparquet engine, and fastparquet failed on a pyarrow-written frame with
-an unnamed date index and has no Python 3.15 wheel.
+an unnamed date index and has no Python 3.15 wheel. P4 and P5 are complete and unreleased.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.
@@ -262,6 +262,11 @@ and step 4's shared SQL turned out small (11 short statements and the store life
 5. **Tidy.** Move maintenance scripts to `scripts/`, and the tool lock beside them.
 
 ### P5. App Factory cleanup
+
+**Done 2026-11-06, except the public `quant-baseline` mirror, which needs the owner's approval.** The
+parity test found two silent errors, both fixed: the platform's Sharpe and information ratio divided by
+floating-point noise on constant inputs, and generated `beta` did so against a constant market. Checking
+the upgrade path also found that `pytemplate update` cannot reach a project built from a built-in pack.
 
 1. **Metric parity test.** Generated `metrics.py` (numpy, deliberately portable under decision
    0009) must agree with `quant_analytics.metrics` on a fixed series, wherever conventions match.

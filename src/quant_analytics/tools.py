@@ -240,7 +240,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         name="analyze_performance",
         description=PERFORMANCE_DESCRIPTION + by_reference,
         permissions=permissions,
-        version="2.0.0",
+        version="2.0.1",
     )
     def analyze_performance(params: PerformanceRequest) -> PerformanceOutput:
         resolver = _Resolver(store)

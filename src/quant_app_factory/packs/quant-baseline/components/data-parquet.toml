@@ -4,5 +4,5 @@ name = "Parquet price data"
 description = "Also load a wide Parquet file of prices, through pyarrow."
 version = "1"
 status = "experimental"
-compatible_profiles = ["quant-research"]
+compatible_profiles = ["quant-lab"]
 dependencies = ["pyarrow>=15"]

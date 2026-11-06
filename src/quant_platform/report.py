@@ -85,7 +85,7 @@ def research_report_tool(
         permissions=frozenset().union(*(registry.get(name).permissions for name in used)),
         timeout_seconds=60.0,
         max_output_bytes=300_000,
-        version="3.0.0",
+        version="3.0.1",
     )
     def research_report(params: ReportRequest) -> ResearchReport:
         steps = [ToolCall(tool=STRATEGY_STEP, arguments={"focus": params.focus})]

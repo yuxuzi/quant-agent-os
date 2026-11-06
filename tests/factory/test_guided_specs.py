@@ -45,7 +45,8 @@ def _factory(**kwargs: Any) -> AppFactory:
 def _raw(tmp_path: Path, **fields: Any) -> dict[str, Any]:
     return {
         "name": "momo-lab",
-        "kind": "quant-research",
+        "template": "quant-baseline",
+        "profile": "quant-lab",
         "description": "Momentum research",
         "output_dir": str(tmp_path),
     } | fields
@@ -95,13 +96,11 @@ def test_a_spec_round_trips_through_its_toml(tmp_path: Path) -> None:
 
 
 def test_describing_a_profile_lists_only_what_it_can_use() -> None:
-    described = _factory().describe_template("quant-baseline", "quant-research")
+    described = _factory().describe_template("quant-baseline", "quant-lab")
 
     names = {question.name for question in described.questions}
     assert {"frequency", "max_horizon", "cost_bps"} <= names
     assert not {"profile", "project_name", "components"} & names
-    old_name = _factory().describe_template("quant-baseline", "backtest")
-    assert [profile.id for profile in old_name.profiles] == ["quant-research"]
     assert {c.id for c in described.components} == {
         "agent-tools",
         "data-csv",
@@ -129,6 +128,13 @@ def test_a_ready_spec_lists_its_files_and_toml(tmp_path: Path) -> None:
     assert check.spec_toml and 'cost_bps = "3"' in check.spec_toml
 
 
+def test_a_draft_with_kind_is_told_what_to_set(tmp_path: Path) -> None:
+    check = _factory().check_spec(_raw(tmp_path, kind="quant-lab"))
+
+    assert not check.ready
+    assert "set template and profile" in " ".join(problem.message for problem in check.problems)
+
+
 @pytest.mark.parametrize(
     ("fields", "field", "message"),
     [
@@ -150,7 +156,8 @@ def test_check_spec_reports_each_kind_of_problem(
 def test_a_declared_secret_setting_needs_a_reference(tmp_path: Path) -> None:
     raw = _raw(
         tmp_path,
-        kind="fastapi-service",
+        template="bundled",
+        profile="fastapi",
         components=["database"],
         settings={"DATABASE_URL": "postgresql+asyncpg://db/research"},
     )
@@ -295,7 +302,7 @@ def test_new_asks_until_the_spec_is_ready_and_writes_it(
     assert result.exit_code == 0, result.output
     assert "Ready:" in result.output
     spec = load_spec(out)
-    assert spec.target == ("quant-baseline", "quant-research")
+    assert spec.target == ("quant-baseline", "quant-lab")
     assert spec.answers == {"frequency": "weekly", "max_horizon": "3", "cost_bps": "2.5"}
     assert not (tmp_path / "momo-lab").exists()
 

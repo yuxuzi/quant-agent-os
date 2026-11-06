@@ -52,7 +52,8 @@ class FakeChecks:
 def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
     base: dict[str, Any] = {
         "name": "pg-lab",
-        "kind": "quant-research",
+        "template": "quant-baseline",
+        "profile": "quant-lab",
         "description": "Backtest on a database",
         "output_dir": str(tmp_path),
     }
@@ -96,7 +97,8 @@ def test_check_spec_with_a_connection_is_ready_and_binds_the_password(tmp_path: 
     check = _factory().check_spec(
         {
             "name": "pg-lab",
-            "kind": "quant-research",
+            "template": "quant-baseline",
+            "profile": "quant-lab",
             "description": "d",
             "output_dir": str(tmp_path),
             "connection": "research-pg",
@@ -109,7 +111,7 @@ def test_check_spec_with_a_connection_is_ready_and_binds_the_password(tmp_path: 
 
 
 def test_database_files_appear_only_with_the_database_component(tmp_path: Path) -> None:
-    _, preview = _factory().preview(_spec(tmp_path, kind="quant-research"))
+    _, preview = _factory().preview(_spec(tmp_path, template="quant-baseline", profile="quant-lab"))
 
     assert not any("database" in name or ".env" in name for name in preview.files)
 

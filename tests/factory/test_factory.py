@@ -48,7 +48,8 @@ LIFECYCLE = [
 def _spec(tmp_path: Path, **changes: Any) -> AppSpec:
     fields: dict[str, Any] = {
         "name": "signal-tools",
-        "kind": "agent-tool",
+        "template": "agent-tool",
+        "profile": "agent-tool",
         "description": "Signal tools for Quant-Agent-OS",
         "output_dir": str(tmp_path),
         "tool_name": "count_signals",
@@ -87,7 +88,8 @@ def _factory(checks: FakeChecks | None = None) -> AppFactory:
 def test_specs_load_from_toml_with_paths_relative_to_the_file(tmp_path: Path) -> None:
     spec_file = tmp_path / "app.toml"
     spec_file.write_text(
-        'name = "pricing-cli"\nkind = "python-cli"\ndescription = "Prices things"\n'
+        'name = "pricing-cli"\ntemplate = "bundled"\nprofile = "python"\n'
+        'description = "Prices things"\n'
         'output_dir = "projects"\n'
     )
 
@@ -103,7 +105,7 @@ def test_specs_load_from_toml_with_paths_relative_to_the_file(tmp_path: Path) ->
         {"name": "Bad_Name"},
         {"description": 'has "quotes"'},
         {"output_dir": "relative/dir"},
-        {"kind": "python-cli", "tool_name": "x"},
+        {"template": "bundled", "profile": "python", "tool_name": "x"},
     ],
 )
 def test_invalid_specs_are_rejected(tmp_path: Path, changes: dict[str, Any]) -> None:
@@ -133,32 +135,32 @@ def test_agent_tools_use_the_factory_pack_and_depend_on_the_platform(tmp_path: P
     assert plan.portable is False
 
 
-@pytest.mark.parametrize(
-    ("kind", "profile"), [("python-cli", "python"), ("fastapi-service", "fastapi")]
-)
-def test_other_kinds_use_bundled_profiles_and_stay_portable(
-    tmp_path: Path, kind: str, profile: str
-) -> None:
-    plan = ArchitecturePlanner().plan(_spec(tmp_path, kind=kind, tool_name=None))
+@pytest.mark.parametrize("profile", ["python", "fastapi"])
+def test_bundled_profiles_stay_portable(tmp_path: Path, profile: str) -> None:
+    spec = _spec(tmp_path, template="bundled", profile=profile, tool_name=None)
+
+    plan = ArchitecturePlanner().plan(spec)
 
     assert (plan.request.profile, plan.request.template, plan.portable) == (profile, None, True)
     assert "tool_name" not in plan.request.data
 
 
 @pytest.mark.parametrize(
-    ("kind", "components", "message"),
+    ("template", "profile", "components", "message"),
     [
-        ("agent-tool", ["database"], "offers none"),
-        ("python-cli", ["database"], "offers container"),
-        ("fastapi-service", ["auth"], "needs a mode"),
-        ("fastapi-service", ["auth", "auth-api-key", "auth-oidc"], "one authentication mode"),
+        ("agent-tool", "agent-tool", ["database"], "offers none"),
+        ("bundled", "python", ["database"], "offers container"),
+        ("bundled", "fastapi", ["auth"], "needs a mode"),
+        ("bundled", "fastapi", ["auth", "auth-api-key", "auth-oidc"], "one authentication mode"),
     ],
 )
 def test_the_planner_explains_impossible_requests(
-    tmp_path: Path, kind: str, components: list[str], message: str
+    tmp_path: Path, template: str, profile: str, components: list[str], message: str
 ) -> None:
-    tool = "count_signals" if kind == "agent-tool" else None
-    spec = _spec(tmp_path, kind=kind, components=components, tool_name=tool)
+    tool = "count_signals" if template == "agent-tool" else None
+    spec = _spec(
+        tmp_path, template=template, profile=profile, components=components, tool_name=tool
+    )
 
     with pytest.raises(PlanningError, match=message):
         ArchitecturePlanner().plan(spec)
@@ -178,13 +180,15 @@ def test_plan_lists_the_exact_files_and_writes_nothing(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "components", "expected"),
-    [("python-cli", [], ["cli"]), ("fastapi-service", ["database"], ["api", "database"])],
+    ("profile", "components", "expected"),
+    [("python", [], ["cli"]), ("fastapi", ["database"], ["api", "database"])],
 )
 def test_bundled_profiles_plan_with_their_components(
-    tmp_path: Path, kind: str, components: list[str], expected: list[str]
+    tmp_path: Path, profile: str, components: list[str], expected: list[str]
 ) -> None:
-    spec = _spec(tmp_path, kind=kind, components=components, tool_name=None)
+    spec = _spec(
+        tmp_path, template="bundled", profile=profile, components=components, tool_name=None
+    )
 
     _, preview = _factory().preview(spec)
 
@@ -317,7 +321,8 @@ def fake_checks(monkeypatch: pytest.MonkeyPatch) -> FakeChecks:
 def _spec_file(tmp_path: Path) -> Path:
     spec_file = tmp_path / "app.toml"
     spec_file.write_text(
-        'name = "signal-tools"\nkind = "agent-tool"\ndescription = "Signal tools"\n'
+        'name = "signal-tools"\ntemplate = "agent-tool"\nprofile = "agent-tool"\n'
+        'description = "Signal tools"\n'
         'tool_name = "count_signals"\noutput_dir = "out"\n'
     )
     (tmp_path / "out").mkdir()

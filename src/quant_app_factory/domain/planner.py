@@ -22,7 +22,7 @@ _COMPONENTS: dict[tuple[str, str], frozenset[str]] = {
     ("bundled", "fastapi"): frozenset(
         {"database", "worker", "auth", "auth-api-key", "auth-oidc", "container"}
     ),
-    ("quant-baseline", "quant-research"): _QUANT_DATA,
+    ("quant-baseline", "quant-lab"): _QUANT_DATA,
 }
 _AUTH_MODES = frozenset({"auth-api-key", "auth-oidc"})
 
@@ -69,8 +69,6 @@ class ArchitecturePlanner:
         defaults = {name: value for name, value in identity.items() if value is not None}
         data = dict(spec.answers)
         reasons = [f"Template '{template}' builds profile '{profile}'."]
-        if spec.alias_note:
-            reasons.insert(0, spec.alias_note)
         portable: bool | None = True
         if template == "agent-tool":
             data["tool_name"] = spec.tool_name or spec.package_name
@@ -83,7 +81,7 @@ class ArchitecturePlanner:
             ]
         elif template == "quant-baseline":
             reasons.append(
-                "A quant-research project is portable numpy code: study, backtest, and report "
+                "A quant-lab project is portable numpy code: study, backtest, and report "
                 "share data, signals, metrics, and one config.toml, with known-answer tests, "
                 "bias tests, and a LIMITATIONS.md."
             )

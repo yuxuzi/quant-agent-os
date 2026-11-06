@@ -95,7 +95,7 @@ An app spec is TOML:
 ```toml
 name = "signal-tools"            # project slug
 template = "agent-tool"          # agent-tool, quant-baseline, bundled, a registered name, or a path
-profile = "agent-tool"           # bundled offers python and fastapi; quant-baseline quant-research
+profile = "agent-tool"           # bundled offers python and fastapi; quant-baseline quant-lab
 description = "Signal tools for Quant-Agent-OS"
 output_dir = "projects"          # existing parent directory, relative to this file
 tool_name = "count_signals"      # agent-tool only
@@ -109,7 +109,7 @@ A quant spec, or one for your own pack:
 ```toml
 name = "momo-lab"
 template = "quant-baseline"
-profile = "quant-research"
+profile = "quant-lab"
 description = "Momentum research"
 output_dir = "."
 components = ["data-parquet"]    # optional: data-parquet, agent-tools
@@ -122,15 +122,12 @@ cost_bps = "3"                   # also max_horizon (IC decay)
 # profile = "my-profile"
 ```
 
-`kind` is a shortcut kept for existing specs: `kind = "agent-tool"`, `"python-cli"`,
-`"fastapi-service"`, or `"quant-research"` stands for the matching template and profile.
-`qaos app new` writes `template` and `profile`, and so do these docs.
+A spec always names `template` and `profile`. On the command line, `qaos app new` also takes the
+shortcuts `agent-tool`, `quant-lab`, `python`, and `fastapi`, and writes both fields for you.
 
 The research parameters themselves (signal, lookback, trade lag, quantiles, costs, rebalance
 schedule, and delisting return) live in the generated project's `config.toml`, not in the spec:
-they change from one run to the next, and every results file records the values it used. The
-quant-baseline 1.x kinds `alpha-research`, `backtest`, and `report` still work for one release;
-each builds `quant-research` and warns.
+they change from one run to the next, and every results file records the values it used.
 
 ## Factory settings
 
@@ -170,7 +167,7 @@ and so are unknown fields.
 ### Templates
 
 - **`qaos app template list`** shows the built-in and registered templates.
-- **`qaos app template fork quant-baseline/quant-research DIR [--profile-id ID]`** copies a
+- **`qaos app template fork quant-baseline/quant-lab DIR [--profile-id ID]`** copies a
   built-in profile into your own pack, checks it, and registers it under the directory's name
   (`--name` to choose).
 - **`qaos app template check NAME_OR_DIR`** loads a pack and plans every profile with

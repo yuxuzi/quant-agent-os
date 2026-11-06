@@ -19,40 +19,12 @@ from pydantic import (
 from quant_app_factory.domain import toml_text
 from quant_app_factory.domain.secrets import ENV_NAME, secret_problem
 
-AppKind = Literal[
-    "agent-tool",
-    "python-cli",
-    "fastapi-service",
-    "quant-research",
-    "alpha-research",
-    "backtest",
-    "report",
-]
 PythonVersion = Literal["3.11", "3.12", "3.13", "3.14", "3.15"]
 DEFAULT_QUANT_AGENT_OS_SOURCE = "git+https://github.com/yuxuzi/quant-agent-os"
 _ONE_LINE = re.compile(r'^[^"\\\n]+$')  # what pytemplate-uv's questions accept
 
-QUANT_RESEARCH = ("quant-baseline", "quant-research")
-# The quant-baseline 1.x profile names. Each now builds quant-research; kept for one release.
-QUANT_ALIASES = frozenset({"alpha-research", "backtest", "report"})
-
-# Each kind is a shortcut for a (template, profile) pair.
-KIND_TARGETS: dict[str, tuple[str, str]] = {
-    "agent-tool": ("agent-tool", "agent-tool"),
-    "python-cli": ("bundled", "python"),
-    "fastapi-service": ("bundled", "fastapi"),
-    "quant-research": QUANT_RESEARCH,
-    **dict.fromkeys(sorted(QUANT_ALIASES), QUANT_RESEARCH),
-}
 BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-baseline", "bundled"})
 TEMPLATE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")  # built-in, or registered in factory.toml
-
-
-def resolve_alias(template: str, profile: str) -> tuple[str, str]:
-    """Map a quant-baseline 1.x profile name to ``quant-research``; anything else is unchanged."""
-    if template == QUANT_RESEARCH[0] and profile in QUANT_ALIASES:
-        return QUANT_RESEARCH
-    return template, profile
 
 
 def is_template_path(value: str) -> bool:
@@ -104,22 +76,18 @@ class SpecError(ValueError):
 class AppSpec(BaseModel):
     """What to build. A model may draft it later (B-16); a person always reviews it.
 
-    Choose what to build with ``kind`` (a shortcut), or with ``template`` and ``profile``:
-    ``template`` is a built-in pack (``agent-tool``, ``quant-baseline``), ``bundled`` for
-    pytemplate-uv's own profiles, a name registered in factory.toml, or the path of your own
-    pack. ``answers`` hold the
-    template's other questions, such as ``frequency`` or ``cost_bps``.
+    Choose what to build with ``template`` and ``profile``: ``template`` is a built-in pack
+    (``agent-tool``, ``quant-baseline``), ``bundled`` for pytemplate-uv's own profiles, a name
+    registered in factory.toml, or the path of your own pack. ``answers`` hold the template's
+    other questions, such as ``frequency`` or ``cost_bps``.
 
     ``output_dir`` is the existing parent directory of the new project, as an absolute path;
     `load_spec` resolves a relative ``output_dir`` or ``template`` path against the spec file.
     """
 
     name: str = Field(pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$", description="Project slug")
-    kind: AppKind | None = None
-    template: str | None = Field(
-        default=None, description="agent-tool, quant-baseline, bundled, or a pack directory"
-    )
-    profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]*$")
+    template: str = Field(description="agent-tool, quant-baseline, bundled, or a pack directory")
+    profile: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
     answers: dict[str, str] = Field(default_factory=dict, description="Other template answers")
     settings: dict[str, str] = Field(
         default_factory=dict,
@@ -147,6 +115,16 @@ class AppSpec(BaseModel):
         description="agent-tool only: a git+https URL or a local path to quant-agent-os",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _no_kind(cls, data: object) -> object:
+        if isinstance(data, dict) and "kind" in data:
+            raise ValueError(
+                'kind was removed; set template and profile, such as template = "quant-baseline" '
+                'and profile = "quant-lab"'
+            )
+        return data
+
     @field_validator("quant_agent_os_source", "template", mode="before")
     @classmethod
     def _forward_slashes(cls, value: object) -> object:
@@ -157,8 +135,8 @@ class AppSpec(BaseModel):
 
     @field_validator("template")
     @classmethod
-    def _known_or_absolute(cls, value: str | None) -> str | None:
-        if value is None or (not is_template_path(value) and TEMPLATE_NAME.match(value)):
+    def _known_or_absolute(cls, value: str) -> str:
+        if not is_template_path(value) and TEMPLATE_NAME.match(value):
             return value  # a built-in or registered name; registered names resolve at plan time
         if not Path(value).is_absolute():
             raise ValueError(
@@ -211,16 +189,6 @@ class AppSpec(BaseModel):
 
     @model_validator(mode="after")
     def _target_specific(self) -> AppSpec:
-        if self.kind is None and (self.template is None or self.profile is None):
-            raise ValueError("set kind, or both template and profile")
-        if self.kind is not None:
-            expected = KIND_TARGETS[self.kind]
-            given = resolve_alias(self.template or expected[0], self.profile or expected[1])
-            if given != expected:
-                raise ValueError(
-                    f"kind {self.kind!r} means template {expected[0]!r} with profile "
-                    f"{expected[1]!r}; set kind or template and profile, not a mix"
-                )
         if self.target != ("agent-tool", "agent-tool") and self.tool_name is not None:
             raise ValueError("tool_name applies only to the agent-tool profile")
         return self
@@ -228,24 +196,7 @@ class AppSpec(BaseModel):
     @property
     def target(self) -> tuple[str, str]:
         """The ``(template, profile)`` this spec builds."""
-        if self.kind is not None:
-            return KIND_TARGETS[self.kind]
-        assert self.template is not None and self.profile is not None  # by validation
-        return resolve_alias(self.template, self.profile)
-
-    @property
-    def alias_note(self) -> str | None:
-        """A deprecation note when the spec names a quant-baseline 1.x kind or profile."""
-        old: str | None = self.kind if self.kind in QUANT_ALIASES else None
-        if self.template == QUANT_RESEARCH[0] and self.profile in QUANT_ALIASES:
-            old = self.profile
-        if old is None:
-            return None
-        return (
-            f"'{old}' is now an alias for the quant-research profile, one project with study, "
-            'backtest, and report commands. Use kind = "quant-research"; the alias will be '
-            "removed in the next release."
-        )
+        return self.template, self.profile
 
     @property
     def package_name(self) -> str:

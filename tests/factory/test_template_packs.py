@@ -26,7 +26,7 @@ def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
     return AppSpec.model_validate(base | fields)
 
 
-def _fork(tmp_path: Path, source: str = "quant-baseline/quant-research", **kwargs: Any) -> Path:
+def _fork(tmp_path: Path, source: str = "quant-baseline/quant-lab", **kwargs: Any) -> Path:
     pack, _, profile = source.partition("/")
     return fork_pack(
         BUILT_IN_PACKS[pack], profile, tmp_path / "my-pack", pack_id="my-pack", **kwargs
@@ -43,7 +43,7 @@ def test_a_fork_keeps_one_profile_and_the_components_it_can_use(tmp_path: Path) 
     components = sorted(path.stem for path in (pack / "components").glob("*.toml"))
     profiles = sorted(p.name for p in pack.iterdir() if (p / "profile.toml").exists())
     assert manifest["id"] == "my-pack"
-    assert profiles == ["quant-research"]
+    assert profiles == ["quant-lab"]
     assert components == ["agent-tools", "data-csv", "data-database", "data-parquet", "metrics"]
     assert _factory().check_template(pack.as_posix()).ok
 
@@ -78,8 +78,8 @@ def test_the_agent_tool_profile_forks_and_renames(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("profile", "kwargs", "message"),
     [
-        ("options", {}, "offers quant-research"),
-        ("quant-research", {"profile_id": "Bad_Id"}, "lowercase slug"),
+        ("options", {}, "offers quant-lab"),
+        ("quant-lab", {"profile_id": "Bad_Id"}, "lowercase slug"),
     ],
 )
 def test_impossible_forks_are_explained(
@@ -103,12 +103,12 @@ def test_a_registered_name_resolves_to_its_pack(tmp_path: Path) -> None:
     pack = _fork(tmp_path)
     factory = _factory(templates=lambda: {"my-pack": pack.as_posix()})
 
-    plan = factory.plan(_spec(tmp_path, template="my-pack", profile="quant-research"))
+    plan = factory.plan(_spec(tmp_path, template="my-pack", profile="quant-lab"))
 
     assert plan.request.template == pack.as_posix()
-    assert [p.id for p in factory.describe_template("my-pack").profiles] == ["quant-research"]
+    assert [p.id for p in factory.describe_template("my-pack").profiles] == ["quant-lab"]
     with pytest.raises(PlanningError, match="known templates"):
-        factory.plan(_spec(tmp_path, template="nope", profile="quant-research"))
+        factory.plan(_spec(tmp_path, template="nope", profile="quant-lab"))
 
 
 def test_names_stay_names_and_paths_must_be_absolute(tmp_path: Path) -> None:
@@ -190,7 +190,7 @@ def test_cli_fork_checks_and_registers_the_pack(tmp_path: Path, settings_file: P
 
     forked = runner.invoke(
         factory_cli.app,
-        ["template", "fork", "quant-baseline/backtest", str(destination), "--profile-id", "momo"],
+        ["template", "fork", "quant-baseline/quant-lab", str(destination), "--profile-id", "momo"],
     )
     listed = runner.invoke(factory_cli.app, ["template", "list"])
     checked = runner.invoke(factory_cli.app, ["template", "check", "momentum"])
@@ -200,8 +200,7 @@ def test_cli_fork_checks_and_registers_the_pack(tmp_path: Path, settings_file: P
     assert (
         load_settings(settings_file).templates["momentum"].path == destination.resolve().as_posix()
     )
-    assert "is now quant-baseline/quant-research" in forked.output  # the old name still works
-    assert "momentum: fork of quant-baseline/quant-research" in listed.output
+    assert "momentum: fork of quant-baseline/quant-lab" in listed.output
     assert checked.exit_code == 0, checked.output
 
 
@@ -230,14 +229,14 @@ def test_a_spec_can_use_a_registered_template(tmp_path: Path, settings_file: Pat
     assert (
         runner.invoke(
             factory_cli.app,
-            ["template", "fork", "quant-baseline/quant-research", str(destination)],
+            ["template", "fork", "quant-baseline/quant-lab", str(destination)],
         ).exit_code
         == 0
     )
     spec = tmp_path / "app.toml"
     spec.write_text(
         'name = "momo-app"\ndescription = "d"\noutput_dir = "."\n'
-        'template = "momentum"\nprofile = "quant-research"\n'
+        'template = "momentum"\nprofile = "quant-lab"\n'
     )
 
     planned = runner.invoke(factory_cli.app, ["plan", str(spec), "--verbose"])

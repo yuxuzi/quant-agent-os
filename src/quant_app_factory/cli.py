@@ -26,14 +26,12 @@ from quant_app_factory.domain.connections import (
 from quant_app_factory.domain.planner import BUILT_IN_PACKS, PlanningError
 from quant_app_factory.domain.ports import ComponentInfo, ScaffoldError
 from quant_app_factory.domain.spec import (
-    KIND_TARGETS,
     RESERVED_ANSWERS,
     TEMPLATE_NAME,
     AppSpec,
     SpecError,
     is_template_path,
     load_spec,
-    resolve_alias,
 )
 from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
 from quant_app_factory.infrastructure.settings_file import (
@@ -61,7 +59,7 @@ def _runs_path(runs: Path | None) -> Path:
 
 
 SpecArgument = Annotated[
-    Path, typer.Argument(help="An app spec (TOML): name, kind, description, output_dir, ...")
+    Path, typer.Argument(help="An app spec (TOML): name, template, profile, description, ...")
 ]
 
 
@@ -99,8 +97,6 @@ def _preview(factory: AppFactory, spec: AppSpec, *, verbose: bool = False) -> bo
         f"[bold]{spec.name}[/bold] ({spec.target[0]}/{spec.target[1]}) -> {preview.project_path}",
         soft_wrap=True,
     )
-    if spec.alias_note:
-        errors.print(f"[yellow]{spec.alias_note}[/yellow]", soft_wrap=True)
     components = ", ".join(preview.components) or "none"
     checks = ", ".join(_short_command(command) for command in preview.lifecycle_commands)
     console.print(
@@ -109,8 +105,7 @@ def _preview(factory: AppFactory, spec: AppSpec, *, verbose: bool = False) -> bo
     )
     if verbose:
         for reason in plan.reasons:
-            if reason != spec.alias_note:
-                console.print(f"  - {reason}", soft_wrap=True)
+            console.print(f"  - {reason}", soft_wrap=True)
         console.print(f"  Profile {preview.profile} v{preview.profile_version}")
         console.print(
             f"  Dependencies: {', '.join(preview.dependencies) or 'none'}", soft_wrap=True
@@ -317,14 +312,23 @@ def _choose(label: str, options: list[str], default: str) -> str:
         errors.print(f"Choose one of: {', '.join(options)}.")
 
 
+# What `qaos app new` accepts for its most common targets; specs name template and profile.
+SHORTCUTS = {
+    "agent-tool": ("agent-tool", "agent-tool"),
+    "quant-lab": ("quant-baseline", "quant-lab"),
+    "python": ("bundled", "python"),
+    "fastapi": ("bundled", "fastapi"),
+}
+
+
 def _resolve_target(
     target: str | None, template: str | None, profile: str | None
 ) -> tuple[str | None, str | None]:
-    """Read ``quant-research`` (a built-in shortcut), ``TEMPLATE/PROFILE``, or a template."""
+    """Read ``quant-lab`` (a built-in shortcut), ``TEMPLATE/PROFILE``, or a template."""
     if target is None:
         return template, profile
-    if target in KIND_TARGETS:
-        return KIND_TARGETS[target]
+    if target in SHORTCUTS:
+        return SHORTCUTS[target]
     head, separator, tail = target.partition("/")
     if separator and TEMPLATE_NAME.match(head) and TEMPLATE_NAME.match(tail):
         return head, tail
@@ -356,7 +360,7 @@ def new(
     target: Annotated[
         str | None,
         typer.Argument(
-            help="What to build: quant-research, agent-tool, TEMPLATE/PROFILE, or a template."
+            help="What to build: quant-lab, agent-tool, TEMPLATE/PROFILE, or a template."
         ),
     ] = None,
     name: Annotated[str | None, typer.Argument(help="Project name, a lowercase slug.")] = None,
@@ -375,7 +379,7 @@ def new(
 ) -> None:
     """Answer the template's questions (or take its defaults), write the spec, and create it.
 
-    `qaos app new quant-research my-lab --defaults` is the one-command start. The
+    `qaos app new quant-lab my-lab --defaults` is the one-command start. The
     questions come from the template itself, only those that apply are asked, and
     pytemplate-uv checks the result. Secrets are asked for as variable names, never values.
     """
@@ -399,8 +403,6 @@ def new(
     except ScaffoldError as error:
         raise _fail(error) from error
     profiles = [item.id for item in catalog.profiles]
-    if profile is not None:
-        profile = resolve_alias(template, profile)[1]
     if profile not in profiles and len(profiles) == 1:
         profile = profiles[0]
     elif profile not in profiles and defaults:
@@ -655,7 +657,7 @@ def template_list() -> None:
 @template_app.command("fork")
 def template_fork(
     source: Annotated[
-        str, typer.Argument(help="A built-in profile, such as quant-baseline/quant-research.")
+        str, typer.Argument(help="A built-in profile, such as quant-baseline/quant-lab.")
     ],
     destination: Annotated[Path, typer.Argument(help="New pack directory.")],
     name: Annotated[str | None, typer.Option(help="Pack id and template name.")] = None,
@@ -672,10 +674,6 @@ def template_fork(
     pack_name, _, profile = source.partition("/")
     if pack_name not in BUILT_IN_PACKS or not profile:
         raise _fail(f"Fork a built-in profile: {', '.join(sorted(BUILT_IN_PACKS))}/<profile>.")
-    if resolve_alias(pack_name, profile)[1] != profile:
-        profile = resolve_alias(pack_name, profile)[1]
-        errors.print(f"[yellow]{source} is now {pack_name}/{profile}; forking that.[/yellow]")
-        source = f"{pack_name}/{profile}"
     pack_id = name or destination.name
     try:
         forked = fork_pack(

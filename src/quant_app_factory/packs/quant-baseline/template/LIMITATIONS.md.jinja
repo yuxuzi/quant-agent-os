@@ -26,6 +26,10 @@ not handle:
 - **Interpretation.** Reports print computed figures only. Write the interpretation yourself,
   and keep it apart from the figures.
 
+- **Later fixes.** This project owns a copy of its code, including `metrics.py`. A fix made to
+  the template later does not reach it by itself. Check the Quant-Agent-OS changelog and apply
+  fixes by hand.
+
 What the tests guard: metric formulas (known answers), no look-ahead in signals, one
 trade-timing convention shared by studies and backtests (`lag` in `config.toml`), missing
 prices (gaps and delistings), drift and the rebalance schedule, cost ordering, and walk-forward choices that never see

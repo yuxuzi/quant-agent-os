@@ -30,6 +30,7 @@ import numpy as np
 import numpy.typing as npt
 
 FloatArray = npt.NDArray[np.float64]
+FLAT = 1e-12  # relative deviation below which a series counts as constant
 
 
 def annualized_return(returns: Sequence[float], periods_per_year: int) -> float | None:
@@ -46,9 +47,12 @@ def sharpe_ratio(
     returns: Sequence[float], periods_per_year: int, risk_free: float = 0.0
 ) -> float | None:
     """Annualised Sharpe ratio; ``risk_free`` is an annual rate. None when returns do not vary."""
+    series = _array(returns)
+    if not _varies(series):
+        return None
     return _value(
         empyrical.sharpe_ratio(
-            _array(returns), risk_free=risk_free / periods_per_year, annualization=periods_per_year
+            series, risk_free=risk_free / periods_per_year, annualization=periods_per_year
         )
     )
 
@@ -105,7 +109,7 @@ def benchmark_metrics(
         series, factor, risk_free=risk_free / periods_per_year, annualization=periods_per_year
     )
     active = series - factor
-    excess = _value(empyrical.excess_sharpe(series, factor))
+    excess = _value(empyrical.excess_sharpe(series, factor)) if _varies(active) else None
     return {
         "alpha": _value(alpha),
         "beta": _value(beta),
@@ -119,6 +123,12 @@ def benchmark_metrics(
 
 def _array(values: Sequence[float]) -> FloatArray:
     return np.asarray(values, dtype=np.float64)
+
+
+def _varies(series: FloatArray) -> bool:
+    """Whether ``series`` varies by more than floating-point noise, which empyrical divides by."""
+    deviation = float(np.nanstd(series, ddof=1)) if series.size > 1 else 0.0
+    return deviation > FLAT * max(1.0, abs(float(np.nanmean(series))))
 
 
 def _value(result: Any) -> float | None:

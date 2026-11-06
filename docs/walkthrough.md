@@ -229,11 +229,11 @@ What the two commands do:
   - it then runs `uv sync`, ruff, mypy, and pytest in the new project;
   - its tests include `check_tool`, the platform's contract checks.
 
-`template = "quant-baseline"` with `profile = "quant-research"` builds a portable quant project from the `quant-baseline` pack: a
+`template = "quant-baseline"` with `profile = "quant-lab"` builds a portable quant project from the `quant-baseline` pack: a
 signal study, a backtest, and a report in one project, with known-answer metric tests, bias
 tests, and a `LIMITATIONS.md`. `uv run <project> study --demo` runs it on a random walk.
-`kind = "python-cli"` or `"fastapi-service"` builds a portable app from pytemplate-uv's own
-profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
+`template = "bundled"` with `profile = "python"` or `"fastapi"` builds a portable app from
+pytemplate-uv's own profiles. Creating needs network access for pytemplate-uv and the project's dependencies.
 
 ## 11. A quant project from your own data, with guidance
 
@@ -255,7 +255,7 @@ uv run qaos app settings set connections.local-prices.database "$PWD/prices.db"
 For PostgreSQL, also set `host`, `port`, `user`, and `schema`. Set `password_env` to the
 *name* of the environment variable that holds the password, never the password itself.
 
-For a first look, `uv run qaos app new quant-research my-lab --defaults` takes every
+For a first look, `uv run qaos app new quant-lab my-lab --defaults` takes every
 default and creates the project after one confirmation (`--yes` skips it in scripts). Steps 2
 and 3 do the same with your own answers.
 
@@ -267,14 +267,14 @@ uv run qaos app new --template quant-baseline -o lab.toml
 ```
 
 ```text
-Profile: quant-research (One project for signal research: ...)
+Profile: quant-lab (One project for signal research: ...)
 Ready: 34 files.
 ```
 
 ```toml
 name = "rev-lab"
 template = "quant-baseline"
-profile = "quant-research"
+profile = "quant-lab"
 connection = "local-prices"
 description = "Reversal research on local prices"
 output_dir = "/Users/you/work"
@@ -348,7 +348,7 @@ book rebalances monthly, so turnover is about a tenth of a daily book's.
 it by name:
 
 ```bash
-uv run qaos app template fork quant-baseline/quant-research packs/desk-research --profile-id desk
+uv run qaos app template fork quant-baseline/quant-lab packs/desk-research --profile-id desk
 #   ok  desk (31 files)
 #   Registered template 'desk-research': use template = "desk-research" in a spec.
 uv run qaos app template check desk-research   # after each edit

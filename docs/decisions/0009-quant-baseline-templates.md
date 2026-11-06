@@ -18,10 +18,11 @@ finished. Tests that metric formulas are correct do not catch that.
 ## Decision
 
 - **A `quant-baseline` pack ships in `quant_app_factory/packs/`.**
-  - Its one profile is `quant-research` (updated 2026-11-01, B-28 S1): a single project with
+  - Its one profile is `quant-lab` (updated 2026-11-01, B-28 S1; named `quant-research` until
+    2026-11-06, which was also the product's name): a single project with
     `study`, `backtest`, and `report` commands that share data, signals, metrics, one
     trade-timing convention, and a `config.toml` of research parameters. The 1.x profiles
-    `alpha-research`, `backtest`, and `report` are aliases for one release. Three projects for
+    `alpha-research`, `backtest`, and `report` were aliases for one release. Three projects for
     one workflow meant copying signal code between them and keeping three environments, and
     the report profile was too small to stand alone.
   - Its components are `metrics` (required), `data-csv` (the default), `data-parquet`,
@@ -56,8 +57,9 @@ finished. Tests that metric formulas are correct do not catch that.
 ## Consequences
 
 - Users get a tested project in minutes and own its code.
-- **Fixes don't flow back.** A metric fix reaches new projects; existing ones update through
-  `pytemplate update`. If the analytics package (B-13) ships, `metrics` may become a
+- **Fixes don't flow back.** A metric fix reaches new projects. Existing ones built from the built-in
+  pack take it by hand, because they record a local path with no tags, so `pytemplate update` cannot
+  reach them (checked 2026-11-06). If the analytics package (B-13) ships, `metrics` may become a
   dependency on it rather than generated code. That would be a later, deliberate change.
 - **Testing grows with each component.** Every combination of components a profile offers
   needs a render test, and the default set needs a smoke test.
