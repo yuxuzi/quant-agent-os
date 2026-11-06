@@ -109,6 +109,10 @@ if [[ "$variant" == postgres ]]; then
   done <"$env_file"
 fi
 
+echo "== agreed test cases pass against the deployed data"
+accepted="$("${compose[@]}" run --rm -T eval)" || fail "acceptance failed: $accepted"
+grep -q '^# Acceptance: PASS' <<<"$accepted" || fail "no passing report: $accepted"
+
 echo "== back up, lose the data, restore"
 "${compose[@]}" stop server
 backup="$(mktemp)"

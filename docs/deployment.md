@@ -306,8 +306,8 @@ the server.
 - checks MCP at `/mcp`: a 401 without a key, a foreign `Host` refused, the tool list, a
   `research_report` call with metrics from the dataset, and the call recorded as `mcp-http`;
 - checks that the server cannot write its knowledge store;
-- runs `doctor`, checks that its output holds no secrets, then backs up, loses the data, restores it, and
-  finds the recorded run again.
+- runs `doctor`, checks that its output holds no secrets, runs [agreed test cases](operations.md#check-it-against-agreed-cases),
+  then backs up, loses the data, restores it, and finds the recorded run again.
 
 It uses its own compose project and port 18000, and it removes its volumes afterwards. On
 PostgreSQL it also checks that the server's role is refused writes by permission, with

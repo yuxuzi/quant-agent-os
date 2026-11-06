@@ -146,6 +146,44 @@ docker compose -f deploy/compose.yaml run --rm -T doctor
 
 On PostgreSQL, also restore the dump, as in [restore](#restore). Remove the `QAOS_IMAGE` line when you upgrade again.
 
+## Check it against agreed cases
+
+Write the cases you and the people accepting this server agree on, in a TOML file. Take expected numbers from your own
+calculation, not from these tools. [The demonstration's cases](../examples/portfolio-intelligence/acceptance.toml)
+are a complete example:
+
+```toml
+[[numeric]]
+name = "growth book volatility"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "metrics.annualized_volatility"   # where in the tool's output
+expected = 0.17029039110268307
+tolerance = 1e-9                      # absolute, and required
+
+[[retrieval]]
+name = "momentum crash risk is in the research"
+question = "When do momentum strategies crash?"
+source = "momentum-crash-risk.md"     # must be among the top k passages (k = 5 unless you set it)
+
+[[retrieval]]
+name = "the research says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true                        # must find no qualifying passage
+```
+
+```bash
+GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval > acceptance.md
+GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval --format json > acceptance.json
+```
+
+It runs the tools a client would get, under the same permissions, and changes nothing. The report gives each case's
+verdict, what it expected and got, the platform version, the SHA-256 of the cases file, and the data versions, so
+it can be traced later. It names sources and never quotes retrieved text. The command exits 0 when every case passes, 1
+when any fails, and 2 when the cases cannot be read, so scripts can use it. Without a compose file it is
+`qaos eval --gold cases.toml`. It runs the platform's own tools: to include your tools, call `run_acceptance` with your
+catalog from your own server code.
+
 ## Retention and export
 
 **Runs are kept until you remove them.** Nothing removes them on its own, and they can hold retrieved passages and

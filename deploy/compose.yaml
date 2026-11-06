@@ -109,6 +109,21 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
 
+  # Runs agreed test cases against the volumes' data: GOLD=/path/to/cases.toml. It writes a report
+  # to stdout, and changes nothing (docs/operations.md).
+  eval:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["qaos", "eval", "--gold", "/gold.toml", "--store", "/data/knowledge/kb.db"]
+    command: []
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - datasets:/data/datasets:ro
+      - ${GOLD:-./acceptance-sample.toml}:/gold.toml:ro
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
   # Writes a tar of the volumes to stdout, or of the ones named: `run --rm -T backup data/runs`.
   # Stop the server first, so the SQLite files are at rest (docs/operations.md).
   backup:

@@ -163,6 +163,10 @@ variants, then upgrades and rolls back, with no undocumented step. Note where th
 | S5.3 | `abstained: bool` on `EvidencePacket`, true when no passage qualifies, so a client and an acceptance test need not infer it. A tool schema change: bump the version, the tool lock, the tools changelog, and report the efficiency delta |
 | S5.4 | `qaos runs export --from --to --format jsonl`, redacted as stored, so a firm can send it to its own log system |
 
+`qaos eval` runs cases through the served tools and shares no code with `tests/research`: that scoring gives
+aggregate metrics, and an acceptance case is a verdict, so there was nothing worth moving. `qaos runs export` leaves out
+arguments and outputs rather than exporting them redacted, because a redacted output can still hold passages.
+
 **Exit:** the demo's fixture passes `qaos eval`. A deliberately wrong expected value and an answerable question
 marked `abstain` each fail it. An export round-trips every agreed audit field: principal, tool and version, input hash, data versions, status, time.
 

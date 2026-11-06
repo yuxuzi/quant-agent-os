@@ -68,6 +68,10 @@ All notable changes to this project are documented here. The format follows
   retrieved text, and overwrites the freed space. Nothing removes runs unless an operator asks, and audit events and
   usage events always stay. `qaos runs export` writes the audit trail as JSON lines for a firm's own log system, with
   hashes and statuses but no arguments or outputs. See [retention and export](docs/operations.md#retention-and-export).
+- **`qaos eval --gold cases.toml`,** an operator command that runs agreed test cases against the served tools: numbers
+  within a stated tolerance, a question that must find a source, and a question that must abstain. It writes a pass or
+  fail report in Markdown or JSON, with the platform version, the hash of the cases file, and the data versions, to attach
+  to acceptance. See [check it against agreed cases](docs/operations.md#check-it-against-agreed-cases).
 
 ### Changed
 
