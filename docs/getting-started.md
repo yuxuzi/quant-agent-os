@@ -13,7 +13,9 @@ qaos connect claude --write       # or cursor, vscode; restart the client
 `--python 3.13` matters: on Python 3.15, the `analytics` extra's `bottleneck` dependency has no
 prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work too.
 
-Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one.
+Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one. Some options
+below are new since 0.2.0 and need an install from `@main` until the next release: `--vocabulary`,
+`--embedder local`, `--expires-in-days`, the `parquet` extra, and `open_platform`.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
 ingestion, `parquet` for Parquet files in `qaos data add`, `postgres` for a PostgreSQL store,
 `factory` for `qaos app`, or `all`. `local-embeddings` adds semantic search on your machine; it is
