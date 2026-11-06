@@ -56,6 +56,7 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
 
     @tool(
         name="find_related_signals",
+        version="1.1.0",
         description=(
             "Find signals, factors, and strategies related to a research question in the "
             "user's corpus. Returns ranked passages with source locations and knowledge-graph "

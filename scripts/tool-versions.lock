@@ -1417,6 +1417,12 @@
         },
         "description": "Everything a client needs to write a cited answer.",
         "properties": {
+          "abstained": {
+            "default": false,
+            "description": "True when no passage qualified: the corpus does not answer this question",
+            "title": "Abstained",
+            "type": "boolean"
+          },
           "corpus_snapshot": {
             "anyOf": [
               {
@@ -1495,7 +1501,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "get_source_passage": {
       "input_schema": {

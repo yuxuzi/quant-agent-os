@@ -62,6 +62,8 @@ All notable changes to this project are documented here. The format follows
 - **An upgrade drill and a no-network install.** `deploy/upgrade-test.sh` builds a real tagged release, seeds it,
   upgrades to this commit, rolls back, and checks that runs and answers survive, on SQLite or PostgreSQL. Operations
   covers `docker save` and `docker load`, what needs network and when, and `QAOS_POSTGRES_IMAGE` for a loaded image.
+- **`abstained` on `find_related_signals`,** true when no passage qualified, so a client or an acceptance test need
+  not infer it from empty `passages`.
 
 ### Changed
 

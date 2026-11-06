@@ -28,6 +28,7 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 | Tool | Version | Change |
 | --- | --- | --- |
+| `find_related_signals` | 1.1.0 | Adds `abstained`, true when no passage qualified, so a client need not infer it from empty `passages`. |
 | `analyze_performance` | 2.0.1 | A Sharpe or information ratio that divided by floating-point noise is now undefined, as documented. |
 | `research_report` | 3.0.1 | The same, for the metrics it reports. |
 | `check_spec` | 2.0.0 | A draft must name `template` and `profile`. `kind` is reported as a problem, and the profile `quant-research` is now `quant-lab`. |
