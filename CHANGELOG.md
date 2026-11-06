@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The license is now the Business Source License 1.1,** from the commit that adds it. Anyone may read,
+  modify, and evaluate the code; production use needs a commercial license; and each version becomes
+  Apache 2.0 four years after its release. Versions up to v0.2.0 and earlier commits stay MIT, and so do
+  `skills/`, `clients/`, and the template packs. See
+  [decision 0019](docs/decisions/0019-business-source-license.md).
+
 ### Added
 
 - **A notebook path.** `quant_platform.open_platform()` opens the home's knowledge store, datasets,

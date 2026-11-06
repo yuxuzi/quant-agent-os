@@ -5,7 +5,7 @@ Claude Code reads this file through `CLAUDE.md`.
 
 ## What this project is
 
-Quant-Agent-OS is an open-source quantitative intelligence and application-engineering
+Quant-Agent-OS is a source-available quantitative intelligence and application-engineering
 platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
   executor, evidence-linked reports, and the MCP adapter.

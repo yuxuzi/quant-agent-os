@@ -36,4 +36,4 @@ be empty and would keep nothing out.
 - A firm that wants single sign-on must use the hosted command for now. If the first design partner
   asks, split OAuth out on its own.
 - The code still ships in every install, so this is a fence for attention and attack surface at
-  start-up, not a licence boundary. Decide that when the licence question (O-4) is decided.
+  start-up, not a licence boundary. [Decision 0019](0019-business-source-license.md) licenses all of it together.

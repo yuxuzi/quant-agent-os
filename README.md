@@ -106,4 +106,8 @@ examples/  scripts/  tests/  docs/
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Source-available under the [Business Source License 1.1](LICENSE): you may read, modify, and evaluate it
+freely, and production use needs a commercial license. Each version becomes Apache 2.0 four years after its
+release. `skills/`, `clients/`, and the App Factory's template packs are MIT, so generated projects carry no
+platform license. Versions up to v0.2.0, and `main` before this license was added, stay MIT
+([decision 0019](docs/decisions/0019-business-source-license.md)).
