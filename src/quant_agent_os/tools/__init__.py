@@ -1,5 +1,12 @@
 """Tool contract, registry, and permissions."""
 
+from quant_agent_os.tools.access import (
+    AccessFileError,
+    AccessPolicy,
+    Caller,
+    FileAccessPolicy,
+    current_caller,
+)
 from quant_agent_os.tools.catalog import (
     PromptArgument,
     PromptArgumentError,
@@ -26,8 +33,12 @@ from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry, Unkn
 __all__ = [
     "CONSEQUENTIAL",
     "READ_ONLY",
+    "AccessFileError",
+    "AccessPolicy",
+    "Caller",
     "Deprecation",
     "DuplicateToolError",
+    "FileAccessPolicy",
     "Permission",
     "PermissionDeniedError",
     "PermissionPolicy",
@@ -40,6 +51,7 @@ __all__ = [
     "ToolSpec",
     "UnknownResourceError",
     "UnknownToolError",
+    "current_caller",
     "parse_version",
     "tool",
 ]

@@ -15,10 +15,10 @@ from pydantic import BaseModel
 
 from quant_agent_os.api import KeyRing, add_key, load_keys
 from quant_agent_os.config import get_settings
-from quant_agent_os.data import UnknownDatasetError
+from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.testing import check_tool
-from quant_agent_os.tools import Permission, PermissionPolicy, tool
+from quant_agent_os.tools import FileAccessPolicy, Permission, PermissionPolicy, tool
 from quant_platform import compose
 from quant_platform.http import build_http_app, single_tenant
 
@@ -49,6 +49,21 @@ def test_desk_var_gives_the_known_answer(store: SqliteDatasetStore) -> None:
     assert output.var == pytest.approx(0.022)
     assert output.periods == 24
     assert output.data_versions == {"dataset:desks": store.get("desks").fingerprint}
+
+
+def test_desk_var_is_not_off_by_one_from_floating_point(tmp_path: Path) -> None:
+    # 5% of 20 periods is rank 1, though (1 - 0.95) * 20 is a little over 1 as a float.
+    class TwentyPeriods:
+        def get(self, dataset_id: str) -> Dataset:
+            rows = "\n".join(f"{i}" for i in [-0.10, -0.05, *[0.01] * 18])
+            return parse_dataset(dataset_id, f"x\n{rows}\n".encode())
+
+        def ids(self) -> list[str]:
+            return ["desks"]
+
+    output = firm_tools(TwentyPeriods())[0].function(DeskVarInput(dataset="desks", column="x"))
+
+    assert output.var == pytest.approx(0.10)
 
 
 def test_the_firms_tool_honours_the_platform_contract(store: SqliteDatasetStore) -> None:
@@ -106,6 +121,36 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
     assert recorded.calls[0].tool == "desk_var"
     assert recorded.calls[0].tool_version == "1.0.0"
     assert catalog.toolsets["desk_var"] == "firm"
+
+
+def test_with_access_rules_the_firms_tool_reads_only_what_the_caller_may(
+    store: SqliteDatasetStore, tmp_path: Path
+) -> None:
+    rules = tmp_path / "access.toml"
+    rules.write_text('[groups.risk]\ntools = ["desk_var"]\ndatasets = ["other"]\n')
+    keys = tmp_path / "keys.toml"
+    key = add_key(keys, "alice", ["tools:call"], groups=["risk"])
+    catalog = build_catalog(store, PermissionPolicy(), access=FileAccessPolicy(rules))
+    app = build_http_app(
+        single_tenant(catalog, MemoryRunStore(), catalog.policy),
+        KeyRing(load_keys(keys)),
+        instructions=catalog.instructions,
+    )
+
+    async def call() -> Any:
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url=BASE,
+                headers={"Authorization": f"Bearer {key}"},
+            ) as client,
+        ):
+            return (await client.post("/v1/tools/desk_var/call", json={"arguments": ARGS})).json()
+
+    result = anyio.run(call)
+    assert result["status"] == "error"
+    assert "No dataset 'desks'" in result["error"]
 
 
 def test_a_firms_tool_gets_no_permission_it_is_not_granted(tmp_path: Path) -> None:

@@ -17,7 +17,8 @@ from firm_tools import firm_tools
 
 from quant_agent_os.api.server import DEFAULT_HOST
 from quant_agent_os.config import get_settings
-from quant_agent_os.tools import PermissionPolicy
+from quant_agent_os.data import DatasetStore, GuardedDatasetStore
+from quant_agent_os.tools import AccessPolicy, FileAccessPolicy, PermissionPolicy
 from quant_platform import Catalog, compose, serve_http
 from quant_research import open_research
 from quant_research.application.retrieval import ResearchService
@@ -30,15 +31,24 @@ INSTRUCTIONS = (
 
 
 def build_catalog(
-    store: SqliteDatasetStore, policy: PermissionPolicy, research: ResearchService | None = None
+    store: DatasetStore,
+    policy: PermissionPolicy,
+    research: ResearchService | None = None,
+    access: AccessPolicy | None = None,
 ) -> Catalog:
-    """Return what this firm serves. The firm's data also feeds the platform's analytics."""
+    """Return what this firm serves. The firm's data also feeds the platform's analytics.
+
+    With ``access``, the firm's tools read through the same guard as the platform's. Connect an
+    entitlement service by implementing `AccessPolicy` and passing it here.
+    """
+    guarded = GuardedDatasetStore(store, access) if access is not None else store
     return compose(
         policy=policy,
         research=research,
-        datasets=store,
-        extra_tools=firm_tools(store),
+        datasets=guarded,
+        extra_tools=firm_tools(guarded),
         extra_instructions=INSTRUCTIONS,
+        access=access,
     )
 
 
@@ -50,11 +60,14 @@ def main() -> None:
         create_sample_database(database)  # for this example only; yours already exists
     store = SqliteDatasetStore(database)
     host = os.environ.get("FIRM_HOST", DEFAULT_HOST)
+    access = FileAccessPolicy(settings.access_file) if settings.access_file else None
     if is_postgres_url(settings.store) or Path(settings.store).is_file():
         with open_research(settings.store, read_only=True) as research:
-            serve_http(build_catalog(store, settings.policy(), research.research), host=host)
+            serve_http(
+                build_catalog(store, settings.policy(), research.research, access), host=host
+            )
     else:
-        serve_http(build_catalog(store, settings.policy()), host=host)
+        serve_http(build_catalog(store, settings.policy(), access=access), host=host)
 
 
 if __name__ == "__main__":

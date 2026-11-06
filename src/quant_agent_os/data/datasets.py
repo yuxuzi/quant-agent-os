@@ -30,6 +30,8 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from quant_agent_os.tools.access import AccessPolicy, note_refusal, permits
+
 DATASET_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 200_000
@@ -340,6 +342,33 @@ class MemoryDatasetStore:
         """Return every dataset id, here and in the base store, sorted."""
         below = self.base.ids() if self.base is not None else []
         return sorted({*self._datasets, *below})
+
+
+class GuardedDatasetStore:
+    """A store that shows the current caller only what an access policy allows (decision 0021).
+
+    A refused dataset answers exactly as a missing one does, and an error names only permitted
+    datasets, so a caller cannot learn what else exists. An auditor sees the refusal on the call's
+    record. A firm's tools must read through this store too, not the one it wraps.
+    """
+
+    def __init__(self, store: DatasetStore, access: AccessPolicy) -> None:
+        self.store = store
+        self.access = access
+
+    def get(self, dataset_id: str) -> Dataset:
+        """Return dataset ``dataset_id``, or raise `UnknownDatasetError` if refused or missing."""
+        if not permits(self.access, "dataset.read", dataset_id):
+            note_refusal("dataset.read", dataset_id)
+            raise _unknown_dataset(dataset_id, self.ids())
+        try:
+            return self.store.get(dataset_id)
+        except UnknownDatasetError:  # the wrapped store's message may name refused datasets
+            raise _unknown_dataset(dataset_id, self.ids()) from None
+
+    def ids(self) -> list[str]:
+        """Return the dataset ids the current caller may read, sorted."""
+        return [item for item in self.store.ids() if permits(self.access, "dataset.read", item)]
 
 
 def _unknown_dataset(dataset_id: str, known: list[str]) -> UnknownDatasetError:

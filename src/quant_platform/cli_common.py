@@ -11,6 +11,7 @@ from rich.markup import escape
 
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DirectoryDatasetStore
+from quant_agent_os.tools import AccessPolicy
 from quant_platform.composition import (
     DEFAULT_TOOLSETS,
     TOOLSET_NEEDS,
@@ -88,6 +89,7 @@ def open_catalog(
     chosen: bool = True,
     embedder: EmbedderChoice | None = None,
     embedding_model: str | None = None,
+    access: AccessPolicy | None = None,
 ) -> tuple[Catalog, ResearchApp | None]:
     """Open what the toolsets need and compose them, or exit with an actionable message.
 
@@ -137,5 +139,6 @@ def open_catalog(
             else None
         ),
         factory=_factory() if "factory" in toolsets else None,
+        access=access,
     )
     return catalog, research

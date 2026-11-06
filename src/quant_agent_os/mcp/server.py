@@ -33,6 +33,7 @@ from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.serving import Surface
+from quant_agent_os.tools.access import Caller, bind_caller
 from quant_agent_os.tools.catalog import PromptArgumentError, PromptSpec, ResourceSpec
 
 if TYPE_CHECKING:
@@ -59,11 +60,13 @@ ApprovalGate = Callable[
 @dataclass(frozen=True)
 class Served:
     """What one request is served: its caller's surface, the recorder for that caller, and
-    (over HTTP, with an approval page) the gate that turns a waiting call into a request."""
+    (over HTTP, with an approval page) the gate that turns a waiting call into a request, and
+    who the caller is."""
 
     surface: Surface
     recorder: RunRecorder | None = None
     approvals: ApprovalGate | None = None
+    caller: Caller | None = None
 
 
 # Called with the transport's request and the scope a request needs ("tools:list" to list,
@@ -117,6 +120,8 @@ def build_server(
             served = route(server.request_context.request, scope)
         except AccessDeniedError as error:
             raise McpError(types.ErrorData(code=FORBIDDEN, message=str(error))) from None
+        # Every handler starts here, and each request's handler is its own task.
+        bind_caller(served.caller)
         surface = served.surface
         return Served(
             Surface(
@@ -127,6 +132,7 @@ def build_server(
             ),
             served.recorder,
             served.approvals,
+            served.caller,
         )
 
     @server.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]

@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from quant_agent_os.tools.access import AccessPolicy, permits
 from quant_agent_os.tools.catalog import ResourceSpec
 from quant_agent_os.tools.contracts import ToolSpec, tool
 from quant_agent_os.tools.registry import ToolRegistry
@@ -41,8 +42,13 @@ class ServerInfo(BaseModel):
     registry_digest: str = Field(description="SHA-256 of the served tool contracts.")
 
 
-def server_info_tool(platform_version: str, tools: list[ToolSpec[Any, Any]]) -> ToolSpec[Any, Any]:
-    """Return ``server_info`` for a ``platform_version`` server of ``tools`` (and itself)."""
+def server_info_tool(
+    platform_version: str, tools: list[ToolSpec[Any, Any]], access: AccessPolicy | None = None
+) -> ToolSpec[Any, Any]:
+    """Return ``server_info`` for a ``platform_version`` server of ``tools`` (and itself).
+
+    With ``access``, it names only the tools the caller may call (decision 0021).
+    """
 
     @tool(
         name=SERVER_INFO_TOOL,
@@ -52,7 +58,11 @@ def server_info_tool(platform_version: str, tools: list[ToolSpec[Any, Any]]) -> 
         ),
     )
     def server_info(params: ServerInfoRequest) -> ServerInfo:
-        registry = ToolRegistry([*tools, server_info])
+        registry = ToolRegistry(
+            spec
+            for spec in [*tools, server_info]
+            if access is None or permits(access, "tool.call", spec.name)
+        )
         return ServerInfo(
             platform_version=platform_version,
             platform_major=int(platform_version.split(".")[0]),

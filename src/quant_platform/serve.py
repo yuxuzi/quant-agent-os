@@ -44,8 +44,11 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
     """Serve ``catalog`` over stdio until the client disconnects; raises `MCPUnavailableError`.
 
     Stdout carries the protocol, so messages go to stderr. A run store that will not open is a
-    warning here, because a client that launches the server cannot show an error.
+    warning here, because a client that launches the server cannot show an error. Raises
+    `ValueError` for a catalog with an access policy: stdio has no authenticated caller.
     """
+    if catalog.access is not None:
+        raise ValueError("An access policy needs serve_http: stdio has no authenticated caller.")
     run_store: SqliteRunStore | None = None
     try:
         if record:

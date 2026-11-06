@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os.api.keys import KeyRing
@@ -26,6 +25,7 @@ from quant_agent_os.mcp.server import (
 )
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.serving import Tenancy
+from quant_agent_os.tools.access import Caller
 
 if TYPE_CHECKING:
     from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 MAX_REQUEST_BYTES = 5 * 1024 * 1024
 TENANT_CLAIM = "tenant"  # set by every verifier from the verified credential, never the request
+GROUPS_CLAIM = "qaos_groups"  # likewise
 
 
 class KeyVerifier:
@@ -54,16 +55,8 @@ class KeyVerifier:
             token=token,
             client_id=key.principal,
             scopes=list(key.scopes),
-            claims={TENANT_CLAIM: key.tenant},
+            claims={TENANT_CLAIM: key.tenant, GROUPS_CLAIM: sorted(key.groups)},
         )
-
-
-@dataclass(frozen=True)
-class Caller:
-    """Who made a request, and in which tenant."""
-
-    principal: str
-    tenant: str
 
 
 GateFor = Callable[[Caller], ApprovalGate]
@@ -86,7 +79,14 @@ def caller_of(request: Any, scope: str) -> Caller:
     tenant = (token.claims or {}).get(TENANT_CLAIM)
     if not isinstance(tenant, str):
         raise AccessDeniedError("This credential names no tenant.")
-    return Caller(principal=token.subject or token.client_id, tenant=tenant)
+    groups = (token.claims or {}).get(GROUPS_CLAIM)
+    return Caller(
+        principal=token.subject or token.client_id,
+        tenant=tenant,
+        groups=frozenset(g for g in groups if isinstance(g, str))
+        if isinstance(groups, list)
+        else frozenset(),
+    )
 
 
 def tenant_route(tenancy: Tenancy, gate_for: GateFor | None = None) -> Route:
@@ -111,7 +111,7 @@ def tenant_route(tenancy: Tenancy, gate_for: GateFor | None = None) -> Route:
             if surface.run_store is not None
             else None
         )
-        return Served(surface, recorder, gate_for(caller) if gate_for is not None else None)
+        return Served(surface, recorder, gate_for(caller) if gate_for is not None else None, caller)
 
     return route
 
