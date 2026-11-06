@@ -159,6 +159,9 @@ def test_step_6_another_desks_data_looks_missing_and_its_tool_is_denied(
     assert "No dataset 'value-book'" in message
     assert "value-assets" not in message and "value-weights" not in message
     assert "refused" not in seen["refused_dataset"]
+    through_firm_tool = seen["refused_by_firm_tool"]
+    assert through_firm_tool["is_error"]
+    assert "No dataset 'value-weights'" in through_firm_tool["error"]
     assert seen["denied_tool"]["status"] == "denied"
 
 
@@ -185,12 +188,15 @@ def test_step_8_every_call_is_on_record_under_its_caller(
         "research_report",
         "analyze_performance",
         "book_var",
+        "book_var",
         "find_related_signals",
     ]
     assert all(re.fullmatch("[0-9a-f]{64}", call["input"]) for call in audit)
     assert all(call["version"] for call in audit)
-    read, called = audit[5], audit[6]
+    read, through_firm_tool, called = audit[5:8]
     assert (read["principal"], read["refused"]) == ("growth-pm", ["dataset.read value-book"])
+    assert through_firm_tool["principal"] == "growth-pm"
+    assert through_firm_tool["refused"] == ["dataset.read value-weights"]
     assert (called["principal"], called["refused"]) == ("value-analyst", ["tool.call book_var"])
     assert called["status"] == "denied"
     assert audit[1]["data_versions"].keys() == {"dataset:growth-weights", "dataset:growth-assets"}
@@ -202,6 +208,18 @@ def test_it_prints_every_step(walkthrough: tuple[dict[str, Any], str]) -> None:
     for number in range(1, 9):
         assert f"[{number}/8]" in printed
     assert printed.isascii()  # a Windows console may not encode anything else
+
+
+def test_the_guide_quotes_the_figures_the_tools_return(
+    walkthrough: tuple[dict[str, Any], str],
+) -> None:
+    seen, _ = walkthrough
+    guide = (Path(demo_module.__file__).parents[2] / "docs" / "demo.md").read_text("utf-8")
+
+    assert f"VaR {seen['var']['var']:.2%}" in guide
+    assert f"volatility {seen['risk']['volatility']:.2%}" in guide
+    assert f"momentum exposure {seen['risk']['factors']['exposures']['momentum']:+.2f}" in guide
+    assert f"Sharpe ratio of {seen['report']['metrics']['sharpe_ratio']:.2f}" in guide
 
 
 def test_each_caller_gets_its_own_key_and_the_instructions_name_it(tmp_path: Path) -> None:

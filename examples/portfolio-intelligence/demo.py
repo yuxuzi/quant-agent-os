@@ -216,6 +216,9 @@ async def drive(url: str, keys: Keys, say: Say = print) -> dict[str, Any]:
         )
         seen["refused_dataset"] = refused
         say(f"  growth-pm reads value-book: {refused['status']}: {refused['error']}")
+        through_firm_tool = await _call(growth, "book_var", {"book": "value"})
+        seen["refused_by_firm_tool"] = through_firm_tool
+        say(f"  growth-pm asks book_var for it: {through_firm_tool['error']}")
         denied = await _call(value, "book_var", {"book": "value"})
         seen["denied_tool"] = denied
         say(f"  value-analyst calls book_var: {denied['status']}")
