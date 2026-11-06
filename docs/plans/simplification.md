@@ -12,7 +12,7 @@ wrong.
 0018; the `research` and `hosted` extras were left out because they would be empty.
 P3 is complete and unreleased. Parquet (P3.3) was approved on 2026-11-05 and uses pyarrow, because
 pandas 3.1 deprecates its fastparquet engine, and fastparquet failed on a pyarrow-written frame with
-an unnamed date index and has no Python 3.15 wheel. P4 and P5 are complete and unreleased.
+an unnamed date index and has no Python 3.15 wheel. P4, P5, and P6 are complete and unreleased.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.
@@ -65,7 +65,7 @@ papers. Nothing in the repo changed.
 | **Five ways to serve,** while the docs say "one server" | `quant-research serve-mcp`, `serve-api`; `quant-factory serve-mcp`; `quant-platform serve-mcp`, `serve-http` | P2.2 |
 | **The default store location disagrees.** `quant-research ingest` without `--store` writes to `./.quant-research/knowledge.db`; the platform looks in `~/.quant-agent-os/knowledge.db` and then serves without research tools | `bootstrap.py:24`, `quant_platform/cli.py:79` | P2.3 |
 | **Three audit locations, and the platform cannot read its own.** Platform: `~/.quant-agent-os/runs.db`; research: beside the store; factory: `factory-runs.db`. `quant-platform` has no `runs` command | CLI modules; an audit that is hard to find fails its purpose | P2.3 |
-| **Five approval paths:** SDK approve and resume, terminal prompt, `--confirm-in-client` (only on `quant-factory serve-mcp`), the web page, standing pre-approval | `docs/decisions/0014`; `docs/plans/agent-surface.md:317` | P1.2, P2.2 |
+| **Five approval paths:** SDK approve and resume, terminal prompt, `--confirm-in-client` (only on `quant-factory serve-mcp`), the web page, standing pre-approval | `docs/decisions/0014`; `docs/plans/archive/agent-surface.md:317` | P1.2, P2.2 |
 | **Three environment prefixes:** `QUANT_AGENT_OS_`, `QUANT_RESEARCH_`, `QUANT_FACTORY_`, plus `.env` read from the working directory, which a client-launched server does not control | `config/settings.py:20`, `docs/configuration.md` | P2.3 |
 | **One name, two things.** `quant-research` is the product, CLI, skill, and also an App Factory profile: `quant-factory new quant-research my-lab` builds something unrelated to the product | `domain/spec.py:26` | P5.2 |
 | **Three ways to choose a template:** `kind`, `template` + `profile`, and 1.x aliases "kept for one release", which is now past | `domain/spec.py:39-52` | P5.2 |
@@ -277,6 +277,10 @@ the upgrade path also found that `pytemplate update` cannot reach a project buil
    approval.**
 
 ### P6. Documentation reset
+
+**Done 2026-11-06.** Commands in the README and getting started are checked to exist, rather than being run:
+running them needs a network and clients. The tutorial's own tests still run its labs. This plan stays out of
+the archive until the mirror gate in P5 is settled.
 
 - **One route:** README → getting-started (one page, the target commands) → tutorial. Fold the
   walkthrough's unique parts into these, then delete it. The tutorial is uncommitted work; see

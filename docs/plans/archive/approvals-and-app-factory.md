@@ -5,7 +5,7 @@ Scope: the last open MVP criterion (5). `create_app` without an approval records
 generated package passes `uv run pytest`, `ruff`, and `mypy`.
 
 The approval gate comes first, because creating an app writes files, runs commands, and
-downloads packages ([decision 0005](../decisions/0005-approval-gates.md)).
+downloads packages ([decision 0005](../../decisions/0005-approval-gates.md)).
 
 ## Steps
 
@@ -53,7 +53,7 @@ raises for a failed command.
 
 - **Adapter.** It calls the pytemplate-uv library's `pytemplate.api.plan` and `api.render`
   in-process, and maps request errors and render errors to typed errors
-  ([decision 0006](../decisions/0006-pytemplate-uv-as-a-library.md)).
+  ([decision 0006](../../decisions/0006-pytemplate-uv-as-a-library.md)).
   - The first version ran `uvx pytemplate-uv==3.0.* ... --json` through the runner. Decision
     0006 replaced it.
 - **The `agent-tool` template pack** ships inside `quant_app_factory`. Its generated package:

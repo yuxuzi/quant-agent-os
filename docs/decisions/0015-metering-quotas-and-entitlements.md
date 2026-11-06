@@ -2,7 +2,7 @@
 
 - Status: accepted (approved by the user 2026-11-03, with Q-14 to Q-18 as proposed)
 - Date: 2026-11-03
-- Plan: [agent-surface P7](../plans/agent-surface.md), backlog B-36. Builds on
+- Plan: [agent-surface P7](../plans/archive/agent-surface.md), backlog B-36. Builds on
   [0011](0011-rest-api-and-api-keys.md) (API keys), [0012](0012-remote-mcp-over-http.md)
   (remote MCP), [0013](0013-identity-and-tenancy.md) (tenants), and
   [0014](0014-approvals-in-the-client.md) (approvals).

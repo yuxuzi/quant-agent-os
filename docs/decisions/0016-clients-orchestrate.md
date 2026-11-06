@@ -7,7 +7,7 @@
 ## Context
 
 Decision 0001 made one bounded orchestrator the first design: a model proposes a plan, and the
-platform validates and runs it. [Agent surface](../plans/agent-surface.md) then moved planning to
+platform validates and runs it. [Agent surface](../plans/archive/agent-surface.md) then moved planning to
 the client, and the orchestrator stayed only as an SDK feature.
 
 The only provider ever built is `FakeModelProvider`, so no user could run the orchestrator with a

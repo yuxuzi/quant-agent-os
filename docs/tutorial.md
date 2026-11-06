@@ -413,7 +413,7 @@ To see one run's calls and audit trail, run `uv run qaos runs <RUN_ID>`.
 | Add `--min-confidence 0.4` to the `strategy` command | More rows, from weaker links |
 | Add a line such as `Momentum predicts time-series momentum.` to your note, then run `ingest` again | Only the changed file is re-read, with one more relation |
 | Run `ingest "$TUT/notes"` twice without changes | `Added 0, unchanged 1` and the same snapshot id |
-| Put your own `.md`, `.txt`, or text-based `.pdf` files in `$TUT/notes` and ingest them | Answers from your own documents. Typed relations need explicit phrasing such as "predicts" or "explained by" ([known limitations](walkthrough.md#known-limitations)) |
+| Put your own `.md`, `.txt`, or text-based `.pdf` files in `$TUT/notes` and ingest them | Answers from your own documents. Typed relations need explicit phrasing such as "predicts" or "explained by" ([known limitations](products/quant-research.md#known-limitations)) |
 
 ---
 
@@ -494,7 +494,7 @@ Edit `$TUT/my_tool.py`, then run it again.
 | **Challenge:** also return the total loss during the longest streak | Your tool, your design. Tell us how it went |
 
 To start a real tool package with these checks already wired in, see
-`uv run qaos app new agent-tool my-tools` ([walkthrough §10](walkthrough.md#10-generate-a-tool-package)).
+`uv run qaos app new agent-tool my-tools` ([Quant App Factory](products/quant-app-factory.md)).
 
 ---
 
@@ -940,7 +940,7 @@ These run inside `my-lab`.
 | `uv run my-lab backtest --demo --signal reversal --lookback 5` | Turnover jumps from 186% to about 783% a year, and costs bite |
 | `uv run my-lab walk-forward --demo` | An out-of-sample Sharpe from chosen lookbacks, here -0.32 over 3 folds |
 | Edit `cost_bps` in `config.toml`, then run the backtest again | A new results folder, and a different net Sharpe. The old result is still there |
-| Replace the demo data with your own prices | See `data` in `config.toml` and `README.md`. A database source is in [walkthrough §11](walkthrough.md#11-a-quant-project-from-your-own-data-with-guidance) |
+| Replace the demo data with your own prices | See `data` in `config.toml` and `README.md`. A database source is in [Quant App Factory](products/quant-app-factory.md#a-quant-project-from-your-own-data) |
 
 Go back to the repository root when you finish:
 
@@ -1007,7 +1007,7 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | Create an API key | `uv run qaos keys new --principal NAME --scope tools:call` |
 | Start a project | `uv run qaos app new quant-lab NAME --defaults` |
 
-**Where to go next:** [walkthrough](walkthrough.md) for your own documents and data,
+**Where to go next:** the [products](products/quant-research.md) for your own documents and data,
 [architecture](architecture.md) for how it fits together, [configuration](configuration.md) for
 every setting, and [security](security.md) for the trust model.
 
@@ -1072,7 +1072,7 @@ These are the questions we most want answered:
 **Already known**, so there's no need to report these, though telling us which ones hurt most does
 help:
 
-- Retrieval and graph features know only the [bundled vocabulary](walkthrough.md#known-limitations),
+- Retrieval and graph features know only the [bundled vocabulary](products/quant-research.md#known-limitations),
   and semantic search needs a hosted embedder.
 - App Factory scaffolds and checks your project, but it does not write your research code yet.
 - `ingest` reports a changed file as `Added 1` rather than as changed.

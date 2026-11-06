@@ -2,7 +2,7 @@
 
 - Status: accepted (approved by the user 2026-11-02)
 - Date: 2026-11-02
-- Plan: [agent-surface P4](../plans/agent-surface.md), backlog B-33
+- Plan: [agent-surface P4](../plans/archive/agent-surface.md), backlog B-33
 
 ## Context
 

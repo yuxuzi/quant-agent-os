@@ -1,6 +1,6 @@
 # Plan: evaluate Quant Research on real papers
 
-Scope: the step after the mock world ([graph-rag-mock-world.md](graph-rag-mock-world.md)).
+Scope: the step after the mock world ([graph-rag-mock-world.md](archive/graph-rag-mock-world.md)).
 Every earlier number came from text written alongside the rules that read it. This plan
 measures the pipeline on real research papers, fixes what breaks first, and records a
 baseline that later changes must not lower.

@@ -1,4 +1,4 @@
-"""Hybrid Graph RAG retrieval: seed entities, expand the graph, fuse ranked passages.
+"""Hybrid retrieval: seed entities, expand the graph, fuse ranked passages.
 
 The result is an `EvidencePacket`: cited passages, graph paths whose edges cite their supporting
 chunks, and the corpus snapshot used. The client (or a later synthesis tool) writes the answer;

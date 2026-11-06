@@ -17,11 +17,11 @@ The design follows three rules:
   with today's `quant-factory create`.
 
 Decisions:
-- [0007 guided specs](../decisions/0007-guided-specs.md);
-- [0008 factory settings](../decisions/0008-factory-settings.md);
-- [0009 quant baseline templates](../decisions/0009-quant-baseline-templates.md).
+- [0007 guided specs](../../decisions/0007-guided-specs.md);
+- [0008 factory settings](../../decisions/0008-factory-settings.md);
+- [0009 quant baseline templates](../../decisions/0009-quant-baseline-templates.md).
 
-Backlog: B-23 to B-26 in [ENGINEERING_REVIEW_PLAN.md](../ENGINEERING_REVIEW_PLAN.md#remaining-backlog).
+Backlog: B-23 to B-26 in [ENGINEERING_REVIEW_PLAN.md](engineering-plan.md#remaining-backlog).
 
 ## Starting point (`e0cbc71`, 2026-10-31)
 

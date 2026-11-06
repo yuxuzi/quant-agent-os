@@ -18,7 +18,7 @@ skill teaches, so the scripted workflow and the skill's stay the same.
 
 Run ``uv run python tests/evaluation/agent_efficiency.py`` to print the metrics, and add
 ``--update`` to rewrite the recorded baseline after an intended change. Offline, deterministic,
-and no model involved (plan steps P1.1 and P2 in docs/plans/agent-surface.md).
+and no model involved (plan steps P1.1 and P2 in docs/plans/archive/agent-surface.md).
 """
 
 from __future__ import annotations

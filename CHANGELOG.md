@@ -35,6 +35,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The docs have one route:** README, then getting started, then the tutorial. `docs/walkthrough.md` is
+  gone, with its quant-project guide and limitations now in the product docs. `architecture.md` describes
+  what exists today, at half the length. The engineering plan is reduced to what is open, and finished plans
+  are in `docs/plans/archive/`.
+- **Quant Research is described as what it measures:** cited keyword search with entity linking and a small
+  graph of extracted facts, plus optional semantic search. Nothing about retrieval changed.
 - **The App Factory profile `quant-research` is now `quant-lab`,** so it no longer shares its name with
   the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
   refused with the new name. The shortcuts `python-cli` and `fastapi-service` are now `python` and
@@ -194,7 +200,7 @@ model-provider features (B-12, B-15, B-16, B-20) are not in this release.
   now an optional extra, `quant-agent-os-platform[factory]`, and is not in the image (B-33).
 - `apps/quant-ai-assistant`, a superseded placeholder, is removed; `quant-factory`'s
   settings-configured factory is public as `default_factory()` (B-31).
-- The agent surface costs clients less context (B-30, [plan](docs/plans/agent-surface.md) P1):
+- The agent surface costs clients less context (B-30, [plan](docs/plans/archive/agent-surface.md) P1):
   - **Leaner definitions.** `tools/list` and `GET /v1/tools` drop the `title` keywords pydantic
     derives from names, and Quant Analytics serves only `analyze_performance` and
     `analyze_risk`: `annualized_return` and `max_drawdown` remain importable
@@ -345,7 +351,7 @@ model-provider features (B-12, B-15, B-16, B-20) are not in this release.
   - **Security review.** [docs/security-review.md](docs/security-review.md) checks the remote
     surface against the OWASP API Top 10 and the MCP security best practices, with five open
     findings and the steps before a public endpoint.
-- Skills and client packaging (B-32, [plan](docs/plans/agent-surface.md) P3):
+- Skills and client packaging (B-32, [plan](docs/plans/archive/agent-surface.md) P3):
   - **Skills.** Four instruction-only skills in `skills/`: `quant-research`,
     `quant-analytics`, `quant-strategy`, and `quant-app-factory`. They teach cited search,
     data by reference, numbers quoted as computed, cited strategy specs and reports, and App
@@ -389,7 +395,7 @@ model-provider features (B-12, B-15, B-16, B-20) are not in this release.
     MCP method checks the key's scope (`tools:list` or `tools:call`); calls are recorded with
     actor `mcp-http` and the key's principal; DNS-rebinding protection admits loopback and
     `--allowed-host` names. `quant_agent_os.mcp.http.add_mcp_route` adds it to any app.
-- One MCP server for every toolset (B-31, [plan](docs/plans/agent-surface.md) P2):
+- One MCP server for every toolset (B-31, [plan](docs/plans/archive/agent-surface.md) P2):
   - **Platform server** (`apps/quant-platform`): `quant-platform serve-mcp` serves the
     research, analytics, and factory toolsets (`--toolsets` narrows them), and
     `quant-platform catalog` lists what a client will see.
@@ -485,7 +491,7 @@ model-provider features (B-12, B-15, B-16, B-20) are not in this release.
   known-answer tests; pyfolio was considered and not used, because it adds only plotting at
   more than twice the footprint. The example `annualized_return` and `max_drawdown` tools now
   come from this package.
-- A quant review of the templates and App Factory (`docs/plans/quant-review.md`).
+- A quant review of the templates and App Factory (`docs/plans/archive/quant-review.md`).
   - **Measured flaws.** The study and the backtest use different trade timing, delisted
     positions lose nothing, and costs ignore drift.
   - **Plan.** Fixes in three tested phases, B-27 to B-29: correct numbers, then one project
@@ -542,7 +548,7 @@ model-provider features (B-12, B-15, B-16, B-20) are not in this release.
 - **App specs.** `AppSpec` accepts `template` (a built-in pack, `bundled`, or the path of
   your own pack), `profile`, and `answers`. `kind` stays a shortcut.
 
-- Planned quant templates and a guided App Factory (`docs/plans/app-factory-questionnaires.md`,
+- Planned quant templates and a guided App Factory (`docs/plans/archive/app-factory-questionnaires.md`,
   backlog B-23–B-26, proposed decisions 0007–0009):
   - `quant-baseline` templates (`alpha-research`, `backtest`, `report`), with bias tests;
   - user packs;

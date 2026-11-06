@@ -2,7 +2,7 @@
 
 - Status: accepted (approved by the user 2026-11-02, with Q-11 to Q-13 as proposed)
 - Date: 2026-11-02
-- Plan: [agent-surface P6](../plans/agent-surface.md), backlog B-35. Builds on
+- Plan: [agent-surface P6](../plans/archive/agent-surface.md), backlog B-35. Builds on
   [0005](0005-approval-gates.md) (approval gates), [0012](0012-remote-mcp-over-http.md)
   (remote MCP), and [0013](0013-identity-and-tenancy.md) (tenants).
 

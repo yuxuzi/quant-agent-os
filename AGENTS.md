@@ -9,8 +9,8 @@ Quant-Agent-OS is an open-source quantitative intelligence and application-engin
 platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
   executor, evidence-linked reports, and the MCP adapter.
-- **Quant Research** (`src/quant_research`): a Graph RAG knowledge system. It is layered
-  as `domain` → `application` → `infrastructure`, with `tools.py` and `cli.py` as interfaces and
+- **Quant Research** (`src/quant_research`): cited keyword search with entity linking and a small
+  graph of extracted facts, plus optional semantic search. It is layered as `domain` → `application` → `infrastructure`, with `tools.py` and `cli.py` as interfaces and
   `bootstrap.py` as the composition root.
 - **Quant App Factory** (`src/quant_app_factory`): Python application generation. An
   `AppSpec` goes through the `ArchitecturePlanner` and a `ScaffoldProvider` (pytemplate-uv),
@@ -27,7 +27,7 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
-  ([plan](docs/plans/agent-surface.md), P3).
+  ([plan](docs/plans/archive/agent-surface.md), P3).
 
 Core must never import a product, and the products must not import each other. Only the
 platform server imports every product, and nothing imports it. Quantitative
@@ -38,8 +38,10 @@ third-party library of App Factory ([decision 0006](docs/decisions/0006-pytempla
 - Core and Quant Research never import it.
 - Never vendor it, and never plan changes to it here.
 
-Read [docs/architecture.md](docs/architecture.md) and the plan in
-[docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes.
+Read [docs/architecture.md](docs/architecture.md) and the open items in
+[docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes. User docs
+have one route: README, then [getting started](docs/getting-started.md), then the
+[tutorial](docs/tutorial.md).
 
 One wheel holds all five import names ([decision 0018](docs/decisions/0018-one-wheel.md)), and
 `qaos` (`quant_platform.cli`) is the one command. Each product's `cli.py` is a Typer app it mounts,
@@ -63,7 +65,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Update the tool lock (after a tool version bump) | `uv run python scripts/tool_lock.py --update` |
 | Research evaluation | `uv run python tests/research/research_eval.py` (add `--update` to rebaseline) |
 | App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest tests/factory/test_factory_smoke.py` |
-| Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python tests/research/real_corpus.py fetch`, then `... real_corpus.py eval` |
+| Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python tests/research/real_corpus.py fetch`, then `... real_corpus.py eval` or `... real_corpus.py ablation` |
 
 Before reporting work as done, run the test, lint, format, and type-check commands and report
 the real results.
@@ -121,6 +123,12 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
 - **Secrets.** Secrets are `SecretStr`, never logged or displayed, and `.env` is never committed.
 - **Facts versus interpretation.** Reports keep `computed`, `retrieved`, and `interpretation`
   evidence distinct. Financial metrics need documented conventions and known-answer tests.
+- **Say what was measured.** Describe Quant Research as it measures on real papers, not as "Graph
+  RAG": keyword search does most of the ranking, and the graph is small
+  ([results](docs/products/quant-research.md#how-well-it-works)). A quality claim cites a measurement.
+- **Docs stay true.** `tests/contract/test_docs.py` checks relative links and the commands the README
+  and getting started teach. Generated metrics stay in step with the platform's
+  (`tests/factory/test_metric_parity.py`).
 
 ## Conventions
 

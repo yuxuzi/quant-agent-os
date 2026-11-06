@@ -13,7 +13,9 @@ qaos connect claude --write       # or cursor, vscode; restart the client
 `--python 3.13` matters: on Python 3.15, the `analytics` extra's `bottleneck` dependency has no
 prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work too.
 
-Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one.
+Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one. Some options
+below are new since 0.2.0 and need an install from `@main` until the next release: `--vocabulary`,
+`--embedder local`, `--expires-in-days`, the `parquet` extra, and `open_platform`.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
 ingestion, `parquet` for Parquet files in `qaos data add`, `postgres` for a PostgreSQL store,
 `factory` for `qaos app`, or `all`. `local-embeddings` adds semantic search on your machine; it is
@@ -82,13 +84,23 @@ qaos data add returns.csv         # the id is the file's name, or use --id
 
 Answers cite your documents by file and line. Metrics come from the server, with their
 conventions, and are never computed by the model. To see exactly what the client is offered,
-run `qaos catalog`.
+run `qaos catalog`. If nothing in your documents matches, the server returns no passages and says so.
+
+Search is mostly keyword search, so a question in other words than your documents can miss:
+[how well it works](products/quant-research.md#how-well-it-works) has the measurements.
+
+From a terminal, `qaos search "short-term reversal"` shows the same evidence, and `qaos runs` shows
+what was recorded: run and call ids, input hashes, the tool registry digest, and the corpus snapshot.
+Calls include retrieved passages, so treat `runs.db` like the corpus itself
+([security](security.md#run-records)).
 
 ## Other clients
 
 - **Cursor and VS Code (Copilot).** `qaos connect cursor --write` or `qaos connect vscode
   --write` adds the server to the project. For the skills, copy the rules file from
   [clients/](../clients/README.md).
+- **Claude Desktop.** `qaos connect claude` prints the entry for `claude_desktop_config.json`, with
+  the command's full path, because Desktop does not read your shell's `PATH`.
 - **A team server over REST,** in Docker, with API keys: see [deployment.md](deployment.md).
 
 ## Use it from a notebook
@@ -174,5 +186,6 @@ uv run mypy                      # strict
 activation is needed. After changing a skill, regenerate the client bundles with
 `uv run python scripts/client_bundles.py`.
 
-Next: play with the [tutorial](tutorial.md), then read [architecture.md](architecture.md) and
-[configuration.md](configuration.md).
+Next: play with the [tutorial](tutorial.md). To generate projects, see
+[Quant App Factory](products/quant-app-factory.md). For how it fits together, see
+[architecture.md](architecture.md) and [configuration.md](configuration.md).

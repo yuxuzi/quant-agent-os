@@ -1,4 +1,4 @@
-"""Quant Research: a Graph RAG knowledge system with source provenance for Quant-Agent-OS."""
+"""Quant Research: cited keyword search with entity linking and a small graph of extracted facts."""
 
 from importlib.metadata import PackageNotFoundError, version
 
