@@ -1,0 +1,18 @@
+# Who reaches what in the demonstration (decision 0021). Anything not listed is refused.
+
+[groups.growth-desk]
+tools = [
+  "server_info",
+  "list_datasets",
+  "analyze_*",
+  "book_var",
+  "find_related_signals",
+  "get_source_passage",
+  "research_report",
+]
+datasets = ["growth-*", "factors"]
+
+# Performance and research only, and only its own book.
+[groups.value-desk]
+tools = ["list_datasets", "analyze_performance", "find_related_signals", "get_source_passage"]
+datasets = ["value-*", "factors"]

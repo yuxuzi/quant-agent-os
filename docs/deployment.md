@@ -325,3 +325,7 @@ throwaway passwords.
 deploy/smoke-test.sh            # SQLite
 deploy/smoke-test.sh postgres   # PostgreSQL with pgvector
 ```
+
+`deploy/firm-image-test.sh` is the same check for [your own tools](#8-add-your-own-tools), and CI runs
+it too. It builds the example's image on the platform's, runs it with the compose file's restrictions,
+and checks that the firm's tool is listed, called, and recorded under the key's principal.

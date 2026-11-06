@@ -60,7 +60,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |
-| Offline demos | `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
+| Offline demos | `uv run python examples/portfolio-intelligence/demo.py`, `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
 | Regenerate client bundles (after changing a skill) | `uv run python scripts/client_bundles.py` |
 | Update the tool lock (after a tool version bump) | `uv run python scripts/tool_lock.py --update` |

@@ -132,6 +132,8 @@ datasets, a few synthetic research notes, one firm tool from S1, and two users f
 | S3.3 | `tests/integration/test_portfolio_demo.py` runs it offline in default CI, and asserts each step |
 | S3.4 | `docs/demo.md`: the same story with a real client, a presenter's script of at most 10 minutes, and the prompts to use. It says which output comes from the client's model and which from the tools. Linked from getting started |
 
+`examples/portfolio-research/` stays: six test files and the tutorial use its tools, so S3.1 adds the demonstration beside it.
+
 **Exit:** 20 consecutive clean runs on a fresh clone; a timed run with Claude under 10 minutes; a reader of
 `docs/demo.md` can run it with no other help.
 

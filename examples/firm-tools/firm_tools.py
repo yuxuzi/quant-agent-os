@@ -45,7 +45,8 @@ def firm_tools(store: DatasetStore) -> list[ToolSpec[Any, Any]]:
         returns = sorted(v for v in dataset.column(params.column) if not math.isnan(v))
         if not returns:
             raise ValueError(f"{params.dataset}.{params.column} has no values.")
-        rank = max(math.ceil((1 - params.confidence) * len(returns)), 1)
+        # Rounded first: (1 - 0.95) * 20 is a little over 1 in floating point, and must be rank 1.
+        rank = max(math.ceil(round((1 - params.confidence) * len(returns), 9)), 1)
         var = max(-returns[rank - 1], 0.0)
         source = SourceRef(
             source_id=f"{params.dataset}.{params.column}", location=f"{len(returns)} periods"

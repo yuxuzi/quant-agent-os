@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The Portfolio Intelligence demonstration.** `examples/portfolio-intelligence/demo.py` runs a fictional
+  firm's tool, data, research, access rules, and audit trail over real HTTP and MCP, with no model, and
+  `--serve` runs the server for a real client. [The guide](docs/demo.md) has a ten-minute script.
 - **Per-caller access.** `qaos serve --http --access access.toml` gives groups of keys their own tools and
   datasets, with `qaos keys new --group`, and anything not listed is denied. Tool lists and errors show a caller
   only what it may reach, a refused dataset looks like a missing one, and refusals are recorded for auditors.
