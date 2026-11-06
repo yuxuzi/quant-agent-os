@@ -78,7 +78,7 @@ public `main` stays under the licence it merged under.
 | --- | --- | --- | --- |
 | 1 | **O-4: the licence from 0.3.0 onwards** | **Decided:** the Business Source License 1.1, [decision 0019](../decisions/0019-business-source-license.md), applied in its own PR | Counsel reviews it before first commercial use |
 | 2 | **Name availability (B-22)** | The README still says the name is unchecked, and a pilot is commercial use | Check before S3's demonstration is shown to anyone |
-| 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. Recorded as decision 0020 in S1.5 | Build as written below |
+| 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. S1 is recorded as decision 0020, and S2 as decision 0021 | Build as written below |
 
 ## S1: Serve a firm's own tools (M)
 

@@ -23,7 +23,8 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
-  `qaos serve` serves them as one MCP server, and `open_platform()` opens them from a notebook.
+  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_http`, and
+  `open_platform()` opens them from a notebook.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
@@ -104,7 +105,8 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
   is labelled `interpretation`.
 - **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
 - **Explicit registration.** No dynamic plugin discovery or code loading, and no tool
-  marketplace. The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
+  marketplace. A firm's tools are named in its own server's code
+  ([decision 0020](docs/decisions/0020-a-firms-own-server.md)). The Claude Code plugin manifest in `.claude-plugin/` only packages the server and
   the skills for clients; it adds no tools.
 - **MCP is the capability boundary; skills are guidance.** Skills contain instructions only, never
   scripts, so every action goes through a tool and the executor's permissions, approvals,
