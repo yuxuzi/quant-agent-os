@@ -889,14 +889,14 @@ flowchart TD
 
 ```bash
 mkdir -p "$TUT/work" && cd "$TUT/work"
-uv run --project "$REPO" qaos app new quant-research my-lab --defaults
+uv run --project "$REPO" qaos app new quant-lab my-lab --defaults
 ```
 
 Answer yes at the prompt. Your yes is the recorded approval.
 
 ```text
 Wrote my-lab.toml.
-my-lab (quant-baseline/quant-research) -> .../qaos-tutorial/work/my-lab
+my-lab (quant-baseline/quant-lab) -> .../qaos-tutorial/work/my-lab
   35 files; components: data-csv, metrics; checks: uv sync, ruff check, ruff format, mypy, pytest
 Create it? It writes files, runs uv, and downloads packages [y/N]: y
 Created .../qaos-tutorial/work/my-lab with pytemplate-uv==3.0.0.
@@ -1005,7 +1005,7 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | See what a client is offered | `uv run qaos catalog` |
 | Serve over MCP (stdio) or HTTP | `uv run qaos serve`, `uv run qaos serve --http` |
 | Create an API key | `uv run qaos keys new --principal NAME --scope tools:call` |
-| Start a project | `uv run qaos app new quant-research NAME --defaults` |
+| Start a project | `uv run qaos app new quant-lab NAME --defaults` |
 
 **Where to go next:** [walkthrough](walkthrough.md) for your own documents and data,
 [architecture](architecture.md) for how it fits together, [configuration](configuration.md) for

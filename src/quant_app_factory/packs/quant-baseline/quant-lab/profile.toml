@@ -1,6 +1,6 @@
 contract = 1
-id = "quant-research"
-name = "Quant research"
+id = "quant-lab"
+name = "Quant lab"
 description = "One project for signal research: study (IC, rank IC, quantile spreads, decay), backtest (lagged trades, drift, rebalancing, costs, delistings), and report, sharing data, signals, metrics, and config.toml, with bias tests."
 version = "1"
 kind = "cli"

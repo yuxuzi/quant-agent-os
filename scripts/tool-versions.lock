@@ -248,7 +248,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     "analyze_risk": {
       "input_schema": {
@@ -828,7 +828,7 @@
         "type": "object"
       },
       "permissions": [],
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     "describe_template": {
       "input_schema": {
@@ -2377,7 +2377,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "3.0.0"
+      "version": "3.0.1"
     },
     "server_info": {
       "input_schema": {

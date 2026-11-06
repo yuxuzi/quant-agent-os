@@ -10,24 +10,24 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
                ─▶ ScaffoldProvider.create ─▶ checks (uv sync, ruff, mypy, pytest) ─▶ FactoryReport
 ```
 
-| Kind | Built from | Depends on Quant-Agent-OS |
+| `template` and `profile` | Built from | Depends on Quant-Agent-OS |
 | --- | --- | --- |
-| `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
-| `python-cli` | pytemplate-uv's bundled `python` profile | No |
-| `fastapi-service` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
-| `quant-research` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
-| your own pack | `template = "path/to/pack"` with `profile = "..."` | Up to the pack |
+| `agent-tool`, `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
+| `bundled`, `python` | pytemplate-uv's bundled `python` profile | No |
+| `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
+| `quant-baseline`, `quant-lab` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
+| `path/to/pack`, your profile | your own pack | Up to the pack |
 
-The kinds `alpha-research`, `backtest`, and `report` from quant-baseline 1.x still work for
-one release: each builds a `quant-research` project and warns that it is an alias.
+On the command line, `qaos app new` also takes the shortcuts `agent-tool`, `quant-lab`, `python`, and
+`fastapi`.
 
-A quant-research project has one `metrics` module, with documented conventions and
+A quant-lab project has one `metrics` module, with documented conventions and
 known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
 cost) and a `LIMITATIONS.md`. Optional components are `data-parquet`, `data-database`
 (PostgreSQL, SQLite, or DuckDB, read-only, with a `check-connection` command), and `agent-tools`. A
 spec can name a connection saved in `factory.toml` (`connection = "research-pg"`).
 
-**Generated metrics and the platform's.** A quant-research project owns a numpy copy of its metrics,
+**Generated metrics and the platform's.** A quant-lab project owns a numpy copy of its metrics,
 so it stays portable ([decision 0009](../decisions/0009-quant-baseline-templates.md)).
 `tests/factory/test_metric_parity.py` holds that copy to `quant_analytics.metrics` on annualised
 return, volatility, Sharpe, maximum drawdown, hit rate, beta, active return, tracking error, and
@@ -40,20 +40,21 @@ information ratio. They differ in three ways:
   only in generated projects; Sortino, Calmar, omega, tail ratio, stability, value at risk, and alpha
   only on the platform.
 
-A generated project does not receive later fixes by itself. Its `LIMITATIONS.md` says so, and
-`pytemplate update` merges a newer template when you choose to.
+A generated project does not receive later fixes by itself, and its `LIMITATIONS.md` says so.
+`pytemplate update` cannot reach one built from a built-in pack, because the project records a local
+path with no tags: apply a fix by hand, using [CHANGELOG.md](../../CHANGELOG.md) to see what changed.
 
 ## Use
 
 ```bash
-uv run qaos app new quant-research my-lab --defaults   # one command: spec, project, checks
+uv run qaos app new quant-lab my-lab --defaults   # one command: spec, project, checks
 uv run qaos app new                # answer the template's questions; writes a ready spec
 uv run qaos app plan app.toml      # writes nothing; --verbose lists every file
 uv run qaos app create app.toml    # asks; your yes is the recorded, single-use approval
 uv run qaos app check app.toml     # re-run an existing project's checks
 uv run qaos app settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
 uv run qaos serve --toolsets factory          # describe_template, check_spec, plan_app for Claude
-uv run qaos app template fork quant-baseline/quant-research packs/mine   # make it yours
+uv run qaos app template fork quant-baseline/quant-lab packs/mine   # make it yours
 uv run qaos app template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
 ```
 

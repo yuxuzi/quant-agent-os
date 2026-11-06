@@ -105,7 +105,7 @@ One command starts a project with every default. Your confirmation is the record
 and the generated project's own checks run before it is reported done:
 
 ```bash
-uv run qaos app new quant-research my-lab --defaults   # asks once, then creates and checks
+uv run qaos app new quant-lab my-lab --defaults   # asks once, then creates and checks
 ```
 
 Or describe the app in a small TOML spec, preview it, then create it:
@@ -124,7 +124,7 @@ uv run qaos app create signal-tools.toml   # asks, creates, runs uv sync/ruff/my
 ```
 
 An `agent-tool` package comes with one typed example tool, a registry, and tests that run the
-platform's contract checks. A `quant-research` project holds a signal study, a backtest, and
+platform's contract checks. A `quant-lab` project holds a signal study, a backtest, and
 a report in one place, with bias tests, and can load prices from a database. `uv run qaos app new` asks the questions
 for you. See [docs/walkthrough.md](docs/walkthrough.md#10-generate-a-tool-package) and
 [§11](docs/walkthrough.md#11-a-quant-project-from-your-own-data-with-guidance).

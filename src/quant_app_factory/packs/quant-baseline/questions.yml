@@ -7,7 +7,7 @@ profile:
   type: str
   help: Project profile
   choices:
-    - quant-research
+    - quant-lab
 
 project_name:
   type: str

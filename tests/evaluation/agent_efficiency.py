@@ -189,7 +189,7 @@ async def report_on_a_signal(client: Client) -> bool:
 async def check_an_app_spec(client: Client) -> bool:
     """Learn what a template asks, then check a draft spec until it is ready."""
     described = await client.call(
-        "describe_template", {"template": "quant-baseline", "profile": "quant-research"}
+        "describe_template", {"template": "quant-baseline", "profile": "quant-lab"}
     )
     if not described:
         return False
@@ -198,7 +198,8 @@ async def check_an_app_spec(client: Client) -> bool:
         {
             "spec": {
                 "name": "momo-lab",
-                "kind": "quant-research",
+                "template": "quant-baseline",
+                "profile": "quant-lab",
                 "description": "Momentum research",
                 "output_dir": client.workdir,
             }

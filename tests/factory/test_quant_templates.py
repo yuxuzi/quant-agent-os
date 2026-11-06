@@ -39,46 +39,42 @@ def _files(tmp_path: Path, **fields: Any) -> set[str]:
     return set(preview.files)
 
 
-# Spec: kind, template, profile, answers
+# Spec: template, profile, answers
 
 
-def test_quant_research_is_a_shortcut_for_the_quant_baseline_pack(tmp_path: Path) -> None:
-    by_kind = _spec(tmp_path, kind="quant-research")
-    explicit = _spec(tmp_path, template="quant-baseline", profile="quant-research")
+def test_a_spec_names_its_template_and_profile(tmp_path: Path) -> None:
+    spec = _spec(tmp_path, template="quant-baseline", profile="quant-lab")
 
-    assert by_kind.target == explicit.target == ("quant-baseline", "quant-research")
-    assert by_kind.alias_note is None
+    assert spec.target == ("quant-baseline", "quant-lab")
 
 
-@pytest.mark.parametrize("old", ["alpha-research", "backtest", "report"])
-def test_the_old_quant_names_build_quant_research_and_say_so(tmp_path: Path, old: str) -> None:
-    by_kind = _spec(tmp_path, kind=old)
-    explicit = _spec(tmp_path, template="quant-baseline", profile=old)
+@pytest.mark.parametrize("old", ["quant-research", "alpha-research", "backtest", "report"])
+def test_the_old_profile_names_are_refused_with_the_one_on_offer(tmp_path: Path, old: str) -> None:
+    spec = _spec(tmp_path, template="quant-baseline", profile=old)
 
-    assert by_kind.target == explicit.target == ("quant-baseline", "quant-research")
-    for spec in (by_kind, explicit):
-        assert spec.alias_note is not None and old in spec.alias_note
-        assert spec.alias_note in ArchitecturePlanner().plan(spec).reasons
-
-
-def test_creating_from_an_old_name_warns(tmp_path: Path) -> None:
-    report = AppFactory(PytemplateUvScaffolder()).create(
-        _spec(tmp_path, kind="backtest"), run_checks=False
-    )
-
-    assert any("alias for the quant-research profile" in note for note in report.warnings)
-    assert (Path(report.project_path) / "momo_lab" / "study.py").is_file()
+    with pytest.raises(PlanningError, match="it offers quant-lab"):
+        AppFactory(PytemplateUvScaffolder()).preview(spec)
 
 
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
-        ({}, "set kind, or both template and profile"),
-        ({"kind": "quant-research", "template": "bundled"}, "not a mix"),
+        ({}, "template"),
+        ({"template": "quant-baseline"}, "profile"),
+        ({"kind": "quant-research"}, "kind was removed; set template and profile"),
         ({"template": "relative/pack", "profile": "x"}, "absolute pack directory"),
-        ({"kind": "backtest", "answers": {"author": "x"}}, "as a spec field"),
-        ({"kind": "backtest", "answers": {"Bad": "x"}}, "lowercase identifier"),
-        ({"kind": "backtest", "tool_name": "x"}, "only to the agent-tool profile"),
+        (
+            {"template": "quant-baseline", "profile": "quant-lab", "answers": {"author": "x"}},
+            "as a spec field",
+        ),
+        (
+            {"template": "quant-baseline", "profile": "quant-lab", "answers": {"Bad": "x"}},
+            "lowercase identifier",
+        ),
+        (
+            {"template": "quant-baseline", "profile": "quant-lab", "tool_name": "x"},
+            "only to the agent-tool profile",
+        ),
     ],
 )
 def test_invalid_targets_and_answers_are_explained(
@@ -100,17 +96,20 @@ def test_a_relative_template_path_is_relative_to_the_spec_file(tmp_path: Path) -
 def test_an_unknown_built_in_profile_lists_the_offered_ones(tmp_path: Path) -> None:
     spec = _spec(tmp_path, template="quant-baseline", profile="options")
 
-    with pytest.raises(PlanningError, match="offers quant-research"):
+    with pytest.raises(PlanningError, match="offers quant-lab"):
         ArchitecturePlanner().plan(spec)
 
 
 @pytest.mark.parametrize(
     ("fields", "portable"),
     [
-        ({"kind": "backtest"}, True),
-        ({"kind": "backtest", "components": ["agent-tools"]}, False),
-        ({"kind": "agent-tool"}, False),
-        ({"kind": "python-cli"}, True),
+        ({"template": "quant-baseline", "profile": "quant-lab"}, True),
+        (
+            {"template": "quant-baseline", "profile": "quant-lab", "components": ["agent-tools"]},
+            False,
+        ),
+        ({"template": "agent-tool", "profile": "agent-tool"}, False),
+        ({"template": "bundled", "profile": "python"}, True),
     ],
 )
 def test_portability_follows_the_platform_dependency(
@@ -123,7 +122,7 @@ def test_portability_follows_the_platform_dependency(
 
 
 def test_one_project_holds_the_study_backtest_and_report(tmp_path: Path) -> None:
-    files = _files(tmp_path, kind="quant-research")
+    files = _files(tmp_path, template="quant-baseline", profile="quant-lab")
 
     assert {
         "config.toml",
@@ -141,7 +140,12 @@ def test_one_project_holds_the_study_backtest_and_report(tmp_path: Path) -> None
 
 def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) -> None:
     _, preview = AppFactory(PytemplateUvScaffolder()).preview(
-        _spec(tmp_path, kind="quant-research", components=["data-parquet", "agent-tools"])
+        _spec(
+            tmp_path,
+            template="quant-baseline",
+            profile="quant-lab",
+            components=["data-parquet", "agent-tools"],
+        )
     )
 
     assert {"momo_lab/tools.py", "tests/test_tools.py"} <= set(preview.files)
@@ -152,7 +156,10 @@ def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) ->
 
 def test_answers_reach_the_generated_code(tmp_path: Path) -> None:
     spec = _spec(
-        tmp_path, kind="quant-research", answers={"frequency": "weekly", "cost_bps": "2.5"}
+        tmp_path,
+        template="quant-baseline",
+        profile="quant-lab",
+        answers={"frequency": "weekly", "cost_bps": "2.5"},
     )
 
     report = AppFactory(PytemplateUvScaffolder()).create(spec, run_checks=False)
@@ -164,7 +171,9 @@ def test_answers_reach_the_generated_code(tmp_path: Path) -> None:
 
 
 def test_an_answer_the_profile_does_not_ask_is_rejected(tmp_path: Path) -> None:
-    spec = _spec(tmp_path, kind="quant-research", answers={"db_kind": "duckdb"})
+    spec = _spec(
+        tmp_path, template="quant-baseline", profile="quant-lab", answers={"db_kind": "duckdb"}
+    )
 
     with pytest.raises(ScaffoldRequestError, match="db_kind"):
         AppFactory(PytemplateUvScaffolder()).preview(spec)
@@ -173,7 +182,7 @@ def test_an_answer_the_profile_does_not_ask_is_rejected(tmp_path: Path) -> None:
 def test_the_pack_is_a_valid_pytemplate_pack() -> None:
     assert (QUANT_BASELINE_PACK / "pytemplate-pack.toml").is_file()
     profiles = sorted(path.parent.name for path in QUANT_BASELINE_PACK.glob("*/profile.toml"))
-    assert profiles == ["quant-research"]
+    assert profiles == ["quant-lab"]
 
 
 # User packs

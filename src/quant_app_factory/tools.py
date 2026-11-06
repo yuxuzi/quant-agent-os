@@ -115,6 +115,7 @@ def guide_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
 
     @tool(
         name="check_spec",
+        version="2.0.0",
         description=(
             "Check a draft app spec. Returns ready with the exact files, or every problem to "
             "fix, plus the spec as TOML. Secrets must be env:NAME references, never values."

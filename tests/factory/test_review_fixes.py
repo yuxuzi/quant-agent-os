@@ -63,7 +63,8 @@ def _factory(checks: FakeChecks | None = None, **kwargs: Any) -> AppFactory:
 def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
     base: dict[str, Any] = {
         "name": "db-lab",
-        "kind": "quant-research",
+        "template": "quant-baseline",
+        "profile": "quant-lab",
         "description": "d",
         "output_dir": str(tmp_path),
         "connection": "local",
@@ -77,13 +78,11 @@ def _spec(tmp_path: Path, **fields: Any) -> AppSpec:
 def test_the_connection_check_never_runs_pack_code_the_operator_did_not_review(
     tmp_path: Path,
 ) -> None:
-    pack = fork_pack(
-        BUILT_IN_PACKS["quant-baseline"], "quant-research", tmp_path / "pack", pack_id="p"
-    )
+    pack = fork_pack(BUILT_IN_PACKS["quant-baseline"], "quant-lab", tmp_path / "pack", pack_id="p")
     checks = FakeChecks()
     out = tmp_path / "out"
     out.mkdir()
-    spec = _spec(out, kind=None, template=pack.as_posix(), profile="quant-research")
+    spec = _spec(out, template=pack.as_posix(), profile="quant-lab")
 
     report = _factory(checks).create(spec, check_connection=True)
 
@@ -113,14 +112,10 @@ def test_the_check_output_is_redacted_before_it_is_reported(tmp_path: Path) -> N
 
 
 def test_a_pack_changed_after_its_preview_is_refused(tmp_path: Path) -> None:
-    pack = fork_pack(
-        BUILT_IN_PACKS["quant-baseline"], "quant-research", tmp_path / "pack", pack_id="p"
-    )
+    pack = fork_pack(BUILT_IN_PACKS["quant-baseline"], "quant-lab", tmp_path / "pack", pack_id="p")
     out = tmp_path / "out"
     out.mkdir()
-    spec = _spec(
-        out, kind=None, template=pack.as_posix(), profile="quant-research", connection=None
-    )
+    spec = _spec(out, template=pack.as_posix(), profile="quant-lab", connection=None)
     factory = _factory()
     reviewed = factory.pack_digest(spec)
 
@@ -136,7 +131,10 @@ def test_plan_app_hands_over_the_pack_digest(tmp_path: Path) -> None:
     with Platform(factory_tools(_factory())) as platform:
         built_in = platform.call("plan_app", spec=_spec(tmp_path, connection=None).model_dump())
         bundled = platform.call(
-            "plan_app", spec=_spec(tmp_path, kind="python-cli", connection=None).model_dump()
+            "plan_app",
+            spec=_spec(
+                tmp_path, template="bundled", profile="python", connection=None
+            ).model_dump(),
         )
 
     assert built_in.output is not None and bundled.output is not None
@@ -186,7 +184,7 @@ def test_cli_check_reruns_and_records_the_approval(
     spec = _spec(tmp_path, connection=None)
     spec_file = tmp_path / "app.toml"
     spec_file.write_text(
-        'name = "db-lab"\nkind = "quant-research"\ndescription = "d"\n'
+        'name = "db-lab"\ntemplate = "quant-baseline"\nprofile = "quant-lab"\ndescription = "d"\n'
         f'output_dir = "{tmp_path.as_posix()}"\n'
     )
     _factory().create(spec, run_checks=False)
@@ -328,7 +326,8 @@ def test_check_spec_reports_a_connection_that_is_not_saved(tmp_path: Path) -> No
     check = _factory().check_spec(
         {
             "name": "db-lab",
-            "kind": "quant-research",
+            "template": "quant-baseline",
+            "profile": "quant-lab",
             "description": "d",
             "output_dir": str(tmp_path),
             "connection": "removed-since",

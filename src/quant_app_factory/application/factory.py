@@ -34,12 +34,10 @@ from quant_app_factory.domain.ports import (
 from quant_app_factory.domain.secrets import is_reference, secret_problem
 from quant_app_factory.domain.spec import (
     BUILT_IN_TEMPLATES,
-    AppKind,
     AppSpec,
     Identity,
     dump_spec,
     is_template_path,
-    resolve_alias,
 )
 
 Runner = Callable[..., CommandResult]  # the signature of `run_command`
@@ -66,7 +64,6 @@ class FactoryReport(BaseModel):
     """What `create` produced: the project, how it was made, and whether its checks pass."""
 
     name: str
-    kind: AppKind | None
     template_name: str = Field(description="agent-tool, quant-baseline, bundled, or a pack path")
     project_path: str
     files: list[str]
@@ -190,11 +187,7 @@ class AppFactory:
     def complete(self, spec: AppSpec) -> AppSpec:
         """Fill identity defaults, resolve a registered template, and apply a connection."""
         spec = self._with_identity(spec)
-        if (
-            spec.template is not None
-            and spec.template not in BUILT_IN_TEMPLATES
-            and not is_template_path(spec.template)
-        ):
+        if spec.template not in BUILT_IN_TEMPLATES and not is_template_path(spec.template):
             spec = spec.model_copy(update={"template": self.template_location(spec.template)})
         if spec.connection is None:
             return spec
@@ -216,7 +209,6 @@ class AppFactory:
         description = self.scaffolder.describe(location)
         if profile is None:
             return description
-        profile = resolve_alias(template, profile)[1]
         chosen = [p for p in description.profiles if p.id == profile]
         if not chosen:
             offered = ", ".join(p.id for p in description.profiles)
@@ -367,7 +359,7 @@ class AppFactory:
                 )
         result = self.scaffolder.create(plan.request)
         checks: list[CheckResult] = []
-        warnings = [spec.alias_note] if spec.alias_note else []
+        warnings: list[str] = []
         if run_checks:
             checks, check_warnings = self.check(
                 Path(result.project_path), result.lifecycle_commands, preview.package_name
@@ -426,7 +418,6 @@ class AppFactory:
     ) -> FactoryReport:
         return FactoryReport(
             name=spec.name,
-            kind=spec.kind,
             template_name=spec.target[0],
             project_path=project_path,
             files=preview.files,

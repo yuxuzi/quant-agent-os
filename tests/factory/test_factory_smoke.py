@@ -22,26 +22,30 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize(
-    "kind, extra",
+    "target, extra",
     [
-        ("agent-tool", {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)}),
-        ("python-cli", {}),
-        ("quant-research", {}),
-        ("quant-research", {"answers": {"frequency": "weekly"}}),
-        ("quant-research", {"answers": {"frequency": "monthly"}}),
         (
-            "quant-research",
+            ("agent-tool", "agent-tool"),
+            {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)},
+        ),
+        (("bundled", "python"), {}),
+        (("quant-baseline", "quant-lab"), {}),
+        (("quant-baseline", "quant-lab"), {"answers": {"frequency": "weekly"}}),
+        (("quant-baseline", "quant-lab"), {"answers": {"frequency": "monthly"}}),
+        (
+            ("quant-baseline", "quant-lab"),
             {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},
         ),
     ],
 )
 def test_generated_projects_pass_their_own_checks(
-    tmp_path: Path, kind: str, extra: dict[str, object]
+    tmp_path: Path, target: tuple[str, str], extra: dict[str, object]
 ) -> None:
     spec = AppSpec.model_validate(
         {
             "name": "smoke-app",
-            "kind": kind,
+            "template": target[0],
+            "profile": target[1],
             "description": "A smoke-test project",
             "output_dir": str(tmp_path),
             **extra,
@@ -76,7 +80,8 @@ def test_a_database_project_passes_its_checks_and_connects(tmp_path: Path) -> No
     spec = AppSpec.model_validate(
         {
             "name": "db-smoke",
-            "kind": "quant-research",
+            "template": "quant-baseline",
+            "profile": "quant-lab",
             "description": "A smoke-test database project",
             "output_dir": str(tmp_path),
             "components": ["data-database"],
@@ -98,7 +103,7 @@ def test_a_forked_pack_with_a_new_question_builds_a_passing_project(tmp_path: Pa
 
     pack = fork_pack(
         BUILT_IN_PACKS["quant-baseline"],
-        "quant-research",
+        "quant-lab",
         tmp_path / "pack",
         pack_id="desk-research",
         profile_id="desk",

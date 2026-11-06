@@ -24,6 +24,16 @@ release, under its existing name, with an entry here. The rule from
 90 days and a major release before removal) is suspended until the owner decides the project is
 mature enough. Version bumps and the lock still apply, so every change stays visible.
 
+## Unreleased
+
+| Tool | Version | Change |
+| --- | --- | --- |
+| `analyze_performance` | 2.0.1 | A Sharpe or information ratio that divided by floating-point noise is now undefined, as documented. |
+| `research_report` | 3.0.1 | The same, for the metrics it reports. |
+| `check_spec` | 2.0.0 | A draft must name `template` and `profile`. `kind` is reported as a problem, and the profile `quant-research` is now `quant-lab`. |
+
+The resource `qaos://template/quant-baseline/quant-research` is now `.../quant-lab`.
+
 ## 0.2.0
 
 | Tool | Version | Change |

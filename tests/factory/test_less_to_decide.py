@@ -39,21 +39,19 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_new_with_defaults_and_yes_creates_a_project_without_a_prompt(workspace: Path) -> None:
-    result = CliRunner().invoke(
-        factory_cli.app, ["new", "quant-research", "my-lab", "--defaults", "-y"]
-    )
+    result = CliRunner().invoke(factory_cli.app, ["new", "quant-lab", "my-lab", "--defaults", "-y"])
 
     assert result.exit_code == 0, result.output
     assert "[y/N]" not in result.output  # nothing was asked
     assert (workspace / "my-lab" / "config.toml").is_file()
     spec = load_spec(workspace / "my-lab.toml")
-    assert spec.kind is None and spec.target == ("quant-baseline", "quant-research")
+    assert spec.target == ("quant-baseline", "quant-lab")
     assert "Created" in result.output
 
 
 def test_new_with_defaults_asks_once_before_creating(workspace: Path) -> None:
     result = CliRunner().invoke(
-        factory_cli.app, ["new", "quant-research", "my-lab", "--defaults"], input="n\n"
+        factory_cli.app, ["new", "quant-lab", "my-lab", "--defaults"], input="n\n"
     )
 
     assert result.exit_code == 1
@@ -62,7 +60,7 @@ def test_new_with_defaults_asks_once_before_creating(workspace: Path) -> None:
 
 
 def test_new_with_defaults_needs_a_name(workspace: Path) -> None:
-    result = CliRunner().invoke(factory_cli.app, ["new", "quant-research", "--defaults"])
+    result = CliRunner().invoke(factory_cli.app, ["new", "quant-lab", "--defaults"])
 
     assert result.exit_code == 1
     assert "Name the project" in result.output
@@ -71,9 +69,9 @@ def test_new_with_defaults_needs_a_name(workspace: Path) -> None:
 @pytest.mark.parametrize(
     ("target", "expected"),
     [
-        ("quant-research", ("quant-baseline", "quant-research")),
+        ("quant-lab", ("quant-baseline", "quant-lab")),
         ("agent-tool", ("agent-tool", "agent-tool")),
-        ("python-cli", ("bundled", "python")),
+        ("python", ("bundled", "python")),
         ("bundled/fastapi", ("bundled", "fastapi")),
         ("./packs/mine", ("./packs/mine", None)),
         (None, (None, None)),
@@ -98,7 +96,7 @@ def test_components_are_a_numbered_menu_and_postgres_asks_only_for_its_password(
     lines += ["db.internal", "", "prices", "", "", "", "", "", "PG_PASSWORD", "", "n"]
 
     result = CliRunner().invoke(
-        factory_cli.app, ["new", "quant-research", "-o", "pg.toml"], input="\n".join(lines) + "\n"
+        factory_cli.app, ["new", "quant-lab", "-o", "pg.toml"], input="\n".join(lines) + "\n"
     )
 
     assert result.exit_code == 0, result.output
@@ -115,7 +113,7 @@ def test_components_are_a_numbered_menu_and_postgres_asks_only_for_its_password(
 
 
 def test_create_prints_a_summary_not_every_file(workspace: Path) -> None:
-    CliRunner().invoke(factory_cli.app, ["new", "quant-research", "lab", "--defaults", "-y"])
+    CliRunner().invoke(factory_cli.app, ["new", "quant-lab", "lab", "--defaults", "-y"])
     (workspace / "out").mkdir()
     spec = workspace / "lab.toml"
     text = spec.read_text()
@@ -162,5 +160,4 @@ def test_every_documented_spec_validates_and_names_template_and_profile(
 
     spec = load_spec(spec_file)
 
-    assert spec.kind is None, f"{source}: use template and profile, not kind"
     assert spec.template and spec.profile

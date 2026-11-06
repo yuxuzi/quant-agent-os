@@ -33,8 +33,17 @@ All notable changes to this project are documented here. The format follows
 - **`record.result()`** returns a call's output, or raises `ToolCallError` with its status and a
   hint. `Platform.call` still never raises.
 
+### Changed
+
+- **The App Factory profile `quant-research` is now `quant-lab`,** so it no longer shares its name with
+  the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
+  refused with the new name. The shortcuts `python-cli` and `fastapi-service` are now `python` and
+  `fastapi`.
+
 ### Removed
 
+- **`kind` in app specs, and the quant-baseline 1.x names** `alpha-research`, `backtest`, and `report`.
+  A spec names `template` and `profile`. A spec with `kind` is refused and says what to set.
 - **The FTS5 fallback.** A SQLite without FTS5 is now refused with what to do, instead of ranking
   keyword search by a second, simpler path. Python builds from uv include FTS5.
 - **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it

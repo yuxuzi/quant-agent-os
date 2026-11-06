@@ -4,7 +4,7 @@ name = "Quant-Agent-OS tools"
 description = "Typed @tool wrappers so the project's functions can be registered as Quant-Agent-OS tools, with contract tests."
 version = "1"
 status = "experimental"
-compatible_profiles = ["quant-research"]
+compatible_profiles = ["quant-lab"]
 dependencies = ["pydantic>=2.7", "quant-agent-os"]
 questions = ["quant_agent_os_source"]
 paths = ["{package}/tools.py", "tests/test_tools.py"]
