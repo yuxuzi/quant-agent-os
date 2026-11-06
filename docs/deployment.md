@@ -69,7 +69,7 @@ docker compose -f deploy/compose.yaml run --rm -T keys new --principal alice \
 
 ```bash
 DATASETS_SOURCE=/path/to/csvs docker compose -f deploy/compose.yaml run --rm datasets \
-  push /import/returns.csv --id returns
+  add /import/returns.csv --id returns
 ```
 
 A dataset is a CSV file: a header row, an index column (dates, oldest first), then numeric
@@ -78,7 +78,7 @@ named `date`, `datetime`, `time`, or `period`, holds `20240102` or `202401` valu
 numbers; `--index` names any other column. The tools infer the frequency from the dates and join
 datasets on them. The analytics tools take `{"dataset": "returns", "column": "fund"}` instead of the
 values, so the numbers never pass through a model. Without `DATASETS_SOURCE`, the import
-directory is `src/quant_platform/sample/datasets`. Pushing the same id again replaces the dataset; its new
+directory is `src/quant_platform/sample/datasets`. Adding the same id again replaces the dataset; its new
 fingerprint shows in each result's data versions. The server reads datasets per request, so no
 restart is needed.
 
@@ -126,31 +126,18 @@ docker compose -f deploy/compose.yaml run --rm runs <run-id>   # one run, its ca
 REST runs show actor `rest`, MCP runs actor `mcp-http`, each with the key's principal. Audit
 events are append-only.
 
-Every recorded call also has a usage event ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)):
-its tenant, tool, toolset, status, duration, and input and output sizes, never its arguments or
-output. Export it per call or as totals:
-
-```bash
-docker compose -f deploy/compose.yaml run --rm usage --tenant acme --by day   # this month, CSV
-docker compose -f deploy/compose.yaml run --rm usage --from 2026-11-01 --to 2026-12-01 \
-    --by tool --format jsonl
-```
-
-Calls that ended `ok`, `error`, or `timeout` are billable; refusals and invalid input are
-recorded but not billable. Without a run store (`qaos serve --no-record`) nothing is metered.
-
 ## 7. Expose it to your team
 
 Keep the published port on loopback, and put a reverse proxy in front. The proxy should:
 - terminate TLS;
-- apply rate limits (the server has none yet; quotas come with plan step P7);
+- apply rate limits (this server has none; plan quotas are a [hosted](hosted.md) feature);
 - forward the `Authorization` header unchanged.
 
 MCP refuses a `Host` or `Origin` it does not know (DNS-rebinding protection). Add the public
-name clients use to the server's command: `--allowed-host research.example.com`.
+name clients use to the server's command, in a compose override: `--allowed-host research.example.com`.
 
 The server sends no CORS headers, so browsers on other origins cannot call it directly. Back
-up the `knowledge`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
+up the `knowledge`, `datasets`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
 ingesting again; the `runs` volume is your audit trail.
 
 ## 8. Add your own tools

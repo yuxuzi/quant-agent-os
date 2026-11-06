@@ -74,6 +74,8 @@ All notable changes to this project are documented here. The format follows
   keyword search by a second, simpler path. Python builds from uv include FTS5.
 - **The mock `hashing` embedder.** `--embedder hashing` and `open_research(vector=True)` are gone; it
   was a test double and now lives with the tests. Use `--embedder local`, or pass an `embedder`.
+- **The `usage` service in `deploy/compose.yaml`.** A single firm's server does not meter; usage export stays
+  a hosted feature, as `qaos hosted usage export`.
 
 ### Fixed
 
@@ -90,6 +92,9 @@ All notable changes to this project are documented here. The format follows
   command, Lab 7's `show.py` no longer printed the open questions, and Lab 6 counted tools no longer
   served. It now uses one home, so `--store` and the other path flags are gone from its single-store
   labs.
+- **The team-server guide taught a command that does not exist.** Adding a dataset is `datasets add`, not
+  `datasets push`, and the backup advice now names the `datasets` volume. The doc test now resolves each
+  `docker compose run` line in the guide and the compose files against the service and the real commands.
 
 ## [0.2.0] - 2026-11-05
 
