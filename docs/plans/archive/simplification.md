@@ -8,7 +8,7 @@ decision records. The core ideas are good. The problem is that it grew a vendor'
 machinery before it had a smooth single-user path, and one number it computes can be silently
 wrong.
 
-**Status.** P0 is released in 0.1.2. P1 and P2 are released in 0.2.0: see decisions 0016, 0017, and
+**Status: complete; archived 2026-11-06.** P0 is released in 0.1.2. P1 and P2 are released in 0.2.0: see decisions 0016, 0017, and
 0018; the `research` and `hosted` extras were left out because they would be empty.
 P3 is complete and unreleased. Parquet (P3.3) was approved on 2026-11-05 and uses pyarrow, because
 pandas 3.1 deprecates its fastparquet engine, and fastparquet failed on a pyarrow-written frame with
@@ -244,7 +244,7 @@ surfaces. Neither widens permissions, but confirm each before merging.
 
 ### P4. Hardening and honest retrieval
 
-**Done 2026-11-05; measured results are in [real-corpus-eval.md](real-corpus-eval.md), C5 and C6.**
+**Done 2026-11-05; measured results are in [real-corpus-eval.md](../real-corpus-eval.md), C5 and C6.**
 Owner's decisions while doing it: the local embedder ships as an opt-in extra; the `httpx` move in
 step 4 is dropped, because `httpx` has no retry for HTTP errors and so would not remove that code;
 and step 4's shared SQL turned out small (11 short statements and the store lifecycle).
@@ -263,7 +263,7 @@ and step 4's shared SQL turned out small (11 short statements and the store life
 
 ### P5. App Factory cleanup
 
-**Done 2026-11-06, except the public `quant-baseline` mirror, which needs the owner's approval.** The
+**Done 2026-11-06.** The owner approved the public `quant-baseline` mirror, now at v3.0.0. The
 parity test found two silent errors, both fixed: the platform's Sharpe and information ratio divided by
 floating-point noise on constant inputs, and generated `beta` did so against a constant market. Checking
 the upgrade path also found that `pytemplate update` cannot reach a project built from a built-in pack.
@@ -279,8 +279,7 @@ the upgrade path also found that `pytemplate update` cannot reach a project buil
 ### P6. Documentation reset
 
 **Done 2026-11-06.** Commands in the README and getting started are checked to exist, rather than being run:
-running them needs a network and clients. The tutorial's own tests still run its labs. This plan stays out of
-the archive until the mirror gate in P5 is settled.
+running them needs a network and clients. The tutorial's own tests still run its labs.
 
 - **One route:** README → getting-started (one page, the target commands) → tutorial. Fold the
   walkthrough's unique parts into these, then delete it. The tutorial is uncommitted work; see
@@ -337,7 +336,7 @@ uv run python packages/quant-research/tests/research_eval.py
 ## Gates
 
 Each of these needs the owner's approval when reached:
-- Removing the orchestrator (P1.1): **approved 2026-11-04**; see [decision 0016](../decisions/0016-clients-orchestrate.md).
+- Removing the orchestrator (P1.1): **approved 2026-11-04**; see [decision 0016](../../decisions/0016-clients-orchestrate.md).
 - Security-surface changes (P1.2, P1.3).
 - CI and release workflow edits (P2.1).
 - New dependencies: Parquet (P3.3), local embedder (P4.3), `httpx` as a direct dependency (P4.4).

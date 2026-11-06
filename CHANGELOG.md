@@ -43,7 +43,7 @@ All notable changes to this project are documented here. The format follows
   graph of extracted facts, plus optional semantic search. Nothing about retrieval changed.
 - **The App Factory profile `quant-research` is now `quant-lab`,** so it no longer shares its name with
   the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
-  refused with the new name, and the `quant-baseline` pack is now 3.0.0. The shortcuts `python-cli` and `fastapi-service` are now `python` and
+  refused with the new name, and the `quant-baseline` pack is now 3.0.0, also at its public mirror. The shortcuts `python-cli` and `fastapi-service` are now `python` and
   `fastapi`.
 
 ### Removed

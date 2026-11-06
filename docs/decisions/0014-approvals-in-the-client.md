@@ -61,7 +61,7 @@ The MCP spec has two ways to involve the user:
 
 ### Local stdio: form elicitation, only when the operator opts in
 
-*Removed 2026-11-05 ([simplification plan](../plans/simplification.md), P1.3): creating a project
+*Removed 2026-11-05 ([simplification plan](../plans/archive/simplification.md), P1.3): creating a project
 is a terminal command, so `--confirm-in-client` had nothing left to confirm. This section and the
 next describe the earlier design.*
 

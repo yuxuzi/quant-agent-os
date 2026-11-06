@@ -3,15 +3,14 @@
 What is still open. How the system works is in [architecture.md](architecture.md), and why is in
 [decisions/](decisions/). Finished plans are in [plans/archive/](plans/archive/), including
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
-The current plan is [simplification.md](plans/simplification.md).
+The most recent plan was [simplification.md](plans/archive/simplification.md).
 
 ## Open backlog
 
 | Item | State | Next step |
 | --- | --- | --- |
-| Public `quant-baseline` mirror | Still has the profile `quant-research` at v2.0.0, as does its hub entry; this repo has `quant-lab` | Owner's approval to update it |
-| `quant-baseline` pack version | Still 2.0.0 after a breaking profile rename | Owner's decision; 3.0.0 would go with the mirror update |
-| Updating generated projects | `pytemplate update` cannot reach a project from a built-in pack, which records a local path with no tags, so fixes are applied by hand | Decide whether to point such projects at the tagged mirror |
+| Next release | P3 to P6 are unreleased, so getting started notes which options need `@main` | The owner's decision; a release removes that note |
+| Updating generated projects | `pytemplate update` cannot reach a project from a built-in pack, which records a local path with no tags, so fixes are applied by hand | Kept open by the owner's decision until a user needs it; the likely route is the tagged mirror |
 | Name availability (B-22) | All names are provisional | Check names before any public launch |
 | Dataset limits | 20 MB, 200,000 rows, and 500 columns may be small for a firm's data | Decide with a real use |
 | Hosted embedders | No measured score floor (still 0.2), so off-topic questions can return passages | Measure one if a user chooses hosted embeddings |

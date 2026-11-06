@@ -9,7 +9,7 @@
 Decision 0003 made each product a workspace member that could be released on its own. In practice
 all five distributions shipped in lockstep with `==` pins, so the promised independence never
 happened and every release paid for it. Releases are GitHub-only, so installing the wheels needed
-`--find-links` to a folder of downloads, or a clone ([simplification plan](../plans/simplification.md)).
+`--find-links` to a folder of downloads, or a clone ([simplification plan](../plans/archive/simplification.md)).
 
 ## Decision
 
