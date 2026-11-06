@@ -12,7 +12,7 @@ wrong.
 0018; the `research` and `hosted` extras were left out because they would be empty.
 P3 is complete and unreleased. Parquet (P3.3) was approved on 2026-11-05 and uses pyarrow, because
 pandas 3.1 deprecates its fastparquet engine, and fastparquet failed on a pyarrow-written frame with
-an unnamed date index and has no Python 3.15 wheel. P4 and P5 are complete and unreleased.
+an unnamed date index and has no Python 3.15 wheel. P4, P5, and P6 are complete and unreleased.
 
 **Compatibility.** The 90-day deprecation rule from decision 0015 is suspended until the project is
 mature enough, so tools may change or be removed with a changelog entry.
@@ -277,6 +277,10 @@ the upgrade path also found that `pytemplate update` cannot reach a project buil
    approval.**
 
 ### P6. Documentation reset
+
+**Done 2026-11-06.** Commands in the README and getting started are checked to exist, rather than being run:
+running them needs a network and clients. The tutorial's own tests still run its labs. This plan stays out of
+the archive until the mirror gate in P5 is settled.
 
 - **One route:** README → getting-started (one page, the target commands) → tutorial. Fold the
   walkthrough's unique parts into these, then delete it. The tutorial is uncommitted work; see

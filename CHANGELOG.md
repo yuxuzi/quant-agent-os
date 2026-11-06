@@ -35,6 +35,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The docs have one route:** README, then getting started, then the tutorial. `docs/walkthrough.md` is
+  gone, with its quant-project guide and limitations now in the product docs. `architecture.md` describes
+  what exists today, at half the length. The engineering plan is reduced to what is open, and finished plans
+  are in `docs/plans/archive/`.
+- **Quant Research is described as what it measures:** cited keyword search with entity linking and a small
+  graph of extracted facts, plus optional semantic search. Nothing about retrieval changed.
 - **The App Factory profile `quant-research` is now `quant-lab`,** so it no longer shares its name with
   the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
   refused with the new name. The shortcuts `python-cli` and `fastapi-service` are now `python` and
