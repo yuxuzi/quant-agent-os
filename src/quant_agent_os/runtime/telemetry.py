@@ -17,7 +17,7 @@ telemetry, an operator installs an SDK and an exporter and configures them, for 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -68,7 +68,7 @@ def _ignore(status: str, version: str | None, duration_ms: float) -> None:
 
 
 @contextmanager
-def call_span(tool: str, tenant: str) -> Iterator[Finish]:
+def call_span(tool: str, tenant: str) -> Generator[Finish, None, None]:
     """Trace one call of ``tool`` for ``tenant``; the caller reports how it ended."""
     if not ENABLED:
         yield _ignore
