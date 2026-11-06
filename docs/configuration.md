@@ -5,7 +5,7 @@ Everything the platform keeps is in one home: `QUANT_AGENT_OS_HOME`, by default
 
 | File | Holds |
 | --- | --- |
-| `config.toml` | Optional settings: `log_level`, `store`, `datasets_dir`, `runs_file`, and `api_keys_file`. |
+| `config.toml` | Optional settings: `log_level`, `store`, `datasets_dir`, `runs_file`, `api_keys_file`, and `access_file`. |
 | `.env` | Optional environment variables, such as provider keys. Never commit it. |
 | `knowledge.db` | The research knowledge store. |
 | `datasets/` | Datasets that tools read by id. |
@@ -28,6 +28,7 @@ permissions come only from the environment or the home's `.env`.
 | `QUANT_AGENT_OS_DATASETS_DIR` | `datasets/` in the home | Datasets directory. |
 | `QUANT_AGENT_OS_RUNS_FILE` | `runs.db` in the home | Run store. |
 | `QUANT_AGENT_OS_API_KEYS_FILE` | `api-keys.toml` in the home | API keys file. |
+| `QUANT_AGENT_OS_ACCESS_FILE` | none | Over HTTP: which groups reach which tools and datasets. See [deployment](deployment.md#9-decide-who-reaches-what). |
 | `QUANT_AGENT_OS_SCHEMA` | `quant_research` | PostgreSQL schema that `qaos ingest` and `qaos search` use. |
 
 `qaos doctor` checks the setup and shows what is off, with no secret values.

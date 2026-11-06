@@ -16,6 +16,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Per-caller access.** `qaos serve --http --access access.toml` gives groups of keys their own tools and
+  datasets, with `qaos keys new --group`, and anything not listed is denied. Tool lists and errors show a caller
+  only what it may reach, a refused dataset looks like a missing one, and refusals are recorded for auditors.
+  A firm can connect its own entitlement system through `AccessPolicy`. Nothing changes without an access
+  file. See [decide who reaches what](docs/deployment.md#9-decide-who-reaches-what).
 - **A firm's own tools on the server.** `compose(extra_tools=...)` serves your Python tools beside the
   platform's, under the same permissions, validation, limits, and recording, and `serve_http` and
   `serve_stdio` are public. Your own `DatasetStore` feeds the analytics tools too. See

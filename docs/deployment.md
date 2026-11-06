@@ -185,6 +185,50 @@ serve_http(catalog, host="0.0.0.0")
 The tool names are in your code and not in a setting, so what the server runs is what your repository
 says ([decision 0020](decisions/0020-a-firms-own-server.md)).
 
+## 9. Decide who reaches what
+
+By default any key with `tools:call` reaches every tool and dataset the server serves. To give people
+different rights, put them in groups and write an access file:
+
+```toml
+# access.toml: anything not listed is denied
+[groups.growth-desk]
+tools = ["analyze_risk", "list_datasets", "find_related_signals", "desk_*"]
+datasets = ["growth-*", "factors"]
+```
+
+```bash
+qaos keys new --principal alice --scope tools:list --scope tools:call --group growth-desk
+qaos serve --http --access access.toml    # or set QUANT_AGENT_OS_ACCESS_FILE
+```
+
+- **Deny by default.** Once there is an access file, a caller reaches only what its groups list. A key
+  with no group reaches nothing, including `server_info` unless a group lists it.
+- **A caller sees only its own.** Tool lists, `list_datasets`, `server_info`, and error messages name only
+  what the caller may reach. A refused dataset answers exactly as a missing one does.
+- **Refusals are recorded.** A refused tool returns `denied`, and a refused dataset returns the same
+  error as a missing one. Either way the call's record and its audit event list what was refused, under
+  the caller's name: `qaos runs <run-id>`.
+- **No restart.** A change to the file applies on the next request. If the file becomes missing or invalid,
+  **nothing is allowed** until it is fixed, and the server logs why. A server will not start without a valid file.
+- **In Docker,** mount the file read-only in a compose override and set `QUANT_AGENT_OS_ACCESS_FILE`.
+
+**The firm's own entitlement system.** Implement `allows(caller, action, resource)`, which is
+`AccessPolicy`, and pass it to `compose(access=...)` in your server. If it raises, the call is refused.
+Your tools read `current_caller()` for rights the file cannot express, such as one portfolio or account.
+Give your tools a `GuardedDatasetStore`, as the [example](../examples/firm-tools/firm_server.py) does,
+because a tool holding the unguarded store can read anything in it.
+
+**What this does not do:**
+- **The corpus is all or nothing.** A caller who may call a research tool can search the whole corpus,
+  and `research_report` reads it too. If two groups must not share research, run a server per corpus.
+- **`runs:read` sees every caller's runs,** including what they retrieved and computed. Give it only to auditors.
+- **Prompts and server instructions go to every caller.** Keep anything confidential out of `extra_instructions`.
+- **Local use is not covered.** stdio and the SDK have no authenticated caller and trust whoever started them,
+  so `serve_stdio` refuses a catalog with an access policy. `qaos hosted serve` does not read an access file.
+
+See [decision 0021](decisions/0021-per-caller-access.md).
+
 ## Hosting many customers
 
 This guide is for one firm or team. A vendor serving many customers needs tenants, plans, OAuth,

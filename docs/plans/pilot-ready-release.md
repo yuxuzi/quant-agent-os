@@ -102,7 +102,7 @@ passes, since skills cover only the platform's own tools. No change to the platf
 
 | Step | Work |
 | --- | --- |
-| S2.1 | `Caller(principal, tenant, groups)` in Core, moved from `mcp/http.py`. Keys gain optional `groups`; `qaos keys new --group`. `ToolExecutor.execute(step, run_id=, caller=)`, passed by REST and HTTP MCP. stdio and the SDK pass none: they trust whoever started them, as now |
+| S2.1 | `Caller(principal, tenant, groups)` in Core, moved from `mcp/http.py`. Keys gain optional `groups`; `qaos keys new --group`. REST and HTTP MCP bind the caller once per request, and the executor carries it onto the tool's thread. stdio and the SDK bind none: they trust whoever started them, as now |
 | S2.2 | An `AccessPolicy` port in Core: `allows(caller, action, resource) -> bool`, with actions `tool.call` and `dataset.read`. With no policy configured, behaviour is exactly as today |
 | S2.3 | Tool-level check in the executor, after the existing policy check. A refusal records `denied` with the principal and the audit event. `tools/list` and `GET /v1/tools` show a caller only what it may call |
 | S2.4 | Dataset-level check at the read: a `GuardedDatasetStore` around the store, reading the caller from a `ContextVar`. `ids()` filters; `get()` refuses. Runs through `copy_context()` at `self._pool.submit`, because tools run on a pool thread, and `research_report`'s nested calls must keep the caller |
@@ -115,7 +115,7 @@ passes, since skills cover only the platform's own tools. No change to the platf
 retrieved and computed, so S6 says to grant it only to auditors. Approvals are untouched. The corpus is
 all-or-nothing per caller, through tool-level rules.
 
-**Exit:** the matrix passes on both interfaces and both stores; the policy file's failure mode is tested;
+**Exit:** the matrix passes on both interfaces; the policy file's failure mode is tested;
 the concurrency path is tested with parallel callers with different entitlements, because a leaked
 `ContextVar` would be a silent cross-user read. Report the efficiency delta (`tools/list` output is unchanged
 with no policy).

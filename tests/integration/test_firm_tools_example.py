@@ -18,7 +18,7 @@ from quant_agent_os.config import get_settings
 from quant_agent_os.data import UnknownDatasetError
 from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.testing import check_tool
-from quant_agent_os.tools import Permission, PermissionPolicy, tool
+from quant_agent_os.tools import FileAccessPolicy, Permission, PermissionPolicy, tool
 from quant_platform import compose
 from quant_platform.http import build_http_app, single_tenant
 
@@ -106,6 +106,36 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
     assert recorded.calls[0].tool == "desk_var"
     assert recorded.calls[0].tool_version == "1.0.0"
     assert catalog.toolsets["desk_var"] == "firm"
+
+
+def test_with_access_rules_the_firms_tool_reads_only_what_the_caller_may(
+    store: SqliteDatasetStore, tmp_path: Path
+) -> None:
+    rules = tmp_path / "access.toml"
+    rules.write_text('[groups.risk]\ntools = ["desk_var"]\ndatasets = ["other"]\n')
+    keys = tmp_path / "keys.toml"
+    key = add_key(keys, "alice", ["tools:call"], groups=["risk"])
+    catalog = build_catalog(store, PermissionPolicy(), access=FileAccessPolicy(rules))
+    app = build_http_app(
+        single_tenant(catalog, MemoryRunStore(), catalog.policy),
+        KeyRing(load_keys(keys)),
+        instructions=catalog.instructions,
+    )
+
+    async def call() -> Any:
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url=BASE,
+                headers={"Authorization": f"Bearer {key}"},
+            ) as client,
+        ):
+            return (await client.post("/v1/tools/desk_var/call", json={"arguments": ARGS})).json()
+
+    result = anyio.run(call)
+    assert result["status"] == "error"
+    assert "No dataset 'desks'" in result["error"]
 
 
 def test_a_firms_tool_gets_no_permission_it_is_not_granted(tmp_path: Path) -> None:

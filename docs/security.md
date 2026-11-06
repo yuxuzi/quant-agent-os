@@ -115,6 +115,20 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   below), but nothing limits unauthenticated requests, so still put a rate-limiting proxy in
   front of any non-loopback deployment.
 
+## Per-caller access
+
+Permissions say what the server may do at all. An access policy says what one caller may do: which tools it
+may call and which datasets it may read ([decision 0021](decisions/0021-per-caller-access.md)). It is off until
+configured, and then it denies what is not listed. How to use it, and what it does not cover, is in
+[deployment](deployment.md#9-decide-who-reaches-what).
+
+- The caller comes only from the verified credential, never from a request.
+- Anything uncertain is a refusal: no bound caller, a policy that raises or returns anything but `True`, or an
+  access file that has become missing or invalid.
+- A refused dataset cannot be told from a missing one, and no output names what the caller may not reach. The
+  refusal is on the call's record and audit event, which callers do not receive.
+- `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
+
 ## Tenants and OAuth
 
 [Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
