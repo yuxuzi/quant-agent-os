@@ -17,6 +17,7 @@ from quant_agent_os.cli import data_app, keys_app, show_runs
 from quant_agent_os.config import ConfigFileError, get_settings
 from quant_agent_os.mcp import MCPUnavailableError
 from quant_agent_os.runs import RunStoreError
+from quant_agent_os.tools import AccessFileError, FileAccessPolicy
 from quant_app_factory.cli import app as factory_app
 from quant_platform.cli_common import (
     DatasetsOption,
@@ -113,7 +114,14 @@ def _serve_http(
     allowed_host: list[str],
     embedder: EmbedderOption,
     embedding_model: str | None,
+    access_file: Path | None,
 ) -> None:
+    access_file = access_file or get_settings().access_file
+    try:
+        access = FileAccessPolicy(access_file) if access_file is not None else None
+    except AccessFileError as error:
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
+        raise typer.Exit(1) from error
     catalog, research = open_catalog(
         parse_toolsets(toolsets),
         store,
@@ -121,6 +129,7 @@ def _serve_http(
         chosen=toolsets is not None,
         embedder=embedder,
         embedding_model=embedding_model,
+        access=access,
     )
     try:
         serve_http(catalog, keys=keys, runs=runs, host=host, port=port, allowed_hosts=allowed_host)
@@ -164,6 +173,13 @@ def serve(
             help="With --http: a public host name clients use (repeat); loopback is always allowed."
         ),
     ] = None,
+    access: Annotated[
+        Path | None,
+        typer.Option(
+            help="With --http: an access file saying which groups reach which tools and datasets "
+            "(default: QUANT_AGENT_OS_ACCESS_FILE). Without one, any key reaches everything served."
+        ),
+    ] = None,
 ) -> None:
     """Serve the toolsets' tools, resources, and prompts to an AI client.
 
@@ -190,10 +206,13 @@ def serve(
             allowed_host or [],
             embedder,
             embedding_model,
+            access,
         )
         return
-    if keys is not None or host != DEFAULT_HOST or port != DEFAULT_PORT or allowed_host:
-        errors.print("[red]error:[/red] --keys, --host, --port, and --allowed-host need --http.")
+    if keys is not None or host != DEFAULT_HOST or port != DEFAULT_PORT or allowed_host or access:
+        errors.print(
+            "[red]error:[/red] --keys, --host, --port, --allowed-host, and --access need --http."
+        )
         raise typer.Exit(2)
     _serve_stdio(toolsets, store, datasets, runs, record, embedder, embedding_model)
 

@@ -28,7 +28,14 @@ from quant_agent_os.tools.permissions import READ_ONLY, Permission, PermissionPo
 
 # What config.toml may set. Permissions are left out on purpose: they come only from the
 # environment or the home's .env, so one more file cannot widen what tools may do.
-CONFIG_FILE_KEYS = ("log_level", "store", "datasets_dir", "runs_file", "api_keys_file")
+CONFIG_FILE_KEYS = (
+    "log_level",
+    "store",
+    "datasets_dir",
+    "runs_file",
+    "api_keys_file",
+    "access_file",
+)
 
 
 class ConfigFileError(ValueError):
@@ -76,11 +83,17 @@ class Settings(BaseSettings):
     datasets_dir: Path = Field(default_factory=lambda: home_dir() / "datasets")
     runs_file: Path = Field(default_factory=lambda: home_dir() / "runs.db")
     api_keys_file: Path = Field(default_factory=lambda: home_dir() / "api-keys.toml")
+    access_file: Path | None = None
 
     @field_validator("datasets_dir", "runs_file", "api_keys_file")
     @classmethod
     def _expand_user(cls, value: Path) -> Path:
         return value.expanduser()
+
+    @field_validator("access_file")
+    @classmethod
+    def _expand_optional_user(cls, value: Path | None) -> Path | None:
+        return value.expanduser() if value is not None else None
 
     @classmethod
     def settings_customise_sources(
