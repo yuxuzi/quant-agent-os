@@ -8,7 +8,7 @@
 ## Context
 
 The next phase serves a firm or team that hosts its own server
-([simplification plan](../plans/simplification.md)). About 1,480 lines of tenants, plans, metering,
+([simplification plan](../plans/archive/simplification.md)). About 1,480 lines of tenants, plans, metering,
 OAuth, and the approval page serve a vendor with many customers, and they sat in the default path:
 `serve-http` had nine options with rules that depended on each other.
 

@@ -2,4 +2,4 @@ contract = 1
 id = "quant-baseline"
 name = "Quant-Agent-OS quant baseline templates"
 description = "A portable, bias-tested quant research project: study, backtest, and report in one."
-version = "2.0.0"
+version = "3.0.0"
