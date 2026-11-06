@@ -193,10 +193,12 @@ def beta(returns: FloatArray, market: FloatArray) -> float:
     both = np.isfinite(returns) & np.isfinite(market)
     if int(both.sum()) < 2:
         return math.nan
-    x = market[both] - float(np.mean(market[both]))
+    center = float(np.mean(market[both]))
+    x = market[both] - center
     y = returns[both] - float(np.mean(returns[both]))
-    spread = float(x @ x)
-    return float(x @ y) / spread if spread > 0.0 else math.nan
+    if float(np.std(x)) <= FLAT * max(1.0, abs(center)):
+        return math.nan
+    return float(x @ y) / float(x @ x)
 
 
 def active_metrics(

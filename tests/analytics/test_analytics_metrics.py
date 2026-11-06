@@ -15,6 +15,7 @@ from quant_analytics import metrics
 
 RETURNS = [0.02, -0.01, 0.03, -0.02, 0.01, 0.0]
 MONTHLY = 12
+DAILY = 252
 
 
 def test_annualized_return_is_geometric() -> None:
@@ -91,3 +92,19 @@ def test_undefined_metrics_are_none_not_infinite() -> None:
     assert metrics.sharpe_ratio(flat, MONTHLY) is None
     assert metrics.annualized_volatility(flat, MONTHLY) == 0.0
     assert metrics.benchmark_metrics(flat, flat, MONTHLY)["information_ratio"] is None
+
+
+@pytest.mark.parametrize(("value", "count"), [(0.01, 50), (0.1, 7), (0.0003, 50), (0.0, 50)])
+def test_a_constant_series_has_no_sharpe_despite_floating_point_noise(
+    value: float, count: int
+) -> None:
+    assert metrics.sharpe_ratio([value] * count, DAILY) is None
+
+
+def test_a_constant_gap_to_the_benchmark_has_no_information_ratio() -> None:
+    returns = np.random.default_rng(1).normal(0.0, 0.01, 100)
+
+    result = metrics.benchmark_metrics(list(returns), list(returns + 0.001), DAILY)
+
+    assert result["active_return"] == pytest.approx(-0.252)
+    assert result["information_ratio"] is None

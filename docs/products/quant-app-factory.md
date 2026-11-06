@@ -27,6 +27,22 @@ cost) and a `LIMITATIONS.md`. Optional components are `data-parquet`, `data-data
 (PostgreSQL, SQLite, or DuckDB, read-only, with a `check-connection` command), and `agent-tools`. A
 spec can name a connection saved in `factory.toml` (`connection = "research-pg"`).
 
+**Generated metrics and the platform's.** A quant-research project owns a numpy copy of its metrics,
+so it stays portable ([decision 0009](../decisions/0009-quant-baseline-templates.md)).
+`tests/factory/test_metric_parity.py` holds that copy to `quant_analytics.metrics` on annualised
+return, volatility, Sharpe, maximum drawdown, hit rate, beta, active return, tracking error, and
+information ratio. They differ in three ways:
+- An undefined metric is NaN in a generated project and None on the platform.
+- A generated metric drops missing values itself, one series at a time, except `active_metrics` and
+  `beta`, which use bars where both are present. The platform's tools leave out and count missing
+  rows first, so its metric functions never see them.
+- Each has metrics the other lacks: Newey-West t-statistics, information coefficients, and turnover
+  only in generated projects; Sortino, Calmar, omega, tail ratio, stability, value at risk, and alpha
+  only on the platform.
+
+A generated project does not receive later fixes by itself. Its `LIMITATIONS.md` says so, and
+`pytemplate update` merges a newer template when you choose to.
+
 ## Use
 
 ```bash

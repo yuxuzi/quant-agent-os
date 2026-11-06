@@ -9,6 +9,7 @@ from {{ package_name }}.metrics import (
     annualized_return,
     annualized_volatility,
     bar_returns,
+    beta,
     hit_rate,
     information_coefficient,
     max_drawdown,
@@ -87,6 +88,13 @@ def test_a_constant_return_compounds_and_has_no_volatility() -> None:
     assert annualized_return(returns, 252) == pytest.approx(1.001**252 - 1)
     assert annualized_volatility(returns, 252) == pytest.approx(0.0)
     assert math.isnan(sharpe_ratio(returns, 252))
+
+
+def test_beta_is_the_slope_and_undefined_against_a_constant_market() -> None:
+    market = np.random.default_rng(7).normal(0.0, 0.01, 504)
+
+    assert beta(2.0 * market + 0.001, market) == pytest.approx(2.0)
+    assert math.isnan(beta(market, np.full(504, 0.001)))
 
 
 def test_sharpe_is_mean_over_deviation_times_root_periods() -> None:

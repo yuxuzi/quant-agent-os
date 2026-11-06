@@ -42,6 +42,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Noise reported as a Sharpe ratio.** `analyze_performance` returned figures such as 4.5e16 for a
+  constant series, and a similar information ratio when returns and benchmark differ by a constant.
+  Both are now undefined, as documented. Generated quant projects had a similar flaw: `beta` against a
+  constant market returned noise and is now NaN. Existing generated projects keep the old code.
 - **Two messages named the removed `dataset push`.** `list_datasets` and the undated-alignment
   refusal now name `qaos data add`.
 
