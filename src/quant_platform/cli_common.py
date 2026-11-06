@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -11,7 +11,6 @@ from rich.markup import escape
 
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DirectoryDatasetStore
-from quant_agent_os.tools import PermissionPolicy, ToolSpec
 from quant_platform.composition import (
     DEFAULT_TOOLSETS,
     TOOLSET_NEEDS,
@@ -79,26 +78,6 @@ def _factory() -> AppFactory:
     except (ScaffoldError, SettingsError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
-
-
-def warn_about_permissions(tools: list[ToolSpec[Any, Any]], policy: PermissionPolicy) -> None:
-    """Warn about tools the policy will deny, or will hold for an approval on every call."""
-    for spec in tools:
-        missing = sorted(p.value for p in spec.permissions - policy.granted)
-        unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions))
-        if missing:
-            errors.print(
-                f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
-                "not granted, so calls will be denied. Grant it with "
-                "QUANT_AGENT_OS_GRANTED_PERMISSIONS, or serve without a hosted embedder."
-            )
-        elif unapproved:
-            errors.print(
-                f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(unapproved)}, which "
-                "needs an approval for every call, so calls will return approval_required. "
-                "Pre-approve it with QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS, or serve without a "
-                "hosted embedder."
-            )
 
 
 def open_catalog(

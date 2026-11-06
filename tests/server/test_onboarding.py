@@ -167,7 +167,7 @@ def test_a_missing_extra_is_named_in_full(monkeypatch: pytest.MonkeyPatch) -> No
     def no_factory() -> None:
         raise ScaffoldError("The App Factory is not installed; quant-agent-os[factory].")
 
-    monkeypatch.setattr("quant_platform.cli.run_stdio", missing)
+    monkeypatch.setattr("quant_platform.serve.run_stdio", missing)
     monkeypatch.setattr("quant_app_factory.cli.open_factory", no_factory)
 
     assert "quant-agent-os[server]" in RUNNER.invoke(app, ["serve", "--no-record"]).output
