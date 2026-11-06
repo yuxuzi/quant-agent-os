@@ -76,9 +76,9 @@ public `main` stays under the licence it merged under.
 
 | # | Decision | Why now | Recommendation |
 | --- | --- | --- | --- |
-| 1 | **O-4: the licence from 0.3.0 onwards** | v0.1.0 to `main` are public under MIT, and that cannot be withdrawn. There is one human author, no fork, and no outside contribution, so later versions can be relicensed cheaply now. Take legal advice | Decide before S1, recording it as a decision. If it changes, apply it in its own PR before S1 merges: `LICENSE`, README, `pyproject.toml`, and the "open-source" line in `AGENTS.md`, with the template packs kept MIT |
+| 1 | **O-4: the licence from 0.3.0 onwards** | **Decided:** the Business Source License 1.1, [decision 0019](../decisions/0019-business-source-license.md), applied in its own PR | Counsel reviews it before first commercial use |
 | 2 | **Name availability (B-22)** | The README still says the name is unchecked, and a pilot is commercial use | Check before S3's demonstration is shown to anyone |
-| 3 | **Approve S1's and S2's design as decision 0019** | S2 changes the security surface, which needs asking first | Approve as written below, or amend |
+| 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. Recorded as decision 0020 in S1.5 | Build as written below |
 
 ## S1: Serve a firm's own tools (M)
 
@@ -92,7 +92,7 @@ discovery. A `--tools-module` option was rejected because it is dynamic code loa
 | S1.2 | Public `serve_http(catalog, ...)` and `serve_stdio(catalog, ...)` in `quant_platform`, taken from the private functions in `cli.py`, which then call them. Same safe defaults: no start without a key or a run store, loopback by default |
 | S1.3 | A firm tool may pass a custom `DatasetStore`, so one agreed data source needs no connector from us. Document it with one tested example |
 | S1.4 | `examples/firm-tools/`: one tool, `firm_server.py`, a `check_tool` test, and a Dockerfile `FROM` the platform image |
-| S1.5 | `deployment.md` section "Add your own tools"; decision 0019 |
+| S1.5 | `deployment.md` section "Add your own tools"; decision 0020 |
 
 **Exit:** the example's tool is served over MCP and REST, with results equal to a direct call. It is refused
 under the default policy when it declares a permission, and it appears in `qaos runs` with its version. `tests/server/test_skills.py` still
@@ -176,7 +176,7 @@ Follow `docs/releasing.md`, and **ask first**, because a version bump and tag ar
 
 - [ ] CI green on every OS and Python; PostgreSQL store tests run locally; authorization and isolation gates pass
 - [ ] Agent-efficiency evaluation shows only intended deltas; research evaluation and `real_corpus.py eval` hold their baselines
-- [ ] Licence files match the S0 decision
+- [ ] Licence files match decision 0019, and counsel has reviewed them
 - [ ] Upgrade drill passes from v0.2.0
 - [ ] Install from the tag in a clean home, with no `--python` override
 - [ ] Changelog and tools changelog updated, and the `@main` note removed from getting started

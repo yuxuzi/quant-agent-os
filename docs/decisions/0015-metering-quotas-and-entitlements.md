@@ -193,7 +193,8 @@ listings (Q-4), and a self-service admin API for plans.
 - **Q-17 (as proposed).** `opentelemetry-api` (already locked) is a direct dependency of the
   `mcp` and `api` extras, not of core.
 - **Q-18 (as proposed).** Metering, plans, quotas, and the compatibility policy are open source;
-  only billing integration and the hosted operations would be paid.
+  only billing integration and the hosted operations would be paid. *Superseded by
+  [0019](0019-business-source-license.md).*
 
 ## Implementation notes (2026-11-03, P7.2)
 

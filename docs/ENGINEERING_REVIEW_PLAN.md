@@ -31,8 +31,6 @@ and B-20) until then.
 Question numbers are the ones used in the earlier plan.
 
 - **O-2:** Which MCP SDK version range should be supported as the protocol moves?
-- **O-4:** Where is the license boundary for commercial features: MIT everywhere plus services, or a
-  separately licensed package? No decision is needed while the customer is a firm hosting it themselves.
 - **O-11:** When `factory.toml` moves to Core, and whether a keychain backend is added, are decided by the
   second product that needs those settings.
 - **O-12:** Will pytemplate-uv's roadmap include generic pack authoring that `template fork` can delegate

@@ -30,3 +30,8 @@ decision, consequences). Read [AGENTS.md](AGENTS.md) for the invariants.
 
 Keep changes focused, add tests, update `CHANGELOG.md` under "Unreleased", and describe how you
 verified the change.
+
+## Licensing of contributions
+
+The project is under the Business Source License 1.1 ([decision 0019](docs/decisions/0019-business-source-license.md)).
+Outside contributions cannot be accepted yet, because that needs a contributor agreement. Please open an issue instead.
