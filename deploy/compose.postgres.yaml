@@ -131,6 +131,46 @@ services:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
     networks: [backend]  # internal: PostgreSQL only, no internet
 
+  # Writes a tar of the volumes to stdout, or of the ones named: `run --rm -T backup data/runs`.
+  # Stop the server first, so the SQLite file is at rest. PostgreSQL is backed up with pg_dump
+  # (docs/operations.md).
+  backup:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["tar", "-C", "/", "-cf", "-"]
+    command: ["data/datasets", "data/runs", "keys"]
+    volumes:
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs:ro
+    network_mode: none
+
+  # Reads a backup from stdin and replaces the volumes it holds: `run --rm -T restore < file`.
+  # It checks the whole archive before it deletes anything. Stop the server first.
+  restore:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        cat >/tmp/restore.tar
+        tar -tf /tmp/restore.tar >/tmp/members
+        grep -qE '^(data/(knowledge|datasets|runs)|keys)/' /tmp/members || {
+          echo "error: this is not an archive from the backup service. Nothing was changed." >&2
+          exit 1
+        }
+        for dir in data/knowledge data/datasets data/runs keys; do
+          if grep -q "^$$dir/" /tmp/members; then find "/$$dir" -mindepth 1 -delete; fi
+        done
+        tar -C / -xf /tmp/restore.tar
+    command: []
+    volumes:
+      - datasets:/data/datasets
+      - keys:/keys
+      - runs:/data/runs
+    network_mode: none
+
 networks:
   backend:
     internal: true

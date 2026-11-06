@@ -136,9 +136,10 @@ Keep the published port on loopback, and put a reverse proxy in front. The proxy
 MCP refuses a `Host` or `Origin` it does not know (DNS-rebinding protection). Add the public
 name clients use to the server's command, in a compose override: `--allowed-host research.example.com`.
 
-The server sends no CORS headers, so browsers on other origins cannot call it directly. Back
-up the `knowledge`, `datasets`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
-ingesting again; the `runs` volume is your audit trail.
+The server sends no CORS headers, so browsers on other origins cannot call it directly.
+
+Before you rely on it, read [operations](operations.md): backups, upgrades, rollback, and what to do
+when a store refuses to open.
 
 ## 8. Add your own tools
 
@@ -302,7 +303,9 @@ the server.
 - checks health, a 401 without a key, a real REST call, and the principal on the recorded run;
 - checks MCP at `/mcp`: a 401 without a key, a foreign `Host` refused, the tool list, a
   `research_report` call with metrics from the dataset, and the call recorded as `mcp-http`;
-- checks that the server cannot write its knowledge store.
+- checks that the server cannot write its knowledge store;
+- runs `doctor`, checks that its output holds no secrets, then backs up, loses the data, restores it, and
+  finds the recorded run again.
 
 It uses its own compose project and port 18000, and it removes its volumes afterwards. On
 PostgreSQL it also checks that the server's role is refused writes by permission, with

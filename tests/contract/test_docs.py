@@ -17,7 +17,7 @@ MARKDOWN = sorted(
     if "archive" not in path.parts  # finished plans keep the words of their day
 )
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
-TAUGHT = ("README.md", "docs/getting-started.md", "docs/deployment.md")
+TAUGHT = ("README.md", "docs/getting-started.md", "docs/deployment.md", "docs/operations.md")
 COMPOSE_FILES = ("deploy/compose.yaml", "deploy/compose.postgres.yaml")
 
 

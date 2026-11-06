@@ -55,6 +55,10 @@ All notable changes to this project are documented here. The format follows
 - **A `doctor` service in both compose files,** so `qaos doctor` checks the deployed volumes. It now shows the
   version, really opens the run store (a store the server would refuse used to read `ok`), and checks an access
   file. Its output holds no secrets, so it can go in a support ticket, and a test checks that.
+- **Backups, upgrades, and rollback for a team server.** [Operations](docs/operations.md) covers each volume, what
+  to do when a store refuses to open, and rollback, which is a restore of the backup taken before the upgrade. New
+  `backup` and `restore` compose services stream the volumes as a tar, one volume or all. `restore` reads the whole
+  archive before it changes anything.
 
 ### Changed
 
