@@ -93,3 +93,6 @@ docs/_build/
 .env
 .env.*
 !.env.example
+
+# Claude Code worktrees
+.claude/worktrees/
