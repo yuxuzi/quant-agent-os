@@ -27,7 +27,7 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
-  ([plan](docs/plans/agent-surface.md), P3).
+  ([plan](docs/plans/archive/agent-surface.md), P3).
 
 Core must never import a product, and the products must not import each other. Only the
 platform server imports every product, and nothing imports it. Quantitative

@@ -1,0 +1,402 @@
+# Quant-Agent-OS engineering plan (archived)
+
+> Archived on 2026-11-06, as written. Much of it is out of date. It remains the definition of the `B-`
+> backlog ids and `O-` questions. What is still open is in
+> [ENGINEERING_REVIEW_PLAN.md](../../ENGINEERING_REVIEW_PLAN.md).
+
+> **Canonical plan** for Quant-Agent-OS: gap analysis, MVP, the 30- and 90-day roadmap, the
+> backlog, and the decision log. The architecture it implements is in
+> [architecture.md](../../architecture.md).
+>
+> **History.** This file used to be the QuantFoundry / uv-template engineering review. On
+> 2026-10-30 it was rewritten around the Quant-Agent-OS product baseline. The earlier version,
+> including the uv-template generator review and its phases, is preserved in git history (commit
+> `797dac3`). `pytemplate-uv` 3.0 is published and is used here as a third-party library
+> ([decision 0006](../../decisions/0006-pytemplate-uv-as-a-library.md)). Its roadmap lives only in its
+> own repository.
+
+## 1. Direction
+
+Quant-Agent-OS is an open-source quantitative intelligence and application-engineering platform
+that AI clients consume through MCP, an SDK, and later REST. It is not a chatbot. It has two
+products:
+1. **Quant Research**: a Graph RAG knowledge system with source provenance.
+2. **Quant App Factory**: generation of maintainable, tested Python applications.
+
+Deterministic quantitative analytics are domain services registered as tools. `pytemplate-uv` is
+a standalone scaffolder behind a replaceable adapter. See
+[decision 0003](../../decisions/0003-brand-and-product-structure.md).
+
+### Principles
+
+The earlier plan's principles carry over, with two additions (9 and 10):
+1. **Bring your own everything.** Users bring their models, keys, documents, data, and
+   databases. The project supports a small documented set and does not claim universal
+   compatibility.
+2. **Lightweight core, explicit registration.** No plugin marketplace and no dynamic code
+   loading.
+3. **MCP is an adapter.** Logic lives in services; every interface goes through the same
+   executor.
+4. **One bounded orchestrator.** Specialist agents are added only after an evaluation shows
+   value.
+5. **Universal tool contract.** Every tool declares typed I/O, permissions, limits, and
+   provenance.
+6. **Evidence first.** `retrieved`, `computed`, and `interpretation` statements stay distinct,
+   and retrieved text is untrusted.
+7. **Deterministic finance.** The LLM does no arithmetic. Metrics have documented conventions
+   and known-answer tests.
+8. **Read-only by default.** Consequential permissions need a per-call approval
+   ([0005](../../decisions/0005-approval-gates.md)).
+9. **Platform, not chatbot.** Clients synthesize answers, and Quant-Agent-OS returns evidence
+   and computed results.
+10. **Smallest coherent change.** Preserve working code, and add infrastructure only for a
+    named requirement.
+
+## 2. Gap analysis (inspected 2026-10-30)
+
+Baseline: `uv run pytest` gives 31 passed with 93% branch coverage; `ruff check`,
+`ruff format --check`, and strict `mypy` (26 files) are all clean. CI covers Linux, macOS, and
+Windows with Python 3.11–3.15. A release workflow uses PyPI Trusted Publishing.
+
+### Existing capabilities (confirmed)
+
+| Capability | Evidence |
+| --- | --- |
+| Typed tool contract, decorator, descriptors | `src/quant_agent_os/tools/contracts.py` |
+| Explicit registry; read-only permission policy with allowlist | `tools/registry.py`, `tools/permissions.py` |
+| Bounded executor with six recorded statuses | `runtime/executor.py`, `tests/unit/test_executor.py` |
+| Single bounded orchestrator, no feedback into planning | `runtime/orchestrator.py`, decision 0001 |
+| Evidence kinds and structured, rendered reports | `evidence/models.py`, `reporting/` |
+| SDK-free MCP adapter, equal to direct calls | `mcp/adapters.py`, `tests/contract/test_tool_contract.py` |
+| Settings with `SecretStr`, log redaction | `config/settings.py`, `observability/logging.py` |
+| Offline end-to-end demo on synthetic data | `examples/portfolio-research/`, `tests/integration/` |
+| Published standalone scaffolder with a JSON CLI and template packs | `pytemplate-uv` 3.0 (sibling repository) |
+
+### Missing capabilities
+
+| Gap | Needed for | Evidence |
+| --- | --- | --- |
+| MCP server transport | Claude demo | `mcp/adapters.py` docstring: "transport (milestone Q5)" |
+| Any Quant Research code (ingestion, store, graph, retrieval) | Product A | No module; "Q4 … not started" in README |
+| Any App Factory code (spec, planner, scaffold adapter, validator) | Product B | No module |
+| Persistence: runs, audit, approvals | Provenance, approvals | Reports exist only in memory |
+| Approval gate and subprocess runner | App Factory writes and execution | `Permission` exists; there is no approval concept; thread timeouts cannot kill |
+| Provenance ids: run id, call id, input hash, timestamps, registry digest | Reproducibility | `ToolCallRecord` and `RunMetadata` fields |
+| Determinism and idempotency on the contract | Baseline per-tool spec | `ToolSpec` fields |
+| Real model-provider adapter | Server-side synthesis, spec drafting | Only `FakeModelProvider` |
+| SDK facade, REST API | Interfaces | None |
+| Analytics package | Real metrics | Metrics are examples in `examples/portfolio-research/portfolio_tools.py` |
+| Evaluation suites | Citation accuracy, injection resistance | `tests/evaluation/README.md` only |
+
+### Duplicated or stale
+
+- Brand drift: "QuantAgentOS" appeared in the CLI help, docstrings, README, and CONTRIBUTING,
+  and "QuantFoundry" in the README and `../quantfoundry.code-workspace`. The docs now follow
+  decision 0003. Code-facing strings remain (B-04).
+- ~~`apps/quant-ai-assistant/` is a README-only placeholder for a chat app that the baseline
+  replaces with external clients.~~ Removed by B-31; `apps/quant-platform` took its place.
+- The uv-template plan sections duplicated `pytemplate-uv`'s own plan. They have been removed
+  here (see History).
+
+### Coupling, risks, and technical debt
+
+| Item | Severity | Evidence or mitigation |
+| --- | --- | --- |
+| A thread timeout cannot stop a running tool | High for `execute_code` | `ToolExecutor` docstring. Use a subprocess runner (B-09) |
+| `runtime/__init__` cannot re-export the orchestrator because of an import cycle | Low | Documented in AGENTS.md. Keep as is |
+| ~~Example metrics live in `examples/` and are imported by the tests through `pythonpath`~~ Resolved by B-13: the example re-exports `quant_analytics.tools` | Low | `pyproject.toml` `[tool.pytest]`. Move them to analytics (B-13) |
+| Observability coverage is 68% | Low | Coverage report. Cover the redaction filter |
+| Scope (two products for one developer) | High | MVP = one complete slice plus a factory foundation (section 3) |
+| Copyright of ingested papers | Medium | Store only user-supplied documents. Hosted knowledge packs carry metadata, links, and licensed text only |
+| Names unchecked | Medium | AD-5. Check before launch |
+
+### Decisions already made
+
+AD-1 to AD-5, AD-8, and decisions 0001–0002 (section 8).
+
+### Decisions still open
+
+Listed in section 10.
+
+## 3. MVP: one complete slice plus the factory foundation
+
+**User story.** A quant adds Quant-Agent-OS to Claude Desktop or Claude Code as an MCP server
+and ingests a folder of research notes and papers. The quant then asks: "Which signals are
+related to short-term reversal, and what supports that?" Claude calls `find_related_signals`
+and `get_source_passage`, receives passages and graph paths with exact citations, and writes an
+answer whose every claim links to a source. Claude can then call `analyze_performance` on
+supplied returns, and `generate_report` produces an evidence-linked report. As a second
+capability, the quant runs `quant-agent-os factory create` (or the `create_app` tool) with
+approval to scaffold a new `agent-tool` package. The package passes its own checks and the
+platform's contract tests.
+
+### Acceptance criteria
+
+1. `uvx --from 'quant-agent-os[mcp]' quant-agent-os serve-mcp` starts a stdio server. A local
+   MCP client test lists the tools, and each call result equals the direct executor result.
+2. `quant-research ingest packages/quant-research/tests/fixtures/corpus` builds a SQLite knowledge store
+   offline. The rerun is idempotent, and the corpus snapshot id stays stable.
+3. `find_related_signals` returns passages and graph paths. Every passage has a `SourceRef`
+   with a location, and every graph edge cites a chunk.
+4. The citation-accuracy evaluation on the fixture corpus records a baseline. Injection
+   fixtures do not change tool selection or permissions.
+5. `create_app` without an approval records `approval_required`. With an approval it scaffolds
+   through `pytemplate-uv` 3.0, and the generated package passes `uv run pytest`, `ruff`, and
+   `mypy` (an opt-in smoke test; the offline test uses a recorded fixture).
+6. Every run is persisted with a run id, call ids, input hashes, the registry digest, and the
+   corpus snapshot id.
+7. Core imports neither product (an enforced test). The default suite runs offline with
+   `FakeModelProvider`. Lint, format, and type checks pass.
+8. A README walkthrough with a Claude Desktop configuration snippet reproduces the demo from a
+   clean checkout with `uv sync --locked`.
+
+**Status (2026-10-30).**
+- **Met:** criteria 2, 3, 4, 5, 6, 7, and 8.
+  - Criterion 5 is shown offline by rendering real projects in-process, and live by the opt-in
+    smoke test: real `agent-tool` and `python-cli` projects pass their own checks.
+- **Criterion 1:** met through `quant-research serve-mcp`, run from a checkout. The `uvx` form
+  waits for publishing, which needs a decision on names.
+
+Out of the MVP:
+- server-side synthesis;
+- vector retrieval;
+- PostgreSQL;
+- REST;
+- code generation beyond scaffolding;
+- backtests.
+
+## 4. Roadmap
+
+The proposed day 1 is **2026-11-02**. The earlier dependency-ordered milestones (Q0–Q7) map
+onto the days below, so there is still only one timeline.
+
+| Window | Goal | Backlog | Earlier milestone |
+| --- | --- | --- | --- |
+| Days 1–7 | Foundation: decisions 0003–0005 accepted, workspace and import boundary, provenance fields, MCP stdio server | B-01–B-04 | Q0, Q5 |
+| Days 8–14 | Quant Research slice: domain models, SQLite store, ingest CLI, fixture corpus | B-05 | Q4 (part) |
+| Days 15–21 | Retrieval tools, citation and injection evaluations, SDK facade, run store | B-06–B-08 | Q4, Q6 |
+| Days 22–30 | Approval gate, subprocess runner, App Factory foundation, demo and docs | B-09–B-11 | Q7 |
+| Days 31–45 | Quant baseline templates and user packs; guided specs (`describe_template`, `check_spec`, `quant-factory new`) and the factory settings file; then a design-partner gate | B-23–B-24 | — |
+| Days 31–60 | Depth: real model adapter, analytics package, PostgreSQL + pgvector, `research_alpha`, `generate_strategy`, `generate_report` over MCP; AppSpec drafting (B-16) fills the same spec files as B-24 | B-12–B-17 | Q1, Q3 |
+| Days 46–60 | If the gate says so: database guidance, template forks and git packs, walkthrough | B-25–B-26 | — |
+| Days 61–90 | Hardening and release: REST + API-key auth, Docker team server, `generate_factor_code` with a bounded iteration loop, `analyze_risk`, security review, end-to-end tests, 0.2 release, name checks | B-18–B-22 | — |
+
+## 5. Backlog (prioritized)
+
+### First five tasks
+
+**B-01. MCP stdio server** (days 1–7). **Done** on `feat/mcp-server`: `quant_agent_os.mcp.server` plus `quant-research serve-mcp`, verified end to end over a stdio subprocess.
+- *Rationale:* this is the fastest route to a Claude demo using tools that already work.
+- *Depends on:* approval to add the official `mcp` SDK as an optional extra.
+- *Files:* `src/quant_agent_os/mcp/server.py`, `cli.py` (`serve-mcp`), `pyproject.toml` extra.
+- *Acceptance:*
+  - the server only forwards to `tool_definitions` and `call_tool`;
+  - the CLI fails with an actionable message when the extra is missing.
+- *Tests:*
+  - an in-process client session test of list and call, equal to direct calls;
+  - denied, invalid, and timeout cases.
+- *Risk:* MCP SDK API drift. Pin a version range and keep the adapter SDK-free.
+
+**B-02. Provenance and contract fields** (days 1–7)
+- *Rationale:* the baseline's per-tool spec and reproducibility requirements.
+- *Files:* `tools/contracts.py`, `runtime/executor.py`, `reporting/models.py`,
+  `reporting/generator.py`.
+- *Acceptance:*
+  - adds `deterministic`, `idempotent`, `call_id`, `run_id`, `started_at`, `input_sha256`,
+    `data_versions`, and `registry_digest`, all additive with defaults;
+  - descriptors expose the new flags;
+  - Markdown provenance shows the run id.
+- *Tests:*
+  - the same input gives the same hash;
+  - the digest changes when a tool version changes;
+  - existing tests are unchanged.
+- *Risk:* report schema churn. Additive fields only.
+
+**B-03. Workspace and import boundary** (days 1–7)
+- *Rationale:* lets products land without coupling (decision 0003).
+- *Files:*
+  - root `pyproject.toml` `[tool.uv.workspace]`;
+  - `packages/quant-research/` skeleton (`pyproject.toml`, `src/quant_research/__init__.py`,
+    `tests/`);
+  - `tests/contract/test_import_boundaries.py`.
+- *Acceptance:*
+  - `uv sync` installs the members;
+  - the boundary test fails if `quant_agent_os` imports `quant_research` or
+    `quant_app_factory`, or if the products import each other;
+  - CI runs member tests.
+- *Tests:* the boundary test, using AST scanning without a new dependency.
+- *Risk:* workspace changes to CI. Ask before editing the workflow.
+
+**B-04. Brand alignment in code-facing text** (days 1–7)
+- *Rationale:* consistent positioning (decision 0003).
+- *Files:* `cli.py` help, package docstrings, `pyproject.toml` description.
+- *Acceptance:* the user-visible strings say Quant-Agent-OS; module and distribution names are
+  unchanged.
+- *Tests:* the CLI help test.
+- *Risk:* none.
+
+**B-05. Quant Research store and ingestion** (days 8–14). **Done** (commits `1f94aa5`–`b58acbd`).
+- *Rationale:* the core of product A.
+- *Files:*
+  - `quant_research/domain/` (Document, Chunk, Entity, Relation, CorpusSnapshot, `KnowledgeStore`
+    protocol);
+  - `infrastructure/sqlite_store.py` and `memory_store.py`;
+  - `application/ingest.py`;
+  - `vocabulary/quant-v1.toml`;
+  - the CLI `quant-research ingest`;
+  - `tests/fixtures/corpus/` (about 10 synthetic, freely licensed notes).
+- *Acceptance:*
+  - ingestion is idempotent by content hash;
+  - every chunk has a location and every relation cites a chunk;
+  - the snapshot id is stable across reruns.
+- *Tests:*
+  - shared contract tests for both stores;
+  - known-answer extraction tests on the fixtures;
+  - an FTS5-missing fallback test.
+- *Risk:* entity-resolution quality. Measure it, then improve the vocabulary.
+
+### Remaining backlog
+
+| ID | Task | Depends on | Acceptance (summary) |
+| --- | --- | --- | --- |
+| B-06 | **Done.** Hybrid retrieval (keyword + graph, RRF); `find_related_signals`, `get_source_passage` tools; citation and injection evaluations. Step plan: [plans/quant-research-retrieval.md](quant-research-retrieval.md) | B-05 | Criteria 3–4 in section 3 |
+| B-07 | **Done.** SDK `Platform` facade (`call`, `run`, `get_run`, `runs`) in `quant_agent_os.sdk` | B-02 | Same records as the MCP path |
+| B-08 | **Done.** `RunStore` (memory, SQLite), `RunRecorder`, append-only audit events; `serve-mcp` records every call; `quant-research runs` | B-02 | Criterion 6; no secrets in the audit (test) |
+| B-09 | **Done.** Approval gate, `approval_required` status, standing approvals, subprocess runner (decision 0005 accepted). Plan: [plans/approvals-and-app-factory.md](approvals-and-app-factory.md) | B-08 | Approvals bound to input hashes and single use; hard kill on timeout |
+| B-10 | **Done.** App Factory foundation: `AppSpec`, `ArchitecturePlanner`, `ScaffoldProvider`, `PytemplateUvScaffolder`, `agent-tool` pack, `plan_app`/`create_app`, `quant_agent_os.testing.check_tool`, CLI `quant-factory plan/create` | B-03, B-09 | Criterion 5; pytemplate-uv imported only through `pytemplate.api` in the adapter (decision 0006) |
+| B-11 | **Done for Quant Research** ([walkthrough.md](../../getting-started.md), verified from a clean clone with `uv sync --locked`). The App Factory part waits for B-10 | B-01, B-06, B-10 | Criterion 8 |
+| B-12 | **Closed** until a design partner asks ([decision 0016](../../decisions/0016-clients-orchestrate.md)). First real `ModelProvider` adapter | — | — |
+| B-13 | **Done.** Analytics package (`packages/quant-analytics`) on empyrical-reloaded, not hand-written formulas and not pyfolio ([decision 0010](../../decisions/0010-analytics-on-empyrical.md)): `analyze_performance` (return, volatility, Sharpe, Sortino, Calmar, Omega, drawdown, tail ratio, stability, VaR, hit rate; alpha, beta, active return, tracking error, IR with a benchmark); the example tools moved in | — | Imports no LLM library; `analyze_performance` registered; known-answer tests pin empyrical's conventions |
+| B-14 | **Done.** `PostgresKnowledgeStore` + pgvector, embedding provider port, vector channel gated by evaluation: same answers as SQLite (FTS5's BM25 in SQL), contract tests run in CI against pgvector; the embedding port and hosted embedders predate it, and the vector channel stays opt-in ([0004](../../decisions/0004-knowledge-store.md)) | B-06 (B-12 only for a provider-backed evaluation) | Passes the shared store contract tests |
+| B-15 | **Closed** until a design partner asks (decision 0016). `research_alpha`: server-side synthesis | — | — |
+| B-16 | **Closed** until a design partner asks (decision 0016). AppSpec drafting by a server-side model | — | — |
+| B-17 | **Done.** `generate_strategy` (a structured strategy specification from research evidence): `StrategyService` turns the cited graph edges around one signal, factor, or strategy into a `StrategySpec` (signals, universe, data, methods, metrics, risks, context, key passages, open questions); deterministic, no model; CLI `quant-research strategy` | B-06 | The output is a spec, not code; the spec links its sources |
+| B-18 | **Done.** REST API (FastAPI extra) and API-key auth with scopes and a principal in audit events ([decision 0011](../../decisions/0011-rest-api-and-api-keys.md)): `quant_agent_os.api`, `quant-agent-os api-key new`, `quant-research serve-api`; run-store schema 3 | B-07, B-08 | REST equals MCP results (contract test) |
+| B-19 | **Done.** Docker image and team-server deployment guide ([deployment.md](../../deployment.md)): `deploy/Dockerfile`, `deploy/compose.yaml` (SQLite) and `deploy/compose.postgres.yaml` (PostgreSQL + pgvector, read-only server role), and a CI job running `deploy/smoke-test.sh` on both (`docker compose up`, no secrets in the image) | B-14, B-18 | `docker compose up` demo; no secrets in the image |
+| B-20 | **Closed** until a design partner asks (decision 0016). `generate_factor_code` and a fix-and-validate loop | — | — |
+| B-21 | **Done.** `analyze_risk` (exposures, volatility contributions) in analytics: Euler volatility contributions from the sample covariance, OLS factor exposures, and an exact in-sample split of variance into factor and specific shares (`quant_analytics/risk.py`, numpy; empyrical has none) | B-13 | Known-answer tests |
+| B-22 | 0.2 release, security review, name availability checks | all | Release gates in section 9 |
+| B-23 | **Done.** Quant baseline templates (`quant-baseline`: `alpha-research`, `backtest`, `report`; required `metrics` component; bias tests; `LIMITATIONS.md`) and user packs (`AppSpec.template`, `profile`, `answers`, `settings`). Step plan: [plans/app-factory-questionnaires.md](app-factory-questionnaires.md) (Q1) | B-10 | Each profile passes its checks, including bias tests (smoke); a local user pack renders; existing specs unchanged |
+| B-24 | **Done.** Guided specs and factory settings (decisions 0007, 0008): read-only `describe_template` and `check_spec` (pytemplate-uv is the judge); `quant-factory new` writes a spec file; `~/.quant-agent-os/factory.toml` (identity, connections with environment-variable names, templates) (Q2) | B-23 | `check_spec` reports each problem kind; secret-looking values refused; identity falls back to git config |
+| B-25 | **Done.** Database guidance: `data-database` component, saved connections, generated `settings.py`, `.env.example`, and `check-connection`; `create --check-connection` (Q3) | B-24 | Scan test finds no secret values in generated files; `check-connection` passes against SQLite or DuckDB (smoke) |
+| B-26 | **Done.** `quant-factory template fork`, `check`, and `add` (git packs pinned and cached); walkthrough (Q4) | B-23, B-24 | A forked pack checks and passes its smoke checks; a git pack plans offline; walkthrough reproduced |
+| B-27 | **Done.** Quant review, phase 1: correct numbers. One trade-timing convention for studies and backtests, delisting exits and gap handling, drifting holdings with a rebalance schedule, Newey-West t-stats, parsed ISO dates, and standard signal definitions. Plan: [plans/quant-review.md](quant-review.md) (R1–R6) | B-23 | A template correctness suite of synthetic worlds with known answers passes for every profile (smoke test) |
+| B-28 | **Done.** Quant review, phase 2: one `quant-research` project (study, backtest, walk-forward, and report subcommands), experiment folders with data fingerprints, out-of-sample walk-forward, exposure modes, run comparisons in reports, and tools that read the project's data (S1–S6) | B-27 | Test windows never influence chosen parameters; known-answer beta, IR, and TE; old kinds alias the new profile |
+| B-29 | **Done.** Quant review, phase 3: a one-command start, questions that apply, quiet output, one way to name a target, and one approval path for operator commands, keeping the prompt (U1–U5) | B-24, B-28 | Scripted CLI tests per path; every doc example validates; agent approvals unchanged |
+| B-30 | **Done.** Agent surface, phase 1: output schemas, failure hints (MCP and REST), concise search, compact schemas and two served analytics tools, untrusted-text marking, and an offline agent-efficiency evaluation with an enforced baseline. Plan: [plans/agent-surface.md](agent-surface.md) (P1) | — | Definition bytes −19%, result bytes −2% on the fixture, success 100% |
+| B-31 | **Done.** Agent surface, phase 2: one platform server (`apps/quant-platform`, `quant-platform serve-mcp`) with toolsets, resources read through tools, prompts, datasets by reference (`quant-agent-os dataset push`, `list_datasets`), and a deterministic `research_report` (P2) | B-30 | Argument bytes −94% on the shared tasks; analytics argument cost no longer grows with the series |
+| B-32 | **Done.** Agent surface, phase 3: four instruction-only skills (`skills/`), consistency tests against the served catalog, the repository as a Claude Code plugin with its marketplace entry, generated Cursor and VS Code (Copilot) bundles (`clients/`), and the skills counted in the efficiency evaluation (P3) | B-31 | Every served tool is covered by a skill |
+| B-33 | **Done.** Remote MCP over stateless Streamable HTTP with REST's API keys and per-method scopes ([decision 0012](../../decisions/0012-remote-mcp-over-http.md)): `quant_agent_os.mcp.http`, `quant-platform serve-http` (MCP at `/mcp`, REST at `/v1`), the team image on the platform, factory toolset an optional extra (P4) | B-18, B-19, B-31 | HTTP equals stdio, REST, and direct calls; smoke test drives MCP over HTTP in Docker |
+| B-34 | **Done.** Tenants and OAuth ([decision 0013](../../decisions/0013-identity-and-tenancy.md)): `quant_agent_os.tenancy`/`serving` (per-caller tenant surfaces for REST and HTTP MCP), tenant-filtered runs, keys with tenants, `quant-platform serve-http --tenants` and `tenant add/list/disable`, OAuth 2.1 by introspection with issuer-pinned tenants and Protected Resource Metadata (P5) | B-14, B-33 | The isolation suite passes: two tenants never see each other's passages, datasets, or runs |
+| B-35 | **Done.** Approving without leaving the client ([decision 0014](../../decisions/0014-approvals-in-the-client.md)): approval requests and the approval page (`serve-http --approval-url`, approver keys with `runs:approve`, four eyes except `local`), the retried call resumed in its original run; `quant-factory serve-mcp --confirm-in-client` for local `create_app` and `check_app` (P6) | B-33 | Approvals cannot come from the agent's key, another tenant, or the requester; the approved call runs once |
+| B-37 | Simplification, phases P0 to P6: correct numbers, remove and fence off, one install, a notebook path, hardening, factory cleanup, docs. Plan: [plans/simplification.md](simplification.md) | — | The outcomes table in the plan |
+| B-36 | **Done.** Commercial readiness ([decision 0015](../../decisions/0015-metering-quotas-and-entitlements.md)): usage events and `quant-platform usage export`, plans with quotas and rate limits, semver tools with `scripts/tool-versions.lock` and `qaos://server/info`, OpenTelemetry per call, SLOs, and a [security review](../../security-review.md) with five open findings (P7) | B-34 | Usage per tenant exported; out-of-plan toolsets unlisted |
+
+`run_backtest` is planned for after day 90 as its own package with explicit cost, slippage,
+calendar, and no-look-ahead tests. Pull it forward only when design-partner demand shows a need.
+It is a different thing from the `backtest` template (B-23). That template generates a backtest
+project the user owns. `run_backtest` would be a platform tool.
+
+## 6. Commercial path (proposed, to be validated)
+
+The goal is open-core sustainability without compromising the open project. Nothing below is
+built before day 90. The architecture only keeps the right seams open:
+- tenancy and principal columns in the run store;
+- audit events usable for metering;
+- separate distributions so licenses can differ per package.
+
+| Offer | Value | Architectural prerequisite |
+| --- | --- | --- |
+| Open-source Core + products (MIT) | Adoption, credibility, contributors | This plan |
+| Team or enterprise server: SSO/OIDC, RBAC, audit retention and export, approval workflows, PostgreSQL deployment support | Firms need governance before agents touch research and code | B-08, B-09, B-18, B-19 |
+| Curated knowledge packs: quant factor and signal graphs with metadata, links, and licensed summaries | Time saved on literature review | B-05, B-14; licensing review |
+| Quant baseline templates (open) and premium App Factory packs (factor libraries, data-pipeline services, research APIs, firm-specific forks) | Faster production-quality builds; guided setup | B-10, B-23, B-26 |
+| Team settings: shared connections and packs, with access control and change audit | Consistent setup across a team without sharing secrets | B-24, B-18, B-19 |
+| Hosted Quant-Agent-OS (later) | No operations burden | Multi-tenant work, currently out of scope |
+| Support, design partnerships, custom integrations | Early revenue and product feedback | MVP demo (B-11) |
+
+Validation steps:
+- recruit 3–5 design partners (quant researchers or small funds) after the MVP demo;
+- track weekly active MCP installations (opt-in only, no telemetry by default), stars, and
+  partner retention;
+- decide the license boundary (for example, enterprise features in a separately licensed
+  package) before day 90 (open question O-4).
+
+## 7. Quality gates per change
+
+Run `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run mypy`.
+Products follow the same contract tests. Each user-visible change gets a CHANGELOG entry.
+
+## 8. Architecture decisions
+
+| ID | Decision | Status |
+| --- | --- | --- |
+| AD-1 | One bounded orchestrator; specialists only after an evaluation ([0001](../../decisions/0001-one-orchestrator-first.md)) | Decision |
+| AD-2 | Logic lives in services and libraries; MCP, REST, and SDK are adapters over one executor ([0002](../../decisions/0002-mcp-boundary.md)) | Decision |
+| AD-3 | Read-only by default | Decision |
+| AD-4 | Bring your own everything, with a small documented support set | Decision |
+| AD-5 | All names are provisional until availability and trademark checks | Decision |
+| AD-6 | Superseded by AD-10 | Superseded |
+| AD-7 | (pytemplate-uv render engine; now owned by that project) | Moved |
+| AD-8 | `pytemplate-uv` is independent. App Factory uses it as a library through `pytemplate.api`, in one adapter, and owns its own template pack (revised by decision 0006; first a pinned CLI) | Decision |
+| AD-9 | Quant-Agent-OS is the brand and platform; two products; one repository as a uv workspace with Core at the root ([0003](../../decisions/0003-brand-and-product-structure.md)) | Proposed |
+| AD-10 | A relational knowledge graph behind `KnowledgeStore`; SQLite and PostgreSQL adapters with equal answers, a graph database only on evidence ([0004](../../decisions/0004-knowledge-store.md)) | Decision |
+| AD-11 | Per-call approvals for consequential permissions; subprocess runner for `execute_code` ([0005](../../decisions/0005-approval-gates.md)) | Proposed |
+| AD-12 | In the MVP, clients synthesize answers and Quant Research returns evidence packets | Proposed |
+| AD-13 | Ingestion is an operator command, not an agent tool | Proposed |
+| AD-14 | Stay on Python ≥ 3.11 (matches `pytemplate-uv` and CI); raise it only when a dependency requires 3.12 | Proposed |
+
+## 9. Risks, release gates, and success metrics
+
+Risks:
+- **Two products for one developer.** Mitigation: the MVP has one complete slice; the second
+  product is a foundation only.
+- **Injection through documents.** Mitigation: read-only agents, no feedback into planning, and
+  injection fixtures.
+- **Weak extraction quality.** Mitigation: deterministic vocabulary first, measured with the
+  citation evaluation.
+- **Metric conventions.** Mitigation: known-answer tests.
+- **MCP SDK and provider drift.** Mitigation: isolated adapters.
+- **Copyright.** Mitigation: user-supplied corpora and licensed packs only.
+- **Names.** Mitigation: AD-5.
+
+Release gates for 0.2:
+- all MVP acceptance criteria are met;
+- no open critical or high findings;
+- the evaluation suites pass with recorded baselines;
+- a clean-checkout demo works.
+
+Success metrics (to be confirmed after the first baseline):
+- citation accuracy at or above the agreed threshold;
+- injection resistance of 100% on the fixtures;
+- 100% of known-answer metric tests pass;
+- generated `agent-tool` packages pass their checks on the first run;
+- the demo reproduces in under 10 minutes.
+
+## 10. Open questions
+
+- **O-1:** Which LLM provider gets the first adapter (B-12)?
+- **O-2:** Which MCP SDK version range is supported, and when is a remote transport (streamable
+  HTTP) needed?
+- **O-3:** What is the final name of the analytics package (derived from `pyfolio-reloaded`)?
+- **O-4:** Where is the license boundary for commercial features: MIT everywhere plus services,
+  or a separately licensed enterprise package?
+- **O-5:** *Resolved by decision 0006:* `plan_app` renders in-process into a temporary
+  directory, so it stays read-only without a narrower permission.
+- **O-6:** What are the distribution names for the products (`quant-agent-os-research`,
+  `quant-agent-os-factory`)?
+- **O-7:** *Resolved by B-10:* packs ship as package data inside `quant_app_factory/packs/`
+  and are passed to pytemplate-uv as local paths. User git packs are pinned and cached
+  locally (B-26).
+- **O-8:** How is iteration in App Factory (B-20) reconciled with the no-feedback invariant?
+  This needs its own decision record.
+- **O-9:** *Resolved by B-25:* `data-database` supports PostgreSQL, SQLite, and DuckDB.
+  Snowflake waits for demand.
+- **O-10:** Does `data-parquet` bring `pyarrow` by default, or is it opt-in for size (B-23)?
+- **O-11:** When `factory.toml` moves to Core, and whether a keychain backend is added, are
+  decided by the second product that needs the settings.
+- **O-12:** Does pytemplate-uv's roadmap include generic pack authoring (an API or a
+  `--json` command) that `template fork` (B-26) can delegate to? It is tracked in
+  pytemplate-uv's repository, not here.
+- **O-13:** How do MCP clients approve consequential calls such as `create_app`? Until then,
+  people converse in Claude and confirm in the terminal.

@@ -29,7 +29,7 @@ flagship chat-style application, "Quant AI Assistant", and split research retrie
 - Dependencies point one way. Core imports no product, and products do not import each other.
   A test enforces this.
 - `pytemplate-uv` is used only through a `ScaffoldProvider` adapter, and this repository holds
-  no plans for it ([AD-8](../ENGINEERING_REVIEW_PLAN.md#architecture-decisions)).
+  no plans for it ([AD-8](../plans/archive/engineering-plan.md#8-architecture-decisions)).
   - *Superseded in part by [decision 0006](0006-pytemplate-uv-as-a-library.md):* App Factory
     now imports `pytemplate.api` as a library, in that adapter only, instead of running the
     pinned CLI.

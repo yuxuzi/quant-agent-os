@@ -260,7 +260,7 @@ Deviations from the steps above:
 **Done when** Claude Code connects with `claude mcp add --transport http` to the Docker team
 server and passes the efficiency suite.
 
-**Status: done (2026-11-02).** [Decision 0012](../decisions/0012-remote-mcp-over-http.md)
+**Status: done (2026-11-02).** [Decision 0012](../../decisions/0012-remote-mcp-over-http.md)
 accepted with the factory toolset as an optional extra. Deviations from the steps above:
 - **No progress notifications.** Stateless JSON responses carry no stream to report progress
   on; long calls (`check_app`) are not served over HTTP. Revisit with P6.
@@ -286,7 +286,7 @@ accepted with the factory toolset as an optional extra. Deviations from the step
 **Done when** two tenants on one server cannot observe each other in any test, and Claude
 connects through OAuth.
 
-**Status: done (2026-11-02).** [Decision 0013](../decisions/0013-identity-and-tenancy.md)
+**Status: done (2026-11-02).** [Decision 0013](../../decisions/0013-identity-and-tenancy.md)
 was accepted with introspection, a schema per tenant, and the HTTP admin API left for later.
 Deviations from the steps above:
 - **The default tenant is `local`**, which the run store already recorded, so no migration
@@ -311,7 +311,7 @@ Deviations from the steps above:
 **Done when** a client completes plan, approve, and apply without leaving the client, and an
 approval cannot be forged by tool output (injection test).
 
-**Status: done (2026-11-02).** [Decision 0014](../decisions/0014-approvals-in-the-client.md)
+**Status: done (2026-11-02).** [Decision 0014](../../decisions/0014-approvals-in-the-client.md)
 was accepted with approver keys and four eyes except for the local tenant. Deviations from the
 steps above:
 - **Both ways in are opt-in.** The approval page needs `--approval-url`, and the in-client
@@ -320,7 +320,7 @@ steps above:
 - **SDK resume.** `Platform.resume` cannot yet resume a call with a secret-named argument;
   see the decision's notes.
 
-### P7. Commercial readiness (B-36; [decision 0015](../decisions/0015-metering-quotas-and-entitlements.md), accepted)
+### P7. Commercial readiness (B-36; [decision 0015](../../decisions/0015-metering-quotas-and-entitlements.md), accepted)
 
 1. **P7.1 Metering.** A usage event per call (tenant, tool, duration, bytes, status), written
    with the run, plus a usage export.
@@ -329,11 +329,11 @@ steps above:
    quota and are never cut off mid-call.
 3. **P7.3 Compatibility.** Tool versions follow semver, with a deprecation window and a
    changelog for tools. The server advertises its version, and skills check it. Done:
-   `scripts/tool-versions.lock`, `qaos://server/info`, [tools changelog](../tools-changelog.md).
+   `scripts/tool-versions.lock`, `qaos://server/info`, [tools changelog](../../tools-changelog.md).
 4. **P7.4 Operations.** SLO dashboards from OpenTelemetry, and a security review of the remote
    surface (OWASP and MCP security best practices) before any public endpoint, folded into
-   B-22. Done: telemetry and SLOs in [deployment](../deployment.md), and the
-   [security review](../security-review.md), whose findings F-1 to F-5 are open.
+   B-22. Done: telemetry and SLOs in [deployment](../../deployment.md), and the
+   [security review](../../security-review.md), whose findings F-1 to F-5 are open.
 
 Billing-provider integration, the licence for the hosted parts, and listings in MCP
 registries wait for the open questions below.

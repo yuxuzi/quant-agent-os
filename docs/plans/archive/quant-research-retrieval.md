@@ -1,7 +1,7 @@
 # Plan: Quant Research retrieval service
 
-Scope: backlog items B-05 and B-06 in [ENGINEERING_REVIEW_PLAN.md](../ENGINEERING_REVIEW_PLAN.md).
-The design is in [architecture.md §6–7](../architecture.md). The service is
+Scope: backlog items B-05 and B-06 in [ENGINEERING_REVIEW_PLAN.md](engineering-plan.md).
+The design is in [architecture.md §6–7](../../architecture.md). The service is
 `quant_research.application.retrieval.ResearchService`, exposed through the
 `find_related_signals` and `get_source_passage` tools.
 
