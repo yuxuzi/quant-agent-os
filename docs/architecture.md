@@ -1,598 +1,294 @@
 # Quant-Agent-OS architecture
 
-This is the canonical architecture of Quant-Agent-OS. The roadmap, gap analysis, and backlog are
-in [ENGINEERING_REVIEW_PLAN.md](ENGINEERING_REVIEW_PLAN.md). Decisions are recorded in
-[decisions/](decisions/).
+How the system is built today. Why it is built this way is in [decisions/](decisions/), and what is
+still open is in [ENGINEERING_REVIEW_PLAN.md](ENGINEERING_REVIEW_PLAN.md).
 
-Every design element carries one of three labels:
-- **Confirmed** means it exists in this repository today and is tested.
-- **Proposed** means it is the agreed target design and is not built yet.
-- **Open** means it is undecided; the open question is listed in the plan.
+## Positioning
 
-## 1. Positioning
+Quant-Agent-OS gives AI clients quantitative research tools with cited, computed evidence, over MCP,
+REST, and a Python SDK. It is not a chatbot, and it calls no model: the client supplies the conversation
+and the plan ([decision 0016](decisions/0016-clients-orchestrate.md)). The expected customer is a firm
+or team that hosts it themselves. One wheel holds five import names
+([decision 0018](decisions/0018-one-wheel.md)), and `qaos` is the one command.
 
-**Quant-Agent-OS** is the brand, the product, and the platform: an open-source quantitative
-intelligence and application-engineering platform. It is **not a chatbot**. Claude, GitHub
-Copilot, Cursor, and other AI clients consume its capabilities through MCP, a REST API, and a
-Python SDK. Quant-Agent-OS supplies the tools, workflows, quantitative services, and provenance;
-the client supplies the conversation.
+| Package | Role | Extra |
+| --- | --- | --- |
+| `quant_agent_os` | Core: tool contract, executor, evidence, runs, interfaces | base |
+| `quant_research` | Cited keyword search with entity linking and a small graph of extracted facts, plus optional semantic search | none; `pdf`, `postgres`, `local-embeddings` add to it |
+| `quant_analytics` | Performance and risk metrics ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `analytics` |
+| `quant_app_factory` | Generates tested Python projects, through [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) | `factory` |
+| `quant_platform` | The composition root: `qaos`, one server for every toolset, `research_report`, prompts, and the hosted command group | `server` |
 
-| Kind | Name | Role | Status |
-| --- | --- | --- | --- |
-| Platform | Quant-Agent-OS Core (`quant_agent_os`) | Runtime, tool registry, executor, evidence, interfaces | Confirmed (partial) |
-| Product A | Quant Research (`quant_research`) | Graph RAG research and knowledge system with source provenance | Proposed |
-| Product B | Quant App Factory (`quant_app_factory`) | Requirements to tested, packaged Python applications | Confirmed (foundation) |
-| Domain service | Quant analytics (separate package; name open) | Deterministic performance, risk, and later backtest calculations | Proposed |
-| External tool | [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.0 | Standalone, deterministic project scaffolder | Confirmed (published) |
-
-The baseline documents call the scaffolder "template-uv" or "uv-template"; its published name is
-`pytemplate-uv`. It is not a Quant-Agent-OS product or component. Quant App Factory uses it as a
-library through a replaceable adapter ([section 9](#9-pytemplate-uv-integration-boundary),
-[decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)).
-
-"QuantFoundry" (the earlier umbrella name) and "Quant AI Assistant" (the earlier flagship app)
-are retired by [decision 0003](decisions/0003-brand-and-product-structure.md). The assistant's
-portfolio-research workflow survives as a platform workflow that external clients call. All
-names remain provisional until availability checks are done.
-
-## 2. System context
+## System context
 
 ```text
         Claude · Copilot · Cursor · VS Code agents · scripts · notebooks
                                    │
-              MCP (stdio, later HTTP) · REST (later) · Python SDK · CLI
+              MCP (stdio, Streamable HTTP) · REST · Python SDK · CLI
                                    │
  ┌─────────────────────────────────▼─────────────────────────────────────┐
- │                      Quant-Agent-OS Core platform                     │
- │  tool contract & registry · permission & approval policy · executor   │
- │  evidence & reports · run store & audit · config                      │
- │  observability                                                        │
- └───────────────▲───────────────────────────────────▲───────────────────┘
-                 │ registers tools                   │ registers tools
-     ┌───────────┴────────────┐          ┌───────────┴─────────────┐
-     │     Quant Research     │          │    Quant App Factory    │
-     │ ingestion · knowledge  │          │ AppSpec · architecture  │
-     │ graph · hybrid         │          │ scaffold · generate ·   │
-     │ retrieval · evidence   │          │ validate · package      │
-     └───────────┬────────────┘          └───────────┬─────────────┘
-                 │                                   │ ScaffoldProvider port
-     KnowledgeStore adapters               pytemplate-uv adapter (pytemplate.api)
-     (memory · SQLite · PostgreSQL)                  │
-                                          pytemplate-uv 3.0 (independent)
+ │  quant_platform: composes the toolsets below into one server          │
+ ├───────────────────────────────────────────────────────────────────────┤
+ │  quant_agent_os (Core)                                                │
+ │  tool contract & registry · permissions & approvals · bounded executor│
+ │  evidence & reports · run store & audit · config · observability      │
+ └─────▲─────────────────────────▲─────────────────────────▲─────────────┘
+       │ registers tools         │ registers tools         │ registers tools
+ ┌─────┴──────────┐      ┌───────┴────────┐      ┌─────────┴──────────┐
+ │ Quant Research │      │ Quant Analytics│      │ Quant App Factory  │
+ └─────┬──────────┘      └───────┬────────┘      └─────────┬──────────┘
+ KnowledgeStore adapters    empyrical-reloaded      ScaffoldProvider port
+ (SQLite · PostgreSQL)                              pytemplate-uv adapter
 
-   Quant analytics (independent package): registered as tools by its owner
-   User-owned: models and keys, documents, data, databases (bring your own)
+ User-owned: documents, data, databases, and any embedding key
 ```
 
-Arrows into Core mean registration: products hand Core `ToolSpec`s. Core never imports a
-product.
+Arrows into Core mean registration: products hand Core `ToolSpec`s, and Core never imports a product.
 
-### 2.1 Target picture by layer
+Identity is an API key with scopes on the HTTP server. Scopes are `tools:list`, `tools:call`, and
+`runs:approve`; there are no PM, trader, or researcher roles. Tenants, plans, usage metering, OAuth, and
+the approval page are behind `qaos hosted`
+([decision 0017](decisions/0017-hosted-behind-a-command-group.md), [hosted.md](hosted.md)). Core keeps
+only a `tenant` column (default `local`) and small hooks such as `UsageGate`.
 
-The same system seen from the people who use it, top to bottom. Orchestration (planning, tool
-selection, and conversation state) happens in the client, not on the server. The platform
-enforces policy, controls the workflow, and keeps the audit trail for every call, whichever
-client makes it. Workflows the platform owns are deterministic composite tools, not
-server-side agents ([decision 0016](decisions/0016-clients-orchestrate.md),
-[agent-surface plan](plans/agent-surface.md), principle 2).
+## Core
 
-```text
-            Portfolio manager · Trader · Researcher
-                              │
- ┌────────────────────────────▼─────────────────────────────────────────┐
- │ AI client: Claude · Cursor · VS Code · Copilot · SDK scripts         │
- │ Agent orchestration: planning · tool selection · conversation state  │
- │ Skills (instruction-only) guide each workflow                        │
- └────────────────────────────┬─────────────────────────────────────────┘
-                              │ MCP (stdio · Streamable HTTP) · REST · SDK
- ┌────────────────────────────▼─────────────────────────────────────────┐
- │ Identity and API gateway                                             │
- │ OAuth 2.1 / API keys · tenant from the credential · rate limits      │
- │ request context (tenant, principal)                                  │
- ├──────────────────────────────────────────────────────────────────────┤
- │ Policy and workflow control (Core)                                   │
- │ tool registry · permissions · approvals · bounded executor ·         │
- │ composite tools · quotas · run store, audit, and metering            │
- └──────────────┬───────────────────────┬───────────────────────┬───────┘
-                │                       │                       │
- ┌──────────────▼──────────┐ ┌──────────▼──────────┐ ┌──────────▼──────────┐
- │ RAG service             │ │ Quant analytics     │ │ Quant App Factory   │
- │ (Quant Research)        │ │ performance and     │ │ specs checked on    │
- │ hybrid graph, keyword,  │ │ risk metrics        │ │ the server; files   │
- │ vector · fusion ·       │ │                     │ │ written locally     │
- │ citations · per-tenant  │ │                     │ │                     │
- │ corpus                  │ │                     │ │                     │
- └──────────────┬──────────┘ └─────────────────────┘ └─────────────────────┘
-                │
-   Research documents, reports, model documentation (ingested by the operator)
-```
-
-| Layer | Status | Where |
+| Component | Module | Responsibility |
 | --- | --- | --- |
-| Agent orchestration in the client, skills | Confirmed | B-32 (P3) |
-| Identity: OAuth 2.1 introspection, API keys, tenants | Confirmed | [0011](decisions/0011-rest-api-and-api-keys.md), [0013](decisions/0013-identity-and-tenancy.md) |
-| Gateway: plans, rate limits, and quotas | Confirmed (per process) | [0015](decisions/0015-metering-quotas-and-entitlements.md) (B-36) |
-| Policy, approvals, executor, audit | Confirmed | [0005](decisions/0005-approval-gates.md), [0014](decisions/0014-approvals-in-the-client.md) |
-| RAG: hybrid retrieval, fusion, citations, tenant isolation | Confirmed | [section 6](#6-quant-research-graph-rag-architecture) |
-| RAG: reranking model, per-document or per-role filters | Open | Not planned; would need its own decision |
-| Quant analytics | Confirmed | [0010](decisions/0010-analytics-on-empyrical.md) |
+| Tool contract | `tools/contracts.py` | `ToolSpec`, `@tool` |
+| Registry | `tools/registry.py` | Explicit, unique registration and lookup |
+| Permissions | `tools/permissions.py` | `Permission`, `PermissionPolicy`, allowlist, read-only default |
+| Catalog and compatibility | `tools/catalog.py`, `tools/compatibility.py`, `tools/server_info.py` | Resources and prompts; schema changes against `scripts/tool-versions.lock`; `qaos://server/info` |
+| Tool call | `runtime/call.py` | `ToolCall`, what every interface hands the executor |
+| Executor | `runtime/executor.py` | Permissions, validation, one bounded pool, timeout, output size, `ToolCallRecord` |
+| Approvals | `runtime/approvals.py` | Single-use approvals bound to run, tool, and input hash |
+| Runner | `runtime/runner.py` | `run_command`: fixed directory, scrubbed environment, kills the process tree on timeout |
+| Quotas and telemetry | `runtime/quotas.py`, `runtime/telemetry.py` | The `UsageGate` hook; optional OpenTelemetry spans |
+| Evidence | `evidence/models.py` | `Evidence` (`retrieved`, `computed`, `interpretation`), `SourceRef` |
+| Reporting | `reporting/` | `Report`, `RunMetadata`, Markdown rendering |
+| Runs | `runs/` | `RunStore` (memory, SQLite), `RunRecorder`, redaction, append-only audit |
+| Configuration | `config/settings.py` | The home, `QUANT_AGENT_OS_*` settings, `SecretStr` |
+| Datasets | `data/` | Tables read by id with a fingerprint as their version; `list_datasets` |
+| Tenancy and serving | `tenancy.py`, `serving.py` | Tenant ids; `Surface`, one tenant's executor, resources, prompts, and runs |
+| MCP | `mcp/adapters.py`, `mcp/server.py`, `mcp/http.py` | Definitions and calls over the executor; stdio; stateless Streamable HTTP |
+| REST | `api/` | FastAPI over the same executor; scoped API keys stored as hashes |
+| SDK | `sdk/` | `Platform`: `call`, `report`, `approve`, `resume`, run lookup |
+| Contract checks | `testing.py` | `check_tool`, also used by generated tool packages |
+| Observability | `observability/logging.py` | Logging with secret redaction |
 
-The user roles in the picture are audiences, not access roles. Identity has scopes
-(`tools:call`, `runs:approve`) but no PM, trader, or researcher roles, so everyone in a tenant
-sees the same corpus. A team that needs separation within a firm uses separate tenants today.
+## Layering and dependencies
 
-## 3. Core platform components
-
-| Component | Module | Responsibility | Status |
-| --- | --- | --- | --- |
-| Tool contract | `tools/contracts.py` | `ToolSpec`, `@tool`, descriptors | Confirmed |
-| Registry | `tools/registry.py` | Explicit, unique registration and lookup | Confirmed |
-| Permissions | `tools/permissions.py` | `Permission`, `PermissionPolicy`, allowlist, read-only default | Confirmed |
-| Tool call | `runtime/call.py` | `ToolCall`, what every interface hands the executor | Confirmed |
-| Executor | `runtime/executor.py` | Permissions, validation, timeout, output size, `ToolCallRecord` | Confirmed |
-| Evidence | `evidence/models.py` | `Evidence` (`retrieved` · `computed` · `interpretation`), `SourceRef` | Confirmed |
-| Reporting | `reporting/` | `Report`, `RunMetadata`, Markdown rendering | Confirmed |
-| Configuration | `config/settings.py` | `QUANT_AGENT_OS_*` settings, `SecretStr` | Confirmed |
-| Observability | `observability/logging.py` | Logging with secret redaction | Confirmed |
-| MCP adapter | `mcp/adapters.py` | `tool_definitions`, `call_tool`, and resources (each read through its tool) and prompts (`tools/catalog.py`) over the executor | Confirmed |
-| Tenancy and serving | `tenancy.py`, `serving.py` | Tenant ids; `Surface` (one tenant's executor, resources, prompts, runs) and `Tenancy`, which REST and HTTP MCP route each caller to ([0013](decisions/0013-identity-and-tenancy.md)) | Confirmed (B-34) |
-| Approvals in the client | `quant_platform/hosted/approval_desk.py`, `approval_page.py` | Approval requests for waiting HTTP calls, the approval page (approver keys, four eyes), resume in the original run; stdio confirmation in the client ([0014](decisions/0014-approvals-in-the-client.md)) | Confirmed (B-35) |
-| OAuth | `quant_platform/hosted/oauth.py` | OAuth 2.1 resource server: introspection, audience, issuer-pinned tenants, Protected Resource Metadata | Confirmed (B-34) |
-| Datasets | `data/` | CSV tables read by id with a fingerprint as data version; `list_datasets`; `qaos data add` | Confirmed (B-31) |
-| CLI | `cli.py` | `info`, `--version` | Confirmed |
-| Approval gate | `tools/permissions.py`, `runtime/approvals.py`, `runtime/runner.py` | Consequential permissions, single-use approvals, the subprocess runner | Confirmed |
-| Run store and audit | `runs/` | Persisted runs, call records, approvals, append-only audit events | Confirmed |
-| MCP server | `mcp/server.py`, `mcp/http.py` | stdio transport, and stateless Streamable HTTP with API-key auth and per-method scopes ([0012](decisions/0012-remote-mcp-over-http.md)); tool annotations from declared permissions | Confirmed |
-| SDK client | `sdk/` | `Platform` facade: registry assembly, `call`, `report`, run lookup | Confirmed |
-| REST API | `api/` | FastAPI over the same executor and recorder (optional `api` extra); scoped API keys stored as hashes ([0011](decisions/0011-rest-api-and-api-keys.md)) | Confirmed (B-18) |
-| Jobs | `runs/jobs.py` | Status for long-running calls (`pending` · `running` · `done`) | Proposed, deferred |
-
-Core builds only the interfaces the first vertical slice needs. Each proposed row names the
-milestone that pulls it in (see the plan).
-
-## 4. Layering, dependency direction, and package ownership
-
-### 4.1 Layers inside each package
+Each product is layered the same way:
 
 | Layer | Contains | Must not depend on |
 | --- | --- | --- |
-| Domain | Pydantic models, invariants, `Protocol` ports (for example `KnowledgeStore`) | Any framework, transport, database, or model vendor |
-| Application | Use-case services (for example `ResearchService`, `FactoryService`) | Transports and concrete adapters |
-| Infrastructure | Adapters: SQLite, PostgreSQL, model providers, subprocess, filesystem | Interfaces |
-| Interface | `@tool` wrappers, MCP server, REST routes, CLI, SDK | Infrastructure internals (wired at bootstrap) |
+| Domain | Pydantic models, invariants, `Protocol` ports | Any framework, transport, database, or vendor |
+| Application | Use-case services, such as `ResearchService` and `AppFactory` | Transports and concrete adapters |
+| Infrastructure | Adapters: SQLite, PostgreSQL, embedders, pytemplate-uv | Interfaces |
+| Interface | `tools.py` and `cli.py`, wired by `bootstrap.py` | Infrastructure internals |
 
-### 4.2 The service → tool → executor chain
+Rules, enforced by `tests/contract/test_import_boundaries.py`:
+- Core imports no product, and the products do not import each other.
+- Only `quant_platform` imports every product, and nothing imports it.
+- Only `quant_app_factory/infrastructure/pytemplate_uv.py` imports `pytemplate-uv`, and only
+  `pytemplate.api` ([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)).
+- `quant_analytics.metrics` imports numerical libraries only.
+- Importing `quant_platform.cli` works with no extra installed, and serving imports no `cli` module.
 
-**Confirmed** today for the example analytics tools; **proposed** for products. This is how the
-baseline's rule that "MCP tools are adapters over application services" fits the existing
-contract:
+Core imports downward only: `tools` → `runtime` → `evidence`, `reporting`, `runs` → `config`, `data`,
+`serving`, `mcp`, `sdk`, `testing`, `observability`, `cli`.
+
+### From client to service
 
 ```text
 MCP client ─┐
-REST client ┼─▶ interface adapter ─▶ ToolExecutor ─▶ ToolSpec(@tool wrapper) ─▶ Application service
-SDK / CLI  ─┤      (no logic)        permissions·approval                         │
-                                   validation·limits·record                     ▼
-                                                                       Domain models and ports
-                                                                                   │
-                                                                       Infrastructure adapters
+REST client ┼─▶ interface adapter ─▶ ToolExecutor ─▶ ToolSpec (@tool wrapper) ─▶ application service
+SDK ────────┘     (no logic)        permissions · approval                              │
+                                  validation · limits · record                          ▼
+                                                                     domain models and ports
+                                                                                        │
+                                                                        infrastructure adapters
 ```
 
-- An application service is an ordinary class with typed methods. It is unit-tested without
-  the platform.
-- A `@tool` wrapper is a few lines that call one service method and map its result to an output
-  model carrying `warnings` and `evidence`.
-- Every remote or agent path (MCP, REST, and SDK `call` and `report`) goes through
-  `ToolExecutor`. Permissions, approvals, validation, timeouts, size limits, and records
-  therefore apply identically on every path. Contract tests assert this
+- An application service is an ordinary class with typed methods, tested without the platform.
+- A `@tool` wrapper is a few lines that call one service method and return `warnings` and `evidence`.
+- Every path goes through `ToolExecutor`, so permissions, approvals, validation, limits, and records
+  apply identically. Contract tests assert that results match
   ([decision 0002](decisions/0002-mcp-boundary.md)).
-- Trusted in-process code may import a service directly as a library. That path is outside the
-  agent boundary and produces no audit record.
+- Trusted in-process code may import a service directly. That path produces no audit record.
 
-### 4.3 Package ownership and allowed imports
+## Tool contract and request lifecycle
 
-| Package | Owns | May import | Extra (one wheel, [decision 0018](decisions/0018-one-wheel.md)) |
-| --- | --- | --- | --- |
-| `quant_agent_os` (`src/quant_agent_os`) | Core | pydantic, typer, rich; optional extras | base |
-| `quant_research` (`src/quant_research`) | Quant Research | `quant_agent_os` public API | none |
-| `quant_app_factory` (`src/quant_app_factory`) | Quant App Factory | `quant_agent_os` public API | `factory` |
-| `quant_analytics` (`src/quant_analytics`) | Deterministic metrics, from empyrical-reloaded ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `metrics`: numerical libraries only; `tools`: `quant_agent_os` public API | `analytics` |
-| `quant_platform` (`src/quant_platform`) | The composition root: one MCP server for every toolset, `research_report`, prompts | Every product's public API | `server` |
-| `pytemplate-uv` (own repository) | Scaffolding | Nothing in this ecosystem | its own package, through `factory` |
+A `ToolSpec` has a snake_case name and description; a `MAJOR.MINOR.PATCH` version; pydantic input and
+output models; the plain function; its declared `Permission`s; `deterministic` and `idempotent` flags;
+`timeout_seconds`; `max_output_bytes`; and an optional `Deprecation`. The `@tool` decorator builds one
+from a typed function, which stays directly callable. Versions and schemas are checked against
+`scripts/tool-versions.lock` ([tools changelog](tools-changelog.md)).
 
-Rules:
-- Core imports no product.
-- Only the platform server imports every product, and nothing imports it.
-- The products do not import each other. If they need to collaborate, they do it through a
-  platform workflow (an orchestrated plan that uses both products' tools) or through documented
-  models in Core.
-- Nothing imports `pytemplate-uv`; it is invoked as a CLI.
-- The analytics package imports no agent or LLM library.
-- An import-linter-style test enforces these rules (backlog item B-03).
+For each call:
+1. **Choose.** The client or the caller's code decides what to call. The platform has no planner.
+2. **Execute.** The executor checks permissions, validates the input, and takes one of its 16 slots
+   (`busy` if none is free). It asks the usage gate to admit the call (`quota_exceeded`), checks for an
+   approval when the tool is consequential (`approval_required`), and runs the tool with a timeout. It
+   then validates the output and enforces its size limit. Failures become records, not exceptions.
+3. **Report.** `research_report` and `Platform.report` collect evidence and warnings, turn failed calls
+   into warnings, and add limitations and run metadata.
+4. **Persist.** A `RunRecorder` writes the run, its records, and audit events as they happen.
 
-Repository strategy (**proposed**, [decision 0003](decisions/0003-brand-and-product-structure.md)):
-one repository and one uv workspace. Core stays at the root, where it already works, and each
-product is a workspace member with its own `pyproject.toml`, tests, version, and changelog. This
-keeps Core and the products independently installable and testable without moving functioning
-code. `pytemplate-uv` keeps its own repository and release cycle. Analytics started in the
-workspace (decision 0010) and moves out when it has its own release cycle.
+The statuses are `ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`, `busy`,
+`unknown_tool`, `timeout`, and `error`. No platform code reads tool output or retrieved text to choose
+what runs next. A client's model reads them, so they stay marked untrusted.
 
-Core's internal import order is **confirmed**:
-`tools` → `runtime.call` / `runtime.executor` → `evidence` / `reporting` →
-`config`, `mcp`, `sdk`, `observability`, `cli`.
+## Quant Research
 
-## 5. Tool contract and request lifecycle
-
-### 5.1 Contract (confirmed)
-
-A `ToolSpec` has the following fields:
-- a snake_case name and a description;
-- a `MAJOR.MINOR.PATCH` version, checked against `scripts/tool-versions.lock`, and an optional
-  `Deprecation` (decision 0015; [tools changelog](tools-changelog.md));
-- pydantic input and output models;
-- the plain function;
-- the `Permission`s it declares;
-- `timeout_seconds` and `max_output_bytes`.
-
-The `@tool` decorator builds one from a typed function, and that function stays directly
-callable. Output models expose `warnings` and `evidence`, and reports collect both.
-
-### 5.2 Additive contract fields (proposed, backlog B-02)
-
-The baseline lists what each tool must specify. The fields below cover what the current contract
-lacks. Every field has a default, so existing tools keep working.
-
-| Field | Default | Purpose |
-| --- | --- | --- |
-| `deterministic: bool` | `True` | Same input and data version give the same output; reports flag non-deterministic calls |
-| `idempotent: bool` | `True` | Safe to retry; non-idempotent tools are never retried automatically |
-| `long_running: bool` | `False` | Runs as a job with status polling (deferred until a tool needs it) |
-
-Approval is **derived, not declared**. A tool needs approval when it declares a consequential
-permission (see [section 12](#12-security-and-approval-model)). The error model is the existing
-`CallStatus` set (`ok`, `invalid_input`, `denied`, `approval_required`, `quota_exceeded`,
-`busy`, `unknown_tool`, `timeout`, `error`).
-
-### 5.3 Request lifecycle (confirmed)
-
-1. **Choose.** The client, or the caller's code, decides which tools to call. The platform has no
-   planner ([decision 0016](decisions/0016-clients-orchestrate.md)).
-2. **Execute.** For each call, the executor checks permissions, validates the input, takes one of its
-   16 slots (`busy` if none is free), asks the tenant's plan limits to admit the call
-   (`quota_exceeded` if not, decision 0015), checks for an
-   approval when the tool is consequential (`approval_required` if not, and the run waits), runs
-   the tool with a timeout, then validates the output and enforces its size limit. Failures become
-   records, not exceptions.
-3. **Report.** `research_report` and `Platform.report` collect evidence and warnings, turn failed
-   calls into warnings, and add limitations and run metadata.
-4. **Persist.** With a `RunRecorder`, the run, its records, and audit events go to the run store as
-   they happen, and so do approvals.
-
-No platform code reads tool output or retrieved text to choose what runs next. A client's model
-reads them, so they stay marked untrusted.
-
-## 6. Quant Research: Graph RAG architecture
-
-**Confirmed** for keyword, mention, graph, and mock-vector retrieval over SQLite, and for
-Markdown, text, and PDF ingestion (`src/quant_research`; step plan in
-[plans/quant-research-retrieval.md](plans/quant-research-retrieval.md)). **Proposed** for a
-real embedding model, the LLM extractor, OCR, and server-side synthesis. PostgreSQL with
-pgvector is **confirmed** (B-14) and gives the same answers as SQLite.
-
-Graph RAG is the defining capability of Quant Research: answers are assembled from explicit,
-typed relationships between quantitative concepts, plus the passages that justify each
-relationship, not from vector similarity alone.
-
-### 6.1 Pipeline
+Measured results are in [Quant Research](products/quant-research.md#how-well-it-works): on real papers,
+keyword search does most of the ranking, and the graph is small.
 
 ```text
- operator (CLI / SDK; never an agent tool in the MVP)
-   │  qaos ingest ./corpus
+ operator: qaos ingest DIR  (never an agent tool)
    ▼
- Loaders ─▶ Chunker ─▶ Extractors ───────────────▶ Entity resolution ─▶ KnowledgeStore
- md, txt,    passages    rule-based (vocabulary,     canonical ids,        documents, chunks,
- PDF text,   with exact  frontmatter, citations)     alias merge           entities, mentions,
- code,       locations   LLM extractor (later,                             relations, corpus
- notebooks               opt-in, labelled)                                 snapshot
-                                                                               │
- MCP / SDK tool calls ─▶ ResearchService.query ─▶ Hybrid retrieval ◀───────────┘
-                                                  keyword · graph expansion · vector (later)
-                                                        │ rank fusion
-                                                        ▼
-                                                  EvidencePacket ─▶ client LLM or report
+ Loaders ─▶ Chunker ─▶ Rule-based extractors ─▶ Entity resolution ─▶ KnowledgeStore
+ md, txt,   passages    vocabulary, front        canonical ids,      documents, chunks, entities,
+ PDF text   with exact  matter, cue phrases      alias merge         mentions, relations, snapshots
+            locations                                                      │
+ MCP / SDK tool calls ─▶ ResearchService ─▶ retrieval ◀────────────────────┘
+                                keyword · mention · graph · optional vector
+                                     │ reciprocal rank fusion
+                                     ▼
+                               evidence ─▶ client's model, or a report
 ```
 
-### 6.2 Ingestion (operator-only)
+### Ingestion
 
-- Ingestion writes to the store. It is therefore an operator command (CLI or SDK), not an agent
-  tool, in the MVP. This keeps agents read-only.
-- Each document records a content `sha256`, a source URI, a title, authors, a date, a license
-  note, and the loader version.
-- Each chunk keeps an exact location. For Markdown and text this is the file line range and
-  section, with paragraph chunks. For PDF it is the page and the line range of that page's
-  extracted text. Lines are packed into chunks of about 500 characters that close at sentence
-  ends, because extraction drops blank lines.
-- Loaders are chosen by suffix. PDF support is the optional `pdf` extra (pypdf). Without it,
-  and for scanned, encrypted, or corrupt PDFs, the file is skipped or flagged with a warning
+- Ingestion writes to the store, so it is an operator command, which keeps agents read-only.
+- Each document records a content `sha256`, a source URI, title, authors, date, a license note, and its
+  `pipeline`: the loader, chunker, extractor, and vocabulary versions. Changed files, and unchanged files
+  with a different pipeline, are re-processed.
+- Each chunk keeps an exact location. Markdown and text have a line range and section, with paragraph
+  chunks. PDF has a page and the line range of that page's extracted text, packed into chunks of about 500
+  characters that close at sentence ends.
+- PDF is the optional `pdf` extra (pypdf). Scanned, encrypted, or corrupt PDFs are skipped with a warning
   that says why.
-- A **corpus snapshot** id is a hash over document hashes plus extractor versions. Every answer
-  records the snapshot it used, so results can be reproduced.
+- A **corpus snapshot** id is a hash over document hashes and extractor versions. Every answer records the
+  snapshot it used.
 
-### 6.3 Extraction
+### Extraction
 
-The extractors in the first version are deterministic:
-- a curated, versioned quant vocabulary (`quant-v1`, bundled) of factors, signals,
-  strategies, methods, metrics, asset classes, datasets, and concepts, with aliases (for
-  example "HML" → `factor:value`). The longest alias wins, and short all-capital aliases match
-  case-sensitively;
-- document front matter (title, authors, published, license);
-- cue phrases between two entities in the same sentence (`rules-v4`). For example, "X predicts
-  Y" yields `X predicts Y`. Passive and inverse forms ("Y is predicted by X", "X explains Y")
-  swap subject and object, so edges point the right way. A negation in the three words right
-  before the cue ("does not predict", "fails to explain") suppresses the pair entirely. A
-  negation elsewhere ("X, which is not small, predicts Y") and "not only" do not. Without a
-  cue, the pair becomes a `related_to` edge with confidence 0.4, which the default
-  `min_confidence` of 0.5 excludes, unless a negation such as "unrelated to" sits between
-  the entities;
-- citation and reference parsing (planned).
+The extractors are deterministic (`rules-v5`):
+- a versioned vocabulary (`quant-v1`, bundled) of factors, signals, strategies, methods, metrics, asset
+  classes, datasets, and concepts, with aliases. The longest alias wins, and short all-capital aliases match
+  case-sensitively. `qaos ingest --vocabulary` merges a firm's terms, and the store keeps the result;
+- document front matter;
+- cue phrases between two entities in one sentence. "X predicts Y" yields `X predicts Y`, and passive and
+  inverse forms swap subject and object. A negation in the three words before the cue suppresses the pair.
+  Without a cue, the pair becomes `related_to` at confidence 0.4, which the default `min_confidence` of 0.5
+  excludes.
 
-Every extracted mention and relation stores the extractor name, version, confidence, and the
-chunk it came from. An LLM extractor is a later, opt-in adapter. Its relations are labelled
-`extractor = "llm:<model>"`, and an evaluation must show that it improves recall before it is
-enabled by default.
+Every mention and relation stores its extractor, version, confidence, and chunk. The predicates are
+`predicts`, `correlates_with`, `explained_by`, `extends`, `contradicts`, `uses`, `tested_on`, and
+`related_to`, in `quant_research.domain.models`. A change to them, the vocabulary, or the extractor bumps
+the matching version, and so the corpus snapshot.
 
-### 6.4 Retrieval
+### Retrieval
 
-1. **Seed:** match vocabulary entities in the query. When the query names none, seed from at
-   most 3 entities in the best keyword passage, report them as direct (`hops = 0`) results, and
-   warn.
-2. **Keyword channel:** BM25 over chunks (SQLite FTS5; FTS5's BM25 computed in SQL on PostgreSQL),
-   using the query's content terms with stopwords removed. A SQLite without FTS5 is refused with a
-   clear message.
-3. **Mention channel:** chunks that mention the most seed entities, so passages that define the
-   topic rank well.
-4. **Graph channel:**
-   - **Walk.** Traverse up to `hops` (default 1, maximum 2) from the seeds over edges with
-     `confidence >= min_confidence`. A recursive CTE computes entity distances first, then a
-     second query returns the edges. This works on SQLite and PostgreSQL.
-   - **Aggregate.** A fact stated in many chunks returns at most 3 citing edges and a
-     `support` count.
-   - **Score.** Each distinct fact contributes confidence divided by hops, times
-     `1 + log2(support)`.
-   - **Path.** Each related entity carries `path`, the shortest chain of cited edges from a
-     seed. Among equally short paths, from any seed, the highest total confidence wins,
-     independent of traversal order. Every path edge is cited in the evidence, even when its
-     chunk is not among the top `k` passages. A two-hop answer therefore shows how it connects, for
-     example `trend-following -uses-> time-series-momentum -extends-> momentum`.
-   - **Rank.** The results are capped at 10 entities. Path and link chunks form the ranking.
-   - **Benchmark.** On the mock world at 3,000 documents and 15,000 relations, two-hop
-     queries take 14 ms at p50 and 37 ms at p95 (`research_bench.py`).
-5. **Vector channel** (optional, off by default): cosine similarity between the query
-   embedding and the chunk embeddings of the same model, keeping hits of at least the embedder's
-   `min_score` (0.8 for the measured local model, 0.2 for hosted models, which have no measured
-   floor). The `Embedder` port has three adapters:
-   - `LocalEmbedder`, fastembed and ONNX on this machine (the `local-embeddings` extra);
-   - `VoyageEmbedder`, where `voyage-finance-2` is the default and any current Voyage model is
-     allowed;
-   - `OpenAIEmbedder`, using `text-embedding-3-small` or `-large`.
+1. **Seed.** Match vocabulary entities in the query. If it names none, seed from at most 3 entities in the
+   best keyword passage, report them as direct results, and warn.
+2. **Keyword channel.** BM25 over chunks, using the query's content terms: FTS5 on SQLite, and FTS5's BM25
+   computed in SQL on PostgreSQL. A SQLite without FTS5 is refused with a clear message.
+3. **Mention channel.** Chunks that mention the most seed entities.
+4. **Graph channel.** A recursive CTE walks up to `hops` (default 1, maximum 2) from the seeds over edges
+   with `confidence >= min_confidence`. A fact stated in many chunks returns at most 3 citing edges and a
+   `support` count, and scores its confidence divided by hops, times `1 + log2(support)`. Each related entity
+   carries the shortest chain of cited edges from a seed. Results are capped at 10 entities.
+5. **Vector channel,** optional and off by default. Cosine similarity against chunk embeddings of the same
+   model, keeping hits of at least the embedder's `min_score`: 0.8 for the measured local model, and 0.2 for
+   hosted models, which have no measured floor.
+   - `LocalEmbedder` uses fastembed and ONNX on this machine (`local-embeddings`).
+   - `VoyageEmbedder` and `OpenAIEmbedder` call each provider's HTTPS endpoint with the standard library,
+     with batching, retries, and backoff. They need the `network` permission.
+   - The model id is part of the corpus snapshot. Searching with a model the store has no embeddings for warns.
+6. **Fuse.** Reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id, capped at `k`.
+7. **Package.** Passages with `SourceRef`, graph paths whose edges cite their chunks, matched entities, the
+   snapshot id, and warnings.
 
-   The hosted adapters call each provider's HTTPS endpoint with the standard library. They
-   batch under the documented limits, retry 429 and 5xx with backoff, honour `Retry-After`, and
-   normalise vectors to unit length. Voyage receives `input_type` `document` or `query`.
+Quant Research writes no answers: the client's model does. Retrieved documents are untrusted, and an
+evaluation checks that injected instructions do not change tool selection or permissions.
 
-   Select an embedder with `open_research(embedder=...)` or `--embedder`. The model id
-   (`voyage:voyage-finance-2:1024`) is part of the corpus snapshot. Searching with a model the
-   store has no embeddings for warns instead of silently dropping the channel. The channel
-   becomes a default only after it beats the evaluation baseline, which includes
-   `paraphrase_hit_rate`. On PostgreSQL the index is pgvector (exact search for now).
-6. **Fuse:** reciprocal rank fusion (k = 60) over the channels, with ties broken by chunk id
-   for determinism, capped at `k` passages.
-7. **Package:** return an `EvidencePacket` containing passages (with `SourceRef`), the graph
-   paths whose edges cite their supporting chunks, the matched entities, the snapshot id, and
-   warnings (for example "no source supports relation X directly").
+### Storage
 
-### 6.5 Synthesis boundary
-
-- In the MVP, **the client LLM synthesizes**. Quant Research returns evidence packets, and
-  Claude (or another client) writes the answer, so the MVP makes no server-side model calls.
-- Server-side synthesis (`research_alpha`) is closed by decision 0016. If it returns, it uses a model,
-  needs the `network` permission when the provider is remote, and returns `interpretation`
-  evidence that cites the passages it used. Hypotheses are always `interpretation`.
-- Retrieved documents are untrusted. Fixture documents containing injected instructions must
-  not change plans, tool selection, or permissions (an evaluation suite).
-
-### 6.6 Domain model
-
-The entity types are:
-- `paper`, `author`, `concept`, `factor`, `signal`, `strategy`, `instrument`, `asset_class`,
-  `method`, `dataset`, `metric`, `empirical_result`.
-
-The `rules-v2` predicates are:
-- `predicts`, `correlates_with`, `explained_by`, `extends`, `contradicts`, `uses`,
-  `tested_on`, `related_to`.
-
-The type and predicate lists live in `quant_research.domain.models`. A change to either, to
-the vocabulary, or to the extractor bumps the matching version, and therefore the corpus
-snapshot.
-
-### 6.7 Quality evaluation
-
-`tests/research/research_eval.py` scores a gold set
-(`tests/evaluation/gold.toml`) on the following metrics:
-- related-entity recall;
-- passage precision@k;
-- citation validity (every link's chunk mentions both entities);
-- location validity (every line range reproduces its text);
-- empty-query accuracy.
-
-Tests fail on any drop below `baseline.json`, and the two validity metrics must be 1.0. The
-current gold set is small and was written alongside the code, so a held-out set is needed
-before making quality claims.
-
-`tests/graph_eval.py` scores the graph against a mock world with a known answer key
-(`tests/mock_world.py`, plan [graph-rag-mock-world.md](plans/graph-rag-mock-world.md)). It
-measures:
-- extraction precision, recall, and F1 per predicate;
-- negation false positives and direction errors;
-- related recall;
-- evidence recall and precision@3, with and without the graph channel;
-- path validity.
-
-The baseline is `graph_baseline.json`.
-
-## 7. Database and knowledge-graph design (proposed)
-
-The relational schema is shared by every adapter. A dedicated graph database is evaluated only
-if traversal depth, scale, or query patterns exceed what recursive CTEs handle
-([decision 0004](decisions/0004-knowledge-store.md)).
+The relational schema is shared by both adapters. A graph database would be considered only if traversal
+exceeded what recursive CTEs handle ([decision 0004](decisions/0004-knowledge-store.md)).
 
 | Table | Key columns |
 | --- | --- |
-**Confirmed** in `SqliteKnowledgeStore` (schema version 2; version-1 stores migrate in
-place):
-
-| Table | Key columns |
-| --- | --- |
-| `documents` | `id` (`doc:` + hash prefix), `sha256` (unique), `uri` (unique), `title`, `authors`, `published`, `license_note`, `loader_version` |
+| `documents` | `id`, `sha256`, `uri`, `title`, `authors`, `published`, `license_note`, `loader_version`, `pipeline` |
 | `chunks` | `id` (`<document>#<ordinal>`), `document_id`, `ordinal`, `text`, `line_start`, `line_end`, `section`, `page` |
-| `chunks_fts` | FTS5 index of `chunks.text` (when the SQLite build has FTS5) |
+| `chunks_fts` | FTS5 index of `chunks.text` (SQLite) |
 | `entities` | `id` (`type:slug`), `type`, `name`, `aliases` |
 | `mentions` | `entity_id`, `chunk_id`, `start`, `end`, `extractor`, `confidence` |
 | `relations` | `id`, `subject_id`, `predicate`, `object_id`, `chunk_id`, `extractor`, `extractor_version`, `confidence` |
 | `corpus_snapshots` | `seq`, `id`, `document_count`, `vocabulary_version`, `extractor_versions` |
-| `embeddings` | `chunk_id`, `model`, `dimensions`, `vector` (float32 blob); cascades with its chunk |
+| `embeddings` | `chunk_id`, `model`, `dimensions`, `vector` |
 
-Deleting a document cascades to its chunks, mentions, and relations. A changed file therefore
-replaces all of its records.
+- Deleting a document cascades, so a changed file replaces all of its records.
+- Ingestion publishes the snapshot in one transaction, and search reads run in one read transaction, so an
+  answer never mixes two corpus versions.
+- Serving opens the store read-only and never migrates it.
+- `KnowledgeStore`, `VectorIndex`, `Embedder`, and `SourceLoader` are `Protocol`s. `SqliteKnowledgeStore`
+  uses only the standard library, with exact brute-force cosine. `PostgresKnowledgeStore` (psycopg and
+  pgvector, the `postgres` extra) passes the same contract tests and gives the same answers.
 
-Consistency rules:
-- Ingestion builds and publishes the corpus snapshot in one `BEGIN IMMEDIATE` transaction, so
-  concurrent ingestions cannot publish a stale snapshot.
-- Search reads run in one read transaction (`KnowledgeStore.reading()`), so an answer never
-  mixes two corpus versions.
-- Migrations (schema version 3) are atomic and can be re-run.
-- Each document records its `pipeline`, the loader, chunker, extractor, and vocabulary
-  versions. Ingestion re-processes unchanged files whose pipeline differs, so upgrading the
-  rules never leaves stale relations behind.
-- Serving opens the store read-only (`mode=ro`) and never migrates it.
+### Evaluation
 
-`KnowledgeStore`, `VectorIndex`, `Embedder`, and `SourceLoader` are `Protocol`s. The adapters
-are:
-- `SqliteKnowledgeStore`. It uses only the standard library, works as a file or as
-  `":memory:"` (for tests), and shares one locked connection because the executor runs tools on
-  worker threads.
-- `TextFileLoader`, for Markdown and text with front matter, and `PdfLoader`, for PDF through
-  pypdf.
-- `LocalEmbedder`, the on-machine embedder. `SqliteKnowledgeStore` also implements
-  `VectorIndex` with exact brute-force cosine, which is fine for thousands of chunks.
-- DuckDB was considered and not chosen for this store. It suits the later analytics and
-  backtest service (columnar scans over factor and price data) better than this workload of
-  point lookups and graph traversal.
-- `PostgresKnowledgeStore` (psycopg 3 and pgvector, the optional `postgres` extra) implements
-  the same ports and passes the shared contract tests against an SQLite reference
-  ([decision 0004](decisions/0004-knowledge-store.md), B-14).
+`tests/research/research_eval.py` scores a gold set on fixtures: related-entity recall, passage precision,
+citation and location validity, and empty-query accuracy. `graph_eval.py` scores extraction and paths against
+a mock world with a known answer key. `real_corpus.py` scores 21 real papers and is opt-in, because `fetch`
+needs a network. Tests fail on any drop below their baselines.
 
-Run and audit tables are in [section 11](#11-workflow-state-audit-and-provenance).
+## Quant Analytics
 
-## 8. Quant App Factory architecture (foundation confirmed)
+`analyze_performance` and `analyze_risk` take dataset references, or small inline examples.
+`quant_analytics.metrics` adapts empyrical-reloaded and states its conventions; `risk.py` computes volatility
+contributions and factor exposures with numpy. Before a metric runs, the tools infer the frequency from the
+dates, join series on them, and leave out and count missing rows. They refuse when frequency or alignment
+cannot be established, and warn when returns look like percentages. Known-answer tests pin the conventions
+([Quant Analytics](products/quant-analytics.md)).
 
-The factory turns requirements into maintainable, tested Python applications. It does not
-produce loose code snippets.
+## Quant App Factory
+
+The factory turns a reviewable spec into a tested project. It is off by default on the server, and creating
+files is a command the user runs. Generated quant projects stay portable, so they hold their own numpy metrics
+and do not receive later fixes by themselves
+([details](products/quant-app-factory.md#generated-metrics-and-the-platforms)).
 
 ```text
-requirements ─▶ AppSpec (typed, editable, validated)
-                  │  drafted by a model (later), or written as TOML/JSON (MVP)
-                  ▼
-               ArchitecturePlanner (deterministic rules: app kind → pattern, profile,
-                  │                 components, layers, dependencies)
-                  ▼
-               ScaffoldProvider.plan()    read-only preview: files, dependencies
-                  │  approval (write_local_data)
-                  ▼
-               ScaffoldProvider.create()  pytemplate-uv adapter
-                  ▼
-               CodeGenerator (later)      model-written modules in designated files only,
-                  │                       approval (write_local_data)
-                  ▼
-               Validator                  uv sync · ruff · ruff format · mypy · pytest
-                  │                       subprocess with timeout and kill, approval
-                  ▼                       (execute_code)
-               FactoryReport              files, checks, versions, request, provenance
-```
-
-The pieces:
-- **`AppSpec`** holds the name, kind (`agent-tool`, `python-cli`, `fastapi-service`, and later
-  `factor-library`), purpose, inputs and outputs, required capabilities, and constraints. It is
-  the single, reviewable contract. The model never writes files directly.
-- **`ArchitecturePlanner`** is deterministic and unit-tested. It recommends a pattern and maps
-  the spec to a scaffold request.
-- **Template pack.** `agent-tool` and `mcp-server` profiles live in a pytemplate-uv template
-  pack inside `quant_app_factory`. That pack encodes the Quant-Agent-OS tool contract, so
-  `pytemplate-uv` itself stays generic.
-- **Generated apps are portable.** `python-cli` and `fastapi-service` apps have no dependency on
-  Quant-Agent-OS. `agent-tool` packages depend on `quant-agent-os` on purpose, because they are
-  tools for the platform.
-- **Iteration** (fix → re-validate) feeds diagnostics back to a model. This is outside the
-  "no feedback into planning" invariant only if the loop is bounded (at most N rounds), uses
-  structured diagnostics (rule ids, file:line, test ids), and asks for approval for each write.
-  It needs a decision record before it is built (open).
-
-### 8.1 Guided generation and quant templates (confirmed)
-
-These pieces are proposed in decisions 0007–0009, with the step plan in
-[plans/app-factory-questionnaires.md](plans/app-factory-questionnaires.md) and the backlog in
-B-23–B-26.
-
-```text
-templates: built-in (agent-tool, quant-baseline) · bundled (python, fastapi) · user pack (path)
-   │
-   ▼
-describe_template ──▶ person, via Claude or `qaos app new` ──▶ spec.toml (the draft)
-   ▲                                                                   │
-   └──────────── check_spec: problems, or ready + exact files ◀────────┘
+describe_template ──▶ person, through a client or `qaos app new` ──▶ spec.toml (the draft)
+   ▲                                                                    │
+   └──────────── check_spec: problems, or ready + exact files ◀─────────┘
                   (pytemplate.api.plan is the judge)
    │ ready
    ▼
-qaos app create spec.toml ─▶ approval ─▶ create_app ─▶ checks (+ check-connection) ─▶ report
+qaos app create spec.toml ─▶ approval ─▶ ArchitecturePlanner ─▶ ScaffoldProvider
+   ─▶ checks: uv sync · ruff · mypy · pytest (+ check-connection) ─▶ FactoryReport
                 ▲
-       factory.toml: identity, connections (environment-variable names), registered packs
+   factory.toml: identity, connections (environment-variable names), registered packs
 ```
 
-- **No draft state.** The spec file is the draft. `check_spec` decides readiness through
-  pytemplate-uv, so Copier's rules are never re-implemented. Model-drafted specs (B-16) fill
-  the same file.
-- **Two kinds of input stay apart.**
-  - Template answers come from the pack's questions and are used when the project renders.
-  - Runtime settings come from the `settings` components declare (for example
-    `DATABASE_URL`) and are read by the generated app. Secret ones accept only `env:NAME`.
-- **Creation in this phase.** Claude can describe, guide, and check. The person confirms
-  creation with `qaos app create`, because MCP clients cannot approve yet (O-13).
-- **Database guidance** is the `data-database` component:
-  - it asks for the database kind, a saved or new connection, and the environment variable
-    that holds the password or URL;
-  - it generates `settings.py`, `.env.example`, and `check-connection`;
-  - `create --check-connection` passes only that variable to the check, and only for built-in
-    templates, so a secret never reaches pack code the operator did not review.
-- **Approvals bind the reviewed pack.** The approval for `create_app` covers a digest of the
-  template pack's files, so a pack edited after its preview is refused rather than rendered.
-- **Quant templates** (decision 0009) are portable:
-  - one required `metrics` component holds all the metric code;
-  - every project carries bias tests (future prices never change past signals or returns,
-    forward-shifted signals, lagged trades, cost ordering)
-    and a `LIMITATIONS.md`;
-  - there is no trading code.
-- **Making templates:**
-  - `qaos app template fork` copies a baseline profile into a user pack, which people
-    edit by hand or with Claude Code;
-  - `template check` validates it;
-  - generic authoring is pytemplate-uv's own roadmap.
+- **`AppSpec`** names a `template` and a `profile`: `agent-tool`, `quant-baseline` with `quant-lab`, `bundled`
+  with `python` or `fastapi`, or your own pack. The spec file is the draft, and there is no draft state.
+- **`ArchitecturePlanner`** is deterministic and maps a spec to a scaffold request.
+- **Template answers and runtime settings stay apart.** Answers come from the pack's questions and are used
+  when rendering. Settings are read by the generated app, and secret ones accept only `env:NAME`.
+- **Database guidance** is the `data-database` component. `create --check-connection` passes only the named
+  variable, and only for built-in templates, so a secret never reaches pack code the operator did not review.
+- **Approvals bind the reviewed pack.** Approval covers a digest of the pack's files, so a pack edited after
+  its preview is refused.
+- **Quant templates** ([decision 0009](decisions/0009-quant-baseline-templates.md)) carry known-answer metric
+  tests, bias tests, and a `LIMITATIONS.md`. There is no trading code.
+- **Your own templates.** `qaos app template fork` copies a profile into a pack, `template check` validates it,
+  and `template add` registers a git pack pinned to a ref and cached, so plans need no network.
 
-## 9. pytemplate-uv integration boundary
-
-**Confirmed:** `pytemplate-uv` 3.0 is published. It provides `plan`, `validate`, `create`, and
-`create-from-config` with `--json` and stable exit codes, `schema request`, and template packs
-through `--template` and `--template-ref`.
-
-**Confirmed** contract inside `quant_app_factory` (B-10):
+### The pytemplate-uv boundary
 
 ```python
 class ScaffoldProvider(Protocol):
@@ -603,168 +299,83 @@ class ScaffoldProvider(Protocol):
     def create(self, request: ScaffoldRequest) -> ScaffoldResult: ...
 ```
 
-`PytemplateUvScaffolder` implements this protocol with the library
-([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)):
-- It builds a `pytemplate.api.RenderRequest` and calls `api.plan`, which renders into a
-  temporary directory and never the target, or `api.render`, which publishes only on success.
-- It maps pytemplate-uv's request errors to `ScaffoldRequestError` (nothing was written) and
-  any other `RenderError` to `ScaffoldRenderError`.
+`PytemplateUvScaffolder` builds a `pytemplate.api.RenderRequest` and calls `api.plan`, which renders into a
+temporary directory, or `api.render`, which publishes only on success. Nothing of pytemplate-uv is copied, and
+its releases and plans are its own repository's business.
 
-Further rules:
-- The dependency is `pytemplate-uv>=3.0,<4`, in one `pyproject.toml`.
-- Only the adapter imports pytemplate-uv, and only `pytemplate.api`; tests enforce this.
-- Offline tests render real projects into temporary directories. A smoke test that also runs
-  the generated project's `uv` checks is opt-in.
-- Nothing of its implementation is copied.
-- Another scaffolder (Copier directly, or a cookiecutter-based one) can be swapped in by writing
-  a second `ScaffoldProvider`. Core and Quant Research never import pytemplate-uv.
-- `pytemplate-uv` releases and plans are its own repository's business.
-- **User packs** (proposed).
-  - B-23: a spec names a local pack directory.
-  - B-26: `qaos app template add` registers a git pack pinned to a ref and caches it under
-    `~/.quant-agent-os/packs/`, so plans read the cache and need no network access.
+## Interfaces
 
-## 10. Interface strategy: MCP, REST, SDK, CLI
+| Interface | Audience | Built on |
+| --- | --- | --- |
+| MCP over stdio | Claude, Cursor, Copilot agents | `qaos serve`; tools, resources, and prompts |
+| MCP over HTTP | Remote clients of a team server | `qaos serve --http`, stateless, at `/mcp` |
+| REST | Web apps, non-Python clients | `qaos serve --http`, at `/v1` on the same port |
+| Python SDK | Notebooks, scripts | `quant_platform.open_platform()`, or `quant_agent_os.sdk.Platform` |
+| CLI | Operators | `qaos`; each product's `cli.py` is a Typer app it mounts |
 
-| Interface | Audience | Built on | Status |
-| --- | --- | --- | --- |
-| MCP (stdio) | Claude Desktop/Code, Cursor, Copilot agents | `quant_agent_os.mcp.server` (official MCP Python SDK, optional `mcp` extra) over the adapter: tools, resources, and prompts; `qaos serve` for every toolset, or a product's own `qaos serve` | Confirmed |
-| MCP (HTTP) | Remote clients of a team or hosted server | `quant_agent_os.mcp.http` (stateless Streamable HTTP, API keys, per-method scopes) beside REST: `qaos serve --http` serves `/mcp` and `/v1` on one port | Confirmed (B-33) |
-| Python SDK | Notebooks, scripts, other services | `quant_agent_os.sdk.Platform` facade over registry + executor + run store | Confirmed |
-| CLI | Operators | Typer: `qaos doctor`/`qaos serve`; `qaos ingest`/`search`; `factory plan/create` | Partly confirmed |
-| REST | Web apps, non-Python clients, the hosted offering | `quant_agent_os.api` (FastAPI, optional `api` extra) over the executor; `qaos serve --http --toolsets research` | Confirmed (B-18) |
+Interfaces contain no business logic, and tool names and schemas are identical across them. MCP over stdio
+runs as the local user with the operator's granted permissions, and HTTP needs an API key.
 
-The rules that apply to every interface:
-- Interfaces contain no business logic.
-- Tool names and schemas are identical across interfaces.
-- MCP and REST results equal the direct executor results (contract tests).
-- MCP stdio runs as the local user with the operator's granted permissions. HTTP transports need
-  authentication (section 12).
+### Served tools
 
-### Candidate public tools (staged)
+`qaos catalog` lists what a server offers. These tools are served, each with its permissions:
 
-The tool names come from the baseline document. A tool is exposed only when its service has
-tests.
+| Tool | Toolset | Permissions |
+| --- | --- | --- |
+| `find_related_signals` | research | `read_local_data`, plus `network` with a hosted embedder |
+| `get_source_passage` | research | `read_local_data` |
+| `research_report` | research and analytics | `read_local_data` |
+| `analyze_performance`, `analyze_risk`, `list_datasets` | analytics | `read_local_data` |
+| `describe_template`, `check_spec` | factory, off by default | none |
+| `server_info` | always | none |
 
-| Tool | Product or service | Permissions | Stage |
-| --- | --- | --- | --- |
-| `find_related_signals` | Quant Research | `read_local_data`, plus `network` when a hosted embedder embeds the query | MVP |
-| `get_source_passage` | Quant Research | `read_local_data` | MVP |
-| `analyze_performance` | Analytics (`quant_analytics.tools`, empyrical) | none (pure computation) | Done (B-13) |
-| `generate_report` | Core (orchestrated run → `Report`) | inherits the plan's tools | MVP (SDK/CLI); MCP at days 31–60 |
-| `plan_app` | App Factory | `read_local_data` (plan plus the exact file preview; renders only into a temporary directory) | Done |
-| `create_app` | App Factory | `write_local_data`, `execute_code`, `network` → approval per call | Done |
-| `describe_template`, `check_spec` | App Factory | `read_local_data` (`check_spec` renders only into a temporary directory) | Days 31–45 (B-24) |
-| `research_alpha` | Quant Research | adds `network` if the model is remote | Days 31–60 |
-| `generate_strategy` | Quant Research (cited `StrategySpec` from graph edges; deterministic, no model) | `read_local_data` | Done (B-17) |
-| `generate_factor_code` | App Factory | `write_local_data`, `execute_code` → approval | Days 61–90 |
-| `analyze_risk` | Analytics (`quant_analytics.risk`, numpy) | none (pure computation) | Done (B-21) |
-| `run_backtest` | Backtest service (new package) | `read_local_data`, `long_running` | After day 90 unless pulled forward |
+## Audit and provenance
 
-## 11. Workflow state, audit, and provenance
+- `ToolCallRecord` stores the tool, version, arguments, status, output or error, duration, `call_id`, `run_id`,
+  `started_at`, `input_sha256`, and `data_versions`.
+- `RunMetadata` stores the platform version, times, `run_id`, a `registry_digest` of tool names, versions, and
+  schemas, and the merged data versions.
+- Every MCP, REST, or SDK call is a run. Arguments and outputs are redacted before storage, and a store failure
+  is logged and never fails the call.
+- `audit_events` is append-only: triggers reject updates and deletes. Its details hold ids, hashes, and statuses,
+  never inputs or secrets.
+- `qaos serve` records to the home's `runs.db`, also used by factory runs. `qaos runs [RUN_ID]` lists runs or
+  shows one.
 
-**Confirmed:**
-- `ToolCallRecord` stores the tool, version, arguments, status, output or error, and duration.
-- `RunMetadata` stores the platform version, provider, and start and end times.
-- `Evidence` and `SourceRef` keep facts and interpretation apart.
-
-**Confirmed** (B-02, B-07, B-08):
-- `ToolCallRecord` also stores `call_id`, `run_id`, `started_at`, `input_sha256`, and
-  `data_versions` (for example the corpus snapshot id).
-- `RunMetadata` stores the `run_id`, the `registry_digest` (a hash of tool names, versions,
-  and schemas), and the merged data versions.
-- `quant_agent_os.runs` has a `RunStore` protocol with in-memory and SQLite adapters
-  (standard library), and a `RunRecorder`.
-  - **Tables:** `runs` (kind `call` or `plan`; status `running`, `completed`, or `failed`,
-    with `planned` and `awaiting_approval` reserved for approvals), `tool_calls`, and
-    `audit_events`.
-  - **Every call is a run.** Each MCP or SDK call is a one-call run, and each orchestrated
-    plan is a run.
-  - **Redaction.** Arguments and outputs pass through `redact` before storage: `SecretStr`
-    values, and values under keys such as `api_key` or `token`.
-  - **Failures.** A store failure is logged and never fails the call.
-- `audit_events` is append-only (SQLite triggers reject UPDATE and DELETE), with columns
-  `run_id`, `actor`, `event`, `subject`, `at`, and `details`. The details hold ids, hashes,
-  and statuses, never inputs or secrets. This table is the future basis for usage metering.
-- `qaos serve --toolsets research` records to `runs.db` beside the knowledge store by default
-  (`--runs`, `--no-record`). `qaos runs [RUN_ID]` lists runs or shows one.
-
-**Proposed:**
-- a digest of the public settings, and package versions in `RunMetadata`.
-
-## 12. Security and approval model
-
-**Confirmed:**
-- Read-only by default: only `read_local_data` is granted.
-- An explicit registry and an optional allowlist.
-- Bounded plans and bounded calls.
-- No feedback into planning.
-- `SecretStr` and log redaction.
+## Security and approvals
 
 See [security.md](security.md) for details.
+- Read-only by default: only `read_local_data` is granted, with an explicit registry and an optional allowlist.
+- `write_local_data`, `execute_code`, `network`, and `external_action` are consequential. Granting one makes a
+  tool eligible to run, and each call still needs a single-use approval bound to the run, the tool, and the
+  input hash ([decision 0005](decisions/0005-approval-gates.md)).
+- Approvals come from the operator: through the SDK, a terminal prompt, or the hosted approval page
+  ([decision 0014](decisions/0014-approvals-in-the-client.md)). A model can never grant one. Standing approval
+  (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`) is empty by default, and each use is recorded.
+- Programs run through `run_command`. The one exception to its scrubbed environment is App Factory's approved
+  connection check, which passes exactly the variables a spec references and redacts their values.
+- Specs, `factory.toml`, and generated files hold environment-variable names, never secret values, and a value
+  that looks like a secret is refused.
 
-**Confirmed** ([decision 0005](decisions/0005-approval-gates.md), B-09):
-- `write_local_data`, `execute_code`, `network`, and `external_action` are **consequential**.
-  Granting such a permission in settings makes a tool eligible to run. Each call still needs an
-  **approval** that is bound to the run id, the tool name, and the input hash, and that is
-  consumed once.
-- Approvals come from the operator, through the SDK (`Platform.approve`, then `resume`) or a
-  CLI. The model can never grant an approval. `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` gives a
-  standing approval; it is empty by default, and each use is recorded.
-- `execute_code` tools run programs through `runtime.runner.run_command`. It uses a fixed
-  working directory, an allowlisted environment (no secrets passed through by default), a
-  timeout, and a hard kill of the process tree. The one exception is App Factory's approved
-  connection check, which passes exactly the variables a spec references, only to code from a
-  built-in template, and redacts their values from the output. A thread timeout is not enough here, because it cannot stop a
-  running process.
-- Ingestion and other store writes are operator commands, not agent tools.
+## Deployment
 
-**Proposed:**
-- approvals through an MCP client's confirmation step.
-- **Secret references** (decisions 0007 and 0008). Specs, `factory.toml`, and generated files
-  hold environment-variable names (`env:NAME`, `password_env`), never secret values.
-  - A value that looks like a secret is refused.
-  - A name resolves only in the process that needs it, and is passed to a program only through
-    `run_command`'s `extra_env`, for exactly that name.
-- HTTP interfaces need authentication. The REST interface has API keys with scopes (B-18,
-  [decision 0011](decisions/0011-rest-api-and-api-keys.md)); OIDC comes later. Each REST call
-  records the key's `principal` on the run and on every audit event. Tenancy is a column in
-  the run store from day one, but multi-tenant hosting remains out of scope.
-- Still out of scope: trading, brokerage connectivity, unrestricted code execution, and
-  autonomous external actions.
+| Mode | What runs |
+| --- | --- |
+| Library | `uv add` into a project; the SDK in a notebook or script |
+| Local server | `qaos serve`, launched by the client over stdio |
+| Team server | A Docker image running `qaos serve --http` over SQLite, or PostgreSQL with a read-only role ([deployment.md](deployment.md)) |
+| Many customers | `qaos hosted` ([hosted.md](hosted.md)) |
 
-## 13. Deployment architecture
+## Extending it
 
-| Mode | What runs | Status |
-| --- | --- | --- |
-| Local library | `uv add quant-agent-os`; SDK in a notebook or script | Confirmed (core) |
-| Local MCP server | `uv run --directory <repo> qaos serve --toolsets research --store <abs path>`, launched by Claude Desktop or Code over stdio; read-only; the SQLite store is created by `qaos ingest` | Confirmed |
-| Team server | Docker image running `qaos serve --http` over SQLite or PostgreSQL + pgvector (a read-only role), REST with API-key auth, both smoke-tested in CI ([deployment.md](deployment.md)); MCP over HTTP later | Confirmed (B-19, B-14) |
-| Hosted | Managed, multi-tenant | Out of scope; commercial option later |
+- **Models:** drive the tools with your vendor's tool loop over `tool_definitions` and `Platform.call`
+  ([example](../examples/your-own-model/drive_tools.py)).
+- **Tools:** register `ToolSpec`s from your own packages in an explicit `ToolRegistry`. There is no plugin
+  discovery or dynamic code loading.
+- **Ports:** `KnowledgeStore`, `VectorIndex`, `Embedder`, `SourceLoader`, `RunStore`, `DatasetStore`, and
+  `ScaffoldProvider` are `Protocol`s with contract tests.
 
-Not planned without a concrete need: a message broker, a distributed workflow engine,
-Kubernetes, or several model frameworks.
+## Not in scope
 
-## 14. Extension points (confirmed)
-
-- **Models:** the platform calls none ([decision 0016](decisions/0016-clients-orchestrate.md)).
-  Drive the tools with your vendor's tool loop over `tool_definitions` and `Platform.call`.
-- **Tools:** register `ToolSpec`s from your own packages in an explicit `ToolRegistry`. There is
-  no plugin discovery and no dynamic code loading.
-- **MCP:** a transport only forwards `tools/list` and `tools/call` to `tool_definitions` and
-  `call_tool`. Definitions carry compact input and output schemas (`compact_schema`), and a
-  failed call carries `failure_details`: a hint and whether retrying helps. REST reuses both.
-
-Extension points are `KnowledgeStore` and `RunStore` (confirmed), and `ScaffoldProvider` and
-`EmbeddingProvider`. Each has a Protocol, one reference adapter, and contract tests.
-
-## 15. Not in scope
-
-The following are not in scope:
-- server-side planning or multi-agent orchestration ([decision 0016](decisions/0016-clients-orchestrate.md));
-- autonomous trading or external actions;
-- unrestricted code execution;
-- hosted multi-tenant infrastructure;
-- a mandatory vector or graph database;
-- broad connector coverage;
-- a plugin marketplace.
+Server-side planning or multi-agent orchestration; autonomous trading or external actions; unrestricted code
+execution; a mandatory vector or graph database; broad connector coverage; and a plugin marketplace.
