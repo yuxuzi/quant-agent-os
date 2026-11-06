@@ -63,7 +63,7 @@ def test_a_newer_store_is_refused_and_left_alone(built: Path) -> None:
     db.close()
 
     for read_only in (True, False):
-        with pytest.raises(StoreError, match="newer than .* Do not ingest"):
+        with pytest.raises(StoreError, match=r"newer than .* Do not ingest"):
             SqliteKnowledgeStore(built, read_only=read_only)
 
     db = sqlite3.connect(built)
