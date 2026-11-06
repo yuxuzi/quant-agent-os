@@ -153,6 +153,38 @@ The server sends no CORS headers, so browsers on other origins cannot call it di
 up the `knowledge`, `keys`, and `runs` volumes. A lost `knowledge` volume can be rebuilt by
 ingesting again; the `runs` volume is your audit trail.
 
+## 8. Add your own tools
+
+To serve your firm's own Python tools, write a small server of your own, in your repository, that
+names them. [examples/firm-tools](../examples/firm-tools/README.md) is a complete one:
+
+```python
+from quant_platform import compose, serve_http
+
+catalog = compose(
+    policy=settings.policy(),
+    research=research.research,
+    datasets=store,  # any DatasetStore: a directory, or your own database
+    extra_tools=firm_tools(store),  # your tools, named here
+    extra_instructions="desk_var gives a desk's value at risk by the firm's convention.",
+)
+serve_http(catalog, host="0.0.0.0")
+```
+
+- **Same controls.** Your tools go through the same executor as the platform's: permissions, input
+  and output validation, timeouts, recording, and keys. A tool that declares a permission the
+  policy does not grant is refused.
+- **No replacing.** A tool with a name the server already serves stops the server at start-up.
+- **Your data.** Give `compose` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
+  tools and `list_datasets` then read it by reference, and no connector is needed.
+- **Test it.** Put `check_tool` from `quant_agent_os.testing` in your tool package's tests.
+- **Deploy it.** Build an image from the platform's, as the example's `Dockerfile` does, then run the
+  compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
+  Mount anything your tools read in a compose override. Every other step above stays the same.
+
+The tool names are in your code and not in a setting, so what the server runs is what your repository
+says ([decision 0020](decisions/0020-a-firms-own-server.md)).
+
 ## Hosting many customers
 
 This guide is for one firm or team. A vendor serving many customers needs tenants, plans, OAuth,

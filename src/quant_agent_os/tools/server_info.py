@@ -16,6 +16,7 @@ from quant_agent_os.tools.contracts import ToolSpec, tool
 from quant_agent_os.tools.registry import ToolRegistry
 
 SERVER_INFO_URI = "qaos://server/info"
+SERVER_INFO_TOOL = "server_info"
 
 
 class ServerInfoRequest(BaseModel):
@@ -44,7 +45,7 @@ def server_info_tool(platform_version: str, tools: list[ToolSpec[Any, Any]]) -> 
     """Return ``server_info`` for a ``platform_version`` server of ``tools`` (and itself)."""
 
     @tool(
-        name="server_info",
+        name=SERVER_INFO_TOOL,
         description=(
             "The platform version and each tool's version and deprecation. Read once per "
             "session as qaos://server/info."

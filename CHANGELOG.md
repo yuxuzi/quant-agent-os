@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A firm's own tools on the server.** `compose(extra_tools=...)` serves your Python tools beside the
+  platform's, under the same permissions, validation, limits, and recording, and `serve_http` and
+  `serve_stdio` are public. Your own `DatasetStore` feeds the analytics tools too. See
+  [add your own tools](docs/deployment.md#8-add-your-own-tools) and `examples/firm-tools`.
 - **A notebook path.** `quant_platform.open_platform()` opens the home's knowledge store, datasets,
   and run log in one call. `platform.data.put("fund", df)` adds a pandas DataFrame or Series for the
   session, with the same date, alignment, and missing-value handling as a CSV file, and writes
