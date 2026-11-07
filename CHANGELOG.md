@@ -119,6 +119,9 @@ All notable changes to this project are documented here. The format follows
   a newer one stamped the file with its own schema version, as the read-only error told operators to do. It now
   refuses, on SQLite as PostgreSQL already did, and says to upgrade or restore instead.
 - **An invalid API keys file no longer puts key hashes in the error.** The message repeated the input.
+- **Access rules that would silently not apply.** `qaos hosted serve` ignored a configured access file and gave every
+  key everything, and it now refuses to start. Keys with groups on a server with no access file now draw a warning at
+  start-up and from `qaos doctor`, because the groups do nothing there.
 
 ## [0.2.0] - 2026-11-05
 

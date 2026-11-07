@@ -22,6 +22,7 @@ from pydantic import AnyUrl, BaseModel
 from typer.testing import CliRunner
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, load_keys
+from quant_agent_os.config import get_settings
 from quant_agent_os.data import (
     DirectoryDatasetStore,
     GuardedDatasetStore,
@@ -39,9 +40,10 @@ from quant_agent_os.tools import (
     tool,
 )
 from quant_agent_os.tools.access import acting_as
-from quant_platform import compose, serve_stdio
+from quant_platform import Catalog, compose, serve_stdio
 from quant_platform.cli import app as cli
 from quant_platform.http import build_http_app, single_tenant
+from quant_platform.serve import warn_about_open_access
 from quant_research import ResearchApp
 
 pytest.importorskip("empyrical")
@@ -553,6 +555,55 @@ def test_without_an_access_policy_every_key_reaches_everything_as_before(
     assert "analyze_performance" in listed(open_server, "carol")[0]
     result = call(open_server, "carol", "rest", "analyze_performance", returns("value-fund"))
     assert result["status"] == "ok"
+
+
+def _warnings(catalog: Catalog, keys: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    warn_about_open_access(catalog, keys)
+    return " ".join(capsys.readouterr().err.split())
+
+
+def test_groups_with_no_access_file_are_called_out(
+    tmp_path: Path, rules: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+    open_catalog = compose(policy=PermissionPolicy())
+
+    assert _warnings(open_catalog, keys, capsys) == ""
+
+    add_key(keys, "desk", SCOPES, groups=["growth"])
+    assert "groups do nothing" in _warnings(open_catalog, keys, capsys)
+
+    guarded = compose(policy=PermissionPolicy(), access=FileAccessPolicy(rules))
+    assert _warnings(guarded, keys, capsys) == ""
+
+
+def test_an_access_file_the_catalog_ignores_is_called_out(
+    tmp_path: Path, rules: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
+    get_settings.cache_clear()
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+
+    assert "no access policy" in _warnings(compose(policy=PermissionPolicy()), keys, capsys)
+    get_settings.cache_clear()
+
+
+def test_hosted_serve_refuses_an_access_file_it_would_ignore(
+    tmp_path: Path, rules: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """It would otherwise start, and give every key everything the operator meant to restrict."""
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
+    get_settings.cache_clear()
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+
+    result = CliRunner().invoke(cli, ["hosted", "serve", "--keys", str(keys)])
+
+    assert result.exit_code == 2
+    assert "does not apply" in " ".join(result.output.split())
+    get_settings.cache_clear()
 
 
 def test_stdio_refuses_a_catalog_with_an_access_policy(rules: Path) -> None:

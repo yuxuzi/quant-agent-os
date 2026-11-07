@@ -8,7 +8,7 @@ from typing import Any
 
 from rich.console import Console
 
-from quant_agent_os.api import ApiKeyError, KeyRing
+from quant_agent_os.api import ApiKeyError, KeyRing, load_keys
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
 from quant_agent_os.config import get_settings
 from quant_agent_os.mcp import run_stdio
@@ -19,6 +19,22 @@ from quant_platform.composition import Catalog
 from quant_platform.http import build_http_app, single_tenant
 
 errors = Console(stderr=True, soft_wrap=True)
+
+
+def warn_about_open_access(catalog: Catalog, keys: Path) -> None:
+    """Warn when an operator seems to expect per-caller access that this server will not apply."""
+    if catalog.access is not None:
+        return
+    if get_settings().access_file is not None:
+        errors.print(
+            "[yellow]warning:[/yellow] an access file is configured, but this catalog has no "
+            "access policy, so every key reaches every tool and dataset. Pass compose(access=...)."
+        )
+    elif any(key.groups for key in load_keys(keys)):
+        errors.print(
+            "[yellow]warning:[/yellow] some keys name groups, but there is no access file, so "
+            "groups do nothing and every key reaches every tool and dataset. Use --access."
+        )
 
 
 def warn_about_permissions(tools: list[ToolSpec[Any, Any]], policy: PermissionPolicy) -> None:
@@ -92,12 +108,14 @@ def serve_http(
     `ApiUnavailableError` or `MCPUnavailableError` without the ``server`` extra.
     """
     settings = get_settings()
-    ring = KeyRing.from_file(keys or settings.api_keys_file)
+    keys_file = keys or settings.api_keys_file
+    ring = KeyRing.from_file(keys_file)
     if not len(ring):
         raise ApiKeyError("the keys file has no enabled key; add one with `qaos keys new`.")
     run_store = SqliteRunStore(runs or settings.runs_file)
     try:
         warn_about_permissions(catalog.tools, catalog.policy)
+        warn_about_open_access(catalog, keys_file)
         if not is_loopback(host):
             errors.print(
                 f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
