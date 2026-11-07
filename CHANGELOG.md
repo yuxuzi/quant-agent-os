@@ -72,6 +72,10 @@ All notable changes to this project are documented here. The format follows
   within a stated tolerance, a question that must find a source, and a question that must abstain. It writes a pass or
   fail report in Markdown or JSON, with the platform version, the hash of the cases file, and the data versions, to attach
   to acceptance. See [check it against agreed cases](docs/operations.md#check-it-against-agreed-cases).
+- **The security model says who is responsible for what.** A trust-boundary diagram, a table of what the platform and the
+  firm each do, what is stored where, and what this does not protect against. [The review](docs/security-review.md) now
+  covers a firm's own tools, per-caller access, and the operator commands. It stays an AI agent's review, and recommends an
+  independent one before production use.
 
 ### Changed
 
