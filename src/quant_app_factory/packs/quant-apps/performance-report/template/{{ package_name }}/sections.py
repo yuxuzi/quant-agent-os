@@ -48,8 +48,8 @@ def horizons(context: Context) -> list[Block]:
             title="Returns by horizon",
             columns=[Column("Book", "text"), *(Column(label) for label in labels)],
             rows=rows,
-            note=f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: annualised. "
-            "ITD: annualised once it covers a full year.",
+            note=f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: "
+            "annualised. ITD: annualised once it covers a full year.",
         )
     ]
 
