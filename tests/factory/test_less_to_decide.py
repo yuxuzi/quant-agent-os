@@ -142,7 +142,8 @@ def _documented_specs() -> list[tuple[str, str]]:
     ]:
         text = path.read_text("utf-8")
         for block in [*_HEREDOC.findall(text), *_TOML_BLOCK.findall(text)]:
-            if re.search(r"(?m)^name = ", block):
+            # A spec names itself at the top; other TOML in the docs has names inside its tables.
+            if re.search(r"(?m)^name = ", re.split(r"(?m)^\[", block)[0]):
                 specs.append((path.name, block))
     return specs
 

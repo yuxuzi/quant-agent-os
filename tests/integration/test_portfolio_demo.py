@@ -128,6 +128,7 @@ def test_step_4_research_is_cited_and_marked_untrusted(
 ) -> None:
     found = walkthrough[0]["research"]
 
+    assert found["abstained"] is False
     assert found["passages"][0]["source"]["source_id"] == "momentum-crash-risk.md"
     assert "lines" in found["passages"][0]["source"]["location"]
     assert found["trust"] == "untrusted"
@@ -171,6 +172,7 @@ def test_step_7_a_question_outside_the_research_abstains(
     abstained = walkthrough[0]["abstained"]
 
     assert not abstained["is_error"]
+    assert abstained["abstained"] is True
     assert abstained["passages"] == []
     assert "Nothing in the corpus matched" in abstained["warnings"][-1]
 

@@ -1,0 +1,20 @@
+# Test cases for the sample corpus and dataset, which deploy/smoke-test.sh runs with `eval`. Your own go
+# in a file like this one, with GOLD=/path/to/cases.toml (docs/operations.md).
+
+[[numeric]]
+name = "sample strategy volatility"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "monthly", column = "strategy" } }
+value = "metrics.annualized_volatility"
+expected = 0.05332533250676007
+tolerance = 1e-9
+
+[[retrieval]]
+name = "reversal is in the corpus"
+question = "short-term reversal"
+source = "reversal-and-microstructure.md"
+
+[[retrieval]]
+name = "the corpus says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true

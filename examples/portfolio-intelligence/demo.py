@@ -227,7 +227,7 @@ async def drive(url: str, keys: Keys, say: Say = print) -> dict[str, Any]:
         abstained = await _call(growth, "find_related_signals", {"query": UNANSWERABLE})
         seen["abstained"] = abstained
         say(f"  Q: {UNANSWERABLE}")
-        say(f"  {len(abstained['passages'])} passages. {abstained['warnings'][-1]}")
+        say(f"  abstained: {abstained['abstained']}. {abstained['warnings'][-1]}")
 
     step(8, "Audit: every call above is on record, under the caller's name")
     seen["audit"] = await _audit(url, keys.auditor)

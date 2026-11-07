@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -13,12 +14,13 @@ from rich.table import Table
 from quant_agent_os import __version__
 from quant_agent_os.api import ApiKeyError, ApiUnavailableError
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT
-from quant_agent_os.cli import data_app, keys_app, show_runs
+from quant_agent_os.cli import data_app, keys_app, runs_app
 from quant_agent_os.config import ConfigFileError, get_settings
 from quant_agent_os.mcp import MCPUnavailableError
 from quant_agent_os.runs import RunStoreError
 from quant_agent_os.tools import AccessFileError, FileAccessPolicy
 from quant_app_factory.cli import app as factory_app
+from quant_platform.acceptance import GoldFileError, load_gold, run_acceptance
 from quant_platform.cli_common import (
     DatasetsOption,
     StoreOption,
@@ -28,6 +30,7 @@ from quant_platform.cli_common import (
     open_catalog,
     parse_toolsets,
 )
+from quant_platform.composition import DEFAULT_TOOLSETS
 from quant_platform.hosted.cli import hosted_app
 from quant_platform.onboarding import connect, doctor, init
 from quant_platform.serve import serve_http, serve_stdio
@@ -43,7 +46,7 @@ app.add_typer(data_app, name="data")
 app.add_typer(keys_app, name="keys")
 app.add_typer(factory_app, name="app", help="App Factory: generate tested Python applications.")
 app.add_typer(hosted_app, name="hosted")
-app.command("runs")(show_runs)
+app.add_typer(runs_app, name="runs")
 app.command()(connect)
 app.command()(doctor)
 app.command()(init)
@@ -139,6 +142,42 @@ def _serve_http(
     finally:
         if research is not None:
             research.close()
+
+
+@app.command("eval")
+def evaluate(
+    gold: Annotated[Path, typer.Option("--gold", help="The agreed test cases, a TOML file.")],
+    output_format: Annotated[
+        str, typer.Option("--format", help="Report format: 'markdown' or 'json'.")
+    ] = "markdown",
+    store: StoreOption = None,
+    datasets: DatasetsOption = None,
+) -> None:
+    """Run agreed test cases against the served tools, and write a report to attach to acceptance.
+
+    It exits 0 when every case passes, 1 when any fails, and 2 when the cases cannot be read.
+    """
+    if output_format not in ("markdown", "json"):
+        errors.print(f"[red]error:[/red] --format is 'markdown' or 'json', not {output_format!r}.")
+        raise typer.Exit(2)
+    try:
+        cases, digest = load_gold(gold)
+    except GoldFileError as error:
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
+        raise typer.Exit(2) from error
+    catalog, research = open_catalog(list(DEFAULT_TOOLSETS), store, datasets, chosen=False)
+    try:
+        report = run_acceptance(catalog, cases, digest)
+    finally:
+        if research:
+            research.close()
+    sys.stdout.write(
+        report.markdown()
+        if output_format == "markdown"
+        else report.model_dump_json(indent=2) + "\n"
+    )
+    if not report.passed:
+        raise typer.Exit(1)
 
 
 @app.command()

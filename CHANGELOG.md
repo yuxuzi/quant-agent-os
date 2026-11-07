@@ -62,6 +62,16 @@ All notable changes to this project are documented here. The format follows
 - **An upgrade drill and a no-network install.** `deploy/upgrade-test.sh` builds a real tagged release, seeds it,
   upgrades to this commit, rolls back, and checks that runs and answers survive, on SQLite or PostgreSQL. Operations
   covers `docker save` and `docker load`, what needs network and when, and `QAOS_POSTGRES_IMAGE` for a loaded image.
+- **`abstained` on `find_related_signals`,** true when no passage qualified, so a client or an acceptance test need
+  not infer it from empty `passages`.
+- **Retention and audit export.** `qaos runs prune --older-than 90d` removes old ended runs with their calls and
+  retrieved text, and overwrites the freed space. Nothing removes runs unless an operator asks, and audit events and
+  usage events always stay. `qaos runs export` writes the audit trail as JSON lines for a firm's own log system, with
+  hashes and statuses but no arguments or outputs. See [retention and export](docs/operations.md#retention-and-export).
+- **`qaos eval --gold cases.toml`,** an operator command that runs agreed test cases against the served tools: numbers
+  within a stated tolerance, a question that must find a source, and a question that must abstain. It writes a pass or
+  fail report in Markdown or JSON, with the platform version, the hash of the cases file, and the data versions, to attach
+  to acceptance. See [check it against agreed cases](docs/operations.md#check-it-against-agreed-cases).
 
 ### Changed
 

@@ -105,8 +105,10 @@ services:
   runs:
     <<: [*image, *hardened]
     profiles: [operator]
-    entrypoint: ["qaos", "runs", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "runs"]
     command: []
+    environment:
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
     volumes:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
     network_mode: none
@@ -131,6 +133,24 @@ services:
       - datasets:/data/datasets:ro
       - keys:/keys:ro
       - runs:/data/runs  # writable: SQLite shares the file with the running server
+    networks: [backend]  # internal: PostgreSQL only, no internet
+
+  # Runs agreed test cases against the deployed data: GOLD=/path/to/cases.toml. It writes a report
+  # to stdout, and changes nothing (docs/operations.md).
+  eval:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["qaos", "eval", "--gold", "/gold.toml", "--store",
+                 "postgresql://qaos_reader@postgres:5432/qaos"]
+    command: []
+    environment:
+      PGPASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - datasets:/data/datasets:ro
+      - ${GOLD:-./acceptance-sample.toml}:/gold.toml:ro
     networks: [backend]  # internal: PostgreSQL only, no internet
 
   # Writes a tar of the volumes to stdout, or of the ones named: `run --rm -T backup data/runs`.

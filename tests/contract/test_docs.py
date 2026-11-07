@@ -69,6 +69,8 @@ def _assert_qaos_command_exists(command: str) -> None:
     words = shlex.split(command)[1:]
     while words and words[0] in getattr(node, "commands", {}):
         node = node.commands[words.pop(0)]  # type: ignore[attr-defined]
+    if default := getattr(node, "default_command", None):
+        node = node.commands[default]  # type: ignore[attr-defined]
     assert not hasattr(node, "commands"), f"{command}: no such command"
     known = {option for param in node.params for option in param.opts + param.secondary_opts}
     for word in words:

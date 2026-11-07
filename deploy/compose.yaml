@@ -78,8 +78,10 @@ services:
   runs:
     <<: *image
     profiles: [operator]
-    entrypoint: ["qaos", "runs", "--runs", "/data/runs/runs.db"]
+    entrypoint: ["qaos", "runs"]
     command: []
+    environment:
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
     volumes:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
     network_mode: none
@@ -103,6 +105,21 @@ services:
       - datasets:/data/datasets:ro
       - keys:/keys:ro
       - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # Runs agreed test cases against the volumes' data: GOLD=/path/to/cases.toml. It writes a report
+  # to stdout, and changes nothing (docs/operations.md).
+  eval:
+    <<: *image
+    profiles: [operator]
+    entrypoint: ["qaos", "eval", "--gold", "/gold.toml", "--store", "/data/knowledge/kb.db"]
+    command: []
+    volumes:
+      - knowledge:/data/knowledge:ro
+      - datasets:/data/datasets:ro
+      - ${GOLD:-./acceptance-sample.toml}:/gold.toml:ro
     network_mode: none
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

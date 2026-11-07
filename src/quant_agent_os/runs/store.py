@@ -15,7 +15,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Protocol, Self
+from typing import NamedTuple, Protocol, Self
 
 from quant_agent_os.runs.models import (
     ApprovalRequest,
@@ -32,8 +32,20 @@ from quant_agent_os.runtime.executor import ToolCallRecord
 SCHEMA_VERSION = 5
 
 
+# Only runs that have ended can be pruned: anything else may still be used.
+_ENDED = ("completed", "failed")
+
+
 class RunStoreError(RuntimeError):
     """Raised when a run store cannot be opened or written."""
+
+
+class Pruned(NamedTuple):
+    """What a prune removed. ``settled`` is False when freed text may still be in the WAL file."""
+
+    runs: int
+    calls: int
+    settled: bool = True
 
 
 class RunStore(Protocol):
@@ -106,6 +118,25 @@ class RunStore(Protocol):
         decided_by: str | None = None,
     ) -> ApprovalRequest | None:
         """Move a request from ``source`` to ``to`` atomically; None if it was not in ``source``."""
+        ...
+
+    def prunable_runs(self, before: datetime) -> int:
+        """Return how many ended runs started before ``before``."""
+        ...
+
+    def prune_runs(self, before: datetime, event: AuditEvent) -> Pruned:
+        """Remove ended runs started before ``before``, their calls, and their outputs.
+
+        ``event`` records it, in the same transaction. Audit events and usage events stay.
+        """
+        ...
+
+    def list_calls(self, start: datetime, end: datetime) -> list[ToolCallRecord]:
+        """Return the tool calls started from ``start`` up to ``end``, oldest first."""
+        ...
+
+    def list_events(self, start: datetime, end: datetime) -> list[AuditEvent]:
+        """Return the audit events from ``start`` up to ``end``, oldest first."""
         ...
 
     def close(self) -> None:
@@ -231,6 +262,43 @@ class MemoryRunStore:
             moved = found.model_copy(update=_decision(to, decided_by))
             self._requests[request_id] = moved
             return moved.model_copy(deep=True)
+
+    def _prunable(self, before: datetime) -> list[str]:
+        return [
+            run.run_id
+            for run in self._runs.values()
+            if run.status in _ENDED and run.started_at < before
+        ]
+
+    def prunable_runs(self, before: datetime) -> int:
+        """Return how many ended runs started before ``before``."""
+        with self._lock:
+            return len(self._prunable(before))
+
+    def prune_runs(self, before: datetime, event: AuditEvent) -> Pruned:
+        """Remove ended runs started before ``before`` and their calls, and record it."""
+        with self._lock:
+            run_ids = self._prunable(before)
+            calls = sum(len(self._calls.pop(run_id, [])) for run_id in run_ids)
+            for run_id in run_ids:
+                del self._runs[run_id]
+            self._events.append(event)
+        return Pruned(len(run_ids), calls)
+
+    def list_calls(self, start: datetime, end: datetime) -> list[ToolCallRecord]:
+        """Return the tool calls started from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            calls = [call for run in self._calls.values() for call in run]
+        return sorted(
+            (call for call in calls if start <= call.started_at < end),
+            key=lambda call: (call.started_at, call.call_id),
+        )
+
+    def list_events(self, start: datetime, end: datetime) -> list[AuditEvent]:
+        """Return the audit events from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            events = list(self._events)
+        return sorted((e for e in events if start <= e.at < end), key=lambda e: e.at)
 
     def close(self) -> None:
         """Nothing to release."""
@@ -615,6 +683,82 @@ class SqliteRunStore:
             except sqlite3.Error as error:
                 raise RunStoreError(f"Cannot write to the run store: {error}") from error
         return moved
+
+    def _prunable(self, before: datetime) -> list[str]:
+        marks = ", ".join("?" for _ in _ENDED)
+        rows = self._db.execute(
+            f"SELECT run_id, started_at FROM runs WHERE status IN ({marks})", _ENDED
+        ).fetchall()
+        return [row["run_id"] for row in rows if datetime.fromisoformat(row["started_at"]) < before]
+
+    def prunable_runs(self, before: datetime) -> int:
+        """Return how many ended runs started before ``before``."""
+        with self._lock:
+            return len(self._prunable(before))
+
+    def prune_runs(self, before: datetime, event: AuditEvent) -> Pruned:
+        """Remove ended runs started before ``before`` and their calls, and record it.
+
+        Freed pages are overwritten, so a removed passage is not left readable in the file. The
+        write-ahead log is then emptied, which a busy server can delay: ``settled`` says if it was.
+        """
+        with self._lock:
+            try:
+                self._db.execute("PRAGMA secure_delete = ON")
+                with self._db:
+                    run_ids = self._prunable(before)
+                    pairs = [(run_id,) for run_id in run_ids]
+                    calls = self._db.executemany(
+                        "DELETE FROM tool_calls WHERE run_id = ?", pairs
+                    ).rowcount
+                    self._db.executemany("DELETE FROM runs WHERE run_id = ?", pairs)
+                    self._db.execute(
+                        "INSERT INTO audit_events (run_id, actor, principal, event, subject, at, "
+                        "details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event.run_id,
+                            event.actor,
+                            event.principal,
+                            event.event,
+                            event.subject,
+                            event.at.isoformat(),
+                            json.dumps(event.details, sort_keys=True, default=str),
+                        ),
+                    )
+                busy = self._db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+            except sqlite3.Error as error:
+                raise RunStoreError(
+                    f"Cannot prune the run store at {self.path}: {error}"
+                ) from error
+        return Pruned(len(run_ids), max(calls, 0), settled=not busy)
+
+    def list_calls(self, start: datetime, end: datetime) -> list[ToolCallRecord]:
+        """Return the tool calls started from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            rows = self._db.execute("SELECT record FROM tool_calls").fetchall()
+        calls = (ToolCallRecord.model_validate_json(row["record"]) for row in rows)
+        return sorted(
+            (call for call in calls if start <= call.started_at < end),
+            key=lambda call: (call.started_at, call.call_id),
+        )
+
+    def list_events(self, start: datetime, end: datetime) -> list[AuditEvent]:
+        """Return the audit events from ``start`` up to ``end``, oldest first."""
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM audit_events ORDER BY id").fetchall()
+        events = [
+            AuditEvent(
+                run_id=row["run_id"],
+                actor=row["actor"],
+                principal=row["principal"],
+                event=row["event"],
+                subject=row["subject"],
+                at=row["at"],
+                details=json.loads(row["details"]),
+            )
+            for row in rows
+        ]
+        return sorted((e for e in events if start <= e.at < end), key=lambda e: e.at)
 
     def close(self) -> None:
         """Close the database connection."""

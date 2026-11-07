@@ -1,0 +1,29 @@
+# Agreed test cases for the fictional firm: qaos eval --gold examples/portfolio-intelligence/acceptance.toml
+# The numbers come from a separate numpy calculation over data/, not from the tools under test, and
+# tests/integration/test_acceptance.py repeats that calculation.
+
+[[numeric]]
+name = "growth book volatility"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "metrics.annualized_volatility"
+expected = 0.17029039110268307
+tolerance = 1e-9
+
+[[numeric]]
+name = "value book volatility"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "value-book", column = "book" } }
+value = "metrics.annualized_volatility"
+expected = 0.12447905949730392
+tolerance = 1e-9
+
+[[retrieval]]
+name = "momentum crash risk is in the research"
+question = "When do momentum strategies crash?"
+source = "momentum-crash-risk.md"
+
+[[retrieval]]
+name = "the research says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true

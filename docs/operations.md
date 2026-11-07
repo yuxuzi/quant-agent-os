@@ -146,6 +146,72 @@ docker compose -f deploy/compose.yaml run --rm -T doctor
 
 On PostgreSQL, also restore the dump, as in [restore](#restore). Remove the `QAOS_IMAGE` line when you upgrade again.
 
+## Check it against agreed cases
+
+Write the cases you and the people accepting this server agree on, in a TOML file. Take expected numbers from your own
+calculation, not from these tools. [The demonstration's cases](../examples/portfolio-intelligence/acceptance.toml)
+are a complete example:
+
+```toml
+[[numeric]]
+name = "growth book volatility"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "metrics.annualized_volatility"   # where in the tool's output
+expected = 0.17029039110268307
+tolerance = 1e-9                      # absolute, and required
+
+[[retrieval]]
+name = "momentum crash risk is in the research"
+question = "When do momentum strategies crash?"
+source = "momentum-crash-risk.md"     # must be among the top k passages (k = 5 unless you set it)
+
+[[retrieval]]
+name = "the research says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true                        # must find no qualifying passage
+```
+
+```bash
+GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval > acceptance.md
+GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval --format json > acceptance.json
+```
+
+It runs the tools a client would get, under the same permissions, and changes nothing. The report gives each case's
+verdict, what it expected and got, the platform version, the SHA-256 of the cases file, and the data versions, so
+it can be traced later. It names sources and never quotes retrieved text. The command exits 0 when every case passes, 1
+when any fails, and 2 when the cases cannot be read, so scripts can use it. Without a compose file it is
+`qaos eval --gold cases.toml`. It runs the platform's own tools: to include your tools, call `run_acceptance` with your
+catalog from your own server code.
+
+## Retention and export
+
+**Runs are kept until you remove them.** Nothing removes them on its own, and they can hold retrieved passages and
+computed results, so decide how long you keep them.
+
+```bash
+docker compose -f deploy/compose.yaml run --rm runs prune --older-than 90d
+```
+
+- **What goes:** ended runs started before then, with their calls, arguments, outputs, and retrieved text. The freed
+  space in the file is overwritten.
+- **What stays:** audit events and usage events, which hold ids, hashes, and sizes rather than content. So you can
+  still show who called what and when, not what came back. The removal itself adds a `runs.pruned` audit event.
+- **What it cannot reach:** backups you already took, and what you already exported. Stop the server first if you need
+  the removed text gone at once, or the write-ahead log can hold it until the next checkpoint, and the command warns you.
+- **Scripts** add `--yes` and `-T`. It asks first otherwise.
+
+To send the audit trail to your own log system:
+
+```bash
+docker compose -f deploy/compose.yaml run --rm -T runs export --from 2026-11-01 --to 2026-12-01 > audit.jsonl
+```
+
+Each line is one call or one audit event. A call has its time, run and call ids, tenant, actor, principal, platform
+version, tool and tool version, input hash, data versions, status, duration, approval, and anything an access policy
+refused. It leaves out arguments, outputs, and internal error text, so your log system learns no content. Export before
+you prune: a pruned call is not exported, though its audit events are.
+
 ## Install with no network
 
 Build on a machine with network, at the release you want, and carry the images across:

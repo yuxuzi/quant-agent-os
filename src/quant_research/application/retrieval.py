@@ -109,6 +109,10 @@ class EvidencePacket(BaseModel):
     seed_entities: list[str]
     related: list[RelatedEntity]
     passages: list[PassageResult]
+    abstained: bool = Field(
+        default=False,
+        description="True when no passage qualified: the corpus does not answer this question",
+    )
     corpus_snapshot: str | None
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
@@ -303,6 +307,7 @@ class ResearchService:
             seed_entities=seeds,
             related=related,
             passages=passages,
+            abstained=not passages,
             corpus_snapshot=snapshot.id if snapshot else None,
             warnings=warnings,
             evidence=evidence,

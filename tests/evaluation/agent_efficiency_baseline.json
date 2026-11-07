@@ -1,13 +1,13 @@
 {
   "servers": {
     "platform": {
-      "client_only_bytes": 17978,
+      "client_only_bytes": 18114,
       "definition_bytes": 6457,
       "instruction_bytes": 817,
       "tools": 7
     },
     "platform-with-factory": {
-      "client_only_bytes": 22378,
+      "client_only_bytes": 22514,
       "definition_bytes": 7486,
       "instruction_bytes": 1145,
       "tools": 9
@@ -24,7 +24,7 @@
     },
     "quant-research": {
       "description_bytes": 274,
-      "skill_bytes": 2787
+      "skill_bytes": 2774
     },
     "quant-strategy": {
       "description_bytes": 282,
@@ -93,9 +93,9 @@
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
-      "result_bytes": 5644,
+      "result_bytes": 5664,
       "skill": "quant-research",
-      "skill_bytes": 2787,
+      "skill_bytes": 2774,
       "success": true,
       "tools": [
         "find_related_signals",
@@ -108,8 +108,8 @@
     "calls": 10,
     "definition_bytes": 6457,
     "instruction_bytes": 817,
-    "result_bytes": 31543,
-    "skill_bytes": 10322,
+    "result_bytes": 31563,
+    "skill_bytes": 10309,
     "skill_description_bytes": 1114,
     "success_rate": 1.0,
     "tools": 7

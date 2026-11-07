@@ -16,6 +16,7 @@ present it with a real AI client, follow [the demonstration guide](../../docs/de
 | `demo.py` | The operator's setup, the server, and a client that walks through eight steps |
 | `book_tools.py` | `book_var`, the firm's own tool |
 | `access.toml` | Who reaches which tools and datasets |
+| `acceptance.toml` | Agreed test cases for [`qaos eval`](../../docs/operations.md#check-it-against-agreed-cases) |
 | `data/` | Weights and asset returns for two books, each book's returns, and shared factor returns |
 | `notes/` | Three research notes |
 
