@@ -2,7 +2,94 @@
 
 Quant-Agent-OS assumes that model output, retrieved documents, and tool output are untrusted.
 The [security review](security-review.md) checks the remote surface against this model and
-lists the open findings.
+lists the open findings. This project holds no certification and claims compliance with no standard. It has had
+an AI agent's review and no independent one, and an independent review is recommended before production use.
+
+## What crosses which boundary
+
+```text
+ Your people                        Your firm's network                         Outside, if you choose
+┌────────────────┐  TLS  ┌───────┐ HTTP  ┌─────────────────────────────┐
+│ AI client      ├──────▶│ your  ├──────▶│ qaos server (container)     │
+│ (Claude,       │ API   │ proxy │       │  keys ▶ access ▶ executor   │
+│  Cursor, ...)  │ key   └───────┘       │  ├ platform tools           │
+└───────┬────────┘                       │  └ your tools (your code)   ├──▶ hosted embedder: query text,
+        │ every result it reads          └──┬──────────┬───────────────┘    only if you grant `network`
+        ▼                                   │ reads    │ records
+ The client's model, which you              ▼          ▼
+ and your client's vendor control     corpus, data    runs, audit        ┌──────────────────────┐
+                                      keys, access    usage              │ Operators: `qaos ...`│
+                                      (read-only)     (read-write)  ◀────┤ on the host. Trusted │
+                                                                         └──────────────────────┘
+```
+
+- **The server checks the API key, then the caller's access, then the tool's permissions.** Everything to the left
+  of the executor is untrusted input, including what the model asks for.
+- **Results reach the client, and so its model.** Keeping numbers out of the model through dataset references covers
+  your input series. Metrics, passages, and report text are the answer, so they go to the client and whichever model it
+  uses. Choose a client and a model provider your data may go to. This is the largest data flow, and the platform
+  cannot limit it.
+- **Your tools are server code.** See [the limits](#what-this-does-not-protect-against).
+- **Operators are outside the model.** Whoever can run `docker compose` on the host can read every volume and change
+  anything.
+
+## Who is responsible for what
+
+The platform is software you run. It has no service of ours behind it, so nothing here reaches back to its authors.
+
+| Area | The platform | Your firm |
+| --- | --- | --- |
+| **TLS** | Serves plain HTTP, on loopback by default, and warns otherwise | Terminates TLS in a reverse proxy, and manages certificates |
+| **Rate limits** | Bounds each call, and 16 calls at once | Limits requests in the proxy, including unauthenticated ones |
+| **Identity** | Checks API keys, kept as hashes, with expiry and revocation that apply with no restart | Decides who holds a key, hands keys over, and removes leavers. There is no single sign-on on `qaos serve` |
+| **Authorization** | Applies an access file or your `AccessPolicy` to tools and datasets. Deny by default once configured | Decides the rules, and enforces anything finer in its own tools |
+| **Secrets** | Stores none in the image or in generated files, and redacts secret-named values from records | Stores `deploy/.env` and provider keys, and rotates them ([how](operations.md#where-things-live)) |
+| **Backups** | Provides `backup`, `restore`, and a tested [upgrade and rollback](operations.md#roll-back) | Runs them on a schedule, stores and encrypts them, and tests a restore |
+| **Retention** | Provides [`qaos runs prune` and `export`](operations.md#retention-and-export). Removes nothing unasked | Sets the policy, and runs it |
+| **Network** | Publishes on loopback. PostgreSQL has an internal network, and operator commands have none | Controls what reaches the host, and what the server may reach |
+| **Patching** | Pins dependencies and base images, and publishes fixes in releases | Applies releases and the host's patches, and rebuilds images |
+| **Your tools** | Validates their input and output, bounds and records each call | Reviews them as server code, and tests them with `check_tool` |
+| **Monitoring and incidents** | Records every call, and emits telemetry with no content | Watches it, responds to incidents, and tells anyone it must. Report platform flaws [privately](#reporting-a-vulnerability) |
+| **Compliance** | Makes no claim | Decides what its rules require, including how long it keeps records |
+
+## What is stored where
+
+| Kind of data | Sensitivity | Where it lives | Who can reach it |
+| --- | --- | --- | --- |
+| Research corpus: text, entities, embeddings | Your research | `knowledge` volume, or PostgreSQL | Any caller allowed a research tool, the whole corpus |
+| Datasets | Your data | `datasets` volume, or your own store | Callers an access file allows. Without one, any key with `tools:call` |
+| Runs and calls: arguments, outputs, **retrieved passages,** computed results | As sensitive as the corpus and data together | `runs` volume | Any key with `runs:read`, for **every** caller's runs |
+| Audit events: ids, hashes, statuses, principals | Who did what, with no content | `runs` volume, kept forever | Any key with `runs:read` |
+| Usage events: tool, status, duration, sizes | Activity, with no content | `runs` volume, kept forever | Operators |
+| API-key hashes, with principals and groups | Access map | `keys` volume, mode 0600 | The server, read-only, and operators |
+| Access rules | Access map | Your file, mounted read-only | The server, and operators |
+| Database passwords | Secret | `deploy/.env`, and the containers' environment | Anyone who can `docker inspect` on the host |
+| Provider keys, if you use a hosted embedder | Secret | The environment, or the home's `.env` | The server. Never in records or errors |
+| Logs | Names of principals, tools, and refused datasets. Never keys or arguments | Container logs | Operators |
+| Telemetry | Tenant, tool, status, duration. Automatic HTTP spans also hold request paths | Your collector, off until you add one | Whoever runs it |
+| Backups and exports | Backups hold everything above but `deploy/.env`. Audit exports hold no content | Wherever you put them | Whoever you let. Pruning does not reach them |
+| Acceptance reports | Numbers and source names, never retrieved text | Wherever you put them | Whoever you let |
+
+## What this does not protect against
+
+- **A tool can do more than it declares.** The executor checks a tool's declared permissions, and nothing sandboxes
+  it. A tool that declares only `read_local_data` can still open a file or a socket, because it is Python in the
+  server's process (tried, and [finding F-6](security-review.md#findings)). So your tools are as trusted as the server,
+  and can read what it can, including the runs and every dataset. Review them like server code, and limit the
+  container's network if they need none.
+- **The corpus is all or nothing.** A caller allowed a research tool searches the whole corpus. For research that two
+  groups must not share, run one server per corpus.
+- **`runs:read` sees everyone.** It reads every caller's runs, with what they retrieved and computed. Give it only to
+  auditors, and never to a key that a client's model can use.
+- **The audit trail resists accidents, not its operator.** The database rejects changes to audit events, but whoever
+  can write the file can remove that rule. For evidence that must outlast a compromised host,
+  [export it](operations.md#retention-and-export) to a system they do not control.
+- **A client can be talked into things.** A passage can hold instructions. Results are marked untrusted, and the server
+  says not to follow them, but only the client decides. Consequential calls still stop for a person's approval.
+- **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
+- **`qaos hosted serve` has no per-caller access.** It refuses to start with an access file configured, and OAuth
+  tokens carry no groups.
+- **Nothing limits unauthenticated requests.** That is the proxy's job.
 
 ## Defaults
 
@@ -51,7 +138,7 @@ provider again.
 
 ## Run records
 
-`qaos serve` records every call as a run in `runs.db` beside the knowledge store. Pass
+`qaos serve` records every call as a run in `runs.db` in the home. Pass
 `--runs PATH` to put it elsewhere, or `--no-record` to keep none. The SDK `Platform` keeps runs
 in memory unless it is given a run store. What each part of a record holds:
 - **Calls.** A call record holds the tool's arguments and output, which for research tools
@@ -60,6 +147,9 @@ in memory unless it is given a run store. What each part of a record holds:
   name a secret (`api_key`, `token`, `password`, ...) are replaced with `[REDACTED]`.
 - **Audit events.** These hold only ids, hashes, and statuses, and the database rejects any
   update or deletion of them.
+- **Retention.** Runs are kept until an operator runs `qaos runs prune`, which removes ended runs and their calls,
+  overwrites the freed space, and records itself. Audit and usage events stay. `qaos runs export` gives each call and
+  audit event without arguments or outputs. Both are operator commands, not tools ([operations](operations.md#retention-and-export)).
 - **Usage events.** One per recorded call, written in the same transaction
   ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
   principal, tool, status, duration, and the sizes of the arguments and output, never their
@@ -100,8 +190,8 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
 [Decision 0012](decisions/0012-remote-mcp-over-http.md). `qaos serve --http` serves MCP
 at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 - **Every MCP request needs an API key.** A missing or unknown key gets 401 with
-  `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, where
-  OAuth tokens will plug in (plan step P5).
+  `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, which
+  is also how `qaos hosted serve` checks OAuth tokens.
 - **Each method checks the key's scope.** Listing tools, resource templates, and prompts, and
   getting a prompt, need `tools:list`; calling a tool and reading a resource (which calls a
   tool) need `tools:call`. There are no new scopes, and no MCP method can approve a call.
@@ -127,6 +217,8 @@ configured, and then it denies what is not listed. How to use it, and what it do
   access file that has become missing or invalid.
 - A refused dataset cannot be told from a missing one, and no output names what the caller may not reach. The
   refusal is on the call's record and audit event, which callers do not receive.
+- Configurations that would silently not apply are called out. `qaos hosted serve` will not start with an access file
+  configured, and keys with groups on a server with no access file draw a warning at start-up and from `qaos doctor`.
 - `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
 
 ## Tenants and OAuth
@@ -134,7 +226,7 @@ configured, and then it denies what is not listed. How to use it, and what it do
 [Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
 (`qaos hosted serve --tenants FILE`):
 - **The tenant comes from the credential only.** An API key's entry names its tenant
-  (`api-key new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
+  (`qaos keys new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
   or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
 - **Each tenant has its own data.** Its knowledge store is its own PostgreSQL schema
   (`qr_<tenant>`) or SQLite file, its datasets are its own directory, and its toolsets and
@@ -180,8 +272,9 @@ The compose file applies these settings to the server:
 - the knowledge store and keys are mounted read-only;
 - it publishes only on `127.0.0.1`.
 
-The operator's `ingest` and `keys` commands run with no network. CI checks the image for
-data files, key files, and secret-looking environment variables on every pull request.
+The operator's `ingest`, `keys`, `backup`, and `restore` commands run with no network. CI checks the image for
+data files, key files, and secret-looking environment variables on every pull request, and that `doctor`'s output, which
+goes in support tickets, holds no secrets.
 
 ## Plans and limits
 
@@ -269,12 +362,13 @@ from their environment and open connections read-only by default: SQLite query-o
 read-only files, and PostgreSQL read-only transactions. A scan test checks that no secret
 reaches the generated files.
 
-## Out of scope for the first release
+## Out of scope
 
 - autonomous trading or brokerage connectivity;
 - unrestricted code execution;
-- high-impact external actions;
-- hosted multi-tenant operation.
+- high-impact external actions.
+
+A public, multi-tenant endpoint needs [these steps](security-review.md#before-a-public-endpoint) first.
 
 ## Reporting a vulnerability
 

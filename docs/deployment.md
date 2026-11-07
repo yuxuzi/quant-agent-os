@@ -199,6 +199,8 @@ qaos serve --http --access access.toml    # or set QUANT_AGENT_OS_ACCESS_FILE
 - **Refusals are recorded.** A refused tool returns `denied`, and a refused dataset returns the same
   error as a missing one. Either way the call's record and its audit event list what was refused, under
   the caller's name: `qaos runs <run-id>`.
+- **Groups need the file.** Without an access file, groups do nothing and every key reaches everything. The server warns at
+  start-up, and `qaos doctor` warns too.
 - **No restart.** A change to the file applies on the next request. If the file becomes missing or invalid,
   **nothing is allowed** until it is fixed, and the server logs why. A server will not start without a valid file.
 - **In Docker,** mount the file read-only in a compose override and set `QUANT_AGENT_OS_ACCESS_FILE`.
@@ -215,7 +217,8 @@ because a tool holding the unguarded store can read anything in it.
 - **`runs:read` sees every caller's runs,** including what they retrieved and computed. Give it only to auditors.
 - **Prompts and server instructions go to every caller.** Keep anything confidential out of `extra_instructions`.
 - **Local use is not covered.** stdio and the SDK have no authenticated caller and trust whoever started them,
-  so `serve_stdio` refuses a catalog with an access policy. `qaos hosted serve` does not read an access file.
+  so `serve_stdio` refuses a catalog with an access policy. `qaos hosted serve` does not apply an access file, so it
+  will not start with one configured.
 
 See [decision 0021](decisions/0021-per-caller-access.md).
 

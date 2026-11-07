@@ -116,6 +116,13 @@ def serve_hosted(
     With --approval-url, a call that waits for an approval sends the client to the approval
     page; issue approver keys with `qaos keys new --scope runs:approve`.
     """
+    if get_settings().access_file is not None:
+        errors.print(
+            "[red]error:[/red] an access file is configured, and `qaos hosted serve` does not "
+            "apply one, so every key would reach every tool and dataset. Use `qaos serve --http`, "
+            "or unset QUANT_AGENT_OS_ACCESS_FILE."
+        )
+        raise typer.Exit(2)
     from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
     from quant_platform.hosted.approval_page import approval_routes
     from quant_platform.hosted.tenants import TenantCatalogs, entitled_toolsets, separate_approver

@@ -5,8 +5,9 @@ Claude Code reads this file through `CLAUDE.md`.
 
 ## What this project is
 
-Quant-Agent-OS is a source-available quantitative intelligence and application-engineering
-platform consumed by AI clients through MCP and a Python SDK. It is not a chatbot.
+Quant-Agent-OS connects AI clients to a firm's own Python tools, research, and data, on a server the firm runs, through
+MCP, REST, and a Python SDK. It is source-available ([decision 0019](docs/decisions/0019-business-source-license.md)), and it
+is not a chatbot.
 - **Core** (`src/quant_agent_os`): typed tool contract and registry, permission policy, bounded
   executor, evidence-linked reports, and the MCP adapter.
 - **Quant Research** (`src/quant_research`): cited keyword search with entity linking and a small
@@ -22,9 +23,10 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
 - **Hosted features** (`quant_platform.hosted`): tenants, plans, usage, OAuth, and the approval page,
   run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
-  chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report`;
-  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_http`, and
-  `open_platform()` opens them from a notebook.
+  chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
+  own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md));
+  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_http`,
+  `open_platform()` opens them from a notebook, and `qaos eval` runs agreed test cases against them.
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
@@ -42,7 +44,8 @@ third-party library of App Factory ([decision 0006](docs/decisions/0006-pytempla
 Read [docs/architecture.md](docs/architecture.md) and the open items in
 [docs/ENGINEERING_REVIEW_PLAN.md](docs/ENGINEERING_REVIEW_PLAN.md) before larger changes. User docs
 have one route: README, then [getting started](docs/getting-started.md), then the
-[tutorial](docs/tutorial.md).
+[tutorial](docs/tutorial.md). Someone running a server reads [deployment](docs/deployment.md), then
+[operations](docs/operations.md).
 
 One wheel holds all five import names ([decision 0018](docs/decisions/0018-one-wheel.md)), and
 `qaos` (`quant_platform.cli`) is the one command. Each product's `cli.py` is a Typer app it mounts,
@@ -65,6 +68,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Regenerate client bundles (after changing a skill) | `uv run python scripts/client_bundles.py` |
 | Update the tool lock (after a tool version bump) | `uv run python scripts/tool_lock.py --update` |
 | Research evaluation | `uv run python tests/research/research_eval.py` (add `--update` to rebaseline) |
+| Team-server smoke test and upgrade drill (need Docker; CI runs them) | `deploy/smoke-test.sh [postgres]`, `deploy/upgrade-test.sh [postgres]` |
 | App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest tests/factory/test_factory_smoke.py` |
 | Real-paper evaluation (opt-in; `fetch` needs network once) | `uv run python tests/research/real_corpus.py fetch`, then `... real_corpus.py eval` or `... real_corpus.py ablation` |
 
@@ -107,7 +111,13 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
 - **Retrieved text never steers the platform.** No tool reads tool output or retrieved text to
   choose what runs next. Retrieved text stays marked untrusted, and anything synthesized from it
   is labelled `interpretation`.
-- **Ingestion is an operator command.** Writes to the knowledge store are not agent tools.
+- **Ingestion is an operator command.** Writes to the knowledge store are not agent tools. Nor are `qaos eval`, `qaos runs
+  prune`, and `qaos runs export`.
+- **Per-caller access fails closed.** Once a policy applies, anything uncertain is a refusal, and a refused dataset looks like a
+  missing one ([decision 0021](docs/decisions/0021-per-caller-access.md)). A configuration an interface would ignore is
+  refused or warned about, never silently dropped.
+- **Declared permissions are checked, not sandboxed.** Never describe a tool's permissions as a limit on what its code can do
+  ([finding F-6](docs/security-review.md#findings)).
 - **Explicit registration.** No dynamic plugin discovery or code loading, and no tool
   marketplace. A firm's tools are named in its own server's code
   ([decision 0020](docs/decisions/0020-a-firms-own-server.md)). The Claude Code plugin manifest in `.claude-plugin/` only packages the server and

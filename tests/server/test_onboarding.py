@@ -173,6 +173,21 @@ def test_doctor_checks_an_access_file(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert "Invalid access file" in output
 
 
+def test_doctor_warns_when_groups_have_no_access_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    keys = get_settings().api_keys_file
+    keys.parent.mkdir(parents=True)
+    add_key(keys, "alice", ["tools:call"], groups=["desk"])
+
+    assert "no access file applies them" in _doctor_output()[1]
+
+    access = tmp_path / "access.toml"
+    access.write_text("[groups.desk]\n")
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(access))
+    assert "no access file applies them" not in _doctor_output()[1]
+
+
 def test_doctor_output_holds_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     """Its output goes in support tickets. Each setting here is wrong, so each error is shown."""
     password = "s3cret-store-password"
