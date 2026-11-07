@@ -849,7 +849,7 @@
           },
           "template": {
             "default": "quant-baseline",
-            "description": "agent-tool, quant-baseline, bundled, or an absolute pack directory",
+            "description": "quant-apps, quant-baseline, agent-tool, bundled, or a pack directory",
             "title": "Template",
             "type": "string"
           }
@@ -1126,7 +1126,7 @@
         "type": "object"
       },
       "permissions": [],
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "find_related_signals": {
       "input_schema": {
