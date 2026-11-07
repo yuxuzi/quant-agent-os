@@ -12,11 +12,19 @@ from quant_app_factory.domain.spec import AppSpec
 PACKS = Path(__file__).resolve().parents[1] / "packs"
 AGENT_TOOL_PACK = PACKS / "agent-tool"
 QUANT_BASELINE_PACK = PACKS / "quant-baseline"
-BUILT_IN_PACKS = {"agent-tool": AGENT_TOOL_PACK, "quant-baseline": QUANT_BASELINE_PACK}
+QUANT_APPS_PACK = PACKS / "quant-apps"
+BUILT_IN_PACKS = {
+    "agent-tool": AGENT_TOOL_PACK,
+    "quant-apps": QUANT_APPS_PACK,
+    "quant-baseline": QUANT_BASELINE_PACK,
+}
+# One application per stage of a fund's investment process (decision 0022).
+QUANT_APP_PROFILES = ("alpha-research", "strategy-backtest", "risk-monitor", "performance-report")
 
 # Optional components each built-in profile accepts. User packs are checked by pytemplate-uv.
 _QUANT_DATA = frozenset({"data-parquet", "data-database", "agent-tools"})
 _COMPONENTS: dict[tuple[str, str], frozenset[str]] = {
+    **{("quant-apps", profile): frozenset({"agent-tools"}) for profile in QUANT_APP_PROFILES},
     ("agent-tool", "agent-tool"): frozenset(),
     ("bundled", "python"): frozenset({"container"}),
     ("bundled", "fastapi"): frozenset(
@@ -84,6 +92,15 @@ class ArchitecturePlanner:
                 "A quant-lab project is portable numpy code: study, backtest, and report "
                 "share data, signals, metrics, and one config.toml, with known-answer tests, "
                 "bias tests, and a LIMITATIONS.md."
+            )
+            if "agent-tools" in spec.components:
+                data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)
+                portable = False
+                reasons.append("agent-tools adds Quant-Agent-OS tool wrappers and that dependency.")
+        elif template == "quant-apps":
+            reasons.append(
+                f"A {profile} project is one stage of the investment process: portable code that "
+                "works as generated and that the firm customizes, with known-answer tests."
             )
             if "agent-tools" in spec.components:
                 data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)

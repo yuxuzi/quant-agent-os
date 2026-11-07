@@ -1,0 +1,116 @@
+"""Quant-Agent-OS tools: this application's risk figures, under the firm's permissions.
+
+The tools read the application's own files, as its ``config.toml`` names them. A caller passes no
+file paths. The config file is ``config.toml`` in the working directory, or the file
+``{{ package_name | upper }}_CONFIG`` names. They return figures without chart series, and write
+nothing.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
+
+from .document import to_dict
+from .monitor import build_document, open_view
+from .risk import RiskView
+from .sections import all_checks
+from .settings import load_settings
+
+CONFIG_VARIABLE = "{{ package_name | upper }}_CONFIG"
+
+
+class NoInput(BaseModel):
+    """These tools use the application's own files and settings."""
+
+
+class ReportOutput(BaseModel):
+    """The risk report's tables and text, without chart series."""
+
+    report: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class LimitResult(BaseModel):
+    """One limit or firm check; a value of None means there was no data to measure."""
+
+    name: str
+    value: float | None
+    limit: float
+    breached: bool
+    detail: str = ""
+
+
+class LimitsOutput(BaseModel):
+    """Every limit and firm check, as of the positions' date."""
+
+    as_of: str
+    breaches: int
+    checks: list[LimitResult]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def _view() -> RiskView:
+    path = Path(os.environ.get(CONFIG_VARIABLE, "config.toml"))
+    if not path.is_file():
+        raise ValueError(f"No {path}; run the tools from the project, or set {CONFIG_VARIABLE}.")
+    return open_view(load_settings(path), path.resolve().parent)
+
+
+def _warnings(view: RiskView) -> list[str]:
+    demo = ["The data is a synthetic demo book."] if view.settings.positions == "demo" else []
+    return [*view.notes, *demo]
+
+
+@tool(
+    name="risk_report",
+    description="Compute the risk report from the firm's positions: exposures, risk, and stress.",
+    permissions=[Permission.READ_LOCAL_DATA],
+    timeout_seconds=30.0,
+)
+def risk_report(params: NoInput) -> ReportOutput:
+    """Compute the report with the application's data and settings."""
+    view = _view()
+    report = to_dict(build_document(view))
+    report["blocks"] = [block for block in report["blocks"] if block["type"] != "chart"]
+    return ReportOutput(report=report, warnings=_warnings(view))
+
+
+@tool(
+    name="check_risk_limits",
+    description="Check the firm's positions against its limits and own checks.",
+    permissions=[Permission.READ_LOCAL_DATA],
+    timeout_seconds=30.0,
+)
+def check_risk_limits(params: NoInput) -> LimitsOutput:
+    """Check every limit; a figure with no data counts as a breach."""
+    view = _view()
+    checks = all_checks(view)
+    return LimitsOutput(
+        as_of=view.as_of.isoformat(),
+        breaches=sum(check.breached for check in checks),
+        checks=[
+            LimitResult(
+                name=check.name,
+                value=None if math.isnan(check.value) else check.value,
+                limit=check.limit,
+                breached=check.breached,
+                detail=check.detail,
+            )
+            for check in checks
+        ],
+        warnings=_warnings(view),
+    )
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [risk_report, check_risk_limits]
+
+
+def registry() -> ToolRegistry:
+    """Return a registry with every tool, ready for a `Platform` or an MCP server."""
+    return ToolRegistry(TOOLS)

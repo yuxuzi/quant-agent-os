@@ -1,0 +1,25 @@
+# Limitations
+
+This application is a tested starting point, not a risk system of record.
+
+- **Positions are taken as given.** It reads your file. Reconciling positions to your prime broker
+  or administrator is a separate job.
+- **The example limits are examples.** Set yours with whoever owns risk at your firm.
+- **History may not repeat.** Value at risk and volatility apply today's weights to past returns.
+  They miss what has not happened yet, and they rest on the chosen lookback.
+- **Linear only.** Options and other non-linear positions need a pricing model: a weight times a
+  return will misstate them, sometimes badly. Add your model in a firm section.
+- **No factor model.** Beta is to one column you choose. Sector exposure comes from your groups
+  file. There is no style or statistical factor decomposition.
+- **Stress scenarios are assumptions.** They show what your book does under the shock you name,
+  and say nothing about how likely it is.
+- **Assets without prices.** They count in exposures, not in return-based risk. The report shows
+  how much gross exposure has prices, and names what is missing.
+- **Missing returns count as 0** in the simulation, which understates risk for illiquid assets.
+- **Not real time.** It runs when you run it, on the files it is given. No market-hours monitoring.
+- **It places no orders** and connects to no broker.
+- **Later fixes.** This project owns a copy of its code. A fix made to the template later does not
+  reach it by itself. Check the Quant-Agent-OS changelog, and apply fixes by hand.
+
+What the tests guard: exposure and concentration, contributions that sum to 1, stress arithmetic,
+limit direction, breaches when data is missing, and no data used after the as-of date.

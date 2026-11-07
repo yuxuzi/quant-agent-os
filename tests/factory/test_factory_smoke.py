@@ -29,6 +29,26 @@ pytestmark = pytest.mark.skipif(
             {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)},
         ),
         (("bundled", "python"), {}),
+        (("quant-apps", "alpha-research"), {}),
+        (("quant-apps", "strategy-backtest"), {}),
+        (("quant-apps", "risk-monitor"), {}),
+        (("quant-apps", "performance-report"), {}),
+        (
+            ("quant-apps", "performance-report"),
+            {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
+        ),
+        (
+            ("quant-apps", "risk-monitor"),
+            {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
+        ),
+        (
+            ("quant-apps", "alpha-research"),
+            {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
+        ),
+        (
+            ("quant-apps", "strategy-backtest"),
+            {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
+        ),
         (("quant-baseline", "quant-lab"), {}),
         (("quant-baseline", "quant-lab"), {"answers": {"frequency": "weekly"}}),
         (("quant-baseline", "quant-lab"), {"answers": {"frequency": "monthly"}}),

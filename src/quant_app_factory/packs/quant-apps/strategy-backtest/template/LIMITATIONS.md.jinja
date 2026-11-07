@@ -1,0 +1,26 @@
+# Limitations
+
+This application is a tested simulation, not a finished research process or a trading system.
+
+- **It places no orders** and connects to no broker.
+- **It supplies no alpha.** Momentum and reversal are textbook examples. The signal is yours.
+- **Survivorship bias.** Results are only as good as the universe you load. Include delisted
+  assets. When an asset's prices stop, the engine charges `delisting_return` once.
+- **Point-in-time data.** Prices and any other inputs must be as known at each date. The look-ahead
+  test covers named firm signals using later prices. It does not cover a signal or weights file,
+  whose timing is its author's responsibility.
+- **Corporate actions.** Use prices adjusted for splits and dividends.
+- **Execution.** Costs are linear in turnover. There is no market impact, borrow cost, short-sale
+  constraint, or capacity limit.
+- **Exposures.** Beta neutrality uses one factor, the equal-weight market. There are no sector,
+  size, or style neutralisations; add yours as a firm rule.
+- **Overfitting and multiple testing.** `backtest` is in-sample; only `walk-forward` is out of
+  sample, for built-in signals. Trying many signals or grids inflates the best. Record them all.
+- **Interpretation.** Reports print computed figures only. Write the interpretation yourself.
+- **Later fixes.** This project owns a copy of its code, including `metrics.py`. A fix made to
+  the template later does not reach it by itself. Check the Quant-Agent-OS changelog and apply
+  fixes by hand.
+
+What the tests guard: metric formulas (known answers), no look-ahead in signals, one trade-timing
+convention, missing prices (gaps and delistings), drift and the rebalance schedule, cost ordering,
+walk-forward choices that never see their test windows, and the files for the next stage.

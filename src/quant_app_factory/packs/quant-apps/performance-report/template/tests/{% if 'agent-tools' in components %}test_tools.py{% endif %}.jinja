@@ -1,0 +1,39 @@
+"""The tools honour the Quant-Agent-OS contract and read only the configured data."""
+
+from pathlib import Path
+
+import pytest
+from quant_agent_os.testing import check_tool
+from quant_agent_os.tools import READ_ONLY, Permission
+
+from {{ package_name }}.tools import CONFIG_VARIABLE, TOOLS, performance_report, registry
+
+
+@pytest.fixture(autouse=True)
+def _config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text('returns = "demo"\n')
+    monkeypatch.setenv(CONFIG_VARIABLE, str(config))
+
+
+def test_the_tool_returns_figures_without_chart_series() -> None:
+    record = check_tool(performance_report, {})
+
+    assert record.output is not None
+    blocks = record.output["report"]["blocks"]
+    assert {block["type"] for block in blocks} <= {"table", "text"}
+    assert any(block["title"] == "Returns by horizon" for block in blocks)
+    assert "The data is synthetic demo returns." in record.output["warnings"]
+
+
+def test_an_unknown_tear_sheet_is_an_error_naming_the_choices() -> None:
+    record = check_tool(performance_report, {"tearsheet": "nope"}, expect="error")
+
+    assert "No tear sheet 'nope'" in (record.error or "")
+
+
+def test_the_tools_take_no_paths_and_declare_only_what_they_need() -> None:
+    assert set(performance_report.input_model.model_fields) == {"tearsheet"}
+    assert all(spec.permissions <= READ_ONLY for spec in TOOLS)
+    assert Permission.READ_LOCAL_DATA in performance_report.permissions
+    assert {spec.name for spec in registry().specs()} == {spec.name for spec in TOOLS}

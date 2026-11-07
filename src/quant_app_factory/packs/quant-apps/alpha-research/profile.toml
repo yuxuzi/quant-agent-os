@@ -1,0 +1,17 @@
+contract = 1
+id = "alpha-research"
+name = "Alpha research"
+description = "From prices to signal evidence: information coefficients, decay, and quantile spreads, around the firm's own signals, and a signal file for the next stage."
+version = "1"
+kind = "cli"
+status = "experimental"
+supported_python = ["3.11", "3.12", "3.13", "3.14", "3.15"]
+lifecycle_commands = ["uv sync", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy {package} tests", "uv run pytest"]
+default_components = []
+optional_components = ["agent-tools"]
+dependencies = ["numpy>=1.26", "typer>=0.12"]
+questions = ["description", "author", "email", "python_version", "license", "frequency", "max_horizon"]
+security_posture = "Reads local price files only; no orders, broker connectivity, or credentials in the project."
+
+[dependency_groups]
+dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]

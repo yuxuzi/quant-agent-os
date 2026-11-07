@@ -1,0 +1,26 @@
+# Parameters for {{ project_name }}. Later template updates leave this file as you left it.
+# Command-line options override them for one run, and every run records the values it used.
+
+data = "demo"       # a price file relative to this file, or "demo" for a random walk
+
+# What to trade: a named signal, a file of scores, or a file of target weights.
+signal = "momentum"  # momentum, reversal, or a signal in {{ package_name }}/firm/signals.py
+# signal_file = "scores.csv"    # such as alpha-research's export
+# weights_file = "weights.csv"  # such as your optimizer's output; skips the portfolio rule
+# lookback = 252     # bars; leave unset for the signal's standard definition
+# skip = 21          # momentum only: latest bars to skip
+
+lag = 1  # bars from the signal's close to the trade
+
+# The portfolio rule: dollar-neutral, beta-neutral, long-only, or a rule in firm/rules.py
+exposure = "dollar-neutral"
+quantiles = 5  # long-only: hold the top 1 / quantiles of assets
+cost_bps = {{ cost_bps }}  # per unit of one-way turnover
+rebalance_every = {{ {"daily": 21, "weekly": 4, "monthly": 1}[frequency] }}  # bars; holdings drift in between
+delisting_return = -0.30  # earned once when a held asset's prices stop (Shumway, 1997)
+
+# Walk-forward: the lookback is chosen per fold on training data only.
+objective = "sharpe"  # or "ic"
+train_bars = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}
+test_bars = {{ {"daily": 63, "weekly": 12, "monthly": 3}[frequency] }}
+# lookbacks = [5, 10, 21]  # default: 0.5, 0.75, and 1 times the signal's lookback

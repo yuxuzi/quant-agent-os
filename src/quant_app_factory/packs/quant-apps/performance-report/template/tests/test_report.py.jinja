@@ -1,0 +1,450 @@
+"""The report end to end: sections, tear sheets, formats, reconciliation, and escaping."""
+
+import datetime as dt
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+from typer.testing import CliRunner
+
+from {{ package_name }} import sections as section_module
+from {{ package_name }}.cli import app
+from {{ package_name }}.context import Context
+from {{ package_name }}.document import Column, Document, TableBlock, render_html, render_markdown
+from {{ package_name }}.excel import load_workbook_table, write_workbook
+from {{ package_name }}.firm.sections import SECTIONS as FIRM_SECTIONS
+from {{ package_name }}.reconcile import reconcile
+from {{ package_name }}.reporting import build_context, build_document, check_data, load_returns
+from {{ package_name }}.risk_metrics import (
+    calmar_ratio,
+    expected_shortfall,
+    sortino_ratio,
+    value_at_risk,
+)
+from {{ package_name }}.settings import ExcelSource, Settings, SettingsError, Tearsheet, load_settings
+from {{ package_name }}.synthetic import demo_returns
+from {{ package_name }}.tables import Table, TableError, load_csv, read_meta, save_table
+
+runner = CliRunner()
+DATES = [dt.date(2024, 1, 31), dt.date(2024, 2, 29), dt.date(2024, 3, 31)]
+
+
+def _table(**columns: list[float]) -> Table:
+    return Table(DATES, list(columns), np.column_stack(list(columns.values())))
+
+
+@pytest.fixture(autouse=True)
+def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
+
+
+def _write_csv(path: Path, text: str) -> Path:
+    path.write_text(text, "utf-8")
+    return path
+
+
+# Risk measures
+
+
+def test_value_at_risk_and_shortfall_have_known_answers() -> None:
+    returns = np.array([-0.05, -0.03, -0.01, 0.01, 0.02])
+
+    assert value_at_risk(returns, 0.25) == pytest.approx(-0.03)
+    assert expected_shortfall(returns, 0.25) == pytest.approx(-0.04)
+
+
+def test_sortino_and_calmar_have_known_answers() -> None:
+    returns = np.array([0.02, -0.01, 0.02, -0.01])
+
+    assert sortino_ratio(returns, 12) == pytest.approx(
+        0.005 * 12 / (np.sqrt(0.00005) * np.sqrt(12))
+    )
+    assert calmar_ratio(np.array([0.10, -0.10]), 2) == pytest.approx(-0.01 / 0.10)
+
+
+def test_ratios_without_downside_are_undefined_not_infinite() -> None:
+    assert np.isnan(sortino_ratio(np.array([0.01, 0.02]), 12))
+    assert np.isnan(calmar_ratio(np.array([0.01, 0.02]), 12))
+
+
+# Choosing sections
+
+
+def test_a_tear_sheet_shows_its_sections_in_its_order() -> None:
+    settings = Settings(
+        tearsheets={"mine": Tearsheet(["risk", "horizons"], "Mine")}, default_tearsheet="mine"
+    )
+
+    document = build_document(build_context(demo_returns(), settings))
+
+    assert [block.title for block in document.blocks][:2] == [
+        "Risk and ratios",
+        "Returns by horizon",
+    ]
+    assert document.title == "Mine"
+
+
+def test_a_report_claims_no_basis_it_was_not_told() -> None:
+    document = build_document(build_context(demo_returns(), Settings()))
+    assert "Basis: not stated" in document.subtitle
+    assert "net" not in document.subtitle
+
+    stated = build_document(build_context(demo_returns(), Settings(basis="net of all fees")))
+    assert "Basis: net of all fees" in stated.subtitle
+
+
+def test_an_unknown_section_names_what_is_available() -> None:
+    settings = Settings(tearsheets={"mine": Tearsheet(["nope"])}, default_tearsheet="mine")
+
+    with pytest.raises(TableError, match="unknown sections nope.*horizons"):
+        build_document(build_context(demo_returns(), settings))
+
+
+def test_an_unknown_tear_sheet_names_what_exists() -> None:
+    with pytest.raises(TableError, match="No tear sheet 'nope'.*pm"):
+        build_document(build_context(demo_returns(), Settings()), "nope")
+
+
+def test_every_built_in_section_runs_on_the_demo() -> None:
+    context = build_context(demo_returns(), Settings(benchmark="Index"))
+
+    for name, section in section_module.BUILT_IN.items():
+        assert section(context), name
+
+
+def test_a_firm_section_can_be_added_and_can_replace_a_built_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mine(context: Context) -> list[Any]:
+        return [TableBlock("Firm view", [Column("Rows", "number")], [[len(context.dates)]])]
+
+    monkeypatch.setitem(FIRM_SECTIONS, "firm_view", mine)
+    monkeypatch.setitem(FIRM_SECTIONS, "risk", mine)
+    settings = Settings(
+        tearsheets={"mine": Tearsheet(["firm_view", "risk"])}, default_tearsheet="mine"
+    )
+
+    titles = [
+        block.title for block in build_document(build_context(demo_returns(), settings)).blocks
+    ]
+
+    assert titles[:2] == ["Firm view", "Firm view"]
+
+
+def test_horizon_section_includes_the_benchmark_and_leaves_it_out_of_books() -> None:
+    context = build_context(demo_returns(), Settings(benchmark="Index"))
+
+    assert "Index" not in context.books.columns
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+    assert [row[0] for row in table.rows] == ["Equity L/S", "Macro", "Stat Arb", "Index"]
+
+
+def test_as_of_ignores_later_rows() -> None:
+    context = build_context(demo_returns(), Settings(), dt.date(2022, 6, 30))
+
+    assert context.as_of <= dt.date(2022, 6, 30)
+
+
+def test_a_missing_benchmark_column_is_refused() -> None:
+    with pytest.raises(TableError, match="No benchmark column 'X'"):
+        build_context(demo_returns(), Settings(benchmark="X"))
+
+
+# Data checks
+
+
+def test_data_notes_report_gaps_late_starts_and_large_moves() -> None:
+    notes = check_data(_table(A=[0.01, np.nan, 0.01], B=[np.nan, 0.01, 0.01], C=[0.9, 0.01, 0.01]))
+
+    joined = " ".join(notes)
+    assert "A has 1 missing" in joined
+    assert "B starts 2024-02-29" in joined
+    assert "C has 1 moves" in joined
+
+
+def test_percent_returns_are_converted_and_impossible_returns_refused(tmp_path: Path) -> None:
+    path = _write_csv(tmp_path / "r.csv", "date,A\n2024-01-31,1.5\n2024-02-29,-2\n")
+
+    assert load_returns(path, Settings(returns_unit="percent")).values[0, 0] == pytest.approx(0.015)
+    with pytest.raises(TableError, match='below -100%; set returns_unit = "percent"'):
+        load_returns(path, Settings())
+
+
+# Settings
+
+
+def test_settings_refuse_unknown_keys_and_bad_values(tmp_path: Path) -> None:
+    path = _write_csv(tmp_path / "c.toml", 'retuns = "x"\n')
+    with pytest.raises(SettingsError, match="unknown keys retuns"):
+        load_settings(path)
+    path = _write_csv(tmp_path / "c.toml", 'horizons = ["soon"]\n')
+    with pytest.raises(SettingsError, match="horizons has soon"):
+        load_settings(path)
+
+
+def test_settings_read_tear_sheets_and_excel_position(tmp_path: Path) -> None:
+    path = _write_csv(
+        tmp_path / "c.toml",
+        'default_tearsheet = "a"\n[tearsheets.a]\nsections = ["risk"]\n'
+        '[excel]\nsheet = "R"\nheader_row = 3\n',
+    )
+
+    settings = load_settings(path)
+
+    assert settings.tearsheets["a"].sections == ["risk"]
+    assert settings.excel == ExcelSource("R", 3)
+
+
+# Files between applications
+
+
+def test_a_saved_table_reads_back_with_its_provenance(tmp_path: Path) -> None:
+    table = _table(net=[0.01, np.nan, -0.02])
+
+    path = save_table(
+        tmp_path / "returns.csv", table, made_by="test", inputs={"prices": "sha256:x"}
+    )
+
+    again = load_csv(path)
+    assert again.fingerprint() == table.fingerprint()
+    assert read_meta(path)["inputs"] == {"prices": "sha256:x"}
+    assert read_meta(path)["fingerprint"] == f"sha256:{table.fingerprint()}"
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("date,A\n2024-02-01,0.1\n2024-01-01,0.1\n", "ascending"),
+        ("date,A,A\n2024-02-01,0.1,0.1\n", "unique"),
+        ("date,A\n01/31/2024,0.1\n", "not an ISO date"),
+        ("date,A\n2024-01-31,abc\n", "line 2: 'abc' is not a number"),
+    ],
+)
+def test_bad_files_say_what_to_fix(tmp_path: Path, text: str, message: str) -> None:
+    with pytest.raises(TableError, match=message):
+        load_csv(_write_csv(tmp_path / "bad.csv", text))
+
+
+# Reconciliation
+
+
+def test_reconcile_finds_only_the_month_that_differs() -> None:
+    ours = _table(A=[0.01, 0.02, 0.03])
+    theirs = _table(A=[0.01, 0.0205, 0.03])
+
+    result = reconcile(ours, theirs, tolerance_bps=1.0)
+
+    assert [(d.month, round(d.bps, 2)) for d in result.breaks] == [("2024-02", -5.0)]
+    assert not result.clean
+
+
+def test_reconcile_compounds_daily_returns_to_match_monthly_figures() -> None:
+    days = Table([dt.date(2024, 1, 2), dt.date(2024, 1, 3)], ["A"], np.array([[0.01], [0.02]]))
+    month = Table([dt.date(2024, 1, 31)], ["A"], np.array([[1.01 * 1.02 - 1]]))
+
+    assert reconcile(days, month, 0.01).clean
+
+
+def test_a_month_or_book_missing_from_our_file_is_not_clean() -> None:
+    ours = Table(DATES[:2], ["A"], np.array([[0.01], [0.02]]))
+    theirs = Table(DATES, ["A", "B"], np.array([[0.01, 0.0], [0.02, 0.0], [0.03, 0.0]]))
+
+    result = reconcile(ours, theirs, 1.0)
+
+    assert result.only_reference == ["B: not in our file", "A 2024-03: not in our file"]
+    assert not result.clean
+
+
+def test_no_shared_book_is_an_error_naming_both_sides() -> None:
+    with pytest.raises(TableError, match="No book in both files.*A.*B"):
+        reconcile(_table(A=[0.0, 0.0, 0.0]), _table(B=[0.0, 0.0, 0.0]), 1.0)
+
+
+# Output safety
+
+
+def test_html_and_markdown_escape_names_from_the_data() -> None:
+    document = Document(
+        "<script>x</script>",
+        blocks=[TableBlock("T", [Column("<b>", "text")], [["<img src=x onerror=y>|z"]])],
+    )
+
+    html = render_html(document)
+    assert "<script>x" not in html and "<img" not in html and "<b>" not in html
+    assert "\\|z" in render_markdown(document)
+
+
+def test_undefined_values_show_as_na() -> None:
+    document = Document("t", blocks=[TableBlock("T", [Column("v")], [[None], [float("nan")]])])
+
+    assert render_markdown(document).count("n/a") == 2
+
+
+# Excel
+
+
+def test_a_workbook_with_title_rows_and_totals_reads_correctly(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Returns"
+    sheet.append(["Administrator statement"])
+    sheet.append([])
+    sheet.append(["Date", "A", "B"])
+    sheet.append([dt.datetime(2024, 1, 31), 0.01, None])
+    sheet.append([dt.date(2024, 2, 29), 0.02, 0.03])
+    sheet.append([None, "Total", 0.03])
+    path = tmp_path / "admin.xlsx"
+    workbook.save(path)
+
+    table = load_workbook_table(path, ExcelSource("Returns", 3))
+
+    assert table.dates == DATES[:2]
+    assert table.columns == ["A", "B"]
+    assert table.values[0, 0] == pytest.approx(0.01)
+    assert np.isnan(table.values[0, 1])
+
+
+def test_a_bad_date_with_dates_after_it_is_an_error_not_a_short_table(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["Date", "A"])
+    workbook.active.append([dt.date(2024, 1, 31), 0.01])
+    workbook.active.append(["29 Feb", 0.02])
+    workbook.active.append([dt.date(2024, 3, 31), 0.03])
+    path = tmp_path / "typo.xlsx"
+    workbook.save(path)
+
+    with pytest.raises(TableError, match="row 3: '29 Feb' is not a date, but dates follow"):
+        load_workbook_table(path)
+
+
+def test_a_text_date_format_in_the_first_row_says_what_to_do(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["Date", "A"])
+    workbook.active.append(["01/31/2024", 0.01])
+    path = tmp_path / "us.xlsx"
+    workbook.save(path)
+
+    with pytest.raises(TableError, match="not an ISO date"):
+        load_workbook_table(path)
+
+
+def test_a_workbook_read_at_the_wrong_row_says_how_to_fix_it(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["Administrator statement"])
+    path = tmp_path / "admin.xlsx"
+    workbook.save(path)
+
+    with pytest.raises(TableError, match="Set header_row"):
+        load_workbook_table(path)
+
+
+def test_a_missing_sheet_names_those_available(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    path = tmp_path / "a.xlsx"
+    openpyxl.Workbook().save(path)
+
+    with pytest.raises(TableError, match="no sheet 'Nope'"):
+        load_workbook_table(path, ExcelSource("Nope"))
+
+
+def test_written_workbooks_hold_numbers_and_never_formulas(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    document = Document(
+        "t",
+        blocks=[
+            TableBlock(
+                "Returns: by/book",
+                [Column("Book", "text"), Column("YTD")],
+                [["=HYPERLINK(1)", 0.05], ["A", None]],
+                note="@note",
+            )
+        ],
+    )
+
+    path = write_workbook(document, tmp_path / "out.xlsx")
+
+    sheet = openpyxl.load_workbook(path).worksheets[1]
+    assert sheet["A2"].value == "'=HYPERLINK(1)"
+    assert sheet["A2"].data_type == "s"
+    assert sheet["B2"].value == pytest.approx(0.05)
+    assert sheet["B2"].number_format == "0.00%"
+    assert sheet["A5"].value == "'@note"
+
+
+def test_a_report_can_be_rebuilt_from_an_excel_file(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["date", "A"])
+    for day, value in zip(DATES, [0.01, 0.02, 0.03], strict=True):
+        workbook.active.append([day, value])
+    path = tmp_path / "r.xlsx"
+    workbook.save(path)
+
+    assert load_returns(path, Settings()).column("A")[2] == pytest.approx(0.03)
+
+
+# The command line
+
+
+def test_report_writes_every_format_with_provenance(tmp_path: Path) -> None:
+    pytest.importorskip("openpyxl")
+
+    done = runner.invoke(app, ["report", "--tearsheet", "pm"])
+
+    assert done.exit_code == 0, done.output
+    assert "synthetic demo returns" in done.output
+    folder = next((tmp_path / "reports").iterdir())
+    assert {path.name for path in folder.iterdir()} == {
+        "report.html",
+        "report.md",
+        "report.xlsx",
+        "results.json",
+    }
+    results = json.loads((folder / "results.json").read_text())
+    assert results["provenance"]["source"] == "demo"
+    assert results["provenance"]["data_fingerprint"].startswith("sha256:")
+    assert "<svg" in (folder / "report.html").read_text()
+
+
+def test_two_runs_never_overwrite_each_other(tmp_path: Path) -> None:
+    pytest.importorskip("openpyxl")
+
+    for _ in range(2):
+        assert runner.invoke(app, ["report"]).exit_code == 0
+
+    assert len(list((tmp_path / "reports").iterdir())) == 2
+
+
+def test_reconcile_exits_clean_or_with_breaks(tmp_path: Path) -> None:
+    ours = _write_csv(tmp_path / "ours.csv", "date,A\n2024-01-31,0.01\n2024-02-29,0.02\n")
+    same = _write_csv(tmp_path / "same.csv", "date,A\n2024-01-15,0.01\n2024-02-15,0.02\n")
+    off = _write_csv(tmp_path / "off.csv", "date,A\n2024-01-31,0.01\n2024-02-29,0.03\n")
+
+    clean = runner.invoke(app, ["reconcile", str(same), "--returns", str(ours)])
+    assert clean.exit_code == 0, clean.output
+    assert "2 months agree" in clean.output
+
+    broken = runner.invoke(app, ["reconcile", str(off), "--returns", str(ours)])
+    assert broken.exit_code == 1
+    assert "2024-02" in broken.output
+
+
+def test_errors_are_messages_not_tracebacks(tmp_path: Path) -> None:
+    done = runner.invoke(app, ["report", "--returns", str(tmp_path / "missing.csv")])
+
+    assert done.exit_code == 1
+    assert isinstance(done.exception, SystemExit)
+
+
+def test_sections_lists_the_choices() -> None:
+    done = runner.invoke(app, ["sections"])
+
+    assert done.exit_code == 0
+    assert "horizons: Returns by horizon" in done.output

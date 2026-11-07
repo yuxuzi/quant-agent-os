@@ -1,0 +1,94 @@
+"""Quant-Agent-OS tools: this application's backtests, under the firm's permissions.
+
+The tools read the application's own data, as ``data`` in its ``config.toml`` names it. A caller
+chooses only a signal and a few parameters, never prices or file paths. The config file is
+``config.toml`` in the working directory, or the file ``{{ package_name | upper }}_CONFIG`` names.
+They simulate only, return metrics without series, and write nothing.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
+
+from .backtest import run
+from .data import Panel, open_panel
+from .parameters import Parameters, load_parameters
+from .walk_forward import run_walk_forward
+
+CONFIG_VARIABLE = "{{ package_name | upper }}_CONFIG"
+
+
+class SignalInput(BaseModel):
+    """Which signal to use on the application's data; unset fields use config.toml."""
+
+    signal: str | None = Field(default=None, max_length=64, description="A signal's name.")
+    lookback: int | None = Field(default=None, ge=1, le=1000, description="Default: config.")
+    skip: int | None = Field(default=None, ge=0, le=1000, description="Momentum only.")
+    lag: int | None = Field(default=None, ge=0, le=20, description="Bars to the trade.")
+    exposure: str | None = Field(default=None, max_length=64, description="A portfolio rule.")
+
+
+class ResultsOutput(BaseModel):
+    """A results document without its series (dates, returns), which can be long."""
+
+    results: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def project_parameters() -> tuple[Parameters, Path]:
+    """The application's parameters, and the folder its data paths start in."""
+    path = Path(os.environ.get(CONFIG_VARIABLE, "config.toml"))
+    if not path.is_file():
+        raise ValueError(f"No {path}; run the tools from the project, or set {CONFIG_VARIABLE}.")
+    return load_parameters(path), path.resolve().parent
+
+
+def _research(
+    params: SignalInput, research: Callable[[Panel, Parameters], dict[str, Any]]
+) -> ResultsOutput:
+    parameters, base = project_parameters()
+    if parameters.data is None:
+        raise ValueError("config.toml sets no data; set data to a price file or demo.")
+    chosen = parameters.updated(**params.model_dump())
+    results = research(open_panel(parameters.data, base), chosen)
+    warnings = ["The data is a synthetic random walk."] if parameters.data == "demo" else []
+    return ResultsOutput(
+        results={key: value for key, value in results.items() if key != "series"},
+        warnings=warnings,
+    )
+
+
+@tool(
+    name="backtest_signal",
+    description="Backtest a signal on the firm's data, net of costs (in-sample).",
+    permissions=[Permission.READ_LOCAL_DATA],
+    timeout_seconds=30.0,
+)
+def backtest_signal(params: SignalInput) -> ResultsOutput:
+    """Run a backtest with the application's data and parameters."""
+    return _research(params, run)
+
+
+@tool(
+    name="walk_forward_signal",
+    description="Walk a signal forward on the firm's data: out-of-sample results only.",
+    permissions=[Permission.READ_LOCAL_DATA],
+    timeout_seconds=60.0,
+)
+def walk_forward_signal(params: SignalInput) -> ResultsOutput:
+    """Choose the lookback on training windows, and report the test windows."""
+    return _research(params, run_walk_forward)
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [backtest_signal, walk_forward_signal]
+
+
+def registry() -> ToolRegistry:
+    """Return a registry with every tool, ready for a `Platform` or an MCP server."""
+    return ToolRegistry(TOOLS)

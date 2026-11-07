@@ -1,0 +1,33 @@
+# {{ project_name }}: instructions for coding assistants
+
+This application starts from a Quant-Agent-OS template, and the firm owns it. It works as
+generated, and it is meant to be changed. Change it in the smallest way that does the job.
+
+## Where a change belongs, simplest first
+
+1. **`config.toml`**: conventions, horizons, data files, and which sections each tear sheet shows.
+2. **`{{ package_name }}/firm/sections.py`**: a new report section, as a function that returns
+   blocks. A section with a built-in's name replaces it.
+3. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
+4. **Any other file**, if those cannot do it. Expect to merge template updates here.
+
+Later template updates leave `config.toml` and `{{ package_name }}/firm/` alone.
+
+## Rules that protect the numbers
+
+- Do not change a formula in `metrics.py`, `risk_metrics.py`, or `horizons.py` to make a report
+  match another figure. Find out why they differ with `{{ project_name }} reconcile`, and say so.
+- A firm that defines a metric differently adds its own named section, and leaves the original
+  in place, so that both numbers keep their definitions.
+- Keep the known-answer tests passing. If one must change, say which and why in the commit message.
+- Add a known-answer test for any new calculation: a small input worked out by hand.
+- Reports hold computed figures only. Do not write interpretation or investment advice into them.
+- Never show a shorter period under a longer one's name: an uncovered horizon stays n/a.
+
+## Check your work
+
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy {{ package_name }} tests && uv run pytest
+```
+
+See `LIMITATIONS.md` for what this application does not do.

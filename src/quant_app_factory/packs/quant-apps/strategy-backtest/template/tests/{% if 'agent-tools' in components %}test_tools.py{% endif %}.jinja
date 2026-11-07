@@ -1,0 +1,53 @@
+"""The tools honour the Quant-Agent-OS contract and read only the configured data."""
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+from quant_agent_os.testing import check_tool
+from quant_agent_os.tools import READ_ONLY, ToolSpec
+
+from {{ package_name }}.tools import (
+    CONFIG_VARIABLE,
+    TOOLS,
+    backtest_signal,
+    registry,
+    walk_forward_signal,
+)
+
+
+def _config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(text)
+    monkeypatch.setenv(CONFIG_VARIABLE, str(path))
+
+
+@pytest.mark.parametrize("spec", [backtest_signal, walk_forward_signal], ids=lambda s: s.name)
+def test_the_tools_return_metrics_without_series(
+    spec: ToolSpec[Any, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _config(tmp_path, monkeypatch, 'data = "demo"\nrebalance_every = 1\n')
+
+    record = check_tool(spec, {"signal": "reversal", "lookback": 5})
+
+    assert record.output is not None
+    results = record.output["results"]
+    assert results["metrics"] and "series" not in results
+    assert record.output["warnings"] == ["The data is a synthetic random walk."]
+
+
+def test_a_project_without_data_says_what_to_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _config(tmp_path, monkeypatch, 'signal = "momentum"\n')
+
+    record = check_tool(backtest_signal, {}, expect="error")
+
+    assert "sets no data" in (record.error or "")
+
+
+def test_the_tools_take_no_prices_or_paths_and_declare_only_what_they_need() -> None:
+    fields = {"signal", "lookback", "skip", "lag", "exposure"}
+    assert all(set(spec.input_model.model_fields) == fields for spec in TOOLS)
+    assert all(spec.permissions <= READ_ONLY for spec in TOOLS)
+    assert {spec.name for spec in registry().specs()} == {spec.name for spec in TOOLS}

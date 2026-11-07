@@ -1,0 +1,245 @@
+"""Known answers for exposures, risk, stress, and limits, and the report end to end."""
+
+import datetime as dt
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+from typer.testing import CliRunner
+
+from {{ package_name }}.cli import app
+from {{ package_name }}.firm.checks import CHECKS
+from {{ package_name }}.monitor import build_document, load_groups
+from {{ package_name }}.risk import (
+    Check,
+    build_view,
+    check_limits,
+    exposures,
+    group_exposures,
+    risk_contributions,
+    simulated_returns,
+    stress_return,
+)
+from {{ package_name }}.sections import BUILT_IN, all_checks
+from {{ package_name }}.settings import Scenario, Settings, SettingsError, load_settings
+from {{ package_name }}.synthetic import demo_book
+from {{ package_name }}.tables import Table, TableError
+
+runner = CliRunner()
+DAY = dt.date(2024, 1, 2)
+ASSETS = ["A", "B", "C"]
+
+
+@pytest.fixture(autouse=True)
+def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
+
+
+def _positions(*rows: list[float]) -> Table:
+    days = [DAY + dt.timedelta(days=index) for index in range(len(rows))]
+    return Table(days, ASSETS, np.array(rows, dtype=np.float64))
+
+
+def test_exposures_have_known_answers() -> None:
+    book = exposures(np.array([0.5, -0.3, 0.2, 0.0]))
+
+    assert book.gross == pytest.approx(1.0)
+    assert book.net == pytest.approx(0.4)
+    assert book.long == pytest.approx(0.7)
+    assert book.short == pytest.approx(-0.3)
+    assert book.positions == 3
+    assert book.largest == pytest.approx(0.5)
+    assert book.top_five == pytest.approx(1.0)
+    assert book.effective_positions == pytest.approx(1.0 / (0.25 + 0.09 + 0.04))
+
+
+def test_an_empty_book_has_zero_exposure() -> None:
+    assert exposures(np.zeros(3)).effective_positions == 0.0
+
+
+def test_group_exposures_net_and_gross_with_ungrouped_named() -> None:
+    result = group_exposures(ASSETS, np.array([0.5, -0.3, 0.1]), {"A": "Tech", "B": "Tech"})
+
+    assert result["Tech"] == pytest.approx((0.2, 0.8))
+    assert result["Ungrouped"] == pytest.approx((0.1, 0.1))
+    assert list(result) == ["Tech", "Ungrouped"]
+
+
+def test_simulated_returns_apply_todays_weights() -> None:
+    returns = np.array([[0.01, 0.02], [np.nan, -0.01]])
+
+    assert simulated_returns(np.array([0.5, -0.5]), returns) == pytest.approx([-0.005, 0.005])
+
+
+def test_risk_contributions_sum_to_one_and_show_a_hedge_as_negative() -> None:
+    generator = np.random.default_rng(1)
+    market = generator.normal(0, 0.01, 500)
+    returns = np.column_stack([market + generator.normal(0, 0.002, 500), market])
+
+    shares = risk_contributions(np.array([1.0, -0.5]), returns)
+
+    assert shares.sum() == pytest.approx(1.0)
+    assert shares[0] > 1.0 > 0.0 > shares[1]
+
+
+def test_two_equal_uncorrelated_positions_each_contribute_half() -> None:
+    returns = np.array([[0.01, 0.01], [-0.01, 0.01], [0.01, -0.01], [-0.01, -0.01]])
+
+    assert risk_contributions(np.array([0.5, 0.5]), returns) == pytest.approx([0.5, 0.5])
+
+
+def test_stress_uses_group_shocks_over_the_market_shock() -> None:
+    scenario = Scenario("s", market=-0.10, groups={"Tech": -0.20})
+
+    result = stress_return(scenario, ASSETS, np.array([0.5, -0.5, 1.0]), {"A": "Tech"})
+
+    assert result == pytest.approx(0.5 * -0.20 + -0.5 * -0.10 + 1.0 * -0.10)
+
+
+def test_limits_are_checked_in_the_right_direction() -> None:
+    settings = Settings(limits={"gross_max": 1.0, "net_min": 0.0, "net_max": 1.0})
+    view = build_view(_positions([0.8, -0.5, 0.0]), settings)
+
+    results = {check.name: check.breached for check in check_limits(view)}
+
+    assert results == {
+        "Gross exposure": True,
+        "Net exposure, lower": False,
+        "Net exposure, upper": False,
+    }
+    below = build_view(_positions([0.1, -0.5, 0.0]), settings)
+    assert {c.name: c.breached for c in check_limits(below)}["Net exposure, lower"]
+
+
+def test_a_limit_with_no_data_is_a_breach_never_a_pass() -> None:
+    view = build_view(_positions([0.1, 0.1, 0.1]), Settings(limits={"var_max": 0.5}))
+
+    only = check_limits(view)[0]
+
+    assert only.breached
+    assert "No data" in only.detail
+
+
+def test_no_data_after_the_as_of_date_reaches_the_view() -> None:
+    days = [DAY + dt.timedelta(days=index) for index in range(6)]
+    prices = Table(
+        days, ["A"], 100.0 * np.cumprod(1.0 + np.array([0, 0.01, 0.01, 0.5, 0.5, 0.5]))[:, None]
+    )
+    positions = Table(days, ["A"], np.ones((6, 1)))
+
+    view = build_view(positions, Settings(), prices=prices, as_of=days[2])
+
+    assert view.as_of == days[2]
+    assert view.asset_returns is not None
+    assert view.asset_returns.shape[0] == 2
+    assert float(view.asset_returns.max()) == pytest.approx(0.01)
+
+
+def test_held_assets_without_prices_are_named_and_counted() -> None:
+    days = [DAY, DAY + dt.timedelta(days=1), DAY + dt.timedelta(days=2)]
+    prices = Table(days, ["A"], np.array([[100.0], [101.0], [102.0]]))
+    positions = Table(days, ASSETS, np.tile([0.3, 0.1, 0.0], (3, 1)))
+
+    view = build_view(positions, Settings(lookback=2), prices=prices)
+
+    assert view.coverage == pytest.approx(0.75)
+    assert any("No prices for 1 held assets (B)" in note for note in view.notes)
+
+
+def test_stale_prices_and_a_short_history_are_noted() -> None:
+    days = [DAY + dt.timedelta(days=index) for index in range(3)]
+    prices = Table(days[:2], ["A", "B", "C"], np.full((2, 3), 100.0))
+
+    view = build_view(
+        _positions([0.1, 0.1, 0.1], [0.1, 0.1, 0.1], [0.1, 0.1, 0.1]), Settings(), prices=prices
+    )
+
+    joined = " ".join(view.notes)
+    assert "latest prices are from" in joined
+    assert "Only 1 bars" in joined
+
+
+def test_every_built_in_section_runs_with_and_without_prices() -> None:
+    book, prices, groups = demo_book()
+    settings = Settings(market="Index", limits={"gross_max": 3.0}, scenarios=[Scenario("s", -0.1)])
+
+    for view in (
+        build_view(book, settings, prices=prices, groups=groups),
+        build_view(book, Settings()),
+    ):
+        for name, section in BUILT_IN.items():
+            assert section(view), name
+
+
+def test_a_firm_check_appears_with_the_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    def mine(view: Any) -> list[Check]:
+        return [Check("Mine", 1.0, 0.0, True)]
+
+    monkeypatch.setitem(CHECKS, "mine", mine)
+    view = build_view(_positions([0.1, 0.1, 0.1]), Settings(limits={"gross_max": 3.0}))
+
+    assert [check.name for check in all_checks(view)] == ["Gross exposure", "Mine"]
+
+
+def test_an_unknown_section_names_what_is_available() -> None:
+    view = build_view(_positions([0.1, 0.1, 0.1]), Settings(sections=["nope"]))
+
+    with pytest.raises(TableError, match="unknown sections nope.*exposures"):
+        build_document(view)
+
+
+def test_settings_refuse_unknown_keys_and_unknown_limits(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text('postions = "x"\n')
+    with pytest.raises(SettingsError, match="unknown keys postions"):
+        load_settings(path)
+    path.write_text("[limits]\ngros_max = 1\n")
+    with pytest.raises(SettingsError, match="unknown limits gros_max"):
+        load_settings(path)
+
+
+def test_settings_read_scenarios(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text('[[scenarios]]\nname = "x"\nmarket = -0.1\ngroups = { Tech = -0.2 }\n')
+
+    assert load_settings(path).scenarios == [Scenario("x", -0.1, {"Tech": -0.2})]
+
+
+def test_groups_file_needs_its_columns(tmp_path: Path) -> None:
+    path = tmp_path / "g.csv"
+    path.write_text("name,sector\nA,Tech\n")
+    with pytest.raises(TableError, match="asset and group"):
+        load_groups(path)
+    path.write_text("asset,group\nA,Tech\n")
+    assert load_groups(path) == {"A": "Tech"}
+
+
+def test_report_writes_every_format(tmp_path: Path) -> None:
+    done = runner.invoke(app, ["report"])
+
+    assert done.exit_code == 0, done.output
+    folder = next((tmp_path / "reports").iterdir())
+    assert {path.name for path in folder.iterdir()} == {"report.html", "report.md", "results.json"}
+    results = json.loads((folder / "results.json").read_text())
+    assert results["provenance"]["positions_fingerprint"].startswith("sha256:")
+
+
+def test_check_exits_one_on_a_breach_and_zero_when_clean(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[limits]\ngross_max = 0.001\n")
+    breached = runner.invoke(app, ["check"])
+    assert breached.exit_code == 1
+    assert "BREACH: Gross exposure" in breached.output
+
+    path.write_text("[limits]\ngross_max = 100\n")
+    clean = runner.invoke(app, ["check"])
+    assert clean.exit_code == 0, clean.output
+    assert "0 of 1 breached" in clean.output
+
+
+def test_check_without_limits_says_so_and_fails() -> None:
+    done = runner.invoke(app, ["check"])
+
+    assert done.exit_code == 1

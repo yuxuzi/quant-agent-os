@@ -1,0 +1,34 @@
+# {{ project_name }}: instructions for coding assistants
+
+This application starts from a Quant-Agent-OS template, and the firm owns it. It works as
+generated, and it is meant to be changed. Change it in the smallest way that does the job.
+
+## Where a change belongs, simplest first
+
+1. **`config.toml`**: data, costs, the rebalance schedule, and the portfolio rule.
+2. **`{{ package_name }}/firm/rules.py`**: the firm's own portfolio rule, from scores to weights.
+3. **`{{ package_name }}/firm/signals.py`**: the firm's own signal, as a function of prices.
+4. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
+5. **Any other file**, if those cannot do it. Expect to merge template updates here.
+
+Later template updates leave `config.toml` and `{{ package_name }}/firm/` alone.
+
+## Rules that protect the results
+
+- This is a simulation. It must never place orders or connect to a broker or order system.
+- Weights at bar t may use data up to bar t only. Do not remove the trade lag.
+- Do not lower costs, or skip delistings, to improve a result. Report changes to them.
+- In-sample backtest figures are not evidence of an edge: use walk-forward, and say which is which.
+- Record every signal and grid you try, because trying many inflates the best.
+- Do not change a formula in `metrics.py` to make a result look better or match another figure.
+- Keep the known-answer and bias tests passing. If one must change, say which and why.
+- Add a known-answer test for any new calculation, and a look-ahead test for any new signal.
+- Results are computed figures only. Do not write interpretation or investment advice into them.
+
+## Check your work
+
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy {{ package_name }} tests && uv run pytest
+```
+
+See `LIMITATIONS.md` for what this application does not do.

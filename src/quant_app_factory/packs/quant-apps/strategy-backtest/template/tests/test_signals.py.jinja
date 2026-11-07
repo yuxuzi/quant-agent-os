@@ -1,0 +1,50 @@
+"""Signals never look ahead, and their defaults are the standard definitions."""
+
+import numpy as np
+import pytest
+
+from {{ package_name }} import config
+from {{ package_name }}.signals import PARAMETERS, compute, momentum, parameters, reversal
+from {{ package_name }}.synthetic import generate_panel
+
+
+@pytest.mark.parametrize("name", sorted(PARAMETERS))
+def test_future_prices_never_change_past_signals(name: str) -> None:
+    prices, _ = generate_panel(n_bars=400, n_assets=8)
+    changed = prices.copy()
+    changed[300:] *= np.linspace(0.5, 1.5, 8)
+
+    original, perturbed = compute(name, prices), compute(name, changed)
+
+    np.testing.assert_array_equal(original[:300], perturbed[:300])
+    assert not np.allclose(original[300:], perturbed[300:], equal_nan=True)
+
+
+def test_defaults_are_twelve_one_momentum_and_one_month_reversal() -> None:
+    month = {252: 21, 52: 4, 12: 1}[config.PERIODS_PER_YEAR]
+
+    assert parameters("momentum") == {"lookback": config.PERIODS_PER_YEAR, "skip": month}
+    assert parameters("reversal") == {"lookback": month}
+
+
+def test_signals_of_a_known_price_path() -> None:
+    prices = (1.01 ** np.arange(30.0))[:, None]  # +1% every bar
+
+    np.testing.assert_allclose(momentum(prices, 12, 1)[12:, 0], 1.01**11 - 1.0)
+    np.testing.assert_allclose(momentum(prices, 12, 0)[12:, 0], 1.01**12 - 1.0)
+    np.testing.assert_allclose(reversal(prices, 5)[5:, 0], -(1.01**5 - 1.0))
+    assert np.isnan(momentum(prices, 12, 1)[:12]).all()
+    assert np.isnan(reversal(prices, 5)[:5]).all()
+
+
+def test_overrides_replace_defaults_and_are_checked() -> None:
+    assert parameters("momentum", lookback=60, skip=None) == {
+        "lookback": 60,
+        "skip": config.MOMENTUM_SKIP,
+    }
+    with pytest.raises(ValueError, match="does not take skip"):
+        parameters("reversal", skip=1)
+    with pytest.raises(ValueError, match="skip < lookback"):
+        momentum(np.ones((30, 2)), 5, 5)
+    with pytest.raises(ValueError, match="momentum"):
+        parameters("magic")

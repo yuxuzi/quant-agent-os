@@ -1,0 +1,45 @@
+# {{ project_name }}
+
+{{ description }}
+
+From signals or target weights to net returns: lagged trades, drift, rebalancing, costs, delistings,
+and walk-forward evaluation. It runs as generated, and it is yours to change.
+
+```bash
+uv sync
+uv run {{ project_name }} backtest            # momentum on random-walk demo prices
+uv run {{ project_name }} walk-forward        # out of sample only
+uv run {{ project_name }} report              # the latest run as Markdown, with a chart
+```
+
+## What to trade
+
+| You have | Use |
+| --- | --- |
+| A signal in code | `signal` in `config.toml`, and `{{ package_name }}/firm/signals.py` for your own |
+| A file of scores, such as alpha-research's | `--signal-file scores.csv` |
+| Target weights, such as your optimizer's | `--weights-file weights.csv`, which skips the portfolio rule |
+
+Each file has a date column, then one column per asset. Set `data` to your prices in the same shape.
+Scores go through a portfolio rule (`exposure` in `config.toml`), which can be your own in
+`{{ package_name }}/firm/rules.py`.
+
+## The next stage
+
+Each backtest folder holds `returns.csv` (net and gross) and `weights.csv`, with their provenance
+beside them. A performance-report application reads `returns.csv` directly:
+
+```bash
+uv run my-report report --returns ../{{ project_name }}/results/RUN/returns.csv
+```
+
+## Make it yours
+
+| Level | What you do | Where |
+| --- | --- | --- |
+| 1 | Set data, costs, and the schedule | `config.toml` |
+| 2 | Add your own signals and portfolio rules | `{{ package_name }}/firm/` |
+| 3 | Add your own file formats | `{{ package_name }}/firm/loaders.py` |
+| 4 | Change anything else; you own the code | Everywhere, with the tests to catch mistakes |
+
+`AGENTS.md` tells a coding assistant the same rules. See `LIMITATIONS.md` for what this does not do.

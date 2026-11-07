@@ -1,0 +1,5 @@
+contract = 1
+id = "quant-apps"
+name = "Quant-Agent-OS applications"
+description = "One customizable application for each stage of a fund's investment process: alpha research, strategy backtest, risk monitor, and performance report."
+version = "1.0.0"

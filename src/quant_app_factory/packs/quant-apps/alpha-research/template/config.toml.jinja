@@ -1,0 +1,15 @@
+# Research parameters for {{ project_name }}. Later template updates leave this file as you left it.
+# Command-line options override them for one run, and every run records the values it used.
+
+data = "demo"       # a price file relative to this file, or "demo" for a random walk
+
+signal = "momentum"  # momentum, reversal, or a signal in {{ package_name }}/firm/signals.py
+# signal_file = "scores.csv"  # or scores from elsewhere: a date column, then one column per asset
+# lookback = 252     # bars; leave unset for the signal's standard definition
+# skip = 21          # momentum only: latest bars to skip
+
+lag = 1  # bars from the signal's close to the trade, shared with the backtest application
+
+quantiles = 5
+max_horizon = {{ max_horizon }}  # longest IC-decay horizon, in bars
+delisting_return = -0.30  # earned once when a held asset's prices stop (Shumway, 1997)
