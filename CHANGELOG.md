@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Applications for each stage of a fund's work.** `qaos app new` now builds `alpha-research`, `strategy-backtest`,
+  `risk-monitor`, and `performance-report`. They chain through ordinary files, and each works as generated and is
+  meant to be changed: choose your tear sheet's sections, and add your own signals, portfolio rules, risk checks, and
+  report sections in a `firm/` folder. `performance-report` covers returns by horizon, return tables, risk basics, Excel
+  input and output, and a month-by-month reconciliation against reference figures. See
+  [Quant App Factory](docs/products/quant-app-factory.md#applications-for-each-stage-of-a-funds-work) and
+  [decision 0022](docs/decisions/0022-one-application-per-stage.md).
 - **The Portfolio Intelligence demonstration.** `examples/portfolio-intelligence/demo.py` runs a fictional
   firm's tool, data, research, access rules, and audit trail over real HTTP and MCP, with no model, and
   `--serve` runs the server for a real client. [The guide](docs/demo.md) has a ten-minute script.

@@ -14,8 +14,9 @@ platform consumed by AI clients through MCP and a Python SDK. It is not a chatbo
   `bootstrap.py` as the composition root.
 - **Quant App Factory** (`src/quant_app_factory`): Python application generation. An
   `AppSpec` goes through the `ArchitecturePlanner` and a `ScaffoldProvider` (pytemplate-uv),
-  and the generated project's checks run through the subprocess runner. Its `agent-tool`
-  template pack is in `quant_app_factory/packs/`.
+  and the generated project's checks run through the subprocess runner. Its template packs are in
+  `quant_app_factory/packs/`: `agent-tool`, `quant-baseline`, and `quant-apps`, with one application per
+  stage of a fund's work ([decision 0022](docs/decisions/0022-one-application-per-stage.md)).
 - **Quant Analytics** (`src/quant_analytics`): performance metrics from empyrical-reloaded
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
