@@ -63,12 +63,44 @@ answers() {  # What the tools answer, from the corpus and from a dataset, with n
     '{"returns": {"dataset": "monthly", "column": "strategy"}, "periods_per_year": 12}' | field output
 }
 
+still_holds() {  # Every field the older answer had is unchanged. A release may add fields.
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+
+def differences(old, new, path=""):
+    if isinstance(old, dict) and isinstance(new, dict):
+        for key, value in old.items():
+            if key in new:
+                yield from differences(value, new[key], f"{path}.{key}")
+            else:
+                yield f"{path}.{key} is gone"
+    elif isinstance(old, list) and isinstance(new, list):
+        if len(old) != len(new):
+            yield f"{path} had {len(old)} items and now has {len(new)}"
+        for index, pair in enumerate(zip(old, new)):
+            yield from differences(*pair, f"{path}[{index}]")
+    elif old != new:
+        yield f"{path}: {old!r} became {new!r}"
+
+
+with open(sys.argv[1]) as first, open(sys.argv[2]) as second:
+    pairs = zip(map(json.loads, first), map(json.loads, second), strict=True)
+    found = [text for old, new in pairs for text in differences(old, new)]
+print("; ".join(found))
+sys.exit(1 if found else 0)
+PY
+}
+
 check_survived() {  # The seeded run is there under its principal, and the answers have not changed.
   "${compose[@]}" run --rm -T doctor >"$workspace/doctor" \
     || fail "doctor failed on $1: $(cat "$workspace/doctor")"
   curl -fsS -H "Authorization: Bearer $key" "$base/v1/runs/$seeded_run" \
     | grep -q '"principal":"drill"' || fail "the seeded run did not survive on $1"
-  [[ "$(answers)" == "$seeded_answers" ]] || fail "the answers changed on $1"
+  answers >"$workspace/answers"
+  changed="$(still_holds "$workspace/seeded" "$workspace/answers")" \
+    || fail "the answers changed on $1: $changed"
 }
 
 echo "== build $from and this commit"
@@ -87,7 +119,7 @@ key="$("${compose[@]}" run --rm -T keys new --principal drill \
 "${compose[@]}" run --rm -T datasets add /import/monthly-returns.csv --id monthly >/dev/null
 start "$old"
 seeded_run="$(call find_related_signals '{"query": "momentum"}' | field run_id | tr -d '"')"
-seeded_answers="$(answers)"
+answers >"$workspace/seeded"
 
 echo "== back up, as operations.md says"
 "${compose[@]}" stop server
