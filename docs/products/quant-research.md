@@ -4,7 +4,7 @@
 plus optional semantic search. It ingests your research notes and papers, finds the factors, signals,
 strategies, methods, and datasets they mention, and extracts the relations they state. Every passage
 and every fact cites where it came from. It returns evidence that AI clients (Claude, Copilot, Cursor)
-turn into cited answers, and it writes no answers itself.
+turn into cited answers, and it writes no answers itself. On a firm's server it is one toolset beside the firm's own tools.
 
 ```bash
 uv run qaos ingest path/to/corpus          # operator command; writes the store

@@ -89,6 +89,9 @@ All notable changes to this project are documented here. The format follows
   the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
   refused with the new name, and the `quant-baseline` pack is now 3.0.0, also at its public mirror. The shortcuts `python-cli` and `fastapi-service` are now `python` and
   `fastapi`.
+- **The README leads with what a firm connects and operates:** its own tools, research, and data, under its control, on a
+  server it runs. Analytics reads as workflows on the platform, and App Factory moves below as optional. No measured claim
+  changed.
 
 ### Removed
 

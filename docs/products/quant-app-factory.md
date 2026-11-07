@@ -1,7 +1,7 @@
 # Quant App Factory
 
-**Quant App Factory** is the application-engineering product of Quant-Agent-OS. It turns a
-typed application spec into a scaffolded, checked, packaged Python project. It uses
+**Quant App Factory** is the optional application-engineering product of Quant-Agent-OS, off by
+default on the server. It turns a typed application spec into a scaffolded, checked, packaged Python project. It uses
 [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3 as a library (`pytemplate.api`),
 behind the replaceable `ScaffoldProvider` port. Only one adapter module imports it.
 
