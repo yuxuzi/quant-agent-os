@@ -1,0 +1,125 @@
+"""The application end to end: firm rules, input files, and the files for the next stage."""
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+from typer.testing import CliRunner
+
+from {{ package_name }} import config
+from {{ package_name }}.backtest import run_with_tables
+from {{ package_name }}.cli import app
+from {{ package_name }}.firm.rules import RULES
+from {{ package_name }}.firm.signals import SIGNALS
+from {{ package_name }}.metrics import FloatArray
+from {{ package_name }}.parameters import ParameterError, Parameters
+from {{ package_name }}.synthetic import demo_panel
+from {{ package_name }}.tables import Table, load_csv, read_meta, save_table
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
+
+
+def _first_asset(prices: FloatArray, signal: FloatArray, parameters: Any) -> FloatArray:
+    weights = np.zeros(prices.shape)
+    weights[:, 0] = 1.0
+    return weights
+
+
+def _cheat(prices: FloatArray) -> FloatArray:
+    scores = np.full(prices.shape, np.nan)
+    scores[:-1] = prices[1:] / prices[:-1] - 1.0
+    return scores
+
+
+def test_a_firm_rule_is_accepted_and_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(RULES, "first", _first_asset)
+
+    results, tables = run_with_tables(demo_panel(), Parameters(exposure="first", rebalance_every=1))
+
+    held = tables["weights.csv"].values
+    assert np.allclose(held[50:, 0], 1.0)
+    assert results["conventions"]["weights"] == "the firm rule first"
+
+
+def test_an_unknown_rule_names_the_choices() -> None:
+    with pytest.raises(ParameterError, match="exposure must be one of"):
+        Parameters(exposure="nope")
+
+
+def test_a_backtest_refuses_a_signal_that_looks_ahead(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(SIGNALS, "cheat", _cheat)
+
+    done = runner.invoke(app, ["backtest", "--signal", "cheat"])
+
+    assert done.exit_code == 1
+
+
+def test_a_backtest_writes_the_files_the_report_reads() -> None:
+    done = runner.invoke(app, ["backtest"])
+
+    assert done.exit_code == 0, done.output
+    folder = next(Path("results").iterdir())
+    returns = load_csv(folder / "returns.csv")
+    assert returns.columns == ["net", "gross"]
+    assert read_meta(folder / "returns.csv")["inputs"]["prices"].startswith("sha256:")
+    assert (returns.column("net") <= returns.column("gross") + 1e-12).all()
+    assert load_csv(folder / "weights.csv").columns == demo_panel().assets
+
+
+def test_target_weights_from_a_file_are_lagged_and_costed(tmp_path: Path) -> None:
+    panel = demo_panel()
+    weights = np.zeros(panel.prices.shape)
+    weights[:, 0] = 1.0
+    path = save_table(tmp_path / "w.csv", Table(panel.dates, panel.assets, weights), made_by="test")
+
+    done = runner.invoke(app, ["backtest", "--weights-file", str(path)])
+
+    assert done.exit_code == 0, done.output
+    folder = next(Path("results").iterdir())
+    held = load_csv(folder / "weights.csv").column(panel.assets[0])
+    assert held[1] == 0.0  # lag 1: the weights of bar 0 trade at the close of bar 1
+    assert held[2] == 1.0
+    returns = load_csv(folder / "returns.csv")
+    paid = returns.column("gross")[2] - returns.column("net")[2]
+    assert paid == pytest.approx(0.5 * config.COST_BPS / 10_000.0)  # one-way turnover 0.5 on entry
+
+
+def test_scores_from_a_file_run_through_the_rule(tmp_path: Path) -> None:
+    panel = demo_panel()
+    scores = np.tile(np.arange(len(panel.assets), dtype=float), (len(panel.dates), 1))
+    path = save_table(tmp_path / "s.csv", Table(panel.dates, panel.assets, scores), made_by="test")
+
+    done = runner.invoke(app, ["backtest", "--signal-file", str(path), "--label", "scores"])
+
+    assert done.exit_code == 0, done.output
+
+
+def test_walk_forward_explains_what_it_cannot_do(tmp_path: Path) -> None:
+    (tmp_path / "config.toml").write_text('weights_file = "w.csv"\n')
+
+    done = runner.invoke(app, ["walk-forward"])
+
+    assert done.exit_code == 1
+
+
+def test_walk_forward_runs_on_a_built_in_signal() -> None:
+    done = runner.invoke(app, ["walk-forward", "--signal", "reversal"])
+
+    assert done.exit_code == 0, done.output
+    assert "Out-of-sample" in done.output
+
+
+def test_report_renders_with_a_chart() -> None:
+    assert runner.invoke(app, ["backtest"]).exit_code == 0
+
+    done = runner.invoke(app, ["report"])
+
+    assert done.exit_code == 0, done.output
+    folder = next(Path("results").iterdir())
+    assert (folder / "report.svg").is_file()

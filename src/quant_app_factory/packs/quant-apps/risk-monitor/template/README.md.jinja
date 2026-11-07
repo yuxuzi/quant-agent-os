@@ -1,0 +1,36 @@
+# {{ project_name }}
+
+{{ description }}
+
+From positions to exposures, concentration, return-based risk, stress scenarios, and limit checks.
+It runs as generated, and it is yours to change.
+
+```bash
+uv sync
+uv run {{ project_name }} report     # a demo report, in reports/
+uv run {{ project_name }} check      # every limit; exits 1 on a breach, so a scheduler can alert
+uv run {{ project_name }} sections   # what you can put in the report
+```
+
+## Use your book
+
+Point `config.toml` at your files. Positions are weights of NAV, with shorts negative:
+
+```text
+date,AAPL,MSFT,XOM
+2024-03-28,0.05,-0.03,0.02
+```
+
+`prices` has the same shape, and turns on volatility, value at risk, risk contributors, and beta.
+`groups` is a CSV with the columns `asset,group`, for sector or any other grouping.
+
+## Make it yours
+
+| Level | What you do | Where |
+| --- | --- | --- |
+| 1 | Set data, limits, and stress scenarios | `config.toml` |
+| 2 | Choose the report's sections | `sections` in `config.toml` |
+| 3 | Add your own checks, sections, and file formats | `{{ package_name }}/firm/` |
+| 4 | Change anything else; you own the code | Everywhere, with the tests to catch mistakes |
+
+`AGENTS.md` tells a coding assistant the same rules. See `LIMITATIONS.md` for what this does not do.

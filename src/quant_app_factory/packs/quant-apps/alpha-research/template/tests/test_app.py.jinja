@@ -1,0 +1,120 @@
+"""The application end to end: firm signals, signal files, look-ahead, and the next stage."""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+from typer.testing import CliRunner
+
+from {{ package_name }}.cli import app
+from {{ package_name }}.data import Panel, aligned, open_panel
+from {{ package_name }}.firm.signals import SIGNALS
+from {{ package_name }}.metrics import FloatArray
+from {{ package_name }}.signals import look_ahead_bars
+from {{ package_name }}.synthetic import demo_panel
+from {{ package_name }}.tables import Table, TableError, load_csv, read_meta
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
+
+
+def _honest(prices: FloatArray) -> FloatArray:
+    scores: FloatArray = prices / prices[0] - 1.0
+    return scores
+
+
+def _cheat(prices: FloatArray) -> FloatArray:
+    scores = np.full(prices.shape, np.nan)
+    scores[:-1] = prices[1:] / prices[:-1] - 1.0  # tomorrow's return
+    return scores
+
+
+def test_a_signal_using_only_the_past_passes_and_one_using_the_future_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(SIGNALS, "honest", _honest)
+    monkeypatch.setitem(SIGNALS, "cheat", _cheat)
+    prices = demo_panel().prices
+
+    assert look_ahead_bars("honest", prices) == []
+    assert look_ahead_bars("cheat", prices)
+
+
+def test_a_study_refuses_a_signal_that_looks_ahead(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(SIGNALS, "cheat", _cheat)
+
+    done = runner.invoke(app, ["study", "--signal", "cheat"])
+
+    assert done.exit_code == 1
+    assert not list(Path().glob("results/*"))
+
+
+def test_a_firm_signal_runs_a_study(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(SIGNALS, "honest", _honest)
+
+    done = runner.invoke(app, ["study", "--signal", "honest"])
+
+    assert done.exit_code == 0, done.output
+    assert "Mean rank IC" in done.output
+
+
+def test_export_writes_scores_with_provenance_and_a_study_reads_them_back(tmp_path: Path) -> None:
+    out = tmp_path / "signals" / "momentum.csv"
+
+    done = runner.invoke(app, ["export", str(out)])
+
+    assert done.exit_code == 0, done.output
+    table = load_csv(out)
+    assert table.columns == demo_panel().assets
+    assert read_meta(out)["inputs"]["prices"].startswith("sha256:")
+    again = runner.invoke(app, ["study", "--signal-file", str(out), "--label", "from-file"])
+    assert again.exit_code == 0, again.output
+
+
+def test_a_file_lines_up_by_date_and_asset_never_by_position() -> None:
+    panel = demo_panel()
+    table = Table(panel.dates[5:7], [panel.assets[1]], np.array([[1.0], [2.0]]))
+
+    scores = aligned(table, panel, "signal")
+
+    assert scores[5, 1] == 1.0 and scores[6, 1] == 2.0
+    assert np.isfinite(scores).sum() == 2
+
+
+def test_a_file_with_nothing_in_common_is_refused() -> None:
+    panel = demo_panel()
+    other = Table(panel.dates[:2], ["NOPE"], np.zeros((2, 1)))
+    with pytest.raises(TableError, match="none of the prices"):
+        aligned(other, panel, "signal")
+
+
+def test_prices_must_be_positive() -> None:
+    panel = demo_panel()
+    with pytest.raises(TableError, match="positive"):
+        Panel(panel.dates, panel.assets, -panel.prices)
+
+
+def test_a_missing_price_file_names_the_setting(tmp_path: Path) -> None:
+    with pytest.raises(TableError, match="set data in config.toml"):
+        open_panel("nope.csv", tmp_path)
+
+
+def test_report_renders_the_latest_run() -> None:
+    assert runner.invoke(app, ["study"]).exit_code == 0
+
+    done = runner.invoke(app, ["report"])
+
+    assert done.exit_code == 0, done.output
+    assert "Computed results" in next(Path("results").glob("*/report.md")).read_text()
+
+
+def test_unknown_config_keys_are_refused_not_ignored(tmp_path: Path) -> None:
+    (tmp_path / "config.toml").write_text('signl = "x"\n')
+
+    done = runner.invoke(app, ["study"])
+
+    assert done.exit_code == 1

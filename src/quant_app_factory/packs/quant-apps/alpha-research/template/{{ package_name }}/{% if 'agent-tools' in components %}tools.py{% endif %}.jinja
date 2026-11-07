@@ -1,0 +1,75 @@
+"""Quant-Agent-OS tools: this application's research, under the firm's permissions.
+
+The tools read the application's own data, as ``data`` in its ``config.toml`` names it. A caller
+chooses only a signal and a few parameters, never prices or file paths. The config file is
+``config.toml`` in the working directory, or the file ``{{ package_name | upper }}_CONFIG`` names.
+A firm signal is tested for look-ahead before it is used. They return metrics without series, and
+write nothing.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field
+from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
+
+from .data import open_panel
+from .parameters import Parameters, load_parameters
+from .study import run_study
+
+CONFIG_VARIABLE = "{{ package_name | upper }}_CONFIG"
+
+
+class SignalInput(BaseModel):
+    """Which signal to use on the application's data; unset fields use config.toml."""
+
+    signal: str | None = Field(default=None, max_length=64, description="A signal's name.")
+    lookback: int | None = Field(default=None, ge=1, le=1000, description="Default: config.")
+    skip: int | None = Field(default=None, ge=0, le=1000, description="Momentum only.")
+    lag: int | None = Field(default=None, ge=0, le=20, description="Bars to the trade.")
+
+
+class ResultsOutput(BaseModel):
+    """A results document without its series, which can be long."""
+
+    results: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def project_parameters() -> tuple[Parameters, Path]:
+    """The application's parameters, and the folder its data paths start in."""
+    path = Path(os.environ.get(CONFIG_VARIABLE, "config.toml"))
+    if not path.is_file():
+        raise ValueError(f"No {path}; run the tools from the project, or set {CONFIG_VARIABLE}.")
+    return load_parameters(path), path.resolve().parent
+
+
+@tool(
+    name="evaluate_signal",
+    description="Study a signal on the firm's data: IC, rank IC, spreads, and decay.",
+    permissions=[Permission.READ_LOCAL_DATA],
+    timeout_seconds=30.0,
+)
+def evaluate_signal(params: SignalInput) -> ResultsOutput:
+    """Run a signal study with the application's data and parameters."""
+    parameters, base = project_parameters()
+    if parameters.data is None:
+        raise ValueError("config.toml sets no data; set data to a price file or demo.")
+    chosen = parameters.updated(**params.model_dump())
+    results = run_study(open_panel(parameters.data, base), chosen)
+    warnings = ["The data is a synthetic random walk."] if parameters.data == "demo" else []
+    return ResultsOutput(
+        results={key: value for key, value in results.items() if key != "series"},
+        warnings=warnings,
+    )
+
+
+TOOLS: list[ToolSpec[Any, Any]] = [evaluate_signal]
+
+
+def registry() -> ToolRegistry:
+    """Return a registry with every tool, ready for a `Platform` or an MCP server."""
+    return ToolRegistry(TOOLS)

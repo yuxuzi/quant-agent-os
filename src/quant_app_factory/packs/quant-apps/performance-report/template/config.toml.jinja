@@ -1,0 +1,32 @@
+# Settings for {{ project_name }}. Later template updates leave this file as you left it.
+
+returns = "demo"           # a CSV or Excel file relative to this file, or "demo" for synthetic data
+benchmark = ""             # a column of that file to compare against, not shown as a book
+basis = "not stated"       # what the returns are; every report states it: net, gross, or your words
+returns_unit = "fraction"  # fraction (0.01 is 1%) or percent (1.0 is 1%)
+periods_per_year = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}
+risk_free = 0.0            # annual, as a fraction
+var_cutoff = 0.05
+top_drawdowns = 5
+firm_name = ""
+horizons = ["MTD", "QTD", "YTD", "1Y", "3Y", "5Y", "ITD"]  # or lengths such as 3M, 6M, 10Y
+default_tearsheet = "pm"
+
+# A tear sheet is one audience's report: your choice of sections, in your order.
+# `{{ project_name }} sections` lists them, including any you add in {{ package_name }}/firm/sections.py.
+[tearsheets.pm]
+title = "Portfolio manager review"
+sections = ["horizons", "risk", "equity", "underwater", "monthly", "drawdowns", "correlation"]
+
+[tearsheets.investor]
+title = "Investor summary"
+sections = ["horizons", "calendar_years", "monthly", "equity"]
+
+[tearsheets.risk]
+title = "Risk review"
+sections = ["risk", "drawdowns", "underwater", "rolling_sharpe", "correlation", "data_notes"]
+
+# If your workbook has title rows above the table, say where the table starts.
+# [excel]
+# sheet = "Returns"
+# header_row = 4

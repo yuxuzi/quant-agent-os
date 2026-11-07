@@ -1,0 +1,159 @@
+"""Known answers, worked out by hand, for horizons, months, years, and drawdowns."""
+
+import datetime as dt
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.horizons import (
+    calendar_years,
+    drawdowns,
+    horizon_return,
+    horizon_start,
+    is_horizon,
+    monthly_returns,
+    months_before,
+    underwater,
+)
+
+
+def _month_ends(first_year: int, count: int) -> list[dt.date]:
+    days = []
+    year, month = first_year, 1
+    for _ in range(count):
+        following = dt.date(year + month // 12, month % 12 + 1, 1)
+        days.append(following - dt.timedelta(days=1))
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return days
+
+
+@pytest.mark.parametrize(
+    ("label", "as_of", "start"),
+    [
+        ("MTD", dt.date(2024, 3, 15), dt.date(2024, 2, 29)),
+        ("QTD", dt.date(2024, 5, 15), dt.date(2024, 3, 31)),
+        ("QTD", dt.date(2024, 1, 15), dt.date(2023, 12, 31)),
+        ("YTD", dt.date(2024, 5, 15), dt.date(2023, 12, 31)),
+        ("1Y", dt.date(2024, 5, 15), dt.date(2023, 5, 15)),
+        ("1Y", dt.date(2024, 2, 29), dt.date(2023, 2, 28)),
+        ("3M", dt.date(2024, 5, 31), dt.date(2024, 2, 29)),
+        ("1M", dt.date(2024, 3, 31), dt.date(2024, 2, 29)),
+        ("ITD", dt.date(2024, 3, 15), None),
+    ],
+)
+def test_horizon_starts(label: str, as_of: dt.date, start: dt.date | None) -> None:
+    assert horizon_start(label, as_of) == start
+
+
+def test_months_before_keeps_a_month_end_at_a_month_end() -> None:
+    assert months_before(dt.date(2024, 2, 29), 1) == dt.date(2024, 1, 31)
+    assert months_before(dt.date(2024, 1, 30), 2) == dt.date(2023, 11, 30)
+
+
+@pytest.mark.parametrize("label", ["MTD", "QTD", "YTD", "ITD", "3M", "5Y", "10Y"])
+def test_valid_horizons(label: str) -> None:
+    assert is_horizon(label)
+
+
+@pytest.mark.parametrize("label", ["", "ytd", "0Y", "1D", "Y", "100Y"])
+def test_invalid_horizons(label: str) -> None:
+    assert not is_horizon(label)
+
+
+def test_period_to_date_compounds_only_the_bars_after_its_start() -> None:
+    dates = _month_ends(2023, 15)  # to March 2024
+    returns = np.full(15, 0.01)
+    returns[-3:] = [0.02, 0.03, 0.04]
+
+    assert horizon_return(dates, returns, "MTD", 12) == pytest.approx(0.04)
+    assert horizon_return(dates, returns, "QTD", 12) == pytest.approx(1.02 * 1.03 * 1.04 - 1)
+    assert horizon_return(dates, returns, "YTD", 12) == pytest.approx(1.02 * 1.03 * 1.04 - 1)
+
+
+def test_one_year_is_cumulative_and_longer_horizons_are_annualised() -> None:
+    dates = _month_ends(2020, 36)
+    returns = np.full(36, 0.01)
+
+    assert horizon_return(dates, returns, "1Y", 12) == pytest.approx(1.01**12 - 1)
+    assert horizon_return(dates, returns, "3Y", 12) == pytest.approx(1.01**12 - 1)
+
+
+def test_an_uncovered_horizon_is_none_never_a_shorter_period() -> None:
+    dates = _month_ends(2023, 6)
+    returns = np.full(6, 0.01)
+
+    assert horizon_return(dates, returns, "1Y", 12) is None
+    assert horizon_return(dates, returns, "3Y", 12) is None
+
+
+def test_a_first_month_end_return_covers_its_whole_month() -> None:
+    dates = _month_ends(2023, 12)  # first return Jan 31 covers from Dec 31
+
+    assert horizon_return(dates, np.full(12, 0.01), "1Y", 12) == pytest.approx(1.01**12 - 1)
+    assert horizon_return(dates, np.full(12, 0.01), "YTD", 12) == pytest.approx(1.01**12 - 1)
+
+
+def test_a_book_that_started_late_does_not_show_a_full_year() -> None:
+    dates = _month_ends(2023, 12)
+    returns = np.full(12, 0.01)
+    returns[:3] = np.nan
+
+    assert horizon_return(dates, returns, "1Y", 12) is None
+    assert horizon_return(dates, returns, "ITD", 12) == pytest.approx(1.01**9 - 1)
+
+
+def test_itd_is_cumulative_before_a_full_year_and_annualised_after() -> None:
+    assert horizon_return(_month_ends(2023, 6), np.full(6, 0.01), "ITD", 12) == pytest.approx(
+        1.01**6 - 1
+    )
+    assert horizon_return(_month_ends(2020, 24), np.full(24, 0.01), "ITD", 12) == pytest.approx(
+        1.01**12 - 1
+    )
+
+
+def test_a_period_with_no_returns_is_none_not_zero() -> None:
+    dates = [dt.date(2023, 12, 29), dt.date(2024, 1, 2)]
+
+    assert horizon_return(dates, np.array([0.01, np.nan]), "MTD", 252) is None
+
+
+def test_no_returns_at_all_is_none() -> None:
+    assert horizon_return(_month_ends(2023, 2), np.full(2, np.nan), "ITD", 12) is None
+
+
+def test_a_bad_label_is_refused() -> None:
+    with pytest.raises(ValueError, match="not a horizon"):
+        horizon_return(_month_ends(2023, 2), np.zeros(2), "soon", 12)
+
+
+def test_months_and_years_compound_and_skip_missing() -> None:
+    dates = [dt.date(2023, 12, 29), dt.date(2024, 1, 2), dt.date(2024, 1, 3), dt.date(2024, 2, 1)]
+    returns = np.array([0.10, 0.01, 0.02, np.nan])
+
+    assert monthly_returns(dates, returns) == pytest.approx(
+        {(2023, 12): 0.10, (2024, 1): 1.01 * 1.02 - 1}
+    )
+    assert calendar_years(dates, returns) == pytest.approx({2023: 0.10, 2024: 1.01 * 1.02 - 1})
+
+
+def test_underwater_from_a_known_path() -> None:
+    returns = np.array([0.10, -0.10, 0.0, 1 / 0.99 - 1 + 0.0])
+    gap = underwater(returns)
+
+    assert gap[0] == pytest.approx(0.0)
+    assert gap[1] == pytest.approx(-0.10)
+
+
+def test_drawdown_episodes_have_known_dates_and_depths() -> None:
+    dates = _month_ends(2023, 6)
+    returns = np.array([-0.10, 1 / 0.9 - 1, -0.20, -0.25, 0.05, 0.05])
+
+    deepest, *others = drawdowns(dates, returns)
+
+    assert deepest.depth == pytest.approx(0.8 * 0.75 - 1)
+    assert deepest.peak == dates[1]
+    assert deepest.trough == dates[3]
+    assert deepest.recovered is None
+    assert others[0].depth == pytest.approx(-0.10)
+    assert others[0].peak is None
+    assert others[0].recovered == dates[1]

@@ -1,0 +1,37 @@
+# Settings for {{ project_name }}. Later template updates leave this file as you left it.
+
+positions = "demo"  # a CSV of weights of NAV: a date column, then one column per asset; or "demo"
+prices = ""         # a CSV of prices in the same shape, for return-based risk
+groups = ""         # a CSV with the columns asset,group, such as sectors
+market = ""         # a column of the prices file to measure beta against
+periods_per_year = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}
+var_cutoff = 0.05
+lookback = {{ {"daily": 252, "weekly": 104, "monthly": 36}[frequency] }}      # bars of past returns for value at risk, volatility, and contributions
+top_positions = 10
+firm_name = ""
+
+# Your choice of sections, in your order. `{{ project_name }} sections` lists them.
+sections = ["limits", "exposures", "groups", "top_positions", "risk", "contributors", "stress", "exposure_history"]
+
+# Limits as fractions of NAV. Examples only: set your own. A figure with no data counts as a breach.
+[limits]
+gross_max = 2.0
+net_max = 0.5
+net_min = -0.5
+single_name_max = 0.15
+top_five_max = 0.75
+# group_gross_max = 0.6
+# volatility_max = 0.15
+# var_max = 0.02          # value at risk per bar, as a loss
+# beta_max = 0.4
+# stress_loss_max = 0.10
+
+# Stress scenarios are your assumptions. These two are examples.
+[[scenarios]]
+name = "Market down 10%"
+market = -0.10
+
+[[scenarios]]
+name = "Technology down 20%, others down 5%"
+market = -0.05
+groups = { Technology = -0.20 }

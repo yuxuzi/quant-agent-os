@@ -1,0 +1,46 @@
+# {{ project_name }}
+
+{{ description }}
+
+From returns to your firm's tear sheets: returns by horizon, return tables, risk basics, charts,
+and a reconciliation against reference figures. It runs as generated, and it is yours to change.
+
+```bash
+uv sync
+uv run {{ project_name }} report                 # a demo report, in reports/
+uv run {{ project_name }} report --tearsheet investor
+uv run {{ project_name }} sections               # what you can put on a tear sheet
+```
+
+## Use your returns
+
+Set `returns` in `config.toml` to a CSV or Excel file with a date column, then one column of
+returns per fund, strategy, or book:
+
+```text
+date,Equity L/S,Macro,Index
+2024-01-31,0.012,-0.004,0.016
+2024-02-29,0.008,0.011,0.042
+```
+
+Set `returns_unit` if your figures are percentages, `benchmark` to the column to compare against,
+and `basis` to say whether they are net or gross.
+
+## Check it against your administrator
+
+```bash
+uv run {{ project_name }} reconcile admin_returns.xlsx --tolerance-bps 1
+```
+
+It compares each book month by month, lists every break, and exits 1 if anything fails to agree.
+
+## Make it yours
+
+| Level | What you do | Where |
+| --- | --- | --- |
+| 1 | Set conventions and data | `config.toml` |
+| 2 | Choose each audience's sections | `[tearsheets.*]` in `config.toml` |
+| 3 | Add your own sections and file formats | `{{ package_name }}/firm/` |
+| 4 | Change anything else; you own the code | Everywhere, with the tests to catch mistakes |
+
+`AGENTS.md` tells a coding assistant the same rules. See `LIMITATIONS.md` for what this does not do.

@@ -1,0 +1,7 @@
+# Entry point for pytemplate-uv; see questions.yml. Templates never declare tasks or migrations.
+_subdirectory: "{{ profile }}/template"
+# A firm's own code and settings stay as the firm left them when the template updates.
+_skip_if_exists:
+  - "config.toml"
+  - "*/firm/*"
+--- !include questions.yml

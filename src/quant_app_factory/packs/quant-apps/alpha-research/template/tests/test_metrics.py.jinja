@@ -1,0 +1,137 @@
+"""Known-answer tests for every metric, so a formula change cannot pass unnoticed."""
+
+import math
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.metrics import (
+    annualized_return,
+    annualized_volatility,
+    bar_returns,
+    beta,
+    hit_rate,
+    information_coefficient,
+    max_drawdown,
+    newey_west_lags,
+    newey_west_t_stat,
+    ranks,
+    sharpe_ratio,
+    simple_returns,
+    turnover,
+)
+
+
+def test_simple_returns_follow_prices() -> None:
+    returns = simple_returns(np.array([100.0, 110.0, 99.0]))
+
+    assert returns == pytest.approx([0.10, -0.10])
+
+
+def test_bar_returns_bridge_gaps_and_charge_delistings_once() -> None:
+    nan = math.nan
+    prices = np.array(
+        [
+            [nan, 100.0, 100.0],
+            [10.0, nan, 110.0],
+            [11.0, nan, nan],
+            [12.1, 121.0, nan],
+            [13.31, 133.1, nan],
+        ]
+    )
+
+    returns, exits = bar_returns(prices, delisting_return=-0.3)
+
+    # Asset 0 starts late: nothing before its first price, then 10% a bar.
+    assert returns[:, 0] == pytest.approx([0.0, 0.0, 0.1, 0.1, 0.1])
+    # Asset 1 has a two-bar gap: 0 inside it, then the whole move (121 / 100) when it ends.
+    assert returns[:, 1] == pytest.approx([0.0, 0.0, 0.0, 0.21, 0.1])
+    # Asset 2 delists after bar 1: -30% once, then nothing.
+    assert returns[:, 2] == pytest.approx([0.0, 0.1, -0.3, 0.0, 0.0])
+    assert exits.sum() == 1
+    assert exits[2, 2]
+    assert np.isfinite(returns).all()
+
+
+def test_newey_west_t_stat_of_a_known_series() -> None:
+    values = np.array([1.0, 2.0, 3.0, 4.0])
+    # Mean 2.5; autocovariances 1.25 (lag 0) and 0.3125 (lag 1), so the Bartlett variance
+    # with one lag is 1.25 + 2 * 0.5 * 0.3125 = 1.5625.
+
+    assert newey_west_t_stat(values, lags=1) == pytest.approx(2.5 / math.sqrt(1.5625 / 4))
+    assert newey_west_t_stat(values, lags=0) == pytest.approx(2.5 / math.sqrt(1.25 / 4))
+    assert math.isnan(newey_west_t_stat(np.ones(10)))
+    assert newey_west_lags(100) == 4
+
+
+def test_newey_west_shrinks_the_t_stat_of_autocorrelated_values() -> None:
+    generator = np.random.default_rng(3)
+    phi, n = 0.5, 20_000
+    values = np.empty(n)
+    values[0] = 0.0
+    shocks = generator.standard_normal(n)
+    for index in range(1, n):
+        values[index] = phi * values[index - 1] + shocks[index]
+    values += 0.05
+
+    naive = newey_west_t_stat(values, lags=0)
+    hac = newey_west_t_stat(values, lags=50)
+
+    # The long-run variance of an AR(1) is (1 + phi) / (1 - phi) times its variance, so the
+    # honest t is about sqrt((1 - phi) / (1 + phi)) = 0.58 of the naive one.
+    assert hac / naive == pytest.approx(math.sqrt((1 - phi) / (1 + phi)), abs=0.05)
+
+
+def test_a_constant_return_compounds_and_has_no_volatility() -> None:
+    returns = np.full(252, 0.001)
+
+    assert annualized_return(returns, 252) == pytest.approx(1.001**252 - 1)
+    assert annualized_volatility(returns, 252) == pytest.approx(0.0)
+    assert math.isnan(sharpe_ratio(returns, 252))
+
+
+def test_beta_is_the_slope_and_undefined_against_a_constant_market() -> None:
+    market = np.random.default_rng(7).normal(0.0, 0.01, 504)
+
+    assert beta(2.0 * market + 0.001, market) == pytest.approx(2.0)
+    assert math.isnan(beta(market, np.full(504, 0.001)))
+
+
+def test_sharpe_is_mean_over_deviation_times_root_periods() -> None:
+    returns = np.array([0.02, -0.01, 0.03, 0.00])
+
+    expected = returns.mean() / returns.std(ddof=1) * math.sqrt(12)
+    assert sharpe_ratio(returns, 12) == pytest.approx(expected)
+    assert sharpe_ratio(np.array([0.01, -0.01] * 50), 252) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_max_drawdown_of_a_known_path() -> None:
+    returns = simple_returns(np.array([100.0, 120.0, 90.0, 95.0, 130.0]))
+
+    assert max_drawdown(returns) == pytest.approx(90 / 120 - 1)
+    assert max_drawdown(np.array([0.01, 0.02])) == 0.0
+
+
+def test_hit_rate_and_turnover() -> None:
+    weights = np.array([[0.5, -0.5], [-0.5, 0.5], [-0.5, 0.5]])
+
+    assert hit_rate(np.array([0.01, -0.02, 0.03, 0.0])) == pytest.approx(0.5)
+    assert turnover(weights) == pytest.approx((1.0 + 0.0) / 2)
+
+
+def test_tied_values_share_their_average_rank() -> None:
+    assert ranks(np.array([10.0, 20.0, 10.0, 30.0])) == pytest.approx([1.5, 3.0, 1.5, 4.0])
+
+
+def test_information_coefficients_of_known_relations() -> None:
+    signal = np.array([[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]])
+    forward = np.array([[0.01, 0.02, 0.03, 0.04], [0.04, 0.03, 0.02, 0.01]])
+
+    assert information_coefficient(signal, forward) == pytest.approx([1.0, -1.0])
+    assert information_coefficient(signal, forward**3, rank=True) == pytest.approx([1.0, -1.0])
+
+
+def test_bars_with_too_few_pairs_have_no_coefficient() -> None:
+    signal = np.array([[1.0, np.nan, np.nan, 2.0]])
+
+    assert math.isnan(information_coefficient(signal, signal)[0])

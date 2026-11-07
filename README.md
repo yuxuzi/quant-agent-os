@@ -10,7 +10,8 @@ and data.
   [What it measures on real papers](docs/products/quant-research.md#how-well-it-works).
 - **Quant Analytics:** performance and risk metrics with stated conventions, computed on your
   datasets by reference, so numbers do not travel through the model.
-- **Quant App Factory:** generates tested Python projects from a small spec, off by default on the
+- **Quant App Factory:** generates tested Python projects you can change, including one for each stage of a fund's
+  work (alpha research, strategy backtest, risk monitor, performance report), off by default on the
   server. It uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is

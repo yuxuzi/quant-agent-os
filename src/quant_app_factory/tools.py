@@ -34,7 +34,7 @@ class DescribeTemplateInput(BaseModel):
 
     template: str = Field(
         default="quant-baseline",
-        description="agent-tool, quant-baseline, bundled, or an absolute pack directory",
+        description="quant-apps, quant-baseline, agent-tool, bundled, or a pack directory",
     )
     profile: str | None = Field(default=None, description="Only what this profile can use")
 
@@ -102,6 +102,7 @@ def guide_tools(factory: AppFactory) -> list[ToolSpec[Any, Any]]:
 
     @tool(
         name="describe_template",
+        version="1.0.1",
         description=(
             "Describe an App Factory template: its profiles, optional components, questions "
             "(with help, choices, defaults, and conditions), and the runtime settings each "

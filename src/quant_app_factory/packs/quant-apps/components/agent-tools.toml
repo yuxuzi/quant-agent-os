@@ -1,0 +1,10 @@
+contract = 1
+id = "agent-tools"
+name = "Quant-Agent-OS tools"
+description = "Typed @tool wrappers so this application's calculations can be served to AI clients under the firm's permissions and audit, with contract tests."
+version = "1"
+status = "experimental"
+compatible_profiles = ["alpha-research", "strategy-backtest", "risk-monitor", "performance-report"]
+dependencies = ["pydantic>=2.7", "quant-agent-os"]
+questions = ["quant_agent_os_source"]
+paths = ["{package}/tools.py", "tests/test_tools.py"]

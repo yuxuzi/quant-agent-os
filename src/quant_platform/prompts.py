@@ -59,5 +59,5 @@ DRAFT_APP_SPEC = PromptSpec(
         "is ready. Secrets must be env:NAME references. Then tell me to run "
         "`qaos app create FILE` myself."
     ),
-    arguments=(PromptArgument("template", "quant-baseline, agent-tool, or bundled"),),
+    arguments=(PromptArgument("template", "quant-apps, quant-baseline, agent-tool, or bundled"),),
 )

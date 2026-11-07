@@ -1,0 +1,19 @@
+"""Facts fixed when the project was generated, and the default research parameters.
+
+Change research parameters in ``config.toml`` (see `parameters`); these values are the
+defaults it overrides.
+"""
+
+PERIODS_PER_YEAR: int = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}  # {{ frequency }} bars
+BARS_PER_MONTH: int = PERIODS_PER_YEAR // 12
+# Standard signal definitions: 12-1 momentum (Jegadeesh and Titman, 1993) and one-month
+# short-term reversal (Jegadeesh, 1990), in bars of this frequency.
+MOMENTUM_LOOKBACK: int = PERIODS_PER_YEAR
+MOMENTUM_SKIP: int = BARS_PER_MONTH
+REVERSAL_LOOKBACK: int = BARS_PER_MONTH
+MAX_HORIZON: int = {{ max_horizon }}  # longest forward horizon for IC decay, in bars
+TRADE_LAG: int = 1  # bars between a signal's close and the trade (0 trades on that close)
+# Return on the bar an asset's prices stop for good (a delisting without a final price).
+# -30% follows Shumway (1997) for performance delistings; 0.0 assumes a cash exit at the last
+# price, which overstates results when delistings are bankruptcies.
+DELISTING_RETURN: float = -0.30
