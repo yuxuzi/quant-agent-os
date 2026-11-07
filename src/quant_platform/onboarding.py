@@ -14,10 +14,13 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
+from quant_agent_os import __version__
 from quant_agent_os.api import ApiKeyError, load_keys
 from quant_agent_os.config import get_settings, home_dir
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
-from quant_agent_os.tools import READ_ONLY
+from quant_agent_os.runs import RunStoreError, check_run_store
+from quant_agent_os.tools import READ_ONLY, AccessFileError
+from quant_agent_os.tools.access import load_access_rules
 from quant_platform.cli_common import console, errors
 from quant_platform.composition import DEFAULT_TOOLSETS, available_toolsets
 from quant_research import open_research
@@ -133,12 +136,17 @@ def init(
 
 
 def doctor() -> None:
-    """Check the home, store, datasets, extras, and permissions, and say how to fix what is off."""
+    """Check the home, stores, datasets, extras, and permissions, and say how to fix what is off.
+
+    It changes nothing, and its output holds no secrets, so it can go in a support ticket.
+    """
     settings = get_settings()
     rows: list[tuple[str, str, str]] = []
 
     def add(check: str, status: str, detail: str) -> None:
         rows.append((check, status, detail))
+
+    add("version", "ok", __version__)
 
     home = home_dir()
     if home.is_dir():
@@ -169,7 +177,14 @@ def doctor() -> None:
     except (DatasetError, OSError) as error:
         add("datasets", "fail", str(error))
 
-    add("run store", "ok", str(settings.runs_file))
+    if settings.runs_file.is_file():
+        try:
+            check_run_store(settings.runs_file)
+            add("run store", "ok", str(settings.runs_file))
+        except RunStoreError as error:
+            add("run store", "fail", str(error))
+    else:
+        add("run store", "ok", f"none yet at {settings.runs_file}; the first call creates it")
 
     if settings.api_keys_file.is_file():
         try:
@@ -181,6 +196,12 @@ def doctor() -> None:
             add("API keys", "fail", str(error))
     else:
         add("API keys", "ok", "none; only `qaos serve --http` needs them (`qaos keys new`)")
+
+    if settings.access_file:
+        try:
+            add("access file", "ok", f"groups: {len(load_access_rules(settings.access_file))}")
+        except AccessFileError as error:
+            add("access file", "fail", str(error))
 
     for extra, (module, without) in EXTRAS.items():
         if importlib.util.find_spec(module) is not None:

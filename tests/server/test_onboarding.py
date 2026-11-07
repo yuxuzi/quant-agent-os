@@ -1,6 +1,8 @@
 """`qaos init`, `connect`, and `doctor`: from nothing to a configured client."""
 
+import hashlib
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +10,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from quant_agent_os.api import add_key
 from quant_agent_os.config import get_settings
 from quant_platform.cli import app
 from quant_platform.onboarding import Client, client_config_path
@@ -119,6 +122,87 @@ def test_doctor_flags_permissions_wider_than_read_only(monkeypatch: pytest.Monke
     result = RUNNER.invoke(app, ["doctor"], env={"COLUMNS": "200"})
 
     assert "wider than read-only: network" in result.output
+
+
+def _doctor_output() -> tuple[int, str]:
+    get_settings.cache_clear()
+    result = RUNNER.invoke(app, ["doctor"], env={"COLUMNS": "1000"})
+    return result.exit_code, " ".join(result.output.split())
+
+
+def test_doctor_reports_a_run_store_the_server_would_refuse() -> None:
+    runs = get_settings().runs_file
+    runs.parent.mkdir(parents=True)
+    runs.write_text("")  # SQLite reads an empty file as a new database
+    db = sqlite3.connect(runs)
+    db.execute("PRAGMA user_version = 99")
+    db.close()
+
+    code, output = _doctor_output()
+
+    assert code == 1
+    assert "run-store schema 99" in output
+    db = sqlite3.connect(runs)
+    assert db.execute("PRAGMA user_version").fetchone()[0] == 99
+    db.close()
+
+
+def test_doctor_reports_an_unreadable_run_store() -> None:
+    runs = get_settings().runs_file
+    runs.parent.mkdir(parents=True)
+    runs.write_text("this is not a database, and it is long enough to be read as one" * 100)
+
+    code, output = _doctor_output()
+
+    assert code == 1
+    assert "Cannot open the run store" in output
+
+
+def test_doctor_checks_an_access_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    access = tmp_path / "access.toml"
+    access.write_text('[groups.desk]\ntools = ["analyze_risk"]\n')
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(access))
+
+    code, output = _doctor_output()
+    assert code == 0
+    assert "groups: 1" in output
+
+    access.write_text("not toml =")
+    code, output = _doctor_output()
+    assert code == 1
+    assert "Invalid access file" in output
+
+
+def test_doctor_output_holds_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Its output goes in support tickets. Each setting here is wrong, so each error is shown."""
+    password = "s3cret-store-password"
+    monkeypatch.setenv("QUANT_AGENT_OS_STORE", f"postgresql://reader:{password}@127.0.0.1:1/qaos")
+    monkeypatch.setenv("PGPASSWORD", "s3cret-pgpassword")
+    monkeypatch.setenv("VOYAGE_API_KEY", "s3cret-voyage")
+    monkeypatch.setenv("OPENAI_API_KEY", "s3cret-openai")
+    keys = get_settings().api_keys_file
+    keys.parent.mkdir(parents=True)
+    key = add_key(keys, "alice", ["tools:call"])
+    digest = hashlib.sha256(key.encode()).hexdigest()
+
+    code, listed = _doctor_output()
+    assert "1 configured" in listed
+    assert code == 1  # the store cannot be reached
+
+    keys.write_text(keys.read_text("utf-8").replace("principal", "princpal"))
+    _, invalid = _doctor_output()
+    assert "Invalid API keys file" in invalid
+
+    for output in (listed, invalid):
+        for secret in (
+            password,
+            "s3cret-pgpassword",
+            "s3cret-voyage",
+            "s3cret-openai",
+            key,
+            digest,
+        ):
+            assert secret not in output
 
 
 def test_a_config_file_setting_permissions_stops_every_command() -> None:

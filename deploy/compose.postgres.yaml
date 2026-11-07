@@ -27,7 +27,9 @@ x-hardened: &hardened
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+    # QAOS_POSTGRES_IMAGE is for an air-gapped install, where `docker load` drops the digest
+    # (docs/operations.md).
+    image: ${QAOS_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6}
     restart: unless-stopped
     environment:
       POSTGRES_DB: qaos
@@ -107,6 +109,68 @@ services:
     command: []
     volumes:
       - runs:/data/runs  # writable: SQLite shares the file with the running server
+    network_mode: none
+
+  # Checks what the deployed server would open, changes nothing, and prints no secrets, so its
+  # output can go in a support ticket. It sees only the settings given here: set a wider
+  # QUANT_AGENT_OS_GRANTED_PERMISSIONS or an access file on it as you do on the server.
+  doctor:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["qaos", "doctor"]
+    command: []
+    environment:
+      PGPASSWORD: ${QAOS_READER_PASSWORD:?set it in deploy/.env}
+      QUANT_AGENT_OS_HOME: /data
+      QUANT_AGENT_OS_STORE: postgresql://qaos_reader@postgres:5432/qaos
+      QUANT_AGENT_OS_RUNS_FILE: /data/runs/runs.db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs  # writable: SQLite shares the file with the running server
+    networks: [backend]  # internal: PostgreSQL only, no internet
+
+  # Writes a tar of the volumes to stdout, or of the ones named: `run --rm -T backup data/runs`.
+  # Stop the server first, so the SQLite file is at rest. PostgreSQL is backed up with pg_dump
+  # (docs/operations.md).
+  backup:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint: ["tar", "-C", "/", "-cf", "-"]
+    command: ["data/datasets", "data/runs", "keys"]
+    volumes:
+      - datasets:/data/datasets:ro
+      - keys:/keys:ro
+      - runs:/data/runs:ro
+    network_mode: none
+
+  # Reads a backup from stdin and replaces the volumes it holds: `run --rm -T restore < file`.
+  # It checks the whole archive before it deletes anything. Stop the server first.
+  restore:
+    <<: [*image, *hardened]
+    profiles: [operator]
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        cat >/tmp/restore.tar
+        tar -tf /tmp/restore.tar >/tmp/members
+        grep -qE '^(data/(knowledge|datasets|runs)|keys)/' /tmp/members || {
+          echo "error: this is not an archive from the backup service. Nothing was changed." >&2
+          exit 1
+        }
+        for dir in data/knowledge data/datasets data/runs keys; do
+          if grep -q "^$$dir/" /tmp/members; then find "/$$dir" -mindepth 1 -delete; fi
+        done
+        tar -C / -xf /tmp/restore.tar
+    command: []
+    volumes:
+      - datasets:/data/datasets
+      - keys:/keys
+      - runs:/data/runs
     network_mode: none
 
 networks:

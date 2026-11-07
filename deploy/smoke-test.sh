@@ -27,10 +27,18 @@ cleanup() {
   "${compose[@]}" logs server || true
   "${compose[@]}" down -v --remove-orphans
   [[ -z "${env_file:-}" ]] || rm -f "$env_file"
+  rm -f "${backup:-}" "${dump:-}"
 }
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+wait_healthy() {
+  for _ in $(seq 1 60); do
+    curl -fsS "$base/healthz" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -fsS "$base/healthz" | grep -q '"ok"' || fail "the server never became healthy"
+}
 
 "${compose[@]}" build
 image="${QAOS_IMAGE:-quant-agent-os:local}"  # the server's image, not the database's
@@ -56,11 +64,7 @@ key="$("${compose[@]}" run --rm -T keys new --principal smoke \
 
 echo "== docker compose up"
 "${compose[@]}" up -d server
-for _ in $(seq 1 60); do
-  curl -fsS "$base/healthz" >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -fsS "$base/healthz" | grep -q '"ok"' || fail "the server never became healthy"
+wait_healthy
 
 echo "== authentication and a real call"
 code="$(curl -s -o /dev/null -w '%{http_code}' "$base/v1/tools")"
@@ -93,6 +97,46 @@ grep -q '"isError":false' <<<"$called" || fail "the MCP call failed: $called"
 grep -q '"sharpe_ratio"' <<<"$called" || fail "the report has no metrics: $called"
 curl -fsS "${auth[@]}" "$base/v1/runs" | grep -q '"actor":"mcp-http"' \
   || fail "the MCP call was not recorded with its caller"
+
+echo "== doctor checks the deployed volumes, and its output holds no secrets"
+report="$("${compose[@]}" run --rm -T doctor)" || fail "doctor failed: $report"
+grep -q 'knowledge store .* ok' <<<"$report" || fail "doctor did not open the store: $report"
+grep -q 'run store .* ok' <<<"$report" || fail "doctor did not open the run store: $report"
+if grep -qF "$key" <<<"$report"; then fail "doctor printed an API key"; fi
+if [[ "$variant" == postgres ]]; then
+  while IFS='=' read -r _ password; do
+    if grep -qF "$password" <<<"$report"; then fail "doctor printed a password"; fi
+  done <"$env_file"
+fi
+
+echo "== back up, lose the data, restore"
+"${compose[@]}" stop server
+backup="$(mktemp)"
+"${compose[@]}" run --rm -T backup >"$backup"
+if [[ "$variant" == postgres ]]; then
+  dump="$(mktemp)"
+  "${compose[@]}" exec -T postgres pg_dump -U postgres -d qaos -Fc >"$dump"
+fi
+if "${compose[@]}" run --rm -T restore </dev/null 2>/dev/null; then
+  fail "restore accepted an empty archive"
+fi
+"${compose[@]}" run --rm -T --entrypoint sh restore -c \
+  'test -s /data/runs/runs.db && rm -f /data/runs/runs.db* /keys/api-keys.toml' \
+  || fail "the empty archive changed the volumes, or there was nothing to remove"
+"${compose[@]}" run --rm -T restore <"$backup"
+if [[ "$variant" == postgres ]]; then
+  "${compose[@]}" exec -T postgres psql -U postgres -d qaos -v ON_ERROR_STOP=1 \
+    -c "DROP SCHEMA quant_research CASCADE" >/dev/null
+  "${compose[@]}" exec -T postgres pg_restore -U postgres -d qaos --clean --if-exists \
+    --single-transaction <"$dump"
+fi
+"${compose[@]}" up -d server
+wait_healthy
+curl -fsS "${auth[@]}" "$base/v1/runs/$run_id" | grep -q '"principal":"smoke"' \
+  || fail "the restored run store lost the recorded run"
+curl -fsS "${auth[@]}" -X POST -H 'content-type: application/json' \
+  -d '{"arguments": {"focus": "short-term reversal"}}' "$base/v1/tools/research_report/call" \
+  | grep -q '"status":"ok"' || fail "the restored server cannot answer"
 
 echo "== the server cannot write its knowledge store"
 if [[ "$variant" == sqlite ]]; then

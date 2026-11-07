@@ -307,6 +307,28 @@ CREATE INDEX IF NOT EXISTS usage_events_tenant_at ON usage_events (tenant, at);
 """
 
 
+def _newer_store(path: str | Path, version: int) -> str:
+    return (
+        f"{path} has run-store schema {version}; this version reads "
+        f"{SCHEMA_VERSION}. Use a new runs file or upgrade quant-agent-os."
+    )
+
+
+def check_run_store(path: Path) -> None:
+    """Raise `RunStoreError` if this version cannot open the store at ``path``; change nothing."""
+    try:
+        db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            db.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error as error:
+        raise RunStoreError(f"Cannot open the run store at {path}: {error}") from error
+    if version > SCHEMA_VERSION:
+        raise RunStoreError(_newer_store(path, version))
+
+
 class SqliteRunStore:
     """A `RunStore` in one SQLite file, safe to share between threads.
 
@@ -324,10 +346,7 @@ class SqliteRunStore:
             version = self._db.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
                 self._db.close()
-                raise RunStoreError(
-                    f"{path} has run-store schema {version}; this version reads "
-                    f"{SCHEMA_VERSION}. Use a new runs file or upgrade quant-agent-os."
-                )
+                raise RunStoreError(_newer_store(path, version))
             if str(path) != ":memory:":
                 self._db.execute("PRAGMA journal_mode=WAL")  # readers never block the server
             with self._db:
