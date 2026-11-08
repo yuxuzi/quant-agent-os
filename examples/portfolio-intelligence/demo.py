@@ -11,7 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import socket
 import subprocess
@@ -23,9 +22,10 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
+import typer
 from book_tools import firm_tools
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -304,21 +304,24 @@ def run_demo(say: Say = print) -> dict[str, Any]:
                 server.wait(timeout=30)
 
 
-def main() -> None:
-    """Run the scripted walk-through, or with ``--serve`` only the server."""
-    parser = argparse.ArgumentParser(description="The Portfolio Intelligence demonstration.")
-    parser.add_argument("--serve", action="store_true", help="Only run the server, for a client")
-    parser.add_argument("--home", type=Path, help="Keep its state here; default: a temporary one")
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    if not args.serve:
+def main(
+    serve_only: Annotated[
+        bool, typer.Option("--serve", help="Only run the server, for a client.")
+    ] = False,
+    home: Annotated[
+        Path | None, typer.Option(help="Keep its state here; default: a temporary one.")
+    ] = None,
+    port: Annotated[int, typer.Option(help="The server's port.")] = 8000,
+) -> None:
+    """Run the scripted walk-through, or with --serve only the server."""
+    if not serve_only:
         run_demo()
-    elif args.home is not None:
-        serve(args.home, args.port)
+    elif home is not None:
+        serve(home, port)
     else:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-            serve(Path(tmp), args.port)
+            serve(Path(tmp), port)
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
