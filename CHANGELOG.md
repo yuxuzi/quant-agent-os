@@ -72,6 +72,10 @@ All notable changes to this project are documented here. The format follows
   within a stated tolerance, a question that must find a source, and a question that must abstain. It writes a pass or
   fail report in Markdown or JSON, with the platform version, the hash of the cases file, and the data versions, to attach
   to acceptance. See [check it against agreed cases](docs/operations.md#check-it-against-agreed-cases).
+- **The security model says who is responsible for what.** A trust-boundary diagram, a table of what the platform and the
+  firm each do, what is stored where, and what this does not protect against. [The review](docs/security-review.md) now
+  covers a firm's own tools, per-caller access, and the operator commands. It stays an AI agent's review, and recommends an
+  independent one before production use.
 
 ### Changed
 
@@ -85,6 +89,9 @@ All notable changes to this project are documented here. The format follows
   the Quant Research product: `qaos app new quant-lab my-lab`. Specs that name the old profile are
   refused with the new name, and the `quant-baseline` pack is now 3.0.0, also at its public mirror. The shortcuts `python-cli` and `fastapi-service` are now `python` and
   `fastapi`.
+- **The README leads with what a firm connects and operates:** its own tools, research, and data, under its control, on a
+  server it runs. Analytics reads as workflows on the platform, and App Factory moves below as optional. No measured claim
+  changed.
 
 ### Removed
 
@@ -119,6 +126,12 @@ All notable changes to this project are documented here. The format follows
   a newer one stamped the file with its own schema version, as the read-only error told operators to do. It now
   refuses, on SQLite as PostgreSQL already did, and says to upgrade or restore instead.
 - **An invalid API keys file no longer puts key hashes in the error.** The message repeated the input.
+- **Access rules that would silently not apply.** `qaos hosted serve` ignored a configured access file and gave every
+  key everything, and it now refuses to start. Keys with groups on a server with no access file now draw a warning at
+  start-up and from `qaos doctor`, because the groups do nothing there; so do keys with groups on `qaos hosted serve`,
+  which applies none. A custom server whose catalog's access policy is not the configured access file is warned that the
+  file does not apply, and the start-up check reads the keys already loaded, so a keys file that changes meanwhile no
+  longer stops the server.
 
 ## [0.2.0] - 2026-11-05
 

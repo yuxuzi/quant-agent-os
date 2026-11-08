@@ -192,6 +192,8 @@ def doctor() -> None:
             expired = sum(key.expired for key in keys)
             shown = f"{len(keys)} configured" + (f", {expired} expired" if expired else "")
             add("API keys", "ok", shown)
+            if not settings.access_file and any(key.groups for key in keys):
+                add("groups", "warn", "keys name groups, but no access file applies them")
         except ApiKeyError as error:
             add("API keys", "fail", str(error))
     else:

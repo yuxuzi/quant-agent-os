@@ -37,6 +37,7 @@ from quant_platform.cli_common import (
 )
 from quant_platform.composition import available_toolsets, instructions_for
 from quant_platform.http import build_http_app, single_tenant
+from quant_platform.serve import warn_about_inert_groups
 from quant_research import ResearchApp
 
 if TYPE_CHECKING:
@@ -116,6 +117,13 @@ def serve_hosted(
     With --approval-url, a call that waits for an approval sends the client to the approval
     page; issue approver keys with `qaos keys new --scope runs:approve`.
     """
+    if get_settings().access_file is not None:
+        errors.print(
+            "[red]error:[/red] an access file is configured, and `qaos hosted serve` does not "
+            "apply one, so every key would reach every tool and dataset. Use `qaos serve --http`, "
+            "or unset QUANT_AGENT_OS_ACCESS_FILE."
+        )
+        raise typer.Exit(2)
     from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
     from quant_platform.hosted.approval_page import approval_routes
     from quant_platform.hosted.tenants import TenantCatalogs, entitled_toolsets, separate_approver
@@ -131,6 +139,7 @@ def serve_hosted(
             "[red]error:[/red] the keys file has no enabled key; add one with `qaos keys new`."
         )
         raise typer.Exit(1)
+    warn_about_inert_groups(ring)
     whole = _load_tenants_file(tenants) if tenants is not None else None
     configured = whole.tenants if whole is not None else None
     oauth = _oauth(whole, ring, resource_url) if whole is not None else None
