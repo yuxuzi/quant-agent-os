@@ -69,7 +69,7 @@ flowchart TD
     L4 --> L5["Lab 5: Guardrails<br/>10 min"]
     L2 --> L6["Lab 6: Connect Claude<br/>10 min"]
     L3 --> L6
-    L5 --> L7["Lab 7: Server and tenants<br/>15 min"]
+    L5 --> L7["Lab 7: Server for your team<br/>10 min"]
     L6 --> L7
     L7 --> F["Give feedback"]
     L8 --> F
@@ -83,7 +83,7 @@ flowchart TD
 | [4. Write a tool](#lab-4-write-your-own-tool) | The tool contract and `check_tool` | Setup |
 | [5. Guardrails](#lab-5-try-to-break-the-guardrails) | Refusals and approvals | Setup |
 | [6. Connect Claude](#lab-6-connect-claude-code) | The same tools from an AI client | Labs 2 and 3, Claude Code |
-| [7. Server and tenants](#lab-7-a-server-with-two-tenants) | REST, API keys, tenant isolation, quotas | Labs 2 and 3 |
+| [7. Server for your team](#lab-7-a-server-for-your-team) | REST, API keys, the run record | Labs 2 and 3 |
 | [8. Generate a project](#lab-8-generate-a-quant-project) | App Factory: study, backtest, report | Setup, network |
 
 ## Setup
@@ -657,28 +657,10 @@ the answers, and tell us if the difference is visible.
 
 ---
 
-## Lab 7: A server with two tenants
+## Lab 7: A server for your team
 
-The first part runs one team's server. The tenants and plans later in this lab are for a vendor
-hosting many customers, so they use `qaos hosted` ([hosted.md](hosted.md)).
-
-**Goal:** run the platform as a service: first with one API key, then with two customers who
-can't see each other's data, then with a quota. It all stays on your machine.
-
-```mermaid
-flowchart TD
-    K1["Key for alice"] --> H["serve --http<br/>checks the key"]
-    K2["Key for gina"] --> H
-    H -->|"No or bad key"| R["401 refused"]
-    H -->|"tenant: acme"| A["acme's catalog<br/>research + analytics"]
-    H -->|"tenant: globex"| G["globex's catalog<br/>research only"]
-    A --> AS[("acme store<br/>and datasets")]
-    G --> GS[("globex store")]
-    A --> L[("Run store<br/>filtered by tenant")]
-    G --> L
-```
-
-### Part 1: one server, one key
+**Goal:** run the platform as a service on your own machine, as a firm runs it on its own
+infrastructure: one server, API keys, and a record of every call.
 
 ```bash
 KEY=$(uv run qaos keys new --principal me --scope tools:list --scope tools:call --scope runs:read)
@@ -740,126 +722,12 @@ run by me in tenant local: analyze_performance completed
 
 The API key file stores only a hash of each key, and the key itself is printed once.
 
-### Part 2: two tenants
-
-Give each tenant its own data, and give `globex` research only:
-
-```bash
-mkdir -p "$TUT/tenants"
-uv run qaos ingest src/quant_platform/sample/corpus --store "$TUT/tenants/acme.db"
-uv run qaos ingest "$TUT/notes" --store "$TUT/tenants/globex.db"
-uv run qaos data add examples/tutorial/data/fund_returns.csv --id fund --dir "$TUT/tenants/datasets" --tenant acme
-
-export QUANT_AGENT_OS_TENANTS_FILE="$TUT/tenants.toml"
-uv run qaos hosted tenant add acme --store "$TUT/tenants/acme.db" --toolsets research,analytics
-uv run qaos hosted tenant add globex --store "$TUT/tenants/globex.db" --toolsets research
-uv run qaos hosted tenant list
-
-ALICE=$(uv run qaos keys new --principal alice --tenant acme --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
-GINA=$(uv run qaos keys new --principal gina --tenant globex --scope tools:list --scope tools:call --scope runs:read --keys "$TUT/tenants/keys.jsonl")
-
-uv run qaos hosted serve --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
-SERVER=$!
-until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
-```
-
-Ask both tenants the same question:
-
-```bash
-ask() {
-  curl -s -H "Authorization: Bearer $1" -H 'content-type: application/json' \
-    -X POST http://127.0.0.1:8765/v1/tools/find_related_signals/call \
-    -d '{"arguments": {"query": "short-term reversal"}}' \
-    | uv run python examples/tutorial/show.py
-}
-echo "--- acme";   ask "$ALICE"
-echo "--- globex"; ask "$GINA"
-```
-
-```text
---- acme
-status: ok
-related: Liquidity provision, Order-flow imbalance, Momentum
-cited: momentum-crashes.md, notes/order-flow.md, reversal-and-microstructure.md
---- globex
-status: ok
-related: Low volatility
-cited: my-reversal-note.md
-```
-
-The same question gets a different answer, because each tenant has its own corpus. Now try to
-cross the line:
-
-```bash
-curl -s -H "Authorization: Bearer $GINA" -H 'content-type: application/json' \
-  -X POST http://127.0.0.1:8765/v1/tools/analyze_performance/call \
-  -d '{"arguments": {"returns": [0.1, 0.2]}}' | uv run python examples/tutorial/show.py
-
-ACME_RUN=$(curl -s -H "Authorization: Bearer $ALICE" http://127.0.0.1:8765/v1/runs \
-  | uv run python -c "import json, sys; print(json.load(sys.stdin)[0]['run_id'])")
-curl -s -H "Authorization: Bearer $GINA" http://127.0.0.1:8765/v1/runs/$ACME_RUN \
-  | uv run python examples/tutorial/show.py
-kill $SERVER
-```
-
-```text
-refused: No tool named 'analyze_performance' is served here.
-refused: No run 3d786f48fc294ca682d86dfa71449934.
-```
-
-`globex` can't see the analytics tool, and from its side acme's run simply doesn't exist.
-
-### Part 3: a plan with a quota
-
-Add a plan that allows two calls a minute, move `globex` onto it, and call three times:
-
-```bash
-cat >> "$TUT/tenants.toml" <<'TOML'
-
-[plans.trial]
-toolsets = ["research"]
-calls_per_minute = 2
-TOML
-uv run qaos hosted tenant add globex --store "$TUT/tenants/globex.db" --plan trial
-
-uv run qaos hosted serve --port 8765 --keys "$TUT/tenants/keys.jsonl" --datasets "$TUT/tenants/datasets" --runs "$TUT/tenants/runs.db" > "$TUT/server.log" 2>&1 &
-SERVER=$!
-until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
-
-ask "$GINA"; ask "$GINA"; ask "$GINA"
-kill $SERVER
-uv run qaos hosted usage export --runs "$TUT/tenants/runs.db" --by tool
-```
-
-The third call is refused (the wait time varies), and the usage export separates billable calls
-from the rest:
-
-```text
-status: quota_exceeded
-error: Tenant globex is over its 2 calls a minute; retry in 30 s.
-hint: The tenant reached a limit of its plan. Wait retry_after_seconds before calling again, and tell the user which limit was reached.
-```
-
-```text
-5 calls from 2026-11-01T00:00:00+00:00 to 2026-11-05T16:21:57.039590+00:00.
-tenant,group,toolset,calls,billable_calls,duration_ms,input_bytes,output_bytes
-acme,find_related_signals,research,1,1,...
-globex,find_related_signals,research,4,3,...
-```
-
-Then clear the tenants setting, so later commands in this terminal serve a single tenant again:
-
-```bash
-unset QUANT_AGENT_OS_TENANTS_FILE
-```
-
 ### Play with it
 
 | Try this | What you should see |
 | --- | --- |
 | Create a key with only `--scope tools:list`, then use it to call a tool | Listing works, and the call is refused: `This API key lacks the 'tools:call' scope.` |
-| `uv run qaos hosted tenant disable globex --tenants "$TUT/tenants.toml"`, then restart the server | `refused: Tenant 'globex' is not served here.` Its data is kept |
-| Connect Claude over HTTP while the Part 1 server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 7 tools, over HTTP |
+| Connect Claude over HTTP while the server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 7 tools, over HTTP |
 
 > This setup is for learning on loopback. Before you put a server on a network, read
 > [deployment.md](deployment.md) and the open findings in
@@ -979,8 +847,7 @@ flowchart TD
 | --- | --- |
 | `warning: no knowledge store, so the research toolset is not served` | Do Lab 3, and `source examples/tutorial/env.sh` in this terminal |
 | `analyze_performance error: ... No dataset 'fund'` | Do the `qaos data add` commands in Lab 2 |
-| `the server does not start`, or `curl` waits forever in Lab 7 | Read `$TUT/server.log`. In Part 2, check that `QUANT_AGENT_OS_TENANTS_FILE` is set, and press Ctrl+C to stop waiting |
-| A single-tenant server still acts on the tenants file | Run `unset QUANT_AGENT_OS_TENANTS_FILE` |
+| `the server does not start`, or `curl` waits forever in Lab 7 | Read `$TUT/server.log`, and press Ctrl+C to stop waiting |
 | Install fails while building a package, on a very new Python | Use an older one: `uv sync --locked --python 3.13` |
 | Claude doesn't list the server | Run `/mcp` in Claude, and check that the paths in the `claude mcp add` command are absolute |
 | You want more detail on a command | Add `--help`. Every command has it |
@@ -994,7 +861,7 @@ The split is deliberate: **writes are commands you run, and reads are tools a mo
 | **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk` |
 | **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
 | **Projects** | `qaos app create`, `qaos app new` | `describe_template`, `check_spec` (with the factory toolset) |
-| **Access** | `qaos keys new`, `qaos hosted tenant add` | None |
+| **Access** | `qaos keys new` | None |
 
 | I want to | Command |
 | --- | --- |
@@ -1043,7 +910,7 @@ and paste this template. Skip anything you like.
 | 4 Write a tool | | | |
 | 5 Guardrails | | | |
 | 6 Connect Claude | | | |
-| 7 Server and tenants | | | |
+| 7 Server for your team | | | |
 | 8 Generate a project | | | |
 
 **Where did I get stuck?** (the lab, the command, and what I saw)

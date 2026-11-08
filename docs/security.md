@@ -87,8 +87,8 @@ The platform is software you run. It has no service of ours behind it, so nothin
 - **A client can be talked into things.** A passage can hold instructions. Results are marked untrusted, and the server
   says not to follow them, but only the client decides. Consequential calls still stop for a person's approval.
 - **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
-- **`qaos hosted serve` has no per-caller access.** It refuses to start with an access file configured, and OAuth
-  tokens carry no groups.
+- **No sign-in through an identity provider yet.** OAuth token checks exist in `quant_platform.identity`, but no
+  command serves them, and tokens carry no groups.
 - **Nothing limits unauthenticated requests.** That is the proxy's job.
 
 ## Defaults
@@ -153,7 +153,7 @@ in memory unless it is given a run store. What each part of a record holds:
 - **Usage events.** One per recorded call, written in the same transaction
   ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
   principal, tool, status, duration, and the sizes of the arguments and output, never their
-  content. `qaos hosted usage export` reads them; it is an operator command, not a tool.
+  content. No tool reads them.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
@@ -191,7 +191,7 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
 at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 - **Every MCP request needs an API key.** A missing or unknown key gets 401 with
   `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, which
-  is also how `qaos hosted serve` checks OAuth tokens.
+  is also how OAuth tokens would be checked.
 - **Each method checks the key's scope.** Listing tools, resource templates, and prompts, and
   getting a prompt, need `tools:list`; calling a tool and reading a resource (which calls a
   tool) need `tools:call`. There are no new scopes, and no MCP method can approve a call.
@@ -217,36 +217,23 @@ configured, and then it denies what is not listed. How to use it, and what it do
   access file that has become missing or invalid.
 - A refused dataset cannot be told from a missing one, and no output names what the caller may not reach. The
   refusal is on the call's record and audit event, which callers do not receive.
-- Configurations that would silently not apply are called out. `qaos hosted serve` will not start with an access file
-  configured, and keys with groups on a server with no access file draw a warning at start-up and from `qaos doctor`.
+- Configurations that would silently not apply are called out. Keys with groups on a server with no access file draw a warning at start-up and from `qaos doctor`.
 - `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
 
-## Tenants and OAuth
+## OAuth
 
-[Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
-(`qaos hosted serve --tenants FILE`):
-- **The tenant comes from the credential only.** An API key's entry names its tenant
-  (`qaos keys new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
-  or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
-- **Each tenant has its own data.** Its knowledge store is its own PostgreSQL schema
-  (`qr_<tenant>`) or SQLite file, its datasets are its own directory, and its toolsets and
-  permissions are its own. Runs share one store, and every read is filtered by tenant. An
-  unknown or disabled tenant reaches nothing (403).
-- **OAuth tokens are checked by introspection** at an authorization server listed in the
-  tenants file. A token is accepted only if it is active and unexpired, its audience is this
-  server's `--resource-url`, and its tenant claim names a tenant pinned to its issuer. A token
-  is never sent to a server that could not have issued it: a JWT's unverified `iss` only
-  chooses which configured server to ask, and an opaque token needs exactly one configured
-  server. API keys are never introspected. Introspection secrets come from environment
-  variables that the file names; results are cached for at most 60 seconds, and a failed check
-  refuses the token without logging it.
-- **Introspection is bounded**, because anyone can send a token. A provider's refusal is
-  cached for 30 seconds, and each provider is asked at most 600 times a minute and 8 times at
-  once; beyond that tokens are refused without asking, with one warning a minute. The
-  reverse proxy's limit on unauthenticated requests stays the first defence.
-- **Isolation is a release gate.** `tests/server/test_platform_tenants.py` runs
-  two tenants with different corpora and datasets on one server and checks that neither can
-  reach the other's passages, datasets, or runs by any tool, URI, or route.
+`quant_platform.identity.oauth` checks tokens from a firm's identity provider by introspection
+([decision 0013](decisions/0013-identity-and-tenancy.md)). No command serves it yet; a firm's own server can,
+through `build_http_app` ([decision 0023](decisions/0023-no-hosted-service.md)). Each firm runs its own installation, so there are no tenants to
+separate.
+- **Tokens are checked by introspection** at a configured authorization server. A token is accepted only if it
+  is active and unexpired, its audience is this server, and its issuer is pinned. A token is never sent to a
+  server that could not have issued it: a JWT's unverified `iss` only chooses which configured server to ask,
+  and an opaque token needs exactly one configured server. API keys are never introspected. Results are cached
+  for at most 60 seconds, and a failed check refuses the token without logging it.
+- **Introspection is bounded**, because anyone can send a token. A provider's refusal is cached for 30 seconds,
+  and each provider is asked at most 600 times a minute and 8 times at once; beyond that tokens are refused
+  without asking. The reverse proxy's limit on unauthenticated requests stays the first defence.
 
 ## PostgreSQL knowledge store
 
@@ -306,7 +293,8 @@ toolsets, calls a minute, billable calls a month, and output size:
     confirming `qaos app create`.
   - Models, MCP clients, and REST clients can never create approvals.
 - **Approving without leaving the client** ([decision 0014](decisions/0014-approvals-in-the-client.md)):
-  - **Over HTTP** (`hosted serve --http --approval-url`), a waiting call opens an approval request,
+  - **Over HTTP**, on a firm's own server that adds the approval page from `quant_platform.identity`, a
+    waiting call opens an approval request,
     and the client is sent to `/approve/<id>` (MCP URL elicitation). The request is bound to
     the tenant, run, tool, input hash, and requester; its id has 128 random bits; it expires
     after 15 minutes and is decided once.

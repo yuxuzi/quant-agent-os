@@ -20,8 +20,9 @@ is not a chatbot.
 - **Quant Analytics** (`src/quant_analytics`): performance metrics from empyrical-reloaded
   ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
   numerical libraries only; `tools.py` registers `analyze_performance` and friends.
-- **Hosted features** (`quant_platform.hosted`): tenants, plans, usage, OAuth, and the approval page,
-  run only through `qaos hosted` ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)).
+- **Sign-in and approvals** (`quant_platform.identity`): OAuth token checks and the browser approval page,
+  for a firm's own server; no command serves them yet. Each customer hosts its own installation, and
+  there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
   own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md));

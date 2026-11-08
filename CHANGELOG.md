@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **The `qaos hosted` command group: tenants, plans, and usage export.** Each firm runs its own installation, and
+  there is no multi-tenant service. A firm that needs separate desks runs one installation for each. OAuth and the
+  approval page move, unchanged, to `quant_platform.identity`, for a firm's own server. See
+  [decision 0023](docs/decisions/0023-no-hosted-service.md).
+
 ### Changed
 
 - **The license is now the Business Source License 1.1,** from the commit that adds it. Anyone may read,
@@ -173,7 +180,7 @@ with `qaos connect`, because their server command changed. See
 - **Hosted features moved to `qaos hosted`** ([decision 0017](docs/decisions/0017-hosted-behind-a-command-group.md)):
   `hosted serve` takes `--tenants`, `--approval-url`, and `--resource-url`, and `tenant` and
   `usage` are under `hosted`. The default `qaos serve --http` serves one team with API keys. Their
-  modules moved from `quant_agent_os` to `quant_platform.hosted`. See [hosted.md](docs/hosted.md).
+  modules moved from `quant_agent_os` to `quant_platform.hosted`. (Removed by [decision 0023](docs/decisions/0023-no-hosted-service.md).)
 - **App Factory is off by default on the server**, and the plugin no longer installs it. Add it with
   `--toolsets research,analytics,factory`. Its commands are under `qaos app`.
 - **The `quant-strategy` and `quant-app-factory` skills need server 0.2.0**, because they rely on

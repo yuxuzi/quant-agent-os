@@ -9,20 +9,23 @@
   [OWASP API Security Top 10 (2023)](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
   and the [MCP security best practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices).
   The second review also ran real servers in the configurations most likely to fail open.
+- **Since then:** [decision 0023](decisions/0023-no-hosted-service.md) removed the multi-tenant server, plans, and
+  usage export. Rows below about tenants, plans, and `qaos hosted serve` describe code that no longer ships; OAuth
+  and the approval page moved unchanged to `quant_platform/identity/`.
 
 The general model is in [security.md](security.md). This page checks it against the code and
 lists what is still open.
 
 ## The surface
 
-`qaos hosted serve` serves everything below on one port; the default `serve --http` serves all but the approval page and OAuth metadata. Local stdio (`qaos serve`) is
+`qaos serve --http` serves everything below except the approval page and OAuth metadata, which only a firm's own server can add, from `quant_platform.identity`. Local stdio (`qaos serve`) is
 out of scope: it trusts the user who started it.
 
 | Route | Who may call it | Guarded by |
 | --- | --- | --- |
 | `POST /mcp` (Streamable HTTP, stateless) | API key or OAuth token, scope per method | `mcp/http.py`: bearer middleware, `caller_of`, `tenant_route` |
 | `/v1/tools`, `/v1/tools/{name}/call`, `/v1/runs` | API key with the route's scope | `api/app.py`: `requires(scope)`, `surface_of` |
-| `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `quant_platform/hosted/approval_page.py`, `approval_desk.py` |
+| `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `quant_platform/identity/approval_page.py`, `approval_desk.py` |
 | `/.well-known/oauth-protected-resource/mcp` | Anyone (public metadata) | MCP SDK |
 | `/healthz` | Anyone; returns `{"status": "ok"}` only | — |
 

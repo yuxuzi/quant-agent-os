@@ -12,7 +12,6 @@ Everything the platform keeps is in one home: `QUANT_AGENT_OS_HOME`, by default
 | `runs.db` | The audit: every recorded run, from the server and from `qaos app`. |
 | `api-keys.toml` | Hashes of API keys for `qaos serve --http`. |
 | `factory.toml`, `packs/` | App Factory settings and fetched template packs. |
-| `tenants.toml` | Tenants for `qaos hosted`. |
 
 A setting comes from a `QUANT_AGENT_OS_*` environment variable, then the home's `.env`, then
 `config.toml`. A `.env` in the working directory is never read, because a client that launches the
