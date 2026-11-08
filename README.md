@@ -99,7 +99,7 @@ src/quant_agent_os/      core: tool contract, executor, evidence, runs, MCP, RES
 src/quant_research/      Quant Research
 src/quant_analytics/     Quant Analytics
 src/quant_app_factory/   Quant App Factory and its template packs
-src/quant_platform/      `qaos`, one server for every toolset, and the hosted command group
+src/quant_platform/      `qaos`, one server for every toolset, sign-in, and approvals
 skills/                  instruction-only skills; clients/: Cursor and VS Code bundles
 .claude-plugin/          Claude Code plugin and marketplace manifests
 deploy/                  team-server Dockerfile, compose files, smoke test, and upgrade drill
@@ -113,8 +113,7 @@ examples/  scripts/  tests/  docs/
   [Quant Analytics](docs/products/quant-analytics.md),
   [Quant App Factory](docs/products/quant-app-factory.md)
 - [Configuration](docs/configuration.md), [security](docs/security.md), and a
-  [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md);
-  [hosting many customers](docs/hosted.md)
+  [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md)
 - [Architecture](docs/architecture.md), [decisions](docs/decisions/), and
   [open backlog](docs/ENGINEERING_REVIEW_PLAN.md)
 - [Tools changelog](docs/tools-changelog.md) and [releasing](docs/releasing.md)

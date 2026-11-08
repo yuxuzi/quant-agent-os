@@ -20,12 +20,13 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import PermissionPolicy
-from quant_platform.hosted.oauth import (
+from quant_platform.identity.oauth import (
     AuthorizationServer,
     FirstOf,
     IntrospectionVerifier,
     protected_resource_routes,
 )
+from quant_platform.identity.rate import TokenBucket
 
 RESOURCE = "https://qaos.example/mcp"
 ACME = "https://login.acme.example"
@@ -312,3 +313,15 @@ def test_mcp_clients_use_tokens_or_keys_and_401s_point_to_the_metadata(
     assert by_key.isError and "lacks the 'tools:call' scope" in by_key.content[0].text
     (run,) = store.list_runs(5)
     assert (run.principal, run.tenant, run.actor) == ("user-7", "acme", "mcp-http")
+
+
+def test_a_token_bucket_allows_bursts_up_to_its_rate_then_refills() -> None:
+    now = [0.0]
+    bucket = TokenBucket(2, clock=lambda: now[0])
+
+    assert [bucket.take(), bucket.take()] == [0.0, 0.0]
+    assert bucket.take() == pytest.approx(30.0)  # 2 a minute: one token every 30 s
+    now[0] = 30.0
+    assert bucket.take() == 0.0
+    with pytest.raises(ValueError, match="at least one call"):
+        TokenBucket(0)

@@ -1,6 +1,6 @@
 # 0017: Hosted features sit behind a command group
 
-- Status: accepted
+- Status: superseded by [0023](0023-no-hosted-service.md), which removes the command group
 - Date: 2026-11-05
 - Amends: [0012](0012-remote-mcp-over-http.md), [0013](0013-identity-and-tenancy.md),
   [0014](0014-approvals-in-the-client.md), [0015](0015-metering-quotas-and-entitlements.md)

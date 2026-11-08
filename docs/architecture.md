@@ -17,7 +17,7 @@ or team that hosts it themselves. One wheel holds five import names
 | `quant_research` | Cited keyword search with entity linking and a small graph of extracted facts, plus optional semantic search | none; `pdf`, `postgres`, `local-embeddings` add to it |
 | `quant_analytics` | Performance and risk metrics ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `analytics` |
 | `quant_app_factory` | Generates tested Python projects, through [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) | `factory` |
-| `quant_platform` | The composition root: `qaos`, one server for every toolset, `research_report`, prompts, and the hosted command group | `server` |
+| `quant_platform` | The composition root: `qaos`, one server for every toolset, `research_report`, prompts, sign-in, and approvals | `server` |
 
 ## System context
 
@@ -46,10 +46,10 @@ or team that hosts it themselves. One wheel holds five import names
 Arrows into Core mean registration: products hand Core `ToolSpec`s, and Core never imports a product.
 
 Identity is an API key with scopes on the HTTP server. Scopes are `tools:list`, `tools:call`, and
-`runs:approve`; there are no PM, trader, or researcher roles. Tenants, plans, usage metering, OAuth, and
-the approval page are behind `qaos hosted`
-([decision 0017](decisions/0017-hosted-behind-a-command-group.md), [hosted.md](hosted.md)). Core keeps
-only a `tenant` column (default `local`) and small hooks such as `UsageGate`.
+`runs:approve`; there are no PM, trader, or researcher roles. Each firm runs its own installation, and
+there is no multi-tenant service ([decision 0023](decisions/0023-no-hosted-service.md)). OAuth and the approval page are in
+`quant_platform.identity`, for a firm's own server. Core keeps a `tenant` column (default `local`) and
+small hooks such as `UsageGate`.
 
 ## Core
 
@@ -349,7 +349,7 @@ See [security.md](security.md) for details.
 - `write_local_data`, `execute_code`, `network`, and `external_action` are consequential. Granting one makes a
   tool eligible to run, and each call still needs a single-use approval bound to the run, the tool, and the
   input hash ([decision 0005](decisions/0005-approval-gates.md)).
-- Approvals come from the operator: through the SDK, a terminal prompt, or the hosted approval page
+- Approvals come from the operator: through the SDK, a terminal prompt, or the approval page
   ([decision 0014](decisions/0014-approvals-in-the-client.md)). A model can never grant one. Standing approval
   (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`) is empty by default, and each use is recorded.
 - Programs run through `run_command`. The one exception to its scrubbed environment is App Factory's approved
@@ -364,7 +364,6 @@ See [security.md](security.md) for details.
 | Library | `uv add` into a project; the SDK in a notebook or script |
 | Local server | `qaos serve`, launched by the client over stdio |
 | Team server | A Docker image running `qaos serve --http` over SQLite, or PostgreSQL with a read-only role ([deployment.md](deployment.md)) |
-| Many customers | `qaos hosted` ([hosted.md](hosted.md)) |
 
 ## Extending it
 

@@ -25,7 +25,7 @@ strict types are clean. The last tag is v0.2.0, and P3 to P6 of the simplificati
 | Audit fields, in the firm's own systems | Partial. Principal, tool version, input hash, and data versions are recorded; `qaos runs` only lists and shows | `quant_agent_os/cli.py:155` | S5 |
 | Data retention | **Missing.** Runs are kept forever, and they can hold retrieved passages | No prune or retention code in `runs/` | S5 |
 | Security boundaries and responsibilities | Partial. Thorough on controls, with no responsibility split or data classification | `docs/security.md`, `docs/security-review.md` | S6 |
-| Sign-in through the firm's identity provider | Exists, behind `qaos hosted` only | `quant_platform/hosted/oauth.py`, decision 0017 | Conditional, see below |
+| Sign-in through the firm's identity provider | Exists as a library, served by no command | `quant_platform/identity/oauth.py`, decision 0023 | Conditional, see below |
 
 Already enough, with no work planned: typed contracts, bounded execution, MCP, REST, SDK, read-only
 defaults, evidence labels, performance and drawdown metrics, volatility decomposition, factor
@@ -47,13 +47,13 @@ exposures, and read-only PostgreSQL.
 - **Per-document access to the corpus.** Decision 0013 chose separate stores because a missed filter in
   full-text, vector, or graph search is a leak. A firm that needs this runs one server per corpus, and S6
   says so.
-- **New hosted, tenant, or App Factory features.** The code stays and gets no new work.
+- **New tenant features.** Decision 0023 removed the multi-tenant server. App Factory work resumed with decision 0022.
 - **Licence-key enforcement in code.** Terms belong in a contract. A check in an MIT or source-available
   codebase is removable, and it would be one more thing to fail on a customer's server.
 
-**Conditional stage: OAuth without tenants.** A pilot can run `qaos hosted serve` with a one-tenant file,
-so the split waits until a partner asks, as decision 0017 says. If the first pilot's client needs a
-sign-in connector, schedule it right after S2, which defines the caller it maps onto.
+**Conditional stage: OAuth sign-in.** The token checks are in `quant_platform.identity`, served by no command (decision
+0023). If the first pilot's client needs a sign-in connector, wiring them into `qaos serve` comes right after S2, which
+defines the caller it maps onto, and it needs the owner's approval as a security change.
 
 ## How to deliver it
 

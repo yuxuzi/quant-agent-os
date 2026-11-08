@@ -55,16 +55,6 @@ def warn_about_open_access(catalog: Catalog, ring: KeyRing) -> None:
         )
 
 
-def warn_about_inert_groups(ring: KeyRing) -> None:
-    """Warn that key groups restrict nothing on a server that applies no access policy."""
-    if any(key.groups for key in ring.enabled()):
-        errors.print(
-            "[yellow]warning:[/yellow] some keys name groups, but this server applies no access "
-            "policy, so groups do nothing and every key reaches its tenant's tools and datasets. "
-            "Use `qaos serve --http --access` for per-caller access."
-        )
-
-
 def _applies(access: AccessPolicy, path: Path) -> bool:
     """Return whether ``access`` is the rules of the access file at ``path``."""
     return isinstance(access, FileAccessPolicy) and access.path.resolve() == path.resolve()

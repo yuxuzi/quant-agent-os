@@ -90,8 +90,8 @@ The platform is software you run. It has no service of ours behind it, so nothin
   an operator gave that permission a standing approval with `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`, which is empty by
   default and recorded on each use.
 - **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
-- **`qaos hosted serve` has no per-caller access.** It refuses to start with an access file configured, and OAuth
-  tokens carry no groups.
+- **No sign-in through an identity provider yet.** OAuth token checks exist in `quant_platform.identity`, but no
+  command serves them, and tokens carry no groups.
 - **Nothing limits unauthenticated requests.** That is the proxy's job.
 
 ## Defaults
@@ -156,7 +156,7 @@ in memory unless it is given a run store. What each part of a record holds:
 - **Usage events.** One per recorded call, written in the same transaction
   ([decision 0015](decisions/0015-metering-quotas-and-entitlements.md)). They hold the tenant,
   principal, tool, status, duration, and the sizes of the arguments and output, never their
-  content. `qaos hosted usage export` reads them; it is an operator command, not a tool.
+  content. No tool reads them.
 - **Store failures.** If the run store cannot be opened, serving continues unrecorded with a
   warning, and a failed write is logged. Losing an answer the tool already produced would not
   make the record more complete.
@@ -194,7 +194,7 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
 at `/mcp` beside the REST routes, with the same keys, policy, and run store:
 - **Every MCP request needs an API key.** A missing or unknown key gets 401 with
   `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, which
-  is also how `qaos hosted serve` checks OAuth tokens.
+  is also how OAuth tokens would be checked.
 - **Each method checks the key's scope.** Listing tools, resource templates, and prompts, and
   getting a prompt, need `tools:list`; calling a tool and reading a resource (which calls a
   tool) need `tools:call`. There are no new scopes, and no MCP method can approve a call.
@@ -204,9 +204,8 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   `Host` or `Origin`; browsers on other origins are refused.
 - **Audited.** Each call or read is a run with actor `mcp-http` and the key's principal.
 - **Same limits as REST.** It binds loopback by default, caps bodies at 5 MiB, has no CORS, and
-  never logs or echoes a key (contract test). A tenant's plan can limit its calls (see
-  below), but nothing limits unauthenticated requests, so still put a rate-limiting proxy in
-  front of any non-loopback deployment.
+  never logs or echoes a key (contract test). Nothing limits a key's call rate or unauthenticated
+  requests, so put a rate-limiting proxy in front of any non-loopback deployment.
 
 ## Per-caller access
 
@@ -220,38 +219,25 @@ configured, and then it denies what is not listed. How to use it, and what it do
   access file that has become missing or invalid.
 - A refused dataset cannot be told from a missing one, and no output names what the caller may not reach. The
   refusal is on the call's record and audit event, which callers do not receive.
-- Configurations that would silently not apply are called out. `qaos hosted serve` will not start with an access file
-  configured, and warns at start-up when keys name groups, which it never applies. On `serve_http`, keys with groups
-  and no access policy, a configured access file with no access policy, or a catalog whose policy is not the configured
-  file each draw a warning at start-up, and `qaos doctor` reports groups with no access file.
+- Configurations that would silently not apply are called out. On `serve_http`, keys with groups and no access policy,
+  a configured access file with no access policy, or a catalog whose policy is not the configured file each draw a
+  warning at start-up, and `qaos doctor` reports groups with no access file.
 - `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
 
-## Tenants and OAuth
+## OAuth
 
-[Decision 0013](decisions/0013-identity-and-tenancy.md). One server can serve several tenants
-(`qaos hosted serve --tenants FILE`):
-- **The tenant comes from the credential only.** An API key's entry names its tenant
-  (`qaos keys new --tenant`), and an OAuth token's tenant claim does. No argument, header, path,
-  or resource URI names a tenant, so a guessed URI resolves inside the caller's own tenant.
-- **Each tenant has its own data.** Its knowledge store is its own PostgreSQL schema
-  (`qr_<tenant>`) or SQLite file, its datasets are its own directory, and its toolsets and
-  permissions are its own. Runs share one store, and every read is filtered by tenant. An
-  unknown or disabled tenant reaches nothing (403).
-- **OAuth tokens are checked by introspection** at an authorization server listed in the
-  tenants file. A token is accepted only if it is active and unexpired, its audience is this
-  server's `--resource-url`, and its tenant claim names a tenant pinned to its issuer. A token
-  is never sent to a server that could not have issued it: a JWT's unverified `iss` only
-  chooses which configured server to ask, and an opaque token needs exactly one configured
-  server. API keys are never introspected. Introspection secrets come from environment
-  variables that the file names; results are cached for at most 60 seconds, and a failed check
-  refuses the token without logging it.
-- **Introspection is bounded**, because anyone can send a token. A provider's refusal is
-  cached for 30 seconds, and each provider is asked at most 600 times a minute and 8 times at
-  once; beyond that tokens are refused without asking, with one warning a minute. The
-  reverse proxy's limit on unauthenticated requests stays the first defence.
-- **Isolation is a release gate.** `tests/server/test_platform_tenants.py` runs
-  two tenants with different corpora and datasets on one server and checks that neither can
-  reach the other's passages, datasets, or runs by any tool, URI, or route.
+`quant_platform.identity.oauth` checks tokens from a firm's identity provider by introspection
+([decision 0013](decisions/0013-identity-and-tenancy.md)). No command serves it yet; a firm's own server can,
+through `build_http_app` ([decision 0023](decisions/0023-no-hosted-service.md)). Each firm runs its own installation, so there are no tenants to
+separate.
+- **Tokens are checked by introspection** at a configured authorization server. A token is accepted only if it
+  is active and unexpired, its audience is this server, and its issuer is pinned. A token is never sent to a
+  server that could not have issued it: a JWT's unverified `iss` only chooses which configured server to ask,
+  and an opaque token needs exactly one configured server. API keys are never introspected. Results are cached
+  for at most 60 seconds, and a failed check refuses the token without logging it.
+- **Introspection is bounded**, because anyone can send a token. A provider's refusal is cached for 30 seconds,
+  and each provider is asked at most 600 times a minute and 8 times at once; beyond that tokens are refused
+  without asking. The reverse proxy's limit on unauthenticated requests stays the first defence.
 
 ## PostgreSQL knowledge store
 
@@ -281,21 +267,14 @@ The operator's `ingest`, `keys`, `backup`, and `restore` commands run with no ne
 data files, key files, and secret-looking environment variables on every pull request, and that `doctor`'s output, which
 goes in support tickets, holds no secrets.
 
-## Plans and limits
+## Call limits
 
-[Decision 0015](decisions/0015-metering-quotas-and-entitlements.md). A tenant's plan bounds its
-toolsets, calls a minute, billable calls a month, and output size:
-- **Entitlement is composition.** Out-of-plan tools are never registered for the tenant, so
-  they are neither listed nor callable (`unknown_tool`). A tenant can narrow its plan, never
-  widen it; the server refuses such a tenants file at start-up.
-- **Checked before the call.** The executor admits a call only after its permissions and input
-  are valid, and before an approval is used or the tool runs. A refusal (`quota_exceeded`)
-  starts nothing and uses no approval; an approved call refused this way stays approved.
-- **Approximate by design.** The rate limit is per server process. The monthly count is read
-  from the run store every 30 seconds and counted locally in between, so concurrent calls can
-  overshoot by the calls in flight.
-- **Unauthenticated traffic is not covered.** Plans limit tenants, not anonymous requests;
-  keep a rate-limiting proxy in front of a public endpoint.
+No command limits a key's calls a minute or a month: plans went with the hosted service
+([decision 0023](decisions/0023-no-hosted-service.md)). Each call is still bounded in time, output
+size, and concurrency (see [defaults](#defaults)). Limit request rates in the reverse proxy, which
+also covers unauthenticated requests. A firm's own server can pass the executor a usage gate
+(`ToolExecutor(usage=...)`, [decision 0015](decisions/0015-metering-quotas-and-entitlements.md)),
+which refuses a call over its limits with `quota_exceeded` before any approval is used.
 
 ## Approvals for consequential permissions
 
@@ -311,7 +290,8 @@ toolsets, calls a minute, billable calls a month, and output size:
     confirming `qaos app create`.
   - Models, MCP clients, and REST clients can never create approvals.
 - **Approving without leaving the client** ([decision 0014](decisions/0014-approvals-in-the-client.md)):
-  - **Over HTTP** (`hosted serve --http --approval-url`), a waiting call opens an approval request,
+  - **Over HTTP**, on a firm's own server that adds the approval page from `quant_platform.identity`, a
+    waiting call opens an approval request,
     and the client is sent to `/approve/<id>` (MCP URL elicitation). The request is bound to
     the tenant, run, tool, input hash, and requester; its id has 128 random bits; it expires
     after 15 minutes and is decided once.
@@ -373,7 +353,7 @@ reaches the generated files.
 - unrestricted code execution;
 - high-impact external actions.
 
-A public, multi-tenant endpoint needs [these steps](security-review.md#before-a-public-endpoint) first.
+A public endpoint needs [these steps](security-review.md#before-a-public-endpoint) first.
 
 ## Reporting a vulnerability
 
