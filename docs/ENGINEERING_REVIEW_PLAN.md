@@ -22,7 +22,7 @@ The current plan is [0.3.0, ready for a first pilot](plans/pilot-ready-release.m
 ## Waiting for a named design partner
 
 Not started, and each needs a user asking for it: `run_backtest` as a platform tool, market-data
-connectors, an LLM extractor, `.ipynb` or `.docx` loaders, SSO separate from `qaos hosted`, and any model
+connectors, an LLM extractor, `.ipynb` or `.docx` loaders, serving OAuth sign-in from `qaos serve`, and any model
 provider. Decision 0016 closes server-side synthesis, spec drafting, and code generation (B-12, B-15, B-16,
 and B-20) until then.
 
@@ -36,5 +36,5 @@ Question numbers are the ones used in the earlier plan.
 - **O-12:** Will pytemplate-uv's roadmap include generic pack authoring that `template fork` can delegate
   to? That is tracked in pytemplate-uv's repository.
 
-A firm with Okta or similar will likely want OAuth without tenants. If the first partner asks, split OAuth
-from `qaos hosted` then.
+A firm with Okta or similar will likely want OAuth sign-in on `qaos serve`. The token checks are in
+`quant_platform.identity`; wiring them in is a security change to decide when the first partner asks.

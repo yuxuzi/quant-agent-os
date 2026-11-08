@@ -22,6 +22,7 @@ from pydantic import AnyUrl, BaseModel
 from typer.testing import CliRunner
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, load_keys
+from quant_agent_os.config import get_settings
 from quant_agent_os.data import (
     DirectoryDatasetStore,
     GuardedDatasetStore,
@@ -39,9 +40,10 @@ from quant_agent_os.tools import (
     tool,
 )
 from quant_agent_os.tools.access import acting_as
-from quant_platform import compose, serve_stdio
+from quant_platform import Catalog, compose, serve_http, serve_stdio
 from quant_platform.cli import app as cli
 from quant_platform.http import build_http_app, single_tenant
+from quant_platform.serve import warn_about_open_access
 from quant_research import ResearchApp
 
 pytest.importorskip("empyrical")
@@ -553,6 +555,85 @@ def test_without_an_access_policy_every_key_reaches_everything_as_before(
     assert "analyze_performance" in listed(open_server, "carol")[0]
     result = call(open_server, "carol", "rest", "analyze_performance", returns("value-fund"))
     assert result["status"] == "ok"
+
+
+@pytest.fixture
+def start_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> Callable[[Catalog, Path], str]:
+    """Run `serve_http` up to listening, and return what it printed: the start-up warnings."""
+    monkeypatch.setattr("quant_platform.serve.run_http", lambda *args, **kwargs: None)
+
+    def start(catalog: Catalog, keys: Path) -> str:
+        serve_http(catalog, keys=keys, runs=tmp_path / "runs.db")
+        return " ".join(capsys.readouterr().err.split())
+
+    return start
+
+
+def test_groups_with_no_access_file_are_called_out(
+    tmp_path: Path, rules: Path, start_up: Callable[[Catalog, Path], str]
+) -> None:
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+    open_catalog = compose(policy=PermissionPolicy())
+
+    assert "warning" not in start_up(open_catalog, keys)
+
+    add_key(keys, "desk", SCOPES, groups=["growth"])
+    assert "groups do nothing" in start_up(open_catalog, keys)
+
+    guarded = compose(policy=PermissionPolicy(), access=FileAccessPolicy(rules))
+    assert "warning" not in start_up(guarded, keys)
+
+
+def test_an_access_file_the_catalog_ignores_is_called_out(
+    tmp_path: Path,
+    rules: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    start_up: Callable[[Catalog, Path], str],
+) -> None:
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
+    get_settings.cache_clear()
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+
+    assert "no access policy" in start_up(compose(policy=PermissionPolicy()), keys)
+    applied = compose(policy=PermissionPolicy(), access=FileAccessPolicy(rules))
+    assert "warning" not in start_up(applied, keys)
+    get_settings.cache_clear()
+
+
+def test_an_access_file_another_policy_overrides_is_called_out(
+    tmp_path: Path,
+    rules: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    start_up: Callable[[Catalog, Path], str],
+) -> None:
+    """A custom server whose catalog has its own policy must not seem to apply the file."""
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
+    get_settings.cache_clear()
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+    other = tmp_path / "other.toml"
+    other.write_text(rules.read_text("utf-8"), "utf-8")
+
+    overridden = compose(policy=PermissionPolicy(), access=FileAccessPolicy(other))
+    assert "its rules do not apply" in start_up(overridden, keys)
+    get_settings.cache_clear()
+
+
+def test_the_warning_reads_the_keys_already_loaded(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A keys file that breaks after loading must not stop the server from starting."""
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "desk", SCOPES, groups=["growth"])
+    ring = KeyRing.from_file(keys)
+    keys.write_text("not toml [", "utf-8")
+
+    warn_about_open_access(compose(policy=PermissionPolicy()), ring)  # raises nothing
+    assert "Traceback" not in capsys.readouterr().err
 
 
 def test_stdio_refuses_a_catalog_with_an_access_policy(rules: Path) -> None:

@@ -46,7 +46,7 @@ def build_http_app(
     REST takes API keys; MCP takes ``verifier``'s credentials (API keys by default, or OAuth
     tokens too), and ``metadata_routes`` publish the OAuth Protected Resource Metadata that
     ``resource_metadata_url`` points to. ``gate_for`` and ``extra_routes`` are for
-    `quant_platform.hosted`: its approval gate, and the page that decides. Raises `ValueError`
+    `quant_platform.identity`: its approval gate, and the page that decides. Raises `ValueError`
     without an enabled key.
     """
     app = build_app(None, keys, None, title="quant-agent-os", tenancy=tenancy)

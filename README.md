@@ -1,18 +1,27 @@
 # quant-agent-os
 
-**Quant-Agent-OS** gives AI clients such as Claude, Copilot, and Cursor quantitative research tools
-with cited, computed evidence. It is not a chatbot and calls no model: your client does the
-conversation, and the tools reach it over MCP, REST, and a Python SDK. You bring your own documents
-and data.
+**Quant-Agent-OS** connects AI clients such as Claude, Copilot, and Cursor to a firm's own Python tools, research,
+and data, on a server the firm runs. It decides who reaches what, bounds every call, and records it. It is not a chatbot
+and calls no model: your client does the conversation, and the tools reach it over MCP, REST, and a Python SDK.
 
-- **Quant Research:** cited keyword search with entity linking and a small graph of extracted facts,
-  plus optional semantic search, over your own notes and papers.
+- **Your own tools.** [Serve your Python functions](docs/deployment.md#8-add-your-own-tools) beside the platform's, with
+  the same validation, limits, and recording.
+- **Your own research.** Cited keyword search with entity linking and a small graph of extracted facts, plus optional
+  semantic search, over your notes and papers.
   [What it measures on real papers](docs/products/quant-research.md#how-well-it-works).
-- **Quant Analytics:** performance and risk metrics with stated conventions, computed on your
-  datasets by reference, so numbers do not travel through the model.
-- **Quant App Factory:** generates tested Python projects you can change, including one for each stage of a fund's
-  work (alpha research, strategy backtest, risk monitor, performance report), off by default on the
-  server. It uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder.
+- **Your own data, by reference.** Performance and risk metrics with stated conventions, computed on your datasets, so
+  input series do not travel through the model.
+- **Under your control.** [Per-caller access](docs/deployment.md#9-decide-who-reaches-what) to tools and datasets, read-only
+  by default, an audit trail you can [export](docs/operations.md#retention-and-export), and
+  [agreed test cases](docs/operations.md#check-it-against-agreed-cases) to accept a deployment against.
+
+**What you operate.** You run the server, in Docker, with TLS and rate limits in your own proxy. You decide who holds a key,
+keep the backups, and apply upgrades, and [operations](docs/operations.md) covers how. Results go to the client you connect,
+and so to its model. [Who is responsible for what](docs/security.md#who-is-responsible-for-what) sets it out, with what this
+does not protect against.
+
+**See it working:** [getting started](docs/getting-started.md#see-it-all-together) ends with the Portfolio Intelligence
+demonstration, which runs one fictional firm's portfolio research and risk analysis, end to end, with no model or network.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is
 > alpha research software (0.2.0), not investment advice.
@@ -48,8 +57,14 @@ AI client or your code ─▶ MCP · REST · SDK ─▶ ToolExecutor ─▶ regi
 
 The platform has no planner ([decision 0016](docs/decisions/0016-clients-orchestrate.md)). Every
 interface reaches the same executor, so every caller gets identical validation and limits. The server
-is read-only by default, writes nothing to the store, and sends nothing off the machine unless you
-choose a hosted embedder. Each call is recorded (`qaos runs`).
+is read-only by default and writes nothing to the store. Beyond what it returns to your client, it sends nothing off the
+machine unless you choose a hosted embedder. Each call is recorded (`qaos runs`).
+
+## Also included
+
+**Quant App Factory** generates tested Python projects from a small spec, including one you can change for each stage of a
+fund's work: alpha research, strategy backtest, risk monitor, and performance report. It is optional, and off by default on
+the server. It uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder.
 
 ## Define a tool
 
@@ -85,10 +100,10 @@ src/quant_agent_os/      core: tool contract, executor, evidence, runs, MCP, RES
 src/quant_research/      Quant Research
 src/quant_analytics/     Quant Analytics
 src/quant_app_factory/   Quant App Factory and its template packs
-src/quant_platform/      `qaos`, one server for every toolset, and the hosted command group
+src/quant_platform/      `qaos`, one server for every toolset, sign-in, and approvals
 skills/                  instruction-only skills; clients/: Cursor and VS Code bundles
 .claude-plugin/          Claude Code plugin and marketplace manifests
-deploy/                  team-server Dockerfile, compose files, and smoke test
+deploy/                  team-server Dockerfile, compose files, smoke test, and upgrade drill
 examples/  scripts/  tests/  docs/
 ```
 
@@ -99,8 +114,7 @@ examples/  scripts/  tests/  docs/
   [Quant Analytics](docs/products/quant-analytics.md),
   [Quant App Factory](docs/products/quant-app-factory.md)
 - [Configuration](docs/configuration.md), [security](docs/security.md), and a
-  [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md);
-  [hosting many customers](docs/hosted.md)
+  [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md)
 - [Architecture](docs/architecture.md), [decisions](docs/decisions/), and
   [open backlog](docs/ENGINEERING_REVIEW_PLAN.md)
 - [Tools changelog](docs/tools-changelog.md) and [releasing](docs/releasing.md)

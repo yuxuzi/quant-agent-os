@@ -20,8 +20,8 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 from quant_agent_os.runs.models import ApprovalRequest
-from quant_platform.hosted.approval_desk import ApprovalDesk, DecisionError
-from quant_platform.hosted.limits import TokenBucket
+from quant_platform.identity.approval_desk import ApprovalDesk, DecisionError
+from quant_platform.identity.rate import TokenBucket
 
 if TYPE_CHECKING:
     from starlette.routing import Route

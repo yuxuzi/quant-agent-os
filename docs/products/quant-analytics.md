@@ -1,7 +1,7 @@
 # Quant Analytics
 
 **Quant Analytics** holds performance and risk metrics with documented conventions, and
-registers them as Quant-Agent-OS tools. It imports no LLM library. The performance formulas
+registers them as Quant-Agent-OS tools, so a portfolio workflow can compute them on a firm's own datasets by reference. It imports no LLM library. The performance formulas
 are empyrical-reloaded's ([decision 0010](../decisions/0010-analytics-on-empyrical.md)).
 
 - `quant_analytics.metrics`: plain functions on empyrical. They cover annualised return and

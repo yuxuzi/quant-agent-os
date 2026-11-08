@@ -18,9 +18,9 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.tools import PermissionPolicy
 from quant_platform import compose
 from quant_platform.cli import app as cli
-from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
-from quant_platform.hosted.approval_page import approval_routes
 from quant_platform.http import build_http_app, single_tenant
+from quant_platform.identity.approval_desk import ApprovalDesk, approval_gates
+from quant_platform.identity.approval_page import approval_routes
 from quant_research import ResearchApp
 
 BASE = "http://127.0.0.1:8000"

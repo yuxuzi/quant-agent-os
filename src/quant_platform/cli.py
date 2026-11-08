@@ -31,7 +31,6 @@ from quant_platform.cli_common import (
     parse_toolsets,
 )
 from quant_platform.composition import DEFAULT_TOOLSETS
-from quant_platform.hosted.cli import hosted_app
 from quant_platform.onboarding import connect, doctor, init
 from quant_platform.serve import serve_http, serve_stdio
 from quant_research.cli import EmbedderOption, ModelOption
@@ -45,7 +44,6 @@ app.add_typer(research_app)
 app.add_typer(data_app, name="data")
 app.add_typer(keys_app, name="keys")
 app.add_typer(factory_app, name="app", help="App Factory: generate tested Python applications.")
-app.add_typer(hosted_app, name="hosted")
 app.add_typer(runs_app, name="runs")
 app.command()(connect)
 app.command()(doctor)
@@ -226,9 +224,8 @@ def serve(
     stdout carries the protocol. With --http, it serves MCP at /mcp and REST at /v1 to callers
     with a key from `qaos keys new`. Every call is recorded with the key's principal, and the
     server does not start without a key or a run store. Put TLS and rate limiting in a reverse
-    proxy before binding anything but loopback (decision 0012). Serving many tenants is `qaos
-    hosted serve`. The research store opens read-only. Permissions come from
-    QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default).
+    proxy before binding anything but loopback (decision 0012). The research store opens
+    read-only. Permissions come from QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default).
     """
     if http:
         if not record:
