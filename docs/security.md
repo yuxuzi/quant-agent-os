@@ -204,9 +204,8 @@ at `/mcp` beside the REST routes, with the same keys, policy, and run store:
   `Host` or `Origin`; browsers on other origins are refused.
 - **Audited.** Each call or read is a run with actor `mcp-http` and the key's principal.
 - **Same limits as REST.** It binds loopback by default, caps bodies at 5 MiB, has no CORS, and
-  never logs or echoes a key (contract test). A tenant's plan can limit its calls (see
-  below), but nothing limits unauthenticated requests, so still put a rate-limiting proxy in
-  front of any non-loopback deployment.
+  never logs or echoes a key (contract test). Nothing limits a key's call rate or unauthenticated
+  requests, so put a rate-limiting proxy in front of any non-loopback deployment.
 
 ## Per-caller access
 
@@ -268,21 +267,14 @@ The operator's `ingest`, `keys`, `backup`, and `restore` commands run with no ne
 data files, key files, and secret-looking environment variables on every pull request, and that `doctor`'s output, which
 goes in support tickets, holds no secrets.
 
-## Plans and limits
+## Call limits
 
-[Decision 0015](decisions/0015-metering-quotas-and-entitlements.md). A tenant's plan bounds its
-toolsets, calls a minute, billable calls a month, and output size:
-- **Entitlement is composition.** Out-of-plan tools are never registered for the tenant, so
-  they are neither listed nor callable (`unknown_tool`). A tenant can narrow its plan, never
-  widen it; the server refuses such a tenants file at start-up.
-- **Checked before the call.** The executor admits a call only after its permissions and input
-  are valid, and before an approval is used or the tool runs. A refusal (`quota_exceeded`)
-  starts nothing and uses no approval; an approved call refused this way stays approved.
-- **Approximate by design.** The rate limit is per server process. The monthly count is read
-  from the run store every 30 seconds and counted locally in between, so concurrent calls can
-  overshoot by the calls in flight.
-- **Unauthenticated traffic is not covered.** Plans limit tenants, not anonymous requests;
-  keep a rate-limiting proxy in front of a public endpoint.
+No command limits a key's calls a minute or a month: plans went with the hosted service
+([decision 0023](decisions/0023-no-hosted-service.md)). Each call is still bounded in time, output
+size, and concurrency (see [defaults](#defaults)). Limit request rates in the reverse proxy, which
+also covers unauthenticated requests. A firm's own server can pass the executor a usage gate
+(`ToolExecutor(usage=...)`, [decision 0015](decisions/0015-metering-quotas-and-entitlements.md)),
+which refuses a call over its limits with `quota_exceeded` before any approval is used.
 
 ## Approvals for consequential permissions
 
@@ -361,7 +353,7 @@ reaches the generated files.
 - unrestricted code execution;
 - high-impact external actions.
 
-A public, multi-tenant endpoint needs [these steps](security-review.md#before-a-public-endpoint) first.
+A public endpoint needs [these steps](security-review.md#before-a-public-endpoint) first.
 
 ## Reporting a vulnerability
 

@@ -514,9 +514,7 @@ flowchart TD
     C -->|No| C1["denied"]
     C -->|Yes| D{"Input matches<br/>the schema?"}
     D -->|No| D1["invalid_input"]
-    D -->|Yes| E{"Within the<br/>plan's quota?"}
-    E -->|No| E1["quota_exceeded"]
-    E -->|Yes| F{"Consequential<br/>permission?"}
+    D -->|Yes| F{"Consequential<br/>permission?"}
     F -->|No| H["Run the tool,<br/>with a time limit"]
     F -->|Yes| G{"Unused approval for<br/>this exact call?"}
     G -->|No| G1["approval_required:<br/>the run waits"]
