@@ -1,4 +1,4 @@
-"""Plan limits (B-36 P7.2, decision 0015): checked before a call starts, never during it."""
+"""The usage gate (decision 0015): a refusal happens before a call starts, never during it."""
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -20,9 +20,6 @@ from quant_agent_os.runtime import (
 )
 from quant_agent_os.runtime.executor import FAILURE_HINTS, canonical_sha256
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
-from quant_platform.hosted.limits import PlanLimits, TokenBucket, month_window
-
-NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 
 
 class Value(BaseModel):
@@ -53,14 +50,6 @@ def text(params: Value) -> Text:
     return Text(text="x" * params.value)
 
 
-class Clock:
-    def __init__(self) -> None:
-        self.at = 0.0
-
-    def __call__(self) -> float:
-        return self.at
-
-
 class Gate:
     """Admits ``allowed`` calls, then refuses; records what it was asked."""
 
@@ -73,92 +62,6 @@ class Gate:
         if len(self.asked) > self.allowed:
             return Refusal("Tenant acme is over its 1 calls a minute; retry in 42 s.", 42)
         return None
-
-
-def test_a_token_bucket_allows_bursts_up_to_its_rate_then_refills() -> None:
-    clock = Clock()
-    bucket = TokenBucket(2, clock=clock)
-
-    assert [bucket.take(), bucket.take()] == [0.0, 0.0]
-    assert bucket.take() == pytest.approx(30.0)
-    clock.at = 30.0
-    assert bucket.take() == 0.0
-    with pytest.raises(ValueError, match="at least one call"):
-        TokenBucket(0)
-
-
-def test_a_month_window_is_a_half_open_utc_calendar_month() -> None:
-    assert month_window(NOW) == (
-        datetime(2026, 11, 1, tzinfo=UTC),
-        datetime(2026, 12, 1, tzinfo=UTC),
-    )
-    assert month_window(datetime(2026, 12, 31, 23, 59, tzinfo=UTC))[1] == datetime(
-        2027, 1, 1, tzinfo=UTC
-    )
-
-
-def test_the_monthly_quota_counts_billable_calls_and_says_when_it_resets() -> None:
-    counted: list[tuple[datetime, datetime]] = []
-
-    def count(start: datetime, end: datetime) -> int:
-        counted.append((start, end))
-        return 2
-
-    limits = PlanLimits("acme", monthly_calls=3, count_billable=count, now=lambda: NOW)
-
-    assert limits.admit("double") is None
-    refusal = limits.admit("double")
-
-    assert refusal is not None
-    assert refusal.message == (
-        "Tenant acme used its 3 calls for November 2026; the quota resets 2026-12-01T00:00Z."
-    )
-    assert refusal.retry_after_seconds == int(
-        (datetime(2026, 12, 1, tzinfo=UTC) - NOW).total_seconds()
-    )
-    assert counted == [month_window(NOW)]  # read once, then counted locally
-
-
-def test_the_monthly_count_is_reread_after_the_refresh_and_in_a_new_month() -> None:
-    clock, now, used = Clock(), [NOW], [5]
-    limits = PlanLimits(
-        "acme",
-        monthly_calls=5,
-        count_billable=lambda start, end: used[0],
-        refresh_seconds=30,
-        now=lambda: now[0],
-        clock=clock,
-    )
-
-    assert limits.admit("double") is not None
-    used[0] = 4  # a refused or non-billable call left the shared count lower
-    assert limits.admit("double") is not None  # still the cached count
-    clock.at = 30.0
-    assert limits.admit("double") is None
-    now[0], used[0] = datetime(2026, 12, 1, tzinfo=UTC), 0
-    assert limits.admit("double") is None
-
-
-def test_a_rate_refusal_does_not_use_the_monthly_quota() -> None:
-    clock = Clock()
-    limits = PlanLimits(
-        "acme",
-        calls_per_minute=1,
-        monthly_calls=2,
-        count_billable=lambda start, end: 0,
-        now=lambda: NOW,
-        clock=clock,
-    )
-
-    assert limits.admit("double") is None
-    refused = limits.admit("double")
-    clock.at = 60.0
-    admitted = limits.admit("double")
-
-    assert refused == Refusal("Tenant acme is over its 1 calls a minute; retry in 60 s.", 60)
-    assert admitted is None  # the refused call did not count toward the 2 a month
-    with pytest.raises(ValueError, match="counter"):
-        PlanLimits("acme", monthly_calls=1)
 
 
 def test_a_refused_call_never_starts_and_keeps_its_approval() -> None:
@@ -230,7 +133,8 @@ def test_stores_count_a_tenants_billable_calls_in_a_window(store: RunStore) -> N
         RunRecorder(store, tenant=tenant).call(
             executor, ToolCall(tool="double", arguments={"value": value})
         )
-    start, end = month_window(datetime.now(UTC))
+    start = datetime.now(UTC) - timedelta(days=1)
+    end = start + timedelta(days=2)
 
     assert store.count_billable("acme", start, end) == 2  # invalid input is not billable
     assert store.count_billable("beta", start, end) == 1

@@ -2,8 +2,8 @@
 
 The executor asks its `UsageGate` to admit each call after the call's permissions and input are
 checked and before any approval is used or the tool runs. A refusal becomes a ``quota_exceeded``
-record with the seconds to wait. A self-hosted server has no gate; `quant_platform.hosted`
-implements one with plans (decision 0015).
+record with the seconds to wait. The platform's servers have no gate (decision 0023); the hook
+remains for a firm's own server.
 """
 
 from __future__ import annotations

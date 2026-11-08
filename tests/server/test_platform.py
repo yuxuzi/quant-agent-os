@@ -228,16 +228,23 @@ def test_app_factory_is_served_only_when_asked_for() -> None:
     assert parse_toolsets("research,factory") == ["research", "factory"]
 
 
-def test_the_default_commands_never_load_the_hosted_modules() -> None:
-    """Tenants, plans, OAuth, and the approval page stay off a self-hosted firm's path."""
+def test_the_default_commands_never_load_sign_in_or_approvals() -> None:
+    """OAuth and the approval page stay off the default path (decision 0023)."""
     code = (
         "import sys, quant_platform.cli\n"
-        "names = [n for n in sys.modules if n.startswith('quant_platform.hosted.')]\n"
+        "names = [n for n in sys.modules if n.startswith('quant_platform.identity')]\n"
         "print(sorted(names))"
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
 
-    assert done.stdout.strip() == "['quant_platform.hosted.cli']"
+    assert done.stdout.strip() == "[]"
+
+
+def test_there_is_no_hosted_command() -> None:
+    shown = CliRunner(env={"COLUMNS": "200"}).invoke(platform_cli.app, ["--help"])
+
+    assert shown.exit_code == 0
+    assert "hosted" not in shown.output
 
 
 def test_the_default_server_takes_no_hosted_options() -> None:

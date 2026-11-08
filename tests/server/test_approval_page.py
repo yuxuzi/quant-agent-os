@@ -27,8 +27,8 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.runtime import Refusal, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
-from quant_platform.hosted.approval_desk import ApprovalDesk, approval_gates
-from quant_platform.hosted.approval_page import approval_routes
+from quant_platform.identity.approval_desk import ApprovalDesk, approval_gates
+from quant_platform.identity.approval_page import approval_routes
 
 BASE = "http://127.0.0.1:8000"
 WRITES: list[str] = []

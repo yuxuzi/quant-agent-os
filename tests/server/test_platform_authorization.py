@@ -590,22 +590,6 @@ def test_an_access_file_the_catalog_ignores_is_called_out(
     get_settings.cache_clear()
 
 
-def test_hosted_serve_refuses_an_access_file_it_would_ignore(
-    tmp_path: Path, rules: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """It would otherwise start, and give every key everything the operator meant to restrict."""
-    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
-    get_settings.cache_clear()
-    keys = tmp_path / "keys.toml"
-    add_key(keys, "plain", SCOPES)
-
-    result = CliRunner().invoke(cli, ["hosted", "serve", "--keys", str(keys)])
-
-    assert result.exit_code == 2
-    assert "does not apply" in " ".join(result.output.split())
-    get_settings.cache_clear()
-
-
 def test_stdio_refuses_a_catalog_with_an_access_policy(rules: Path) -> None:
     catalog = compose(policy=PermissionPolicy(), access=FileAccessPolicy(rules))
 
