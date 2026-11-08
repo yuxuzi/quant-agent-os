@@ -1,0 +1,39 @@
+name: Upgrade drill
+
+# Upgrades from a real tagged release and rolls back, on both stores (docs/operations.md). It builds two
+# images per store, so it runs when something it proves could change, not on every pull request: the
+# build, the keys and settings it reads, the stored runs, corpus, and datasets, and the answers it compares.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/upgrade-drill.yml"
+      - ".dockerignore"
+      - "deploy/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/quant_agent_os/api/**"
+      - "src/quant_agent_os/config/**"
+      - "src/quant_agent_os/data/**"
+      - "src/quant_agent_os/runs/**"
+      - "src/quant_agent_os/runtime/executor.py"
+      - "src/quant_research/domain/**"
+      - "src/quant_research/infrastructure/**"
+      - "src/quant_analytics/metrics.py"
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [sqlite, postgres]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: deploy/upgrade-test.sh ${{ matrix.store }}

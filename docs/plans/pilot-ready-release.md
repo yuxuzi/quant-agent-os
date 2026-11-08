@@ -149,10 +149,10 @@ datasets, a few synthetic research notes, one firm tool from S1, and two users f
 
 The default compose file drops the `usage` service: usage export stays a hosted feature, and S5.4 gives a firm its
 audit export. `deploy/smoke-test.sh` proves `doctor`, backup, and restore on every pull request. `deploy/upgrade-test.sh`
-runs by hand until CI adds it.
+runs in its own workflow, on release tags and on pull requests that change the deploy files or the stores.
 
 **Exit:** someone following only `deployment.md` and `operations.md` installs on a clean machine with both
-variants, then upgrades and rolls back, with no undocumented step. Note where they got stuck and fix the doc. Adding the drill to CI needs asking.
+variants, then upgrades and rolls back, with no undocumented step. Note where they got stuck and fix the doc.
 
 ## S5: Acceptance evaluation and audit export (M)
 
