@@ -20,6 +20,7 @@ dependencies = [
     "duckdb-engine>=0.13",
 {%- endif %}
 {%- endif %}
+    "typer>=0.12",
 {%- if 'agent-tools' in components %}
     "pydantic>=2.7",
     "quant-agent-os",
@@ -27,7 +28,7 @@ dependencies = [
 ]
 
 [project.scripts]
-{{ project_name }} = "{{ package_name }}.cli:main"
+{{ project_name }} = "{{ package_name }}.cli:app"
 
 [dependency-groups]
 dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]

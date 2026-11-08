@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format follows
   Apache 2.0 four years after its release. Versions up to v0.2.0 and earlier commits stay MIT, and so do
   `skills/`, `clients/`, and the template packs. See
   [decision 0019](docs/decisions/0019-business-source-license.md).
+- **`quant-lab` projects use Typer** (the `quant-baseline` pack is now 3.1.0), like the `quant-apps` applications.
+  The commands and flags are the same. Generated projects depend on `typer`, their script points at `cli:app`, and a
+  mistake in data or parameters now exits with status 1 and a message, not a usage error with status 2.
 
 ### Added
 
