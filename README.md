@@ -20,8 +20,8 @@ keep the backups, and apply upgrades, and [operations](docs/operations.md) cover
 and so to its model. [Who is responsible for what](docs/security.md#who-is-responsible-for-what) sets it out, with what this
 does not protect against.
 
-**See it working:** [the Portfolio Intelligence demonstration](docs/demo.md) runs one fictional firm's portfolio research and
-risk analysis, end to end, with no model or network.
+**See it working:** [getting started](docs/getting-started.md#see-it-all-together) ends with the Portfolio Intelligence
+demonstration, which runs one fictional firm's portfolio research and risk analysis, end to end, with no model or network.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is
 > alpha research software (0.2.0), not investment advice.
@@ -108,8 +108,7 @@ examples/  scripts/  tests/  docs/
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md), then the [tutorial](docs/tutorial.md), and
-  [the demonstration](docs/demo.md)
+- [Getting started](docs/getting-started.md), then the [tutorial](docs/tutorial.md)
 - Products: [Quant Research](docs/products/quant-research.md),
   [Quant Analytics](docs/products/quant-analytics.md),
   [Quant App Factory](docs/products/quant-app-factory.md)

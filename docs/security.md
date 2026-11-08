@@ -23,7 +23,7 @@ an AI agent's review and no independent one, and an independent review is recomm
                                                                          └──────────────────────┘
 ```
 
-- **The server checks the API key, then the caller's access, then the tool's permissions.** Everything to the left
+- **The server checks the API key, then the tool's permissions, then the caller's access.** Everything to the left
   of the executor is untrusted input, including what the model asks for.
 - **Results reach the client, and so its model.** Keeping numbers out of the model through dataset references covers
   your input series. Metrics, passages, and report text are the answer, so they go to the client and whichever model it
@@ -57,9 +57,9 @@ The platform is software you run. It has no service of ours behind it, so nothin
 | Kind of data | Sensitivity | Where it lives | Who can reach it |
 | --- | --- | --- | --- |
 | Research corpus: text, entities, embeddings | Your research | `knowledge` volume, or PostgreSQL | Any caller allowed a research tool, the whole corpus |
-| Datasets | Your data | `datasets` volume, or your own store | Callers an access file allows. Without one, any key with `tools:call` |
-| Runs and calls: arguments, outputs, **retrieved passages,** computed results | As sensitive as the corpus and data together | `runs` volume | Any key with `runs:read`, for **every** caller's runs |
-| Audit events: ids, hashes, statuses, principals | Who did what, with no content | `runs` volume, kept forever | Any key with `runs:read` |
+| Datasets | Your data | `datasets` volume, or your own store | Callers an access file or your `AccessPolicy` allows. Without either, any key with `tools:call` |
+| Runs and calls: arguments, outputs, **retrieved passages,** computed results | As sensitive as the corpus and data together | `runs` volume | Any key with `runs:read`, for **every** caller's runs in its tenant. `qaos serve` has one tenant |
+| Audit events: ids, hashes, statuses, principals | Who did what, with no content | `runs` volume, kept forever | Any key with `runs:read`, in its tenant |
 | Usage events: tool, status, duration, sizes | Activity, with no content | `runs` volume, kept forever | Operators |
 | API-key hashes, with principals and groups | Access map | `keys` volume, mode 0600 | The server, read-only, and operators |
 | Access rules | Access map | Your file, mounted read-only | The server, and operators |
@@ -79,13 +79,16 @@ The platform is software you run. It has no service of ours behind it, so nothin
   container's network if they need none.
 - **The corpus is all or nothing.** A caller allowed a research tool searches the whole corpus. For research that two
   groups must not share, run one server per corpus.
-- **`runs:read` sees everyone.** It reads every caller's runs, with what they retrieved and computed. Give it only to
-  auditors, and never to a key that a client's model can use.
+- **`runs:read` sees everyone in its tenant.** It reads every caller's runs in the key's tenant, which on `qaos serve`
+  is every caller, with what they retrieved and computed. Give it only to auditors, and never to a key that a client's
+  model can use.
 - **The audit trail resists accidents, not its operator.** The database rejects changes to audit events, but whoever
   can write the file can remove that rule. For evidence that must outlast a compromised host,
   [export it](operations.md#retention-and-export) to a system they do not control.
 - **A client can be talked into things.** A passage can hold instructions. Results are marked untrusted, and the server
-  says not to follow them, but only the client decides. Consequential calls still stop for a person's approval.
+  says not to follow them, but only the client decides. Consequential calls still stop for a person's approval, unless
+  an operator gave that permission a standing approval with `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`, which is empty by
+  default and recorded on each use.
 - **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
 - **No sign-in through an identity provider yet.** OAuth token checks exist in `quant_platform.identity`, but no
   command serves them, and tokens carry no groups.
@@ -217,7 +220,9 @@ configured, and then it denies what is not listed. How to use it, and what it do
   access file that has become missing or invalid.
 - A refused dataset cannot be told from a missing one, and no output names what the caller may not reach. The
   refusal is on the call's record and audit event, which callers do not receive.
-- Configurations that would silently not apply are called out. Keys with groups on a server with no access file draw a warning at start-up and from `qaos doctor`.
+- Configurations that would silently not apply are called out. On `serve_http`, keys with groups and no access policy,
+  a configured access file with no access policy, or a catalog whose policy is not the configured file each draw a
+  warning at start-up, and `qaos doctor` reports groups with no access file.
 - `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
 
 ## OAuth

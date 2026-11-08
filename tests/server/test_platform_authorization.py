@@ -558,7 +558,7 @@ def test_without_an_access_policy_every_key_reaches_everything_as_before(
 
 
 def _warnings(catalog: Catalog, keys: Path, capsys: pytest.CaptureFixture[str]) -> str:
-    warn_about_open_access(catalog, keys)
+    warn_about_open_access(catalog, KeyRing.from_file(keys))
     return " ".join(capsys.readouterr().err.split())
 
 
@@ -587,7 +587,38 @@ def test_an_access_file_the_catalog_ignores_is_called_out(
     add_key(keys, "plain", SCOPES)
 
     assert "no access policy" in _warnings(compose(policy=PermissionPolicy()), keys, capsys)
+    applied = compose(policy=PermissionPolicy(), access=FileAccessPolicy(rules))
+    assert _warnings(applied, keys, capsys) == ""
     get_settings.cache_clear()
+
+
+def test_an_access_file_another_policy_overrides_is_called_out(
+    tmp_path: Path, rules: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A custom server whose catalog has its own policy must not seem to apply the file."""
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(rules))
+    get_settings.cache_clear()
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "plain", SCOPES)
+    other = tmp_path / "other.toml"
+    other.write_text(rules.read_text("utf-8"), "utf-8")
+
+    overridden = compose(policy=PermissionPolicy(), access=FileAccessPolicy(other))
+    assert "its rules do not apply" in _warnings(overridden, keys, capsys)
+    get_settings.cache_clear()
+
+
+def test_the_warning_reads_the_keys_already_loaded(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A keys file that breaks after loading must not stop the server from starting."""
+    keys = tmp_path / "keys.toml"
+    add_key(keys, "desk", SCOPES, groups=["growth"])
+    ring = KeyRing.from_file(keys)
+    keys.write_text("not toml [", "utf-8")
+
+    warn_about_open_access(compose(policy=PermissionPolicy()), ring)  # raises nothing
+    assert "Traceback" not in capsys.readouterr().err
 
 
 def test_stdio_refuses_a_catalog_with_an_access_policy(rules: Path) -> None:
