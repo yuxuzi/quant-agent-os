@@ -37,6 +37,7 @@ from quant_platform.cli_common import (
 )
 from quant_platform.composition import available_toolsets, instructions_for
 from quant_platform.http import build_http_app, single_tenant
+from quant_platform.serve import warn_about_inert_groups
 from quant_research import ResearchApp
 
 if TYPE_CHECKING:
@@ -138,6 +139,7 @@ def serve_hosted(
             "[red]error:[/red] the keys file has no enabled key; add one with `qaos keys new`."
         )
         raise typer.Exit(1)
+    warn_about_inert_groups(ring)
     whole = _load_tenants_file(tenants) if tenants is not None else None
     configured = whole.tenants if whole is not None else None
     oauth = _oauth(whole, ring, resource_url) if whole is not None else None

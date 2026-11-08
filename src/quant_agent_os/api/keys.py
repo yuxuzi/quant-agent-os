@@ -180,6 +180,11 @@ class KeyRing:
         self._reload()
         return sum(not key.expired for key in self._keys)
 
+    def enabled(self) -> tuple[ApiKey, ...]:
+        """Return the enabled keys as the ring holds them now; never re-raises a read error."""
+        self._reload()
+        return tuple(self._keys)
+
     def authenticate(self, presented: str) -> ApiKey | None:
         """Return the key matching ``presented``, comparing every hash in constant time."""
         self._reload()
