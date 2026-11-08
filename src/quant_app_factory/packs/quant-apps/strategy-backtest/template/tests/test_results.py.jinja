@@ -1,0 +1,80 @@
+"""Runs never overwrite each other, and each one records what it was computed from."""
+
+import datetime as dt
+import json
+from pathlib import Path
+
+import numpy as np
+
+from {{ package_name }}.data import Panel
+from {{ package_name }}.parameters import Parameters, load_parameters
+from {{ package_name }}.results import code_version, latest_run, load_results, save_run
+from {{ package_name }}.synthetic import dates, generate_panel
+
+NOW = dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC)
+RESULTS = {"kind": "study", "parameters": {"signal": "momentum"}, "metrics": {"x": 1.0}}
+
+
+def _panel(prices: np.ndarray) -> Panel:
+    assets = [f"A{index}" for index in range(prices.shape[1])]
+    return Panel(dates=dates(prices.shape[0]), assets=assets, prices=prices)
+
+
+def test_changing_one_price_changes_the_fingerprint() -> None:
+    prices, _ = generate_panel(n_bars=50, n_assets=4)
+    changed = prices.copy()
+    changed[30, 2] *= 1.0001
+
+    assert _panel(prices).fingerprint() == _panel(prices.copy()).fingerprint()
+    assert _panel(prices).fingerprint() != _panel(changed).fingerprint()
+
+
+def test_the_fingerprint_covers_dates_assets_and_missing_prices() -> None:
+    prices, _ = generate_panel(n_bars=50, n_assets=4)
+    base = _panel(prices)
+    gap = prices.copy()
+    gap[10, 1] = np.nan
+
+    renamed = Panel(dates=base.dates, assets=["A0", "A1", "A2", "B3"], prices=prices)
+    shifted = Panel(dates=dates(50, dt.date(2021, 1, 1)), assets=base.assets, prices=prices)
+    assert len({base.fingerprint(), renamed.fingerprint(), shifted.fingerprint()}) == 3
+    assert _panel(gap).fingerprint() == _panel(gap.copy()).fingerprint()
+    assert _panel(gap).fingerprint() != base.fingerprint()
+
+
+def test_two_runs_in_the_same_second_make_two_folders(tmp_path: Path) -> None:
+    first = save_run(tmp_path, RESULTS, parameters=Parameters(), fingerprint="f", now=NOW)
+    second = save_run(tmp_path, RESULTS, parameters=Parameters(), fingerprint="f", now=NOW)
+
+    assert first.name == "20260102T030405Z-study-momentum"
+    assert second.name == "20260102T030405Z-study-momentum-2"
+    assert latest_run(tmp_path) == second
+
+
+def test_a_run_records_its_provenance_and_exact_parameters(tmp_path: Path) -> None:
+    parameters = Parameters(signal="reversal", lookback=5, cost_bps=2.5)
+
+    folder = save_run(
+        tmp_path, RESULTS, parameters=parameters, fingerprint="abc", label="Try 1", now=NOW
+    )
+
+    results = load_results(folder)
+    assert folder.name.endswith("-try-1")
+    assert results["provenance"]["data_fingerprint"] == "sha256:abc"
+    assert results["provenance"]["created"] == "2026-01-02T03:04:05+00:00"
+    assert results["provenance"]["code_version"]["package"]
+    assert load_parameters(folder / "config.toml") == parameters
+
+
+def test_version_1_results_files_still_load(tmp_path: Path) -> None:
+    old = tmp_path / "results.json"
+    old.write_text(json.dumps({"schema_version": 1, "kind": "study", "metrics": {}}))
+
+    assert load_results(old)["kind"] == "study"
+
+
+def test_the_code_version_names_the_package() -> None:
+    version = code_version()
+
+    assert version["package"]
+    assert version["git"] is None or isinstance(version["git"], str)

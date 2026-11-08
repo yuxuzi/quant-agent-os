@@ -15,11 +15,39 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `agent-tool`, `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
 | `bundled`, `python` | pytemplate-uv's bundled `python` profile | No |
 | `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
+| `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal, and a signal file | No |
+| `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with walk-forward | No |
+| `quant-apps`, `risk-monitor` | the `quant-apps` pack: positions to exposures, value at risk, stress, and limit checks | No |
+| `quant-apps`, `performance-report` | the `quant-apps` pack: returns to horizon tables, risk basics, tear sheets, Excel, and reconciliation | No |
 | `quant-baseline`, `quant-lab` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
 | `path/to/pack`, your profile | your own pack | Up to the pack |
 
-On the command line, `qaos app new` also takes the shortcuts `agent-tool`, `quant-lab`, `python`, and
-`fastapi`.
+On the command line, `qaos app new` also takes the shortcuts `alpha-research`, `strategy-backtest`,
+`risk-monitor`, `performance-report`, `agent-tool`, `quant-lab`, `python`, and `fastapi`.
+
+## Applications for each stage of a fund's work
+
+The `quant-apps` pack has one application for each stage ([decision 0022](../decisions/0022-one-application-per-stage.md)).
+Each works as generated and is meant to be changed:
+
+```text
+alpha-research ──▶ strategy-backtest ──▶ performance-report
+ (scores.csv)       (returns.csv)         (tables, tear sheets, reconciliation)
+                    (weights.csv) ──────▶ risk-monitor (exposures, stress, limits)
+```
+
+The stages exchange ordinary CSV files with a date column, so you can use one alone or replace any of them.
+
+| Level | What you do | Where |
+| --- | --- | --- |
+| 1 | Set conventions and data | `config.toml` |
+| 2 | Choose what appears, such as each audience's tear sheet | `config.toml` |
+| 3 | Add your own signals, rules, sections, checks, and file formats | the project's `firm/` folder, which template updates skip |
+| 4 | Change anything else | Any file: you own the code, and its known-answer tests catch mistakes |
+
+Each project's `AGENTS.md` gives a coding assistant the same rules. The `agent-tools` component serves an application's
+calculations to AI clients through a firm's own server. The templates supply no alpha: momentum and reversal are textbook
+examples, and a firm's named signal is tested for look-ahead before each run.
 
 A quant-lab project has one `metrics` module, with documented conventions and
 known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
@@ -49,7 +77,8 @@ path with no tags: apply a fix by hand, using [CHANGELOG.md](../../CHANGELOG.md)
 ## Use
 
 ```bash
-uv run qaos app new quant-lab my-lab --defaults   # one command: spec, project, checks
+uv run qaos app new performance-report my-report --defaults   # one command: spec, project, checks
+uv run qaos app new quant-lab my-lab --defaults   # or the all-in-one research sample
 uv run qaos app new                # answer the template's questions; writes a ready spec
 uv run qaos app plan app.toml      # writes nothing; --verbose lists every file
 uv run qaos app create app.toml    # asks; your yes is the recorded, single-use approval

@@ -1,0 +1,24 @@
+# Limitations
+
+This application is a tested starting point, not a finished reporting system.
+
+- **The returns are taken as given.** It computes from your file. Whether they are net of fees,
+  and correct, is the job of your books and your administrator. `reconcile` shows differences; it
+  does not say which side is right.
+- **Not a compliance product.** Showing gross or net returns, or sending a report to investors,
+  has regulatory requirements. Have your compliance officer or counsel review what you send.
+- **No attribution.** It does not say why a book made money. That needs positions or factors.
+- **Return-based risk only.** Value at risk here comes from a book's past returns, and assumes the
+  past describes the future. Current exposures need positions: see the risk-monitor template.
+- **One series per column.** It does not handle share classes, fee schedules, or capital flows.
+  Compute time-weighted returns before this step.
+- **Bars per year are fixed.** Volatility and Sharpe use `periods_per_year`, so a file with
+  irregular dates gives approximate annualised figures.
+- **Partial periods.** A first or last month or year may be partial; check the dates shown.
+- **Excel charts.** The workbook holds tables; charts are in the HTML report.
+- **Later fixes.** This project owns a copy of its code. A fix made to the template later does not
+  reach it by itself. Check the Quant-Agent-OS changelog, and apply fixes by hand.
+- **No interpretation.** Reports print computed figures only. Commentary is yours to write.
+
+What the tests guard: metric formulas, horizon boundaries (known answers), monthly compounding,
+reconciliation, section selection, and escaping of text in every output.

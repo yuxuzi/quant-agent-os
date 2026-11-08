@@ -316,6 +316,10 @@ def _choose(label: str, options: list[str], default: str) -> str:
 SHORTCUTS = {
     "agent-tool": ("agent-tool", "agent-tool"),
     "quant-lab": ("quant-baseline", "quant-lab"),
+    "alpha-research": ("quant-apps", "alpha-research"),
+    "strategy-backtest": ("quant-apps", "strategy-backtest"),
+    "risk-monitor": ("quant-apps", "risk-monitor"),
+    "performance-report": ("quant-apps", "performance-report"),
     "python": ("bundled", "python"),
     "fastapi": ("bundled", "fastapi"),
 }
@@ -360,12 +364,14 @@ def new(
     target: Annotated[
         str | None,
         typer.Argument(
-            help="What to build: quant-lab, agent-tool, TEMPLATE/PROFILE, or a template."
+            help="What to build: performance-report, risk-monitor, strategy-backtest, "
+            "alpha-research, quant-lab, agent-tool, TEMPLATE/PROFILE, or a template."
         ),
     ] = None,
     name: Annotated[str | None, typer.Argument(help="Project name, a lowercase slug.")] = None,
     template: Annotated[
-        str | None, typer.Option(help="quant-baseline, agent-tool, bundled, or a pack path.")
+        str | None,
+        typer.Option(help="quant-apps, quant-baseline, agent-tool, bundled, or a pack path."),
     ] = None,
     profile: Annotated[str | None, typer.Option(help="The profile to build.")] = None,
     out: Annotated[Path | None, typer.Option("--out", "-o", help="Spec file to write.")] = None,

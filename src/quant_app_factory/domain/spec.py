@@ -23,7 +23,7 @@ PythonVersion = Literal["3.11", "3.12", "3.13", "3.14", "3.15"]
 DEFAULT_QUANT_AGENT_OS_SOURCE = "git+https://github.com/yuxuzi/quant-agent-os"
 _ONE_LINE = re.compile(r'^[^"\\\n]+$')  # what pytemplate-uv's questions accept
 
-BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-baseline", "bundled"})
+BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-apps", "quant-baseline", "bundled"})
 TEMPLATE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")  # built-in, or registered in factory.toml
 
 
@@ -86,7 +86,9 @@ class AppSpec(BaseModel):
     """
 
     name: str = Field(pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$", description="Project slug")
-    template: str = Field(description="agent-tool, quant-baseline, bundled, or a pack directory")
+    template: str = Field(
+        description="quant-apps, quant-baseline, agent-tool, bundled, or a pack directory"
+    )
     profile: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
     answers: dict[str, str] = Field(default_factory=dict, description="Other template answers")
     settings: dict[str, str] = Field(

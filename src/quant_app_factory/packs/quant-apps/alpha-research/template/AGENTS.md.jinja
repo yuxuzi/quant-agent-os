@@ -1,0 +1,33 @@
+# {{ project_name }}: instructions for coding assistants
+
+This application starts from a Quant-Agent-OS template, and the firm owns it. It works as
+generated, and it is meant to be changed. Change it in the smallest way that does the job.
+
+## Where a change belongs, simplest first
+
+1. **`config.toml`**: data, the signal, the lag, and the study's settings.
+2. **`{{ package_name }}/firm/signals.py`**: the firm's own signal, as a function of prices.
+3. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
+4. **Any other file**, if those cannot do it. Expect to merge template updates here.
+
+Later template updates leave `config.toml` and `{{ package_name }}/firm/` alone.
+
+## Rules that protect the results
+
+- A signal at bar t may use data up to bar t only. Run `{{ project_name }} check-signal NAME`.
+- Never tune a signal on a result and report that result as if it were out of sample. Record every
+  signal you try, because trying many inflates the best.
+- Keep the firm's signals in this repository's `firm/` folder and out of any shared template.
+- The timing convention (`lag`) is shared with the backtest application: keep them the same.
+- Do not change a formula in `metrics.py` to make a result look better or match another figure.
+- Keep the known-answer and bias tests passing. If one must change, say which and why.
+- Add a known-answer test for any new calculation, and a look-ahead test for any new signal.
+- Results are computed figures only. Do not write interpretation or investment advice into them.
+
+## Check your work
+
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy {{ package_name }} tests && uv run pytest
+```
+
+See `LIMITATIONS.md` for what this application does not do.

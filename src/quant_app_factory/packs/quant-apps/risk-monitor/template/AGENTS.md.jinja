@@ -1,0 +1,35 @@
+# {{ project_name }}: instructions for coding assistants
+
+This application starts from a Quant-Agent-OS template, and the firm owns it. It works as
+generated, and it is meant to be changed. Change it in the smallest way that does the job.
+
+## Where a change belongs, simplest first
+
+1. **`config.toml`**: data files, limits, stress scenarios, and which sections appear.
+2. **`{{ package_name }}/firm/checks.py`**: a rule the `[limits]` table cannot express.
+3. **`{{ package_name }}/firm/sections.py`**: a new report section. A built-in's name replaces it.
+4. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
+5. **Any other file**, if those cannot do it. Expect to merge template updates here.
+
+Later template updates leave `config.toml` and `{{ package_name }}/firm/` alone.
+
+## Rules that protect the numbers
+
+- This application reads and reports. It must never place orders, change positions, or connect to
+  a broker or order system.
+- Do not loosen a limit, or change how one is measured, to clear a breach. A limit belongs to the
+  firm's risk owner.
+- A figure with no data is a breach, never a pass. Keep it that way.
+- Do not change a formula in `metrics.py`, `risk_metrics.py`, or `risk.py` to match another system.
+  Add a separately named figure, so that both keep their definitions.
+- Keep the known-answer tests passing, and add one for any new calculation.
+- Use no data dated after the as-of date.
+- Reports hold computed figures only. Do not write interpretation or trading advice into them.
+
+## Check your work
+
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy {{ package_name }} tests && uv run pytest
+```
+
+See `LIMITATIONS.md` for what this application does not do.

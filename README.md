@@ -62,8 +62,9 @@ machine unless you choose a hosted embedder. Each call is recorded (`qaos runs`)
 
 ## Also included
 
-**Quant App Factory** generates tested Python projects from a small spec. It is optional, and off by default on the server.
-It uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder.
+**Quant App Factory** generates tested Python projects from a small spec, including one you can change for each stage of a
+fund's work: alpha research, strategy backtest, risk monitor, and performance report. It is optional, and off by default on
+the server. It uses the standalone [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) scaffolder.
 
 ## Define a tool
 

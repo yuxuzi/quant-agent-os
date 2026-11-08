@@ -1,0 +1,36 @@
+# {{ project_name }}
+
+{{ description }}
+
+From prices to evidence about a signal: information coefficients, decay, and quantile spreads. It
+provides the harness around your signal, not the signal. It runs as generated, and it is yours to change.
+
+```bash
+uv sync
+uv run {{ project_name }} study                       # momentum on random-walk demo prices
+uv run {{ project_name }} report                      # that run as Markdown
+uv run {{ project_name }} export signals/momentum.csv # scores for the next stage
+```
+
+## Use your data and your signal
+
+Set `data` in `config.toml` to a CSV with a date column, then one column of prices per asset. Add
+your signal to `{{ package_name }}/firm/signals.py`, and set `signal` to its name. Every run of a firm
+signal first tests it for look-ahead; `{{ project_name }} check-signal NAME` runs that test alone.
+A signal computed elsewhere can be studied with `--signal-file scores.csv`.
+
+## The next stage
+
+`export` writes a file that a strategy-backtest application reads with `--signal-file`. Its timing
+convention (`lag`) is the same, so a study describes what a backtest can earn.
+
+## Make it yours
+
+| Level | What you do | Where |
+| --- | --- | --- |
+| 1 | Set data and study settings | `config.toml` |
+| 2 | Add your own signals | `{{ package_name }}/firm/signals.py` |
+| 3 | Add your own file formats | `{{ package_name }}/firm/loaders.py` |
+| 4 | Change anything else; you own the code | Everywhere, with the tests to catch mistakes |
+
+`AGENTS.md` tells a coding assistant the same rules. See `LIMITATIONS.md` for what this does not do.

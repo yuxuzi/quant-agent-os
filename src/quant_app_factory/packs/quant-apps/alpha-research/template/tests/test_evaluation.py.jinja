@@ -1,0 +1,119 @@
+"""Evaluation finds a planted signal, finds nothing in pure noise, and times trades honestly."""
+
+import numpy as np
+import pytest
+
+from {{ package_name }}.config import TRADE_LAG
+from {{ package_name }}.evaluation import (
+    forward_returns,
+    hac_t_stat,
+    ic_decay,
+    ic_summary,
+    quantile_spread,
+    signal_autocorrelation,
+)
+from {{ package_name }}.metrics import newey_west_t_stat
+from {{ package_name }}.signals import compute
+from {{ package_name }}.synthetic import generate_panel
+
+
+def test_a_tradable_planted_signal_has_a_positive_ic_and_spread() -> None:
+    prices, signal = generate_panel(signal_strength=0.3, delay=TRADE_LAG)
+
+    summary = ic_summary(signal, prices)
+
+    assert summary["mean_rank_ic"] > 0.1
+    assert summary["rank_ic_t_stat"] > 5
+    assert np.nanmean(quantile_spread(signal, prices)) > 0
+
+
+def test_a_next_bar_signal_is_only_worth_something_without_a_trade_lag() -> None:
+    # The edge lasts one bar. A study that ignored the trade lag would promote it, but a
+    # backtest with a one-bar lag could not earn it, and neither can the default study.
+    prices, signal = generate_panel(signal_strength=0.3, delay=0)
+
+    at_close = ic_summary(signal, prices, lag=0)
+    lagged = ic_summary(signal, prices, lag=1)
+
+    assert at_close["mean_rank_ic"] > 0.1
+    assert abs(lagged["mean_rank_ic"]) < 0.03
+    assert np.nanmean(quantile_spread(signal, prices, lag=0)) > 0.002
+    assert abs(np.nanmean(quantile_spread(signal, prices, lag=1))) < 0.001
+
+
+def test_noise_has_no_ic() -> None:
+    prices, signal = generate_panel(signal_strength=0.0)
+
+    assert abs(ic_summary(signal, prices)["mean_rank_ic"]) < 0.03
+
+
+def test_no_ic_on_a_random_walk_across_seeds() -> None:
+    means = []
+    for seed in range(40):
+        prices, _ = generate_panel(n_bars=300, n_assets=20, seed=seed)
+        means.append(ic_summary(compute("reversal", prices, lookback=5), prices)["mean_rank_ic"])
+
+    standard_error = np.std(means, ddof=1) / np.sqrt(len(means))
+    assert abs(np.mean(means)) < 3 * standard_error
+
+
+def test_the_planted_signal_decays_after_one_bar() -> None:
+    prices, signal = generate_panel(signal_strength=0.3, delay=TRADE_LAG)
+
+    decay = ic_decay(signal, prices, 3)
+
+    assert len(decay["mean_rank_ic"]) == len(decay["t_stat"]) == 3
+    assert decay["mean_rank_ic"][0] > 0.1
+    assert decay["mean_rank_ic"][0] > decay["mean_rank_ic"][2]
+    assert decay["t_stat"][0] > 5
+
+
+def test_long_horizon_t_stats_cover_the_overlap() -> None:
+    ics = np.random.default_rng(1).standard_normal(60) + 0.2
+
+    assert hac_t_stat(ics, horizon=30) == newey_west_t_stat(ics, lags=29)
+
+
+def test_forward_returns_start_at_the_trade_bar() -> None:
+    prices = np.array([[100.0], [110.0], [121.0], [133.1]])
+
+    at_close = forward_returns(prices, 1, lag=0)
+    lagged = forward_returns(prices, 2, lag=1)
+
+    np.testing.assert_allclose(at_close[:3, 0], [0.1, 0.1, 0.1])
+    assert np.isnan(at_close[3, 0])
+    np.testing.assert_allclose(lagged[0, 0], 133.1 / 110.0 - 1.0)
+    assert np.isnan(lagged[1:, 0]).all()
+
+
+def test_a_delisting_inside_the_horizon_counts_with_its_loss() -> None:
+    nan = np.nan
+    prices = np.array([[100.0], [110.0], [nan], [nan]])
+
+    forward = forward_returns(prices, 2, lag=0, delisting_return=-0.5)
+
+    np.testing.assert_allclose(forward[0, 0], 1.1 * 0.5 - 1.0)  # up 10%, then delisted
+    np.testing.assert_allclose(forward[1, 0], -0.5)
+    assert np.isnan(forward[2:, 0]).all()  # the horizon runs past the panel
+
+
+def test_forward_returns_bridge_a_gap_by_the_price_ratio() -> None:
+    nan = np.nan
+    prices = np.array([[100.0], [nan], [120.0], [126.0]])
+
+    forward = forward_returns(prices, 2, lag=0)
+
+    np.testing.assert_allclose(forward[0, 0], 0.2)
+    assert np.isnan(forward[1, 0])  # no price to trade at
+
+
+@pytest.mark.parametrize("horizon, lag", [(0, 1), (1, -1)])
+def test_forward_returns_reject_impossible_timing(horizon: int, lag: int) -> None:
+    with pytest.raises(ValueError, match="horizon"):
+        forward_returns(np.ones((5, 2)), horizon, lag)
+
+
+def test_a_fresh_random_signal_has_no_autocorrelation() -> None:
+    _, signal = generate_panel()
+
+    assert abs(signal_autocorrelation(signal)) < 0.05

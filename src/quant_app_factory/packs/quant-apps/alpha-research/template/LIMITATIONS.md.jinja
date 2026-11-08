@@ -1,0 +1,21 @@
+# Limitations
+
+This application is a tested harness for studying signals, not a research process.
+
+- **It supplies no alpha.** Momentum and reversal are textbook examples. The signal is yours.
+- **Survivorship bias.** Results are only as good as the universe you load. Include delisted
+  assets. When an asset's prices stop, a study charges `delisting_return` once.
+- **Point-in-time data.** Prices and any other inputs must be as known at each date. The look-ahead
+  test catches a signal using later prices. It cannot detect restated data, and it does not cover
+  a signal file, whose timing is its author's responsibility.
+- **Corporate actions.** Use prices adjusted for splits and dividends.
+- **Costs.** Quantile spreads are gross and hypothetical. Backtest a signal before concluding.
+- **Overfitting and multiple testing.** Study figures are in-sample, and trying many signals
+  inflates the best one. Record every one you try.
+- **Interpretation.** Reports print computed figures only. Write the interpretation yourself.
+- **Later fixes.** This project owns a copy of its code, including `metrics.py`. A fix made to
+  the template later does not reach it by itself. Check the Quant-Agent-OS changelog and apply
+  fixes by hand.
+
+What the tests guard: metric formulas (known answers), no look-ahead in signals, one trade-timing
+convention, missing prices (gaps and delistings), and detection of a signal that looks ahead.

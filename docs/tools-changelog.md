@@ -31,6 +31,7 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 | `find_related_signals` | 1.1.0 | Adds `abstained`, true when no passage qualified, so a client need not infer it from empty `passages`. |
 | `analyze_performance` | 2.0.1 | A Sharpe or information ratio that divided by floating-point noise is now undefined, as documented. |
 | `research_report` | 3.0.1 | The same, for the metrics it reports. |
+| `describe_template` | 1.0.1 | Its description also names the new `quant-apps` template. |
 | `check_spec` | 2.0.0 | A draft must name `template` and `profile`. `kind` is reported as a problem, and the profile `quant-research` is now `quant-lab`. |
 
 The resource `qaos://template/quant-baseline/quant-research` is now `.../quant-lab`.
@@ -71,7 +72,7 @@ First versioned release. Every tool is at `1.0.0`:
 | `analyze_performance` | analytics | 1.0.0 |
 | `analyze_risk` | analytics | 1.0.0 |
 | `list_datasets` | analytics | 1.0.0 |
-| `describe_template` | factory | 1.0.0 |
+| `describe_template` | factory | 1.0.1 |
 | `check_spec` | factory | 1.0.0 |
 | `plan_app` | factory | 1.0.0 |
 | `server_info` | platform | 1.0.0 |
