@@ -219,8 +219,8 @@ Ready-made tools join an app with `include`, such as a generated application's `
 written by hand with `@tool` still works through `compose(extra_tools=...)` and `serve_http`.
 
 **Known limits.** A long calculation runs in a thread with a timeout, not in a process that can be
-killed, and a result over the size limit is refused, not streamed. Scripts in other languages need an
-adapter that is not built yet.
+killed, and a result over the size limit is refused, not streamed. Only Python functions and internal
+services are supported; code in other languages, such as R or Julia, is not.
 
 The tool names are in your code and not in a setting, so what the server runs is what your repository
 says (decisions [0020](decisions/0020-a-firms-own-server.md) and

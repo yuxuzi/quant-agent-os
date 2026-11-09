@@ -51,5 +51,5 @@ What 0020 decided still holds:
 - Calling an internal service is a separate adapter, `FirmApp.call_service`. A typed stub describes the service,
   the host is fixed in the firm's code, and the tool needs `network`. Its results are `retrieved` evidence: the
   platform did not compute them.
-- Running an existing script or executable is a separate adapter, not yet built. A script needs `execute_code`,
-  which needs an approval for every call by default.
+- Only Python is supported. There is no adapter for scripts or executables in other languages, such as R or
+  Julia: it would need `execute_code` on a served tool.
