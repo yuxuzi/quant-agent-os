@@ -208,11 +208,12 @@ def test_a_bad_answer_is_recorded_as_an_error(
 
 def test_an_unreachable_service_is_explained() -> None:
     app = FirmApp("risk")
-    app.call_service(desk_var, url="http://127.0.0.1:9/var", returns=Series, timeout_seconds=2)
+    # Windows retries a refused connection for about two seconds, so keep the default timeout.
+    app.call_service(desk_var, url="http://127.0.0.1:9/var", returns=Series)
 
     record = _run(app, {"returns": GROWTH})
 
-    assert record.error_detail is not None
+    assert record.status == "error" and record.error_detail is not None
     assert record.error_detail.startswith(
         "ServiceError: Cannot reach the service at http://127.0.0.1:9/var:"
     )
