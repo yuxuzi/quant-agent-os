@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
+from quant_agent_os.registration import FirmApp
 from quant_agent_os.tools import AccessPolicy, PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
 from quant_agent_os.tools.registry import DuplicateToolError
 from quant_agent_os.tools.server_info import (
@@ -100,6 +101,7 @@ def compose(
     extra_tools: Sequence[ToolSpec[Any, Any]] = (),
     extra_instructions: str | None = None,
     access: AccessPolicy | None = None,
+    apps: Sequence[FirmApp] = (),
 ) -> Catalog:
     """Return the catalog for the given products; each one given is a toolset served.
 
@@ -108,7 +110,9 @@ def compose(
     analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
     guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
     ``extra_tools`` are a firm's own, served as the toolset ``firm`` under the same executor
-    checks, and ``extra_instructions`` tells clients about them. Every catalog also serves
+    checks, and ``extra_instructions`` tells clients about them. ``apps`` are a firm's
+    registered functions (decision 0024), served the same way over ``datasets``, with their
+    instructions. Every catalog also serves
     `server_info` (``qaos://server/info``, decision 0015). With ``access``, each caller reaches
     only the tools and datasets it allows (decision 0021); give extra tools a
     `GuardedDatasetStore` too. Raises `DuplicateToolError` when an extra tool reuses a served
@@ -157,13 +161,15 @@ def compose(
         resources += factory_resources()
         prompts.append(DRAFT_APP_SPEC)
         served.append("factory")
-    _check_extra_names(extra_tools, {spec.name for spec in tools})
-    add("firm", list(extra_tools))
+    extra = [*extra_tools, *(spec for app in apps for spec in app.tools(datasets))]
+    _check_extra_names(extra, {spec.name for spec in tools})
+    add("firm", extra)
     add("platform", [server_info_tool(platform_version(), list(tools), access)])
     resources.append(server_info_resource())
     instructions = instructions_for(served)
-    if extra_instructions:
-        instructions = f"{instructions}\n\n{extra_instructions}"
+    for text in [extra_instructions, *(app.instructions for app in apps)]:
+        if text:
+            instructions = f"{instructions}\n\n{text}"
     return Catalog(tools, resources, prompts, instructions, toolsets, policy, access)
 
 
