@@ -5,14 +5,13 @@ Parameters come from config.toml in the current directory; flags override them f
 
 from __future__ import annotations
 
-import argparse
 import re
-import sys
-from collections.abc import Sequence
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
-{%- if 'data-database' in components %}
+from typing import Annotated, Any
 
+import typer
+{%- if 'data-database' in components %}
 from sqlalchemy.exc import SQLAlchemyError
 {%- endif %}
 
@@ -30,138 +29,265 @@ from .walk_forward import run_walk_forward
 CONFIG = Path("config.toml")
 RESULTS = Path("results")
 
+app = typer.Typer(help=__doc__, no_args_is_help=True)
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line and return its exit code."""
-    parser = _parser()
-    args = parser.parse_args(argv)
+
+class Exposure(StrEnum):
+    """Book types."""
+
+    DOLLAR_NEUTRAL = "dollar-neutral"
+    BETA_NEUTRAL = "beta-neutral"
+    LONG_ONLY = "long-only"
+
+
+class Objective(StrEnum):
+    """Walk-forward training objectives."""
+
+    SHARPE = "sharpe"
+    IC = "ic"
+
+
+PricesOption = Annotated[Path | None, typer.Option(help="A wide price file (default: data).")]
+DemoOption = Annotated[bool, typer.Option("--demo", help="Use a synthetic random walk.")]
+{%- if 'data-database' in components %}
+DatabaseOption = Annotated[bool, typer.Option("--database", help="Query the configured database.")]
+{%- endif %}
+ConfigOption = Annotated[
+    Path | None, typer.Option(help="Parameters file (default: ./config.toml).")
+]
+SignalOption = Annotated[str | None, typer.Option(help="momentum or reversal.")]
+LookbackOption = Annotated[int | None, typer.Option(help="Lookback in bars (default: standard).")]
+SkipOption = Annotated[int | None, typer.Option(help="Momentum: bars to skip (default: standard).")]
+LagOption = Annotated[int | None, typer.Option(help="Bars from the signal to the trade.")]
+LabelOption = Annotated[
+    str | None, typer.Option(help="Name for the run folder (default: kind and signal).")
+]
+ResultsOption = Annotated[Path, typer.Option(help="Where run folders go (default: results).")]
+CostOption = Annotated[float | None, typer.Option(help="Cost per unit of turnover, in bps.")]
+RebalanceOption = Annotated[int | None, typer.Option(help="Bars between rebalances.")]
+ExposureOption = Annotated[Exposure | None, typer.Option(help="Book type.")]
+
+
+@app.command()
+def study(
+    prices: PricesOption = None,
+    demo: DemoOption = False,
+{%- if 'data-database' in components %}
+    database: DatabaseOption = False,
+{%- endif %}
+    config: ConfigOption = None,
+    signal: SignalOption = None,
+    lookback: LookbackOption = None,
+    skip: SkipOption = None,
+    lag: LagOption = None,
+    label: LabelOption = None,
+    results: ResultsOption = RESULTS,
+    quantiles: Annotated[int | None, typer.Option(help="Signal quantiles for the spread.")] = None,
+    max_horizon: Annotated[
+        int | None, typer.Option(help="Longest IC-decay horizon, in bars.")
+    ] = None,
+) -> None:
+    """Evaluate a signal: IC, spreads, and decay."""
+    _research(
+        "study",
+        _source_flag(prices, demo{% if 'data-database' in components %}, database{% endif %}),
+        config,
+        label,
+        results,
+        signal=signal,
+        lookback=lookback,
+        skip=skip,
+        lag=lag,
+        quantiles=quantiles,
+        max_horizon=max_horizon,
+    )
+
+
+@app.command()
+def backtest(
+    prices: PricesOption = None,
+    demo: DemoOption = False,
+{%- if 'data-database' in components %}
+    database: DatabaseOption = False,
+{%- endif %}
+    config: ConfigOption = None,
+    signal: SignalOption = None,
+    lookback: LookbackOption = None,
+    skip: SkipOption = None,
+    lag: LagOption = None,
+    label: LabelOption = None,
+    results: ResultsOption = RESULTS,
+    cost_bps: CostOption = None,
+    rebalance_every: RebalanceOption = None,
+    exposure: ExposureOption = None,
+) -> None:
+    """Backtest a signal with costs."""
+    _research(
+        "backtest",
+        _source_flag(prices, demo{% if 'data-database' in components %}, database{% endif %}),
+        config,
+        label,
+        results,
+        signal=signal,
+        lookback=lookback,
+        skip=skip,
+        lag=lag,
+        cost_bps=cost_bps,
+        rebalance_every=rebalance_every,
+        exposure=exposure.value if exposure else None,
+    )
+
+
+@app.command("walk-forward")
+def walk_forward(
+    prices: PricesOption = None,
+    demo: DemoOption = False,
+{%- if 'data-database' in components %}
+    database: DatabaseOption = False,
+{%- endif %}
+    config: ConfigOption = None,
+    signal: SignalOption = None,
+    lookback: LookbackOption = None,
+    skip: SkipOption = None,
+    lag: LagOption = None,
+    label: LabelOption = None,
+    results: ResultsOption = RESULTS,
+    cost_bps: CostOption = None,
+    rebalance_every: RebalanceOption = None,
+    exposure: ExposureOption = None,
+    objective: Annotated[Objective | None, typer.Option(help="Training objective.")] = None,
+    train_bars: Annotated[int | None, typer.Option(help="Bars in each training window.")] = None,
+    test_bars: Annotated[int | None, typer.Option(help="Bars in each test window.")] = None,
+) -> None:
+    """Choose the lookback on training data; report out of sample."""
+    _research(
+        "walk-forward",
+        _source_flag(prices, demo{% if 'data-database' in components %}, database{% endif %}),
+        config,
+        label,
+        results,
+        signal=signal,
+        lookback=lookback,
+        skip=skip,
+        lag=lag,
+        cost_bps=cost_bps,
+        rebalance_every=rebalance_every,
+        exposure=exposure.value if exposure else None,
+        objective=objective.value if objective else None,
+        train_bars=train_bars,
+        test_bars=test_bars,
+    )
+
+
+@app.command()
+def report(
+    results: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help="Run folders or results files: one to report, several to compare "
+            "(default: latest)."
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None, typer.Option(help="Markdown file (default: in the run folder, or results/).")
+    ] = None,
+) -> None:
+    """Render a results file as Markdown."""
     try:
-        if args.command == "report":
-            _report(args.results or [latest_run(RESULTS)], args.out)
+        _report(results or [latest_run(RESULTS)], out)
+    except ValueError as error:
+        raise _fail(error) from error
 {%- if 'data-database' in components %}
-        elif args.command == "check-connection":
-            return _check_connection()
+
+
+@app.command("check-connection")
+def check_connection_command() -> None:
+    """Connect to the configured database, then exit."""
+    try:
+        typer.echo(check_connection())
+    except SQLAlchemyError as error:
+        raise _database_failure(error, "Cannot connect") from error
 {%- endif %}
-        else:
-            parameters, base = _parameters(args)
-            parameters = parameters.updated(data=_source(args, parameters))
-            panel, parameters = _panel(parameters, base)
-            research = {"study": run_study, "backtest": run, "walk-forward": run_walk_forward}
-            results = research[args.command](panel, parameters)
-            folder = save_run(
-                args.results,
-                results,
-                parameters=parameters,
-                fingerprint=panel.fingerprint(),
-                label=args.label,
-            )
-            print(f"Wrote {folder}")
-            print(_headline(results))
+
+
+def _fail(error: Exception | str) -> typer.Exit:
+    typer.secho(str(error), fg=typer.colors.RED, err=True)
+    return typer.Exit(code=1)
+{%- if 'data-database' in components %}
+
+
+def _database_failure(error: SQLAlchemyError, attempt: str) -> typer.Exit:
+    cause = getattr(error, "orig", None) or error
+    return _fail(f"{attempt}: {type(error).__name__}: {cause}")
+{%- endif %}
+
+
+def _source_flag(prices: Path | None, demo: bool{% if 'data-database' in components %}, database: bool{% endif %}) -> str | None:
+    """The data source a flag names, if any; at most one may be given."""
+    given = {
+        "--prices": prices is not None,
+        "--demo": demo,
+{%- if 'data-database' in components %}
+        "--database": database,
+{%- endif %}
+    }
+    chosen = [flag for flag, on in given.items() if on]
+    if len(chosen) > 1:
+        raise typer.BadParameter(f"use only one of {', '.join(chosen)}")
+    if demo:
+        return "demo"
+{%- if 'data-database' in components %}
+    if database:
+        return "database"
+{%- endif %}
+    return None if prices is None else str(Path.cwd() / prices)
+
+
+def _research(
+    kind: str,
+    source: str | None,
+    config: Path | None,
+    label: str | None,
+    results: Path,
+    **flags: Any,
+) -> None:
+    try:
+        parameters, base = _parameters(config, flags)
+        parameters = parameters.updated(data=_data(source, parameters))
+        panel, parameters = _panel(parameters, base)
+        research = {"study": run_study, "backtest": run, "walk-forward": run_walk_forward}
+        outcome = research[kind](panel, parameters)
+        folder = save_run(
+            results,
+            outcome,
+            parameters=parameters,
+            fingerprint=panel.fingerprint(),
+            label=label,
+        )
     except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
-        parser.error(str(error))
-    return 0
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="{{ project_name }}", description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-
-    study = commands.add_parser("study", help="Evaluate a signal: IC, spreads, and decay.")
-    _add_research_options(study)
-    study.add_argument("--quantiles", type=int, help="Signal quantiles for the spread.")
-    study.add_argument("--max-horizon", type=int, help="Longest IC-decay horizon, in bars.")
-
-    backtest = commands.add_parser("backtest", help="Backtest a signal with costs.")
-    _add_research_options(backtest)
-    _add_trading_options(backtest)
-
-    walk = commands.add_parser(
-        "walk-forward", help="Choose the lookback on training data; report out of sample."
-    )
-    _add_research_options(walk)
-    _add_trading_options(walk)
-    walk.add_argument("--objective", choices=["sharpe", "ic"], help="Training objective.")
-    walk.add_argument("--train-bars", type=int, help="Bars in each training window.")
-    walk.add_argument("--test-bars", type=int, help="Bars in each test window.")
-
-    report = commands.add_parser("report", help="Render a results file as Markdown.")
-    report.add_argument(
-        "results",
-        type=Path,
-        nargs="*",
-        help="Run folders or results files: one to report, several to compare (default: latest).",
-    )
-    report.add_argument(
-        "--out", type=Path, help="Markdown file (default: in the run folder, or results/)."
-    )
+        raise _fail(error) from error
 {%- if 'data-database' in components %}
-
-    commands.add_parser("check-connection", help="Connect to the configured database, then exit.")
+    except SQLAlchemyError as error:
+        raise _database_failure(error, "Cannot read prices from the database") from error
 {%- endif %}
-    return parser
+    typer.echo(f"Wrote {folder}")
+    typer.echo(_headline(outcome))
 
 
-def _add_research_options(parser: argparse.ArgumentParser) -> None:
-    source = parser.add_mutually_exclusive_group()
-    source.add_argument("--prices", type=Path, help="A wide price file (default: data).")
-    source.add_argument("--demo", action="store_true", help="Use a synthetic random walk.")
-{%- if 'data-database' in components %}
-    source.add_argument("--database", action="store_true", help="Query the configured database.")
-{%- endif %}
-    parser.add_argument("--config", type=Path, help="Parameters file (default: ./config.toml).")
-    parser.add_argument("--signal", help="momentum or reversal.")
-    parser.add_argument("--lookback", type=int, help="Lookback in bars (default: standard).")
-    parser.add_argument("--skip", type=int, help="Momentum: bars to skip (default: standard).")
-    parser.add_argument("--lag", type=int, help="Bars from the signal to the trade.")
-    parser.add_argument("--label", help="Name for the run folder (default: kind and signal).")
-    parser.add_argument(
-        "--results", type=Path, default=RESULTS, help="Where run folders go (default: results)."
-    )
-
-
-def _add_trading_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--cost-bps", type=float, help="Cost per unit of turnover, in bps.")
-    parser.add_argument("--rebalance-every", type=int, help="Bars between rebalances.")
-    parser.add_argument(
-        "--exposure", choices=["dollar-neutral", "beta-neutral", "long-only"], help="Book type."
-    )
-
-
-def _parameters(args: argparse.Namespace) -> tuple[Parameters, Path]:
+def _parameters(config: Path | None, flags: dict[str, Any]) -> tuple[Parameters, Path]:
     """Parameters from config.toml (or defaults) and flags, and the folder data paths start in."""
-    path: Path | None = args.config
+    path = config
     if path is None and CONFIG.is_file():
         path = CONFIG
     base = load_parameters(path) if path is not None else Parameters()
     if path is None:
-        print("No config.toml here; using the default parameters.", file=sys.stderr)
-    names = (
-        "signal",
-        "lookback",
-        "skip",
-        "lag",
-        "quantiles",
-        "max_horizon",
-        "cost_bps",
-        "rebalance_every",
-        "exposure",
-        "objective",
-        "train_bars",
-        "test_bars",
-    )
-    flags = {name: getattr(args, name, None) for name in names}
+        typer.echo("No config.toml here; using the default parameters.", err=True)
     return base.updated(**flags), (path.parent if path is not None else Path())
 
 
-def _source(args: argparse.Namespace, parameters: Parameters) -> str:
-    if args.demo:
-        return "demo"
-{%- if 'data-database' in components %}
-    if args.database:
-        return "database"
-{%- endif %}
-    if args.prices is not None:
-        return str(Path.cwd() / args.prices)
+def _data(source: str | None, parameters: Parameters) -> str:
+    if source is not None:
+        return source
     if parameters.data is None:
         raise ValueError(
             "No data: set data in config.toml (demo, {% if 'data-database' in components %}"
@@ -190,7 +316,7 @@ def _report(sources: list[Path], out: Path | None) -> None:
     else:
         text = render_comparison(runs, chart_name)
     out.write_text(text, "utf-8")
-    print(f"Wrote {out}" + (f" and {chart_name}" if chart_name else ""))
+    typer.echo(f"Wrote {out}" + (f" and {chart_name}" if chart_name else ""))
 
 
 def _run_name(source: Path) -> str:
@@ -231,19 +357,7 @@ def _panel(parameters: Parameters, base: Path) -> tuple[Panel, Parameters]:
     if source not in {"demo", "database"}:
         source = str((base / source).resolve())
     return open_panel(source), parameters.updated(data=source)
-{%- if 'data-database' in components %}
-
-
-def _check_connection() -> int:
-    try:
-        print(check_connection())
-    except SQLAlchemyError as error:
-        cause = getattr(error, "orig", None) or error
-        print(f"Cannot connect: {type(error).__name__}: {cause}", file=sys.stderr)
-        return 1
-    return 0
-{%- endif %}
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    app()
