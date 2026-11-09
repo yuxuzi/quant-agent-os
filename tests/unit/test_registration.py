@@ -1,8 +1,10 @@
 """Registering a firm's functions (decision 0024): schemas, data by reference, and provenance."""
 
+import json
 import math
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
 import pytest
@@ -12,7 +14,7 @@ from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
 from quant_agent_os.registration import FirmApp, Frame, Prices, Series, _code_version, _Docstring
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
-from quant_agent_os.testing import check_tool
+from quant_agent_os.testing import check_app, check_tool
 from quant_agent_os.tools import (
     DuplicateToolError,
     Permission,
@@ -460,3 +462,72 @@ def test_parameter_descriptions_are_read_from_google_numpy_and_sphinx_docstrings
 
     assert doc.summary == "Sum it."
     assert doc.parameters == {"values": "The values.", "scale": "Applied last."}
+
+
+# check_app and the schema lock
+
+
+def _risk_app(function: Any = historical_var, version: str = "1.0.0") -> FirmApp:
+    app = FirmApp("risk")
+    app.expose(function, name="desk_var", version=version, returns=Series)
+    return app
+
+
+def test_check_app_runs_every_tool_with_its_example(store: Store) -> None:
+    records = check_app(_risk_app(), {"desk_var": {"returns": SERIES}}, datasets=store)
+
+    assert [record.status for record in records] == ["ok"]
+
+
+@pytest.mark.parametrize(
+    ("examples", "message"),
+    [
+        ({}, "desk_var has no example call"),
+        ({"desk_var": {"returns": SERIES}, "other": {}}, "other is not a tool of app 'risk'"),
+        ({"desk_var": {"returns": {"dataset": "nothing", "column": "x"}}}, "status is 'error'"),
+    ],
+)
+def test_check_app_reports_missing_unknown_and_failing_examples(
+    store: Store, examples: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ToolContractError, match=re.escape(message)):
+        check_app(_risk_app(), examples, datasets=store)
+
+
+def _var_with_horizon(returns: list[float], horizon: int, confidence: float = 0.75) -> float:
+    """VaR over a horizon, a new required input."""
+    return historical_var(returns, confidence) * math.sqrt(horizon)
+
+
+def _var_with_scale(returns: list[float], confidence: float = 0.75, scale: float = 1.0) -> float:
+    """VaR, scaled: a new optional input."""
+    return historical_var(returns, confidence) * scale
+
+
+def test_the_schema_lock_fails_a_change_without_a_big_enough_version_bump(
+    store: Store, tmp_path: Path
+) -> None:
+    lock = tmp_path / "tools.lock.json"
+    example = {"desk_var": {"returns": SERIES}}
+    horizon = {"desk_var": {"returns": SERIES, "horizon": 4}}
+
+    with pytest.raises(ToolContractError, match="there is no lock"):
+        check_app(_risk_app(), example, datasets=store, lock=lock)
+    check_app(_risk_app(), example, datasets=store, lock=lock, update_lock=True)
+    check_app(_risk_app(), example, datasets=store, lock=lock)  # unchanged: passes
+
+    with pytest.raises(ToolContractError, match="a major schema change needs a major"):
+        check_app(_risk_app(_var_with_horizon, "1.1.0"), horizon, datasets=store, lock=lock)
+    with pytest.raises(ToolContractError, match="needs a major"):  # not written
+        check_app(
+            _risk_app(_var_with_horizon, "1.1.0"),
+            horizon,
+            datasets=store,
+            lock=lock,
+            update_lock=True,
+        )
+    check_app(
+        _risk_app(_var_with_scale, "1.1.0"), example, datasets=store, lock=lock, update_lock=True
+    )
+    check_app(_risk_app(_var_with_scale, "1.1.0"), example, datasets=store, lock=lock)
+    assert json.loads(lock.read_text())["tools"]["desk_var"]["version"] == "1.1.0"
