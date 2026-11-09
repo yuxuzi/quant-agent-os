@@ -26,6 +26,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Register a firm's own functions in a few lines.** `FirmApp.expose(desk_var, returns=Series)` serves an
+  existing typed function as a tool: the input schema comes from its type hints, the descriptions from its
+  docstring, and a parameter marked `Series`, `Frame`, or `Prices` takes a dataset reference and reaches the
+  function as a list, a NumPy array, or a pandas object. Every result carries the data's fingerprints, the
+  code's version, the stated convention, and `computed` evidence. `serve_apps` serves apps beside the
+  platform's toolsets, and `check_app` tests them in a firm's CI, with an optional schema lock. The
+  firm-tools example's own file shrank from 47 lines of code to 20, none of them platform code. See
+  [add your own tools](docs/deployment.md#8-add-your-own-tools) and
+  [decision 0024](docs/decisions/0024-registering-a-firms-functions.md).
 - **Applications for each stage of a fund's work.** `qaos app new` now builds `alpha-research`, `strategy-backtest`,
   `risk-monitor`, and `performance-report`. They chain through ordinary files, and each works as generated and is
   meant to be changed: choose your tear sheet's sections, and add your own signals, portfolio rules, risk checks, and

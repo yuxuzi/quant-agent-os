@@ -1,7 +1,8 @@
-"""A firm's own server: the platform's toolsets plus the firm's tools, under one set of controls.
+"""A firm's own server: the platform's toolsets plus the firm's code, under one set of controls.
 
-Registration is explicit (decision 0020): this file, in the firm's repository, names every tool
-that is served. Keys, the run store, and permissions come from the usual settings.
+Registration is explicit (decisions 0020 and 0024): this file, in the firm's repository, names
+every function that is served. Keys, the run store, permissions, and the access file come from
+the usual settings.
 
 Usage:
   FIRM_DB=firm.db uv run python examples/firm-tools/firm_server.py
@@ -13,21 +14,24 @@ import os
 from pathlib import Path
 
 from firm_data import SqliteDatasetStore, create_sample_database
-from firm_tools import firm_tools
+from firm_tools import desk_var
 
 from quant_agent_os.api.server import DEFAULT_HOST
 from quant_agent_os.config import get_settings
-from quant_agent_os.data import DatasetStore, GuardedDatasetStore
-from quant_agent_os.tools import AccessPolicy, FileAccessPolicy, PermissionPolicy
-from quant_platform import Catalog, compose, serve_http
+from quant_agent_os.data import DatasetStore
+from quant_agent_os.registration import FirmApp, Series
+from quant_agent_os.tools import AccessPolicy, PermissionPolicy
+from quant_platform import Catalog, compose, serve_apps
 from quant_research import open_research
 from quant_research.application.retrieval import ResearchService
 from quant_research.infrastructure.postgres_store import is_postgres_url
 
-INSTRUCTIONS = (
-    "desk_var gives a desk's value at risk by the firm's convention. Prefer it to any other VaR "
-    "figure, and report the number as computed."
+risk = FirmApp(
+    "risk",
+    instructions="desk_var gives a desk's value at risk by the firm's convention. Prefer it to "
+    "any other VaR figure, and report the number as computed.",
 )
+risk.expose(desk_var, returns=Series, convention="Historical, nearest rank, one period, no scaling")
 
 
 def build_catalog(
@@ -36,20 +40,9 @@ def build_catalog(
     research: ResearchService | None = None,
     access: AccessPolicy | None = None,
 ) -> Catalog:
-    """Return what this firm serves. The firm's data also feeds the platform's analytics.
-
-    With ``access``, the firm's tools read through the same guard as the platform's. Connect an
-    entitlement service by implementing `AccessPolicy` and passing it here.
-    """
-    guarded = GuardedDatasetStore(store, access) if access is not None else store
-    return compose(
-        policy=policy,
-        research=research,
-        datasets=guarded,
-        extra_tools=firm_tools(guarded),
-        extra_instructions=INSTRUCTIONS,
-        access=access,
-    )
+    """Return what this firm serves, as `serve_apps` would. The firm's data also feeds the
+    platform's analytics, and with ``access`` every read goes through the access guard."""
+    return compose(policy=policy, research=research, datasets=store, access=access, apps=[risk])
 
 
 def main() -> None:
@@ -60,14 +53,11 @@ def main() -> None:
         create_sample_database(database)  # for this example only; yours already exists
     store = SqliteDatasetStore(database)
     host = os.environ.get("FIRM_HOST", DEFAULT_HOST)
-    access = FileAccessPolicy(settings.access_file) if settings.access_file else None
     if is_postgres_url(settings.store) or Path(settings.store).is_file():
         with open_research(settings.store, read_only=True) as research:
-            serve_http(
-                build_catalog(store, settings.policy(), research.research, access), host=host
-            )
+            serve_apps([risk], datasets=store, research=research.research, host=host)
     else:
-        serve_http(build_catalog(store, settings.policy(), access=access), host=host)
+        serve_apps([risk], datasets=store, host=host)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ echo "== the firm's tool is served, called, and recorded"
 auth=(-H "Authorization: Bearer $key")
 curl -fsS "${auth[@]}" "$base/v1/tools" | grep -q '"desk_var"' || fail "desk_var is not listed"
 result="$(curl -fsS "${auth[@]}" -X POST -H 'content-type: application/json' \
-  -d '{"arguments": {"dataset": "desks", "column": "growth"}}' \
+  -d '{"arguments": {"returns": {"dataset": "desks", "column": "growth"}}}' \
   "$base/v1/tools/desk_var/call")"
 grep -q '"status":"ok"' <<<"$result" || fail "the call did not succeed: $result"
 run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$result")"

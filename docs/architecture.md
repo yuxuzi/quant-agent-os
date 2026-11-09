@@ -73,7 +73,8 @@ small hooks such as `UsageGate`.
 | MCP | `mcp/adapters.py`, `mcp/server.py`, `mcp/http.py` | Definitions and calls over the executor; stdio; stateless Streamable HTTP |
 | REST | `api/` | FastAPI over the same executor; scoped API keys stored as hashes |
 | SDK | `sdk/` | `Platform`: `call`, `report`, `approve`, `resume`, run lookup |
-| Contract checks | `testing.py` | `check_tool`, also used by generated tool packages |
+| Registration | `registration.py` | `FirmApp.expose`: a firm's typed function as a tool, with data by reference and provenance |
+| Contract checks | `testing.py` | `check_tool`, also used by generated tool packages; `check_app` and its schema lock |
 | Observability | `observability/logging.py` | Logging with secret redaction |
 
 ## Layering and dependencies
@@ -96,7 +97,7 @@ Rules, enforced by `tests/contract/test_import_boundaries.py`:
 - Importing `quant_platform.cli` works with no extra installed, and serving imports no `cli` module.
 
 Core imports downward only: `tools` → `runtime` → `evidence`, `reporting`, `runs` → `config`, `data`,
-`serving`, `mcp`, `sdk`, `testing`, `observability`, `cli`.
+`serving`, `registration`, `mcp`, `sdk`, `testing`, `observability`, `cli`.
 
 ### From client to service
 

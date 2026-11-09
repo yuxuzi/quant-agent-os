@@ -26,8 +26,9 @@ is not a chatbot.
   there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
-  own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md));
-  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_http`,
+  own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md)), registered as plain functions
+  with `FirmApp.expose` ([decision 0024](docs/decisions/0024-registering-a-firms-functions.md));
+  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_apps`,
   `open_platform()` opens them from a notebook, and `qaos eval` runs agreed test cases against the
   platform's own tools (a firm's own tools go through `run_acceptance` with its catalog).
 - **Skills and client packaging**: `skills/` holds the four instruction-only skills,
@@ -88,8 +89,8 @@ the real results.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
    `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from
    `observability/logging.py`.
-4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces),
-   `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`), `observability/`,
+4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces), `registration.py`
+   (`FirmApp`), `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`, `check_app`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a
