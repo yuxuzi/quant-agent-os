@@ -206,14 +206,20 @@ def check_connection_command() -> None:
     try:
         typer.echo(check_connection())
     except SQLAlchemyError as error:
-        cause = getattr(error, "orig", None) or error
-        raise _fail(f"Cannot connect: {type(error).__name__}: {cause}") from error
+        raise _database_failure(error, "Cannot connect") from error
 {%- endif %}
 
 
 def _fail(error: Exception | str) -> typer.Exit:
     typer.secho(str(error), fg=typer.colors.RED, err=True)
     return typer.Exit(code=1)
+{%- if 'data-database' in components %}
+
+
+def _database_failure(error: SQLAlchemyError, attempt: str) -> typer.Exit:
+    cause = getattr(error, "orig", None) or error
+    return _fail(f"{attempt}: {type(error).__name__}: {cause}")
+{%- endif %}
 
 
 def _source_flag(prices: Path | None, demo: bool{% if 'data-database' in components %}, database: bool{% endif %}) -> str | None:
@@ -260,6 +266,10 @@ def _research(
         )
     except ValueError as error:  # bad data or parameters: say what to fix, not a traceback
         raise _fail(error) from error
+{%- if 'data-database' in components %}
+    except SQLAlchemyError as error:
+        raise _database_failure(error, "Cannot read prices from the database") from error
+{%- endif %}
     typer.echo(f"Wrote {folder}")
     typer.echo(_headline(outcome))
 

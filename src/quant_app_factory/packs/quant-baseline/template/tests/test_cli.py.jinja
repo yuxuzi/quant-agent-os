@@ -128,21 +128,22 @@ def test_report_reads_a_named_run_or_an_old_results_file() -> None:
 
 
 @pytest.mark.parametrize(
-    ("config", "flags"),
+    ("config", "flags", "message"),
     [
-        ("lookbak = 5\n", ["study", "--demo"]),  # a typo in config.toml
-        ("lag = -1\n", ["study", "--demo"]),
-        ("", ["study", "--demo", "--signal", "reversal", "--skip", "1"]),
-        ("", ["study", "--demo", "--signal", "magic"]),
-        ("", ["report"]),  # no runs yet
+        ("lookbak = 5\n", ["study", "--demo"], "unknown keys lookbak"),  # a typo in config.toml
+        ("lag = -1\n", ["study", "--demo"], "lag must be zero or more bars"),
+        ("", ["study", "--demo", "--signal", "reversal", "--skip", "1"], "does not take skip"),
+        ("", ["study", "--demo", "--signal", "magic"], "choose one of momentum, reversal"),
+        ("", ["report"], "run `study` or `backtest` first"),  # no runs yet
     ],
 )
-def test_mistakes_are_explained_and_fail(config: str, flags: list[str]) -> None:
+def test_mistakes_are_explained_and_fail(config: str, flags: list[str], message: str) -> None:
     Path("config.toml").write_text(config)
 
     done = runner.invoke(app, flags)
 
     assert done.exit_code == 1
+    assert message in done.output
     assert "Traceback" not in done.output and not Path("results").exists()
 
 
@@ -158,6 +159,21 @@ def test_only_one_data_source_flag_is_accepted() -> None:
 
     assert done.exit_code == 2
     assert "use only one of --prices, --demo" in done.output
+{%- if 'data-database' in components %}
+
+
+def test_a_database_failure_is_explained_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = tmp_path / "empty.db"  # no prices table, whatever database the project names
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{empty.as_posix()}")
+
+    done = runner.invoke(app, ["study", "--database"])
+
+    assert done.exit_code == 1
+    assert "Cannot read prices from the database: OperationalError" in done.output
+    assert "Traceback" not in done.output and not Path("results").exists()
+{%- endif %}
 
 
 def test_config_toml_names_the_data_and_the_run_records_where_it_was(tmp_path: Path) -> None:
