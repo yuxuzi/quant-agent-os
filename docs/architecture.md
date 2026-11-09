@@ -73,7 +73,7 @@ small hooks such as `UsageGate`.
 | MCP | `mcp/adapters.py`, `mcp/server.py`, `mcp/http.py` | Definitions and calls over the executor; stdio; stateless Streamable HTTP |
 | REST | `api/` | FastAPI over the same executor; scoped API keys stored as hashes |
 | SDK | `sdk/` | `Platform`: `call`, `report`, `approve`, `resume`, run lookup |
-| Registration | `registration.py` | `FirmApp.expose`: a firm's typed function as a tool, with data by reference and provenance |
+| Registration | `registration.py` | `FirmApp.expose`: a firm's typed function as a tool, with data by reference and provenance; `call_service`: a read-only internal service, from a typed stub |
 | Contract checks | `testing.py` | `check_tool`, also used by generated tool packages; `check_app` and its schema lock |
 | Observability | `observability/logging.py` | Logging with secret redaction |
 

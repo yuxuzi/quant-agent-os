@@ -35,6 +35,11 @@ All notable changes to this project are documented here. The format follows
   firm-tools example's own file shrank from 47 lines of code to 20, none of them platform code. See
   [add your own tools](docs/deployment.md#8-add-your-own-tools) and
   [decision 0024](docs/decisions/0024-registering-a-firms-functions.md).
+- **Serve a firm's internal service as a tool.** `FirmApp.call_service(desk_limits, url=...)` takes a typed stub
+  for the schemas and sends each call to a fixed host, with GET or POST, and an optional bearer token from an
+  environment variable. Data references are sent as values, the JSON answer is checked against the stub's return
+  type, redirects are not followed, and results carry `retrieved` evidence. The tool needs `network`. See
+  [internal services](docs/deployment.md#8-add-your-own-tools).
 - **Applications for each stage of a fund's work.** `qaos app new` now builds `alpha-research`, `strategy-backtest`,
   `risk-monitor`, and `performance-report`. They chain through ordinary files, and each works as generated and is
   meant to be changed: choose your tear sheet's sections, and add your own signals, portfolio rules, risk checks, and
