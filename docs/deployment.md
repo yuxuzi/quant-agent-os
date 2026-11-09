@@ -145,35 +145,58 @@ when a store refuses to open.
 
 ## 8. Add your own tools
 
-To serve your firm's own Python tools, write a small server of your own, in your repository, that
-names them. [examples/firm-tools](../examples/firm-tools/README.md) is a complete one:
+To serve your firm's own Python functions, write a small server of your own, in your repository,
+that names them. [examples/firm-tools](../examples/firm-tools/README.md) is a complete one:
 
 ```python
-from quant_platform import compose, serve_http
+from firm_risk.var import desk_var  # your code, unchanged
 
-catalog = compose(
-    policy=settings.policy(),
-    research=research.research,
-    datasets=store,  # any DatasetStore: a directory, or your own database
-    extra_tools=firm_tools(store),  # your tools, named here
-    extra_instructions="desk_var gives a desk's value at risk by the firm's convention.",
+from quant_agent_os.registration import FirmApp, Series
+from quant_platform import serve_apps
+
+risk = FirmApp(
+    "risk", instructions="desk_var gives a desk's value at risk by the firm's convention."
 )
-serve_http(catalog, host="0.0.0.0")
+risk.expose(desk_var, returns=Series, convention="Historical, nearest rank, one period")
+serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
 ```
 
+- **Schemas from your hints.** `expose` reads the input schema from the type hints, and the description
+  and each parameter's description from the docstring (Google, NumPy, or Sphinx style). A function
+  without type hints needs them added first. It may return a number, a dict, a dataclass, a Pydantic
+  model, or NumPy and pandas values, which are converted.
+- **Data by reference.** A parameter marked `Series`, `Frame`, or `Prices` takes a dataset reference,
+  such as `{"dataset": "desks", "column": "growth"}`. The server reads the dataset and passes your
+  function a list, a NumPy array, or a pandas object, whichever its hint asks for. Missing values arrive
+  as NaN, with a warning, and two series from different datasets are not aligned for you.
+- **Provenance added.** Every result carries the data's fingerprints, your package's version, the
+  convention you state, and `computed` evidence.
 - **Same controls.** Your tools go through the same executor as the platform's: permissions, input
-  and output validation, timeouts, recording, and keys. A tool that declares a permission the
-  policy does not grant is refused.
-- **No replacing.** A tool with a name the server already serves stops the server at start-up.
-- **Your data.** Give `compose` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
+  and output validation, timeouts, recording, keys, and the access file. A tool that reads data
+  declares `read_local_data`. **Declare any other permission yourself**, as in
+  `expose(..., permissions=[Permission.NETWORK])`: the platform cannot tell that a function writes files
+  or calls out.
+- **No replacing.** A tool with a name the server already serves stops the server at start-up. Give an
+  app `prefix=True` to start its tools' names with its own.
+- **Your data.** Give `serve_apps` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
   tools and `list_datasets` then read it by reference, and no connector is needed.
-- **Test it.** Put `check_tool` from `quant_agent_os.testing` in your tool package's tests.
+- **Test it.** In your CI, call `check_app(risk, {"desk_var": {...}}, datasets=store)` from
+  `quant_agent_os.testing`. With `lock=Path("tools.lock.json")` it also fails when a tool's schemas
+  change without a big enough version bump; create the lock with `update_lock=True`.
 - **Deploy it.** Build an image from the platform's, as the example's `Dockerfile` does, then run the
   compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
   Mount anything your tools read in a compose override. Every other step above stays the same.
 
+Ready-made tools join an app with `include`, such as a generated application's `agent-tools`, and a tool
+written by hand with `@tool` still works through `compose(extra_tools=...)` and `serve_http`.
+
+**Known limits.** A long calculation runs in a thread with a timeout, not in a process that can be
+killed, and a result over the size limit is refused, not streamed. Scripts in other languages and
+internal services need adapters that are not built yet.
+
 The tool names are in your code and not in a setting, so what the server runs is what your repository
-says ([decision 0020](decisions/0020-a-firms-own-server.md)).
+says (decisions [0020](decisions/0020-a-firms-own-server.md) and
+[0024](decisions/0024-registering-a-firms-functions.md)).
 
 ## 9. Decide who reaches what
 

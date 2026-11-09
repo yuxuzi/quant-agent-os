@@ -11,7 +11,9 @@ from rich.console import Console
 from quant_agent_os.api import ApiKeyError, KeyRing
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
 from quant_agent_os.config import get_settings
+from quant_agent_os.data import DatasetStore
 from quant_agent_os.mcp import run_stdio
+from quant_agent_os.registration import FirmApp
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tools import (
@@ -21,8 +23,9 @@ from quant_agent_os.tools import (
     ToolRegistry,
     ToolSpec,
 )
-from quant_platform.composition import Catalog
+from quant_platform.composition import Catalog, compose
 from quant_platform.http import build_http_app, single_tenant
+from quant_research.application.retrieval import ResearchService
 
 errors = Console(stderr=True, soft_wrap=True)
 
@@ -158,3 +161,33 @@ def serve_http(
         run_http(http_app, host=host, port=port)
     finally:
         run_store.close()
+
+
+def serve_apps(
+    apps: Sequence[FirmApp],
+    *,
+    datasets: DatasetStore | None = None,
+    research: ResearchService | None = None,
+    policy: PermissionPolicy | None = None,
+    access: AccessPolicy | None = None,
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+) -> None:
+    """Serve a firm's ``apps`` beside the platform's toolsets until interrupted (decision 0024).
+
+    ``datasets`` is the firm's data, read by its apps and by the platform's analytics. The
+    permission policy and the access file come from the usual settings unless given, as for
+    `qaos serve`, and keys and the run store are `serve_http`'s. Raises as `serve_http` does,
+    and `ToolContractError` when an app reads data and no ``datasets`` is given.
+    """
+    settings = get_settings()
+    if access is None and settings.access_file is not None:
+        access = FileAccessPolicy(settings.access_file)
+    catalog = compose(
+        policy=policy or settings.policy(),
+        research=research,
+        datasets=datasets,
+        access=access,
+        apps=apps,
+    )
+    serve_http(catalog, host=host, port=port)
