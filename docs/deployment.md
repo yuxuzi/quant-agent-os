@@ -187,12 +187,40 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
   compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
   Mount anything your tools read in a compose override. Every other step above stays the same.
 
+**Internal services.** A read-only service your firm already runs, such as a limits or pricing API,
+becomes a tool from a typed stub whose body never runs:
+
+```python
+def desk_limits(desk: str) -> Limits:
+    """A desk's risk limits, from the limits service."""
+
+
+risk.call_service(
+    desk_limits, url="https://limits.internal/desks/{desk}", method="GET", token_env="LIMITS_TOKEN"
+)
+```
+
+- The stub's hints and docstring give the schemas, as for `expose`. With POST, the arguments go as a JSON
+  object, and data references are read and sent as values, with missing values as null. With GET, they go
+  in the query string, and a `{name}` in the path takes that argument.
+- The answer must be JSON that matches the stub's return type. Results carry `retrieved` evidence naming
+  the service, and the data's fingerprints.
+- The host is fixed in your code. Redirects are not followed, and an answer over the size limit is
+  refused. `token_env` names a variable whose value is sent as a bearer token, only over https; it is
+  never shown or recorded.
+- The tool needs `network`. Grant it with `QUANT_AGENT_OS_GRANTED_PERMISSIONS`. Each call then needs an
+  approval, unless you give `network` a standing approval with
+  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'` ([configuration](configuration.md)). Register only
+  services that change nothing, or declare `external_action` too.
+- A failure such as an unreachable service or an error status reaches the caller as an internal error
+  with the call id; the reason is in the run record.
+
 Ready-made tools join an app with `include`, such as a generated application's `agent-tools`, and a tool
 written by hand with `@tool` still works through `compose(extra_tools=...)` and `serve_http`.
 
 **Known limits.** A long calculation runs in a thread with a timeout, not in a process that can be
-killed, and a result over the size limit is refused, not streamed. Scripts in other languages and
-internal services need adapters that are not built yet.
+killed, and a result over the size limit is refused, not streamed. Only Python functions and internal
+services are supported; code in other languages, such as R or Julia, is not.
 
 The tool names are in your code and not in a setting, so what the server runs is what your repository
 says (decisions [0020](decisions/0020-a-firms-own-server.md) and

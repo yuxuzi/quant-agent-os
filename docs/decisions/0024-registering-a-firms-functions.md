@@ -48,5 +48,8 @@ What 0020 decided still holds:
   the limit are refused, not streamed.
 - Two series from different datasets reach the function as stored, without being aligned by date. The function
   aligns them when it needs to.
-- Running an existing script or executable, and calling an internal service, are separate adapters, and not yet
-  built. A script needs `execute_code`, which needs an approval for every call by default.
+- Calling an internal service is a separate adapter, `FirmApp.call_service`. A typed stub describes the service,
+  the host is fixed in the firm's code, and the tool needs `network`. Its results are `retrieved` evidence: the
+  platform did not compute them.
+- Only Python is supported. There is no adapter for scripts or executables in other languages, such as R or
+  Julia: it would need `execute_code` on a served tool.

@@ -8,7 +8,8 @@ description and parameter descriptions. A parameter marked `Series`, `Frame`, or
 a dataset reference; the dataset is read through the store the app is served with, so the access
 guard applies, and the function gets plain values, a NumPy array, or a pandas object, whichever
 its hint asks for. Results gain the data's fingerprints, the code's version, the stated
-convention, and ``computed`` evidence. Registration stays explicit, in the firm's own server
+convention, and ``computed`` evidence. `FirmApp.call_service` registers a read-only internal
+service the same way, from a typed stub. Registration stays explicit, in the firm's own server
 file (decision 0020): nothing here discovers or loads code.
 
 NumPy and pandas are never imported unless a function's hints name them.
@@ -19,9 +20,15 @@ from __future__ import annotations
 import dataclasses
 import importlib.metadata
 import inspect
+import json
 import math
+import os
 import re
+import string
 import types
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_type_hints
@@ -105,6 +112,7 @@ class _Exposed:
     max_output_bytes: int
     deterministic: bool
     idempotent: bool
+    service: _Service | None = None  # the function stands for a service called over HTTP
 
 
 class FirmApp:
@@ -158,12 +166,96 @@ class FirmApp:
         detect a function that writes files or calls out. Raises `ToolContractError` naming
         what to change when the function cannot be exposed as it is.
         """
+        self._add(
+            function,
+            name=name,
+            description=description,
+            convention=convention,
+            version=version,
+            permissions=permissions,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+            deterministic=deterministic,
+            idempotent=idempotent,
+            data=data,
+        )
+        return function
+
+    def call_service(
+        self,
+        stub: Callable[..., Any],
+        /,
+        *,
+        url: str,
+        method: Literal["GET", "POST"] = "POST",
+        token_env: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        convention: str | None = None,
+        version: str = "1.0.0",
+        permissions: Iterable[Permission] = (),
+        timeout_seconds: float = 10.0,
+        max_output_bytes: int = 100_000,
+        deterministic: bool = False,
+        idempotent: bool = True,
+        **data: DataMarker,
+    ) -> Callable[..., Any]:
+        """Register a read-only internal service as a tool, described by ``stub``, and return it.
+
+        ``stub`` is a function whose hints and docstring describe the service, as for `expose`;
+        its body never runs. Each call sends the arguments to ``url``: as a JSON object with
+        POST, or as a query string with GET. A ``{name}`` in the URL's path takes that
+        argument instead. Data references are read and sent as values, and the JSON answer is
+        checked against the stub's return type. The host is fixed here, redirects are not
+        followed, and a larger answer than ``max_output_bytes`` is refused. ``token_env``
+        names an environment variable whose value is sent as a bearer token; it is read at
+        each call and never shown. The tool needs `network`, which needs an approval for each
+        call unless the operator pre-approves it, and the service must not change anything:
+        declare `external_action` in ``permissions`` for one that does.
+        """
+        self._add(
+            stub,
+            name=name,
+            description=description,
+            convention=convention,
+            version=version,
+            permissions={*permissions, Permission.NETWORK},
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+            deterministic=deterministic,
+            idempotent=idempotent,
+            data=data,
+            endpoint=(url, method, token_env),
+        )
+        return stub
+
+    def _add(
+        self,
+        function: Callable[..., Any],
+        *,
+        name: str | None,
+        description: str | None,
+        convention: str | None,
+        version: str,
+        permissions: Iterable[Permission],
+        timeout_seconds: float,
+        max_output_bytes: int,
+        deterministic: bool,
+        idempotent: bool,
+        data: Mapping[str, DataMarker],
+        endpoint: tuple[str, Literal["GET", "POST"], str | None] | None = None,
+    ) -> None:
         tool_name = f"{self.name}_{name or function.__name__}" if self.prefix else name
         tool_name = tool_name or function.__name__
         if tool_name in self.names:
             raise DuplicateToolError(f"App '{self.name}' already has a tool named '{tool_name}'.")
         doc = _Docstring.parse(inspect.getdoc(function) or "")
         inputs = _inputs(function, tool_name, data)
+        service = (
+            _Service.build(tool_name, *endpoint, inputs, timeout_seconds, max_output_bytes)
+            if endpoint
+            else None
+        )
         input_model = _input_model(tool_name, function, inputs, doc)
         output_model, flatten = _output_model(tool_name, function)
         summary = description or doc.summary
@@ -179,7 +271,7 @@ class FirmApp:
             text += f" {BY_REFERENCE}"
             permissions = {*permissions, Permission.READ_LOCAL_DATA}
         entry = _Exposed(
-            function=function,
+            function=service or function,
             name=tool_name,
             description=text,
             version=version,
@@ -188,16 +280,16 @@ class FirmApp:
             output_model=output_model,
             flatten=flatten,
             convention=convention,
-            code_version=_code_version(function),
+            code_version=None if service else _code_version(function),
             permissions=frozenset(permissions),
             timeout_seconds=timeout_seconds,
             max_output_bytes=max_output_bytes,
             deterministic=deterministic,
             idempotent=idempotent,
+            service=service,
         )
         _build(entry, None)  # checks the name, version, and limits now, not when served
         self._exposed.append(entry)
-        return function
 
     def include(self, tools: Iterable[ToolSpec[Any, Any]] | ToolRegistry) -> None:
         """Add ready-made tools as they are, such as a generated application's registry."""
@@ -263,9 +355,8 @@ def _call(entry: _Exposed, store: DatasetStore | None, params: BaseModel) -> Bas
         for column, values in columns.items():
             missing = sum(math.isnan(number) for number in values)
             if missing:
-                warnings.append(
-                    f"{dataset.id}.{column} has {missing} missing values, passed as NaN."
-                )
+                passed = "sent as null" if entry.service else "passed as NaN"
+                warnings.append(f"{dataset.id}.{column} has {missing} missing values, {passed}.")
             sources.append(
                 SourceRef(
                     source_id=f"{dataset.id}.{column}",
@@ -274,12 +365,21 @@ def _call(entry: _Exposed, store: DatasetStore | None, params: BaseModel) -> Bas
             )
         arguments[item.name] = _as_target(item, dataset, columns)
     result = _plain(entry.function(**arguments))
+    if entry.flatten and not isinstance(result, dict):
+        raise TypeError(f"{entry.name} gave {type(result).__name__}, not an object with fields.")
     fields: dict[str, Any] = dict(result) if entry.flatten else {"result": result}
     versions = {f"dataset:{d.id}": d.fingerprint for d in read.values()}
     versions.update(fields.pop("data_versions", None) or {})
-    statement = f"{entry.name} computed {_summary(result)}"
-    if sources:
-        statement += f" from {', '.join(source.source_id for source in sources)}"
+    if entry.service:
+        statement = f"{entry.name} retrieved {_summary(result)} from the service at "
+        statement += entry.service.url
+        if sources:
+            statement += f", given {', '.join(source.source_id for source in sources)}"
+        sources.append(SourceRef(source_id=entry.service.url, location=entry.service.method))
+    else:
+        statement = f"{entry.name} computed {_summary(result)}"
+        if sources:
+            statement += f" from {', '.join(source.source_id for source in sources)}"
     if entry.convention:
         statement += f", by the convention: {entry.convention.rstrip('.')}"
     own_warnings = fields.pop("warnings", None) or []
@@ -293,7 +393,11 @@ def _call(entry: _Exposed, store: DatasetStore | None, params: BaseModel) -> Bas
             "warnings": [*own_warnings, *warnings],
             "evidence": [
                 *own_evidence,
-                Evidence(kind="computed", statement=statement + ".", sources=sources),
+                Evidence(
+                    kind="retrieved" if entry.service else "computed",
+                    statement=statement + ".",
+                    sources=sources,
+                ),
             ],
         }
     )
@@ -303,6 +407,151 @@ def _summary(result: Any) -> str:
     if isinstance(result, bool) or not isinstance(result, int | float):
         return "its result"
     return f"{result:.6g}"
+
+
+# Services
+
+LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
+QUERY_TYPES = (str, int, float, bool)
+
+
+class ServiceError(RuntimeError):
+    """Raised when an internal service cannot be reached or answers with an error."""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None  # urllib then raises HTTPError with the redirect's status
+
+
+@dataclass(frozen=True)
+class _Service:
+    """Calls one endpoint of a firm's service with a tool's arguments."""
+
+    url: str  # as registered, with any {name} in the path; safe to show
+    method: Literal["GET", "POST"]
+    token_env: str | None
+    path_names: tuple[str, ...]
+    timeout_seconds: float
+    max_bytes: int
+
+    @classmethod
+    def build(
+        cls,
+        tool_name: str,
+        url: str,
+        method: Literal["GET", "POST"],
+        token_env: str | None,
+        inputs: Sequence[_Input],
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> _Service:
+        """Check the endpoint against the stub's parameters, so mistakes stop the server early."""
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ToolContractError(
+                f"Tool '{tool_name}': url must be an http or https address, not '{url}'."
+            )
+        if "@" in parts.netloc or "{" in parts.netloc:
+            raise ToolContractError(
+                f"Tool '{tool_name}': the url's host must be fixed, with no credentials or "
+                "{name}; use token_env= for a token."
+            )
+        if method not in ("GET", "POST"):
+            raise ToolContractError(f"Tool '{tool_name}': method must be GET or POST.")
+        if token_env and parts.scheme == "http" and parts.hostname not in LOOPBACK:
+            raise ToolContractError(
+                f"Tool '{tool_name}': a token is sent only over https; use an https url."
+            )
+        names = {item.name for item in inputs}
+        try:
+            fields = [
+                field for _, field, _, _ in string.Formatter().parse(url) if field is not None
+            ]
+        except ValueError as error:
+            raise ToolContractError(f"Tool '{tool_name}': the url is malformed: {error}") from error
+        unknown = [field for field in fields if field not in names]
+        if unknown:
+            raise ToolContractError(
+                f"Tool '{tool_name}': the url names {', '.join(unknown)}, which the stub's "
+                "parameters do not."
+            )
+        if method == "GET":
+            for item in inputs:
+                origin = get_origin(item.target)
+                inner = get_args(item.target)[0] if origin in (list, tuple) else item.target
+                if item.marker is not None or not _query_value(inner):
+                    raise ToolContractError(
+                        f"Tool '{tool_name}': parameter '{item.name}' cannot go in a query "
+                        "string; use method='POST'."
+                    )
+        return cls(url, method, token_env, tuple(fields), timeout_seconds, max_bytes)
+
+    def __call__(self, **arguments: Any) -> Any:
+        values = _json_ready(_plain(arguments))
+        url = self.url.format(
+            **{name: urllib.parse.quote(str(values.pop(name)), safe="") for name in self.path_names}
+        )
+        headers = {"Accept": "application/json"}
+        if self.token_env:
+            token = os.environ.get(self.token_env)
+            if not token:
+                raise ServiceError(f"Set {self.token_env} to the token for {self.url}.")
+            headers["Authorization"] = f"Bearer {token}"
+        body = None
+        if self.method == "GET":
+            query = urllib.parse.urlencode(
+                {key: value for key, value in values.items() if value is not None}, doseq=True
+            )
+            if query:
+                url += ("&" if urllib.parse.urlsplit(url).query else "?") + query
+        else:
+            body = json.dumps(values, allow_nan=False).encode()
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(url, data=body, headers=headers, method=self.method)
+        opener = urllib.request.build_opener(_NoRedirect)
+        try:
+            with opener.open(request, timeout=self.timeout_seconds) as response:
+                answer = response.read(self.max_bytes + 1)
+        except urllib.error.HTTPError as error:
+            error.close()
+            raise ServiceError(
+                f"The service at {self.url} answered {error.code} {error.reason}"
+                + ("; redirects are not followed." if 300 <= error.code < 400 else ".")
+            ) from None
+        except TimeoutError:
+            raise ServiceError(
+                f"The service at {self.url} did not answer within {self.timeout_seconds:g} s."
+            ) from None
+        except (urllib.error.URLError, OSError) as error:
+            reason = getattr(error, "reason", error)
+            raise ServiceError(f"Cannot reach the service at {self.url}: {reason}.") from None
+        if len(answer) > self.max_bytes:
+            raise ServiceError(
+                f"The service at {self.url} answered with more than {self.max_bytes} bytes."
+            )
+        try:
+            return json.loads(answer)
+        except ValueError:
+            raise ServiceError(f"The service at {self.url} did not answer with JSON.") from None
+
+
+def _query_value(hint: Any) -> bool:
+    hint = _without_none(hint)[0]
+    if get_origin(hint) is Literal:
+        return True
+    return isinstance(hint, type) and issubclass(hint, QUERY_TYPES)
+
+
+def _json_ready(value: Any) -> Any:
+    """``value`` with NaN and infinity as null, which JSON can carry."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_ready(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
+    return value
 
 
 # Inputs
