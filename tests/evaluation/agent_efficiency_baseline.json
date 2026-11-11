@@ -8,7 +8,7 @@
     },
     "platform-with-factory": {
       "client_only_bytes": 22514,
-      "definition_bytes": 7486,
+      "definition_bytes": 7488,
       "instruction_bytes": 1145,
       "tools": 9
     }

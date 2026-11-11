@@ -26,6 +26,10 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 ## Unreleased
 
+No changes yet.
+
+## 0.3.0
+
 | Tool | Version | Change |
 | --- | --- | --- |
 | `find_related_signals` | 1.1.0 | Adds `abstained`, true when no passage qualified, so a client need not infer it from empty `passages`. |
