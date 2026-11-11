@@ -4,13 +4,12 @@ The project is one wheel, `quant-agent-os`, at one version ([decision 0018](deci
 `tests/contract/test_release.py` checks that the plugin and the changelog name it, and the
 server's `serverInfo.version` is this version.
 
-## 0.1.0 scope
+## Scope
 
-0.1.0 is for local use (stdio, the Claude Code plugin) and for self-hosted team servers behind
-a reverse proxy. A public, multi-tenant endpoint is not in scope until the steps in
-[security-review.md](security-review.md#before-a-public-endpoint) are done: a rate limit on
-unauthenticated requests (F-1), a plan for every tenant (F-2), and F-1 and F-5 fixed or
-accepted in writing.
+Releases are for local use (stdio, the Claude Code plugin) and for a firm's own server behind its
+reverse proxy. There is no multi-tenant service ([decision 0023](decisions/0023-no-hosted-service.md)).
+Before a server faces the public internet, do the steps in
+[security-review.md](security-review.md#before-a-public-endpoint).
 
 ## Where releases go
 

@@ -4,7 +4,7 @@ Quant-Agent-OS reaches your AI client as one MCP server plus four skills that te
 how to use it. You need [uv](https://docs.astral.sh/uv/). From nothing to a first answer:
 
 ```bash
-uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.2.0"
+uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.3.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; restart the client
@@ -13,9 +13,7 @@ qaos connect claude --write       # or cursor, vscode; restart the client
 `--python 3.13` matters: on Python 3.15, the `analytics` extra's `bottleneck` dependency has no
 prebuilt wheel, so it needs a working C compiler to install. 3.11 to 3.14 work too.
 
-Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one. Some options
-below are new since 0.2.0 and need an install from `@main` until the next release: `--vocabulary`,
-`--embedder local`, `--expires-in-days`, the `parquet` extra, and `open_platform`.
+Use a newer [release](https://github.com/yuxuzi/quant-agent-os/releases) if there is one.
 `qaos doctor` explains anything that is missing. Add extras as you need them: `pdf` for PDF
 ingestion, `parquet` for Parquet files in `qaos data add`, `postgres` for a PostgreSQL store,
 `factory` for `qaos app`, or `all`. `local-embeddings` adds semantic search on your machine; it is
@@ -106,12 +104,11 @@ Calls include retrieved passages, so treat `runs.db` like the corpus itself
 ## Use it from a notebook
 
 Install into the notebook's own environment, not with `uv tool install`, because a kernel cannot
-import a tool's environment. The `analytics` extra brings pandas. `open_platform` is new since
-0.2.0, so until the next release, install from `main`:
+import a tool's environment. The `analytics` extra brings pandas:
 
 ```bash
 uv init --python 3.13 my-research && cd my-research     # in a project you have: uv python pin 3.13
-uv add "quant-agent-os[analytics] @ git+https://github.com/yuxuzi/quant-agent-os@main"
+uv add "quant-agent-os[analytics] @ git+https://github.com/yuxuzi/quant-agent-os@v0.3.0"
 ```
 
 ```python

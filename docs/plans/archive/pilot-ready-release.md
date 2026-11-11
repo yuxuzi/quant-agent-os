@@ -1,5 +1,7 @@
 # Plan: 0.3.0, ready for a first pilot
 
+**Finished:** released as 0.3.0. Open follow-ups are in [the open backlog](../../ENGINEERING_REVIEW_PLAN.md).
+
 ## Context
 
 The next phase is one firm, hosting its own server, running one workflow: AI-assisted portfolio
@@ -76,7 +78,7 @@ public `main` stays under the licence it merged under.
 
 | # | Decision | Why now | Recommendation |
 | --- | --- | --- | --- |
-| 1 | **O-4: the licence from 0.3.0 onwards** | **Decided:** the Business Source License 1.1, [decision 0019](../decisions/0019-business-source-license.md), applied in its own PR | Counsel reviews it before first commercial use |
+| 1 | **O-4: the licence from 0.3.0 onwards** | **Decided:** the Business Source License 1.1, [decision 0019](../../decisions/0019-business-source-license.md), applied in its own PR | Counsel reviews it before first commercial use |
 | 2 | **Name availability (B-22)** | The README still says the name is unchecked, and a pilot is commercial use | Check before S3's demonstration is shown to anyone |
 | 3 | **S1's and S2's design** | **Approved 2026-11-06,** including `firm_server.py` over a `--tools-module` option. S1 is recorded as decision 0020, and S2 as decision 0021 | Build as written below |
 
@@ -184,13 +186,13 @@ marked `abstain` each fail it. An export round-trips every agreed audit field: p
 
 Follow `docs/releasing.md`, and **ask first**, because a version bump and tag are the owner's call.
 
-- [ ] CI green on every OS and Python; PostgreSQL store tests run locally; authorization and isolation gates pass
-- [ ] Agent-efficiency evaluation shows only intended deltas; research evaluation and `real_corpus.py eval` hold their baselines
-- [ ] Licence files match decision 0019, and counsel has reviewed them
-- [ ] Upgrade drill passes from v0.2.0
+- [x] CI green on every OS and Python; PostgreSQL store tests run locally; authorization and isolation gates pass
+- [x] Agent-efficiency evaluation shows only intended deltas; research evaluation and `real_corpus.py eval` hold their baselines
+- [ ] Licence files match decision 0019, and counsel has reviewed them (the files match; counsel's review is the owner's, before first commercial use)
+- [x] Upgrade drill passes from v0.2.0
 - [ ] Install from the tag in a clean home, with no `--python` override
-- [ ] Changelog and tools changelog updated, and the `@main` note removed from getting started
-- [ ] `ENGINEERING_REVIEW_PLAN.md` reduced to what is open, and this plan archived
+- [x] Changelog and tools changelog updated, and the `@main` note removed from getting started
+- [x] `ENGINEERING_REVIEW_PLAN.md` reduced to what is open, and this plan archived
 
 ## Deferred to after the first pilot
 
