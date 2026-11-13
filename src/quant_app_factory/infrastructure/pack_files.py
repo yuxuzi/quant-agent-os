@@ -7,6 +7,7 @@ profile); and leaves the result for the user to edit by hand or with an AI assis
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ import stat
 import sys
 import tomllib
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from quant_agent_os.runtime.runner import CommandResult, run_command
@@ -68,32 +70,83 @@ def fork_pack(
     return destination
 
 
+@dataclass(frozen=True)
+class FetchedPack:
+    """A git pack in the local cache. ``commit`` is None when an existing cache was reused."""
+
+    path: Path
+    commit: str | None
+    digest: str
+
+
+def pack_digest(root: Path) -> str:
+    """Return a SHA-256 over every file's relative path and bytes under ``root``.
+
+    This is the digest pytemplate-uv records and its ``--template-digest`` takes: files in order
+    of their path components, each path (with forward slashes) and each file's bytes followed by
+    a NUL byte. ``tests/factory/test_template_packs.py`` holds the two equal.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).parts):
+        if path.is_file():
+            digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+            digest.update(path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
 def clone_pack(
     source: str,
     ref: str,
     destination: Path,
     runner: Callable[..., CommandResult] = run_command,
-) -> Path:
+    *,
+    commit: str | None = None,
+    digest: str | None = None,
+) -> FetchedPack:
     """Fetch ``source`` (``gh:org/repo``, a git URL, or a local repository) at ``ref``.
 
     The checkout is cached at ``destination`` without its git history; an existing cache is
-    reused, so plans never need the network again.
+    reused, so plans never need the network again. ``commit`` and ``digest`` pin the pack: a
+    fetch that resolves to another commit, or whose files have another digest, is removed and
+    refused. A reused cache has no commit to compare, so pass ``commit`` only for a new fetch.
     """
     if destination.is_dir():
-        return destination
+        fetched = FetchedPack(destination, None, pack_digest(destination))
+    else:
+        fetched = _fetch(source, ref, destination, runner)
+    problem = None
+    if commit is not None and fetched.commit != commit:
+        problem = f"is commit {fetched.commit or 'unknown'}, not the pinned {commit}"
+    elif digest is not None and fetched.digest != digest:
+        problem = f"has digest {fetched.digest}, not the pinned {digest}"
+    if problem:
+        _remove_tree(destination)
+        raise PackError(
+            f"{source} at {ref} {problem}. The tag may have moved; nothing was registered."
+        )
+    return fetched
+
+
+def _fetch(
+    source: str, ref: str, destination: Path, runner: Callable[..., CommandResult]
+) -> FetchedPack:
     url = f"https://github.com/{source[3:]}.git" if source.startswith("gh:") else source
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # Line endings are not converted, so a pack has the same bytes and digest on every machine.
+    clone = ["git", "-c", "core.autocrlf=false", "clone", "--quiet", "--depth", "1"]
     result = runner(
-        ["git", "clone", "--quiet", "--depth", "1", "--branch", ref, url, str(destination)],
+        [*clone, "--branch", ref, url, str(destination)],
         cwd=destination.parent,
         timeout=CLONE_TIMEOUT_SECONDS,
     )
+    if result.ok:
+        result = runner(["git", "rev-parse", "HEAD"], cwd=destination, timeout=30.0)
     if not result.ok:
         _remove_tree(destination)
         detail = (result.stderr_tail or result.stdout_tail).strip()[-500:]
         raise PackError(f"Cannot fetch {source} at {ref}: {detail or 'git failed'}")
     _remove_tree(destination / ".git")
-    return destination
+    return FetchedPack(destination, result.stdout_tail.strip(), pack_digest(destination))
 
 
 def _remove_tree(path: Path) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import getpass
 import re
 import shutil
+import tomllib
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -33,7 +34,13 @@ from quant_app_factory.domain.spec import (
     is_template_path,
     load_spec,
 )
-from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
+from quant_app_factory.infrastructure.pack_files import (
+    FetchedPack,
+    PackError,
+    clone_pack,
+    fork_pack,
+    pack_digest,
+)
 from quant_app_factory.infrastructure.settings_file import (
     RegisteredTemplate,
     SettingsError,
@@ -646,18 +653,43 @@ def _print_check(factory: AppFactory, template: str) -> bool:
     return result.ok
 
 
+def _pack_version(factory: AppFactory, template: str) -> str | None:
+    """Return the version in the pack's manifest (None for pytemplate-uv's own profiles)."""
+    location = factory.template_location(template)
+    if location is None:
+        return None
+    try:
+        manifest = tomllib.loads((Path(location) / "pytemplate-pack.toml").read_text("utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    version = manifest.get("version")
+    return version if isinstance(version, str) else None
+
+
 @template_app.command("list")
 def template_list() -> None:
-    """List the built-in templates and the ones registered in factory.toml."""
+    """List every template by the name `qaos app new` takes, with its pack's version."""
     factory = default_factory()
-    for name in [*sorted(BUILT_IN_PACKS), "bundled"]:
-        profiles = ", ".join(p.id for p in factory.describe_template(name).profiles)
-        console.print(f"[bold]{name}[/bold] (built-in): {profiles}", soft_wrap=True)
-    for name, entry in sorted(load_settings().templates.items()):
-        pinned = f" at {entry.ref}" if entry.ref else ""
-        console.print(
-            f"[bold]{name}[/bold]: {entry.source}{pinned} -> {entry.path}", soft_wrap=True
-        )
+    registered = load_settings().templates
+    for name in [*sorted(BUILT_IN_PACKS), "bundled", *sorted(registered)]:
+        entry = registered.get(name)
+        try:
+            described = factory.describe_template(name)
+        except ScaffoldError as error:
+            errors.print(f"[bold]{name}[/bold]: [red]{error}[/red]", soft_wrap=True)
+            continue
+        version = _pack_version(factory, name)
+        origin = entry.source if entry is not None else "built in"
+        if name == "bundled":
+            origin += ", pytemplate-uv's own profiles"
+        if entry is not None and entry.ref:
+            origin += f" at {entry.ref}"
+        if entry is not None and entry.commit:
+            origin += f", commit {entry.commit[:12]}"
+        heading = f"[bold]{name}[/bold]" + (f" {version}" if version else "")
+        console.print(f"{heading} ({origin})", soft_wrap=True)
+        for profile in described.profiles:
+            console.print(f"  {name}/{profile.id}", soft_wrap=True)
 
 
 @template_app.command("fork")
@@ -705,6 +737,15 @@ def template_check(
     """Load a pack and plan each of its profiles with default answers. Writes nothing."""
     if is_template_path(template) or Path(template).is_dir():
         template = Path(template).expanduser().resolve().as_posix()
+    entry = load_settings().templates.get(template)
+    if entry is not None and entry.digest and Path(entry.path).is_dir():
+        found = pack_digest(Path(entry.path))
+        if found != entry.digest:
+            raise _fail(
+                f"The cached pack {template!r} has digest {found}, not the recorded "
+                f"{entry.digest}: its files changed after it was fetched. Remove {entry.path} "
+                "and run `qaos app template add` again."
+            )
     if not _print_check(default_factory(), template):
         raise typer.Exit(code=1)
 
@@ -714,26 +755,47 @@ def template_add(
     source: Annotated[str, typer.Argument(help="A pack directory, gh:org/repo, or a git URL.")],
     name: Annotated[str, typer.Option(help="The name specs will use.")],
     ref: Annotated[
-        str | None, typer.Option(help="Git tag or branch to pin (required for git sources).")
+        str | None, typer.Option(help="Git tag or branch to fetch (required for git sources).")
+    ] = None,
+    commit: Annotated[
+        str | None, typer.Option(help="Refuse the git pack unless --ref is this commit.")
+    ] = None,
+    digest: Annotated[
+        str | None, typer.Option(help="Refuse the git pack unless its files have this digest.")
     ] = None,
 ) -> None:
-    """Register a pack. A git pack is fetched once at --ref and cached, so plans stay offline."""
+    """Register a pack. A git pack is fetched once at --ref and cached, so plans stay offline.
+
+    The commit and the digest of what was fetched are recorded. Pass --commit and --digest, as
+    the pack's author or an index publishes them, to refuse a pack that differs.
+    """
     local = Path(source).expanduser()
+    fetched: FetchedPack | None = None
     if local.is_dir() and ref is None:
+        if commit or digest:
+            raise _fail("--commit and --digest pin a git pack: pass --ref as well.")
         path = local.resolve()
-        cached = False
     else:
         if ref is None:
             raise _fail("Pin a git pack with --ref (a tag or branch).")
         path = settings_path().parent / "packs" / name / ref
+        if (commit or digest) and path.is_dir():
+            shutil.rmtree(path)  # a pin is checked against a new fetch, never an old cache
         try:
-            clone_pack(source, ref, path)
+            fetched = clone_pack(source, ref, path, commit=commit, digest=digest)
         except PackError as error:
             raise _fail(error) from error
-        cached = True
     factory = default_factory()
     if not _print_check(factory, path.as_posix()):
-        if cached:
+        if fetched is not None:
             shutil.rmtree(path, ignore_errors=True)
         raise typer.Exit(code=1)
-    _register(name, RegisteredTemplate(source=source, ref=ref, path=path.as_posix()))
+    known = load_settings().templates.get(name)
+    entry = RegisteredTemplate(source=source, ref=ref, path=path.as_posix())
+    if fetched is not None:
+        reused = known.commit if known is not None and known.digest == fetched.digest else None
+        entry = entry.model_copy(
+            update={"commit": fetched.commit or reused, "digest": fetched.digest}
+        )
+        console.print(f"  digest {fetched.digest}", soft_wrap=True)
+    _register(name, entry)

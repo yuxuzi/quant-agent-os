@@ -40,6 +40,8 @@ class RegisteredTemplate(_Strict):
 
     source: str
     ref: str | None = None
+    commit: str | None = None
+    digest: str | None = None
     path: str
 
 
