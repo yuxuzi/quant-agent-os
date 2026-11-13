@@ -1,12 +1,14 @@
 """Unit tests for settings, logging redaction, and the CLI."""
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from quant_agent_os.config import ConfigFileError, Settings, home_dir
-from quant_agent_os.observability import RedactSecretsFilter
+from quant_agent_os.config import ConfigFileError, Settings, get_settings, home_dir
+from quant_agent_os.observability import RedactSecretsFilter, configure_logging
+from quant_agent_os.observability.logging import HANDLER_NAME, PACKAGES
 from quant_agent_os.tools import Permission
 
 
@@ -25,6 +27,50 @@ def test_logging_filter_redacts_secrets() -> None:
     RedactSecretsFilter(["sk-secret"]).filter(record)
 
     assert record.getMessage() == "key=[REDACTED]"
+
+
+@pytest.fixture
+def package_loggers() -> Iterator[None]:
+    """Restore the platform's loggers after a test configures them."""
+    saved = {
+        name: (logging.getLogger(name).level, list(logging.getLogger(name).handlers))
+        for name in PACKAGES
+    }
+    yield
+    for name, (level, handlers) in saved.items():
+        logging.getLogger(name).setLevel(level)
+        logging.getLogger(name).handlers = handlers
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_the_log_level_applies_to_every_package_once(caplog: pytest.LogCaptureFixture) -> None:
+    configure_logging("debug", secrets=["sk-secret"])
+    configure_logging("DEBUG", secrets=["sk-secret"])
+
+    logging.getLogger("quant_research.ingest").debug("using key %s", "sk-secret")
+
+    for name in PACKAGES:
+        logger = logging.getLogger(name)
+        assert logger.level == logging.DEBUG
+        assert [h.get_name() for h in logger.handlers].count(HANDLER_NAME) == 1
+    assert "using key [REDACTED]" in caplog.text  # still propagates, redacted on the way
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_an_unknown_log_level_stops_qaos(monkeypatch: pytest.MonkeyPatch) -> None:
+    from typer.testing import CliRunner
+
+    from quant_platform.cli import app
+
+    monkeypatch.setenv("QUANT_AGENT_OS_LOG_LEVEL", "LOUD")
+    get_settings.cache_clear()
+    try:
+        result = CliRunner().invoke(app, ["data", "list"])
+    finally:
+        get_settings.cache_clear()
+
+    assert result.exit_code == 1
+    assert "LOUD" in result.output
 
 
 def test_permissions_can_be_granted_through_the_environment(
