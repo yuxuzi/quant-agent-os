@@ -156,7 +156,7 @@ class ToolExecutor:
     matching, unused approval from ``approvals`` for this run, tool, and input hash, or when the
     policy pre-approves those permissions; otherwise the call records ``approval_required``.
 
-    With ``usage`` (a tenant's plan limits, decision 0015), a call whose permissions and input
+    With ``usage`` (a firm's own limits, `quotas.UsageGate`), a call whose permissions and input
     are valid must be admitted before any approval is used or the tool starts; a refusal
     records ``quota_exceeded``. ``max_output_bytes`` caps every tool's own output limit.
 

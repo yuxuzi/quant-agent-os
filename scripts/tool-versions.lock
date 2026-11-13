@@ -671,7 +671,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     "check_spec": {
       "input_schema": {
