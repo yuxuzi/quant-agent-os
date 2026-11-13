@@ -13,6 +13,7 @@ from quant_agent_os.runs import (
     NotAwaitingApprovalError,
     RunNotFoundError,
     RunStore,
+    RunStoreError,
     SqliteRunStore,
 )
 from quant_agent_os.runtime import Approval, MemoryApprovalLedger, ToolCall, ToolExecutor
@@ -162,6 +163,25 @@ def test_an_approval_is_bound_to_its_run_tool_and_input() -> None:
     assert [r.status for r in (other_input, other_run, no_run)] == ["approval_required"] * 3
     assert (first.status, replay.status) == ("ok", "approval_required")
     assert WRITES == ["approved"]
+
+
+def test_a_ledger_that_fails_approves_nothing_and_is_recorded_not_raised() -> None:
+    class BrokenLedger(MemoryApprovalLedger):
+        def consume(self, run_id: str, tool: str, input_sha256: str) -> Approval | None:
+            raise RunStoreError("disk I/O error at /secret/path/runs.db")
+
+    registry = ToolRegistry([write_note, read_note])
+    executor = ToolExecutor(registry, GRANTED, approvals=BrokenLedger(), max_concurrent_calls=1)
+
+    record = executor.execute(ToolCall(tool="write_note", arguments={"text": "x"}), run_id="r")
+
+    assert record.status == "error"
+    assert "could not check its approval" in (record.error or "")
+    assert "/secret/path" not in (record.error or "")
+    assert "disk I/O error" in (record.error_detail or "")
+    assert WRITES == []
+    # Its slot is free again: the next call is not refused as busy.
+    assert executor.execute(ToolCall(tool="read_note", arguments={"text": "y"})).status == "ok"
 
 
 def test_a_standing_approval_runs_without_a_per_call_approval_and_is_recorded() -> None:

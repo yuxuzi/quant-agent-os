@@ -267,11 +267,27 @@ class ToolExecutor:
                 )
             pending = self.policy.needs_approval(spec.permissions)
             if pending:
-                granted = (
-                    self.approvals.consume(run_id, spec.name, input_sha256)
-                    if self.approvals is not None and run_id is not None
-                    else None
-                )
+                try:
+                    granted = (
+                        self.approvals.consume(run_id, spec.name, input_sha256)
+                        if self.approvals is not None and run_id is not None
+                        else None
+                    )
+                except Exception as error:  # a ledger that cannot be read approves nothing
+                    failed = record(
+                        "error",
+                        tool_version=spec.version,
+                        error_detail=f"{type(error).__name__}: {error}",
+                    )
+                    return failed.model_copy(
+                        update={
+                            "error": (
+                                f"Tool '{spec.name}' could not check its approval (call "
+                                f"{failed.call_id}). The operator can find the details in the "
+                                "run record."
+                            )
+                        }
+                    )
                 if granted is None:
                     names = ", ".join(sorted(permission.value for permission in pending))
                     return record(
