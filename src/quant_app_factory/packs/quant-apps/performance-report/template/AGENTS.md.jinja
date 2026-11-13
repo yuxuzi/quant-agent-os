@@ -9,9 +9,12 @@ generated, and it is meant to be changed. Change it in the smallest way that doe
 2. **`{{ package_name }}/firm/sections.py`**: a new report section, as a function that returns
    blocks. A section with a built-in's name replaces it.
 3. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
-4. **Any other file**, if those cannot do it. Expect to merge template updates here.
+4. **Any other file**, if those cannot do it. Keep such changes small and tested.
 
-Later template updates leave `config.toml` and `{{ package_name }}/firm/` alone.
+This project is yours: no command upgrades it from a newer template. To take a later fix,
+generate a fresh project from the newer template and compare; `.pytemplate.toml` records the
+template, its version, and your answers. Changes kept in `config.toml` and
+`{{ package_name }}/firm/` keep that comparison small.
 
 ## Rules that protect the numbers
 

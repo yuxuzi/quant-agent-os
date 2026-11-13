@@ -1,4 +1,4 @@
-"""Read your firm's own file formats. Generated once; later template updates leave this alone.
+"""Read your firm's own file formats. This file is yours to change.
 
 Map a file suffix to a function that returns a `Table`. A loader here takes priority over the
 built-in readers for that suffix. For example, for US dates in a ``.dat`` export::

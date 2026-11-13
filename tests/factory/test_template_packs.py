@@ -8,12 +8,18 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pytemplate import api
 from typer.testing import CliRunner
 
 from quant_app_factory import AppFactory, AppSpec, Identity, PytemplateUvScaffolder, load_spec
 from quant_app_factory import cli as factory_cli
 from quant_app_factory.domain.planner import BUILT_IN_PACKS, PlanningError
-from quant_app_factory.infrastructure.pack_files import PackError, clone_pack, fork_pack
+from quant_app_factory.infrastructure.pack_files import (
+    PackError,
+    clone_pack,
+    fork_pack,
+    pack_digest,
+)
 from quant_app_factory.infrastructure.settings_file import load_settings
 
 
@@ -200,7 +206,8 @@ def test_cli_fork_checks_and_registers_the_pack(tmp_path: Path, settings_file: P
     assert (
         load_settings(settings_file).templates["momentum"].path == destination.resolve().as_posix()
     )
-    assert "momentum: fork of quant-baseline/quant-lab" in listed.output
+    assert "momentum 0.1.0 (fork of quant-baseline/quant-lab)" in listed.output
+    assert "momentum/momo" in listed.output
     assert checked.exit_code == 0, checked.output
 
 
@@ -221,6 +228,72 @@ def test_cli_add_registers_local_and_pinned_git_packs(tmp_path: Path, settings_f
     assert templates["remote"].ref == "v1"
     assert Path(templates["remote"].path) == settings_file.parent / "packs" / "remote" / "v1"
     assert unpinned.exit_code == 1 and "--ref" in unpinned.output
+    assert templates["remote"].digest == pack_digest(Path(templates["remote"].path))
+    assert templates["remote"].commit == _head(repository)
+
+
+def _head(repository: Path) -> str:
+    done = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repository, check=True, capture_output=True, text=True
+    )
+    return done.stdout.strip()
+
+
+def test_the_digest_is_the_one_pytemplate_uv_records(tmp_path: Path) -> None:
+    repository = _git_pack(tmp_path)
+
+    fetched = clone_pack(repository.as_posix(), "v1", tmp_path / "cache" / "v1")
+    with api.open_catalog(repository.as_posix(), "v1") as (_, source, _):
+        assert (fetched.commit, fetched.digest) == (source.commit, source.digest)
+
+
+def test_cli_add_refuses_a_pack_that_does_not_match_its_pins(
+    tmp_path: Path, settings_file: Path
+) -> None:
+    runner = CliRunner()
+    repository = _git_pack(tmp_path)
+    commit = _head(repository)
+    with api.open_catalog(repository.as_posix(), "v1") as (_, source, _):
+        digest = source.digest
+    add = ["template", "add", repository.as_posix(), "--name", "firm", "--ref", "v1"]
+
+    moved = runner.invoke(factory_cli.app, [*add, "--commit", "0" * 40])
+    changed = runner.invoke(factory_cli.app, [*add, "--commit", commit, "--digest", "f" * 64])
+    no_ref = runner.invoke(
+        factory_cli.app, ["template", "add", str(repository), "--name", "firm", "--commit", commit]
+    )
+
+    assert moved.exit_code == 1 and "not the pinned" in moved.output
+    assert changed.exit_code == 1 and "digest" in changed.output
+    assert no_ref.exit_code == 1 and "--ref" in no_ref.output
+    assert "firm" not in load_settings(settings_file).templates
+    assert not (settings_file.parent / "packs" / "firm" / "v1").exists()
+
+    pinned = runner.invoke(factory_cli.app, [*add, "--commit", commit, "--digest", str(digest)])
+    listed = runner.invoke(factory_cli.app, ["template", "list"])
+
+    assert pinned.exit_code == 0, pinned.output
+    entry = load_settings(settings_file).templates["firm"]
+    assert (entry.commit, entry.digest) == (commit, digest)
+    assert f"commit {commit[:12]}" in listed.output
+    assert "quant-apps/risk-monitor" in listed.output and "bundled/python" in listed.output
+
+
+def test_cli_check_fails_when_a_cached_pack_changed(tmp_path: Path, settings_file: Path) -> None:
+    runner = CliRunner()
+    repository = _git_pack(tmp_path)
+    add = ["template", "add", repository.as_posix(), "--name", "firm", "--ref", "v1"]
+    assert runner.invoke(factory_cli.app, add).exit_code == 0
+    cached = Path(load_settings(settings_file).templates["firm"].path)
+
+    before = runner.invoke(factory_cli.app, ["template", "check", "firm"])
+    (cached / "questions.yml").write_text(
+        (cached / "questions.yml").read_text("utf-8") + "# edited\n", "utf-8"
+    )
+    after = runner.invoke(factory_cli.app, ["template", "check", "firm"])
+
+    assert before.exit_code == 0, before.output
+    assert after.exit_code == 1 and "files changed" in " ".join(after.output.split())
 
 
 def test_a_spec_can_use_a_registered_template(tmp_path: Path, settings_file: Path) -> None:

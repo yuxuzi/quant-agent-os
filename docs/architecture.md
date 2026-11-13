@@ -287,7 +287,8 @@ qaos app create spec.toml ─▶ approval ─▶ ArchitecturePlanner ─▶ Scaf
 - **Quant templates** ([decision 0009](decisions/0009-quant-baseline-templates.md)) carry known-answer metric
   tests, bias tests, and a `LIMITATIONS.md`. There is no trading code.
 - **Your own templates.** `qaos app template fork` copies a profile into a pack, `template check` validates it,
-  and `template add` registers a git pack pinned to a ref and cached, so plans need no network.
+  and `template add` registers a git pack fetched once at a tag, held to its commit and a digest of its files, and
+  cached, so plans need no network ([decision 0025](decisions/0025-templates-are-starting-points.md)).
 
 ### The pytemplate-uv boundary
 

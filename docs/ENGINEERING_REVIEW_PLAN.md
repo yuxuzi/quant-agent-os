@@ -4,13 +4,12 @@ What is still open. How the system works is in [architecture.md](architecture.md
 [decisions/](decisions/). Finished plans are in [plans/archive/](plans/archive/), including
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
 The most recent plan was [0.3.0, ready for a first pilot](plans/archive/pilot-ready-release.md),
-released as 0.3.0.
+released as 0.3.0. [Templates as starting points](plans/templates.md) followed it.
 
 ## Open backlog
 
 | Item | State | Next step |
 | --- | --- | --- |
-| Updating generated projects | `pytemplate update` cannot reach a project from a built-in pack, which records a local path with no tags, so fixes are applied by hand | Kept open by the owner's decision until a user needs it; the likely route is the tagged mirror |
 | Name availability (B-22) | All names are provisional | Check names before any public launch |
 | Dataset limits | 20 MB, 200,000 rows, and 500 columns may be small for a firm's data | Decide with a real use |
 | Hosted embedders | No measured score floor (still 0.2), so off-topic questions can return passages | Measure one if a user chooses hosted embeddings |

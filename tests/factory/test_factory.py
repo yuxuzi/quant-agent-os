@@ -149,7 +149,7 @@ def test_bundled_profiles_stay_portable(tmp_path: Path, profile: str) -> None:
     ("template", "profile", "components", "message"),
     [
         ("agent-tool", "agent-tool", ["database"], "offers none"),
-        ("bundled", "python", ["database"], "offers container"),
+        ("bundled", "python", ["database"], "offers container, mcp"),
         ("bundled", "fastapi", ["auth"], "needs a mode"),
         ("bundled", "fastapi", ["auth", "auth-api-key", "auth-oidc"], "one authentication mode"),
     ],
@@ -181,7 +181,11 @@ def test_plan_lists_the_exact_files_and_writes_nothing(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("profile", "components", "expected"),
-    [("python", [], ["cli"]), ("fastapi", ["database"], ["api", "database"])],
+    [
+        ("python", [], ["cli"]),
+        ("python", ["mcp"], ["cli", "mcp"]),
+        ("fastapi", ["database"], ["api", "database"]),
+    ],
 )
 def test_bundled_profiles_plan_with_their_components(
     tmp_path: Path, profile: str, components: list[str], expected: list[str]

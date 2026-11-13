@@ -1,4 +1,4 @@
-"""Your firm's own report sections. Generated once; later template updates leave this file alone.
+"""Your firm's own report sections. This file is yours to change.
 
 Add a function that takes the `RiskView` and returns blocks, list it in ``SECTIONS``, and name it
 under ``sections`` in ``config.toml``. A section with a built-in's name replaces it. For example::

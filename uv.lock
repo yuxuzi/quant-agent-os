@@ -2341,16 +2341,16 @@ wheels = [
 
 [[package]]
 name = "pytemplate-uv"
-version = "3.0.0"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "copier" },
     { name = "rich" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/df/42eecfe6034c03e21793101216bbbbaa02e05d154aa85ea73a82014ca0d0/pytemplate_uv-3.0.0.tar.gz", hash = "sha256:9b2b1d8b6ae0fc86a80eea69b5a3a5783ed8f3b52ce87e43b32a3b36ed3a8c70", size = 114852, upload-time = "2026-10-30T01:32:59.426Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/a4/f49b4a3a22aacc3cb004683c6fc4514718b2817ad2ac7ddb7ee8310946d7/pytemplate_uv-3.1.0.tar.gz", hash = "sha256:90eac11e2f03604013ef0b9ea6ffadbbe1877ecd6e6a983c2956574e1a8166a1", size = 114357, upload-time = "2026-11-13T02:40:03.298Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/0d/f9017ef2025de58d1fa2c6eacf0f821e71f5205803a53eb1d80407ae709c/pytemplate_uv-3.0.0-py3-none-any.whl", hash = "sha256:8bdf205b672445537f1a39f45507c17b82d4522a1b4cc9a31e73c6c35f2ea624", size = 129518, upload-time = "2026-10-30T01:32:58.185Z" },
+    { url = "https://files.pythonhosted.org/packages/49/33/462b12b03fc7c44e13a87e8933cddd12e69055b3cf244030277ff7e55ece/pytemplate_uv-3.1.0-py3-none-any.whl", hash = "sha256:5d98bc2b0243dda74e6e1933774eca28d7ce07284a5c7da7c9ae998b69d693db", size = 130162, upload-time = "2026-11-13T02:40:01.969Z" },
 ]
 
 [[package]]
@@ -2581,7 +2581,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
-    { name = "pytemplate-uv", marker = "extra == 'factory'", specifier = ">=3.0,<4" },
+    { name = "pytemplate-uv", marker = "extra == 'factory'", specifier = ">=3.1,<4" },
     { name = "quant-agent-os", extras = ["analytics", "factory", "parquet", "pdf", "postgres", "server"], marker = "extra == 'all'" },
     { name = "quant-agent-os", extras = ["api", "mcp"], marker = "extra == 'server'" },
     { name = "rich", specifier = ">=13.7" },

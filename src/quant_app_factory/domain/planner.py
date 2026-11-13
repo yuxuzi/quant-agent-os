@@ -26,7 +26,7 @@ _QUANT_DATA = frozenset({"data-parquet", "data-database", "agent-tools"})
 _COMPONENTS: dict[tuple[str, str], frozenset[str]] = {
     **{("quant-apps", profile): frozenset({"agent-tools"}) for profile in QUANT_APP_PROFILES},
     ("agent-tool", "agent-tool"): frozenset(),
-    ("bundled", "python"): frozenset({"container"}),
+    ("bundled", "python"): frozenset({"container", "mcp"}),
     ("bundled", "fastapi"): frozenset(
         {"database", "worker", "auth", "auth-api-key", "auth-oidc", "container"}
     ),
