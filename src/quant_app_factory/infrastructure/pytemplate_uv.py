@@ -1,6 +1,6 @@
 """`PytemplateUvScaffolder`: the `ScaffoldProvider` backed by the pytemplate-uv library.
 
-pytemplate-uv is a third-party dependency (``pytemplate-uv>=3.0,<4``). This module is the only
+pytemplate-uv is a third-party dependency (``pytemplate-uv>=3.1,<4``). This module is the only
 place that imports it, and it uses only its supported interface, ``pytemplate.api``. Rendering
 runs in-process with Copier's ``unsafe=False`` and needs no network for the bundled profiles or
 this package's local template pack.

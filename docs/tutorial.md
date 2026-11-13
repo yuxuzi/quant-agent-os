@@ -766,7 +766,7 @@ Wrote my-lab.toml.
 my-lab (quant-baseline/quant-lab) -> .../qaos-tutorial/work/my-lab
   35 files; components: data-csv, metrics; checks: uv sync, ruff check, ruff format, mypy, pytest
 Create it? It writes files, runs uv, and downloads packages [y/N]: y
-Created .../qaos-tutorial/work/my-lab with pytemplate-uv==3.0.0.
+Created .../qaos-tutorial/work/my-lab with pytemplate-uv==3.1.0.
   ok  uv sync  (0.2 s)
   ok  uv run ruff check .  (0.4 s)
   ok  uv run ruff format --check .  (0.0 s)
