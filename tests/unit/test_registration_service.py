@@ -277,3 +277,18 @@ def test_literals_and_lists_go_in_a_query_and_check_tool_passes(
     assert spec.name == "risk_by_code" and not spec.deterministic and spec.idempotent
     assert record.output is not None and record.output["result"] == 1.5
     assert exchange.requests[0]["path"] == "/figure?v=2&desk=value&days=1&days=5"
+
+
+@pytest.mark.parametrize("desk", ["..", ".", ""])
+def test_a_path_argument_cannot_reach_another_endpoint(
+    service: tuple[str, Exchange], desk: str
+) -> None:
+    url, exchange = service
+    app = FirmApp("risk")
+    app.call_service(desk_limits, url=f"{url}/desks/{{desk}}/limits", method="GET")
+
+    record = _run(app, {"desk": desk})
+
+    assert record.status == "error"
+    assert "desk must name one path segment" in (record.error or "")
+    assert exchange.requests == []

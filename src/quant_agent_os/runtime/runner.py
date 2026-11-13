@@ -13,9 +13,11 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import IO
 
 from pydantic import BaseModel
 
@@ -51,6 +53,7 @@ ENV_ALLOWLIST = frozenset(
     }
 )
 OUTPUT_TAIL_CHARS = 4000
+UTF8_MAX_BYTES = 4  # the most bytes one character takes
 
 
 class CommandResult(BaseModel):
@@ -91,8 +94,10 @@ def run_command(
     """Run ``command`` in ``cwd`` and return its result; failures are results, never raised.
 
     The program gets `scrubbed_environment` and no stdin. When ``timeout`` (seconds) expires,
-    its whole process tree is killed. Only the last ``tail_chars`` characters of each stream
-    are kept (raise it for programs whose whole output is needed, such as JSON results).
+    its whole process tree is killed, and the call returns even if a descendant that left the
+    tree lives on. Only the last ``tail_chars`` characters of each stream are kept (raise it
+    for programs whose whole output is needed, such as JSON results); the rest stays on disk
+    until the call returns, never in memory.
     """
     started = time.perf_counter()
     arguments = [str(part) for part in command]
@@ -116,31 +121,34 @@ def run_command(
         flags, new_session = subprocess.CREATE_NEW_PROCESS_GROUP, False
     else:
         flags, new_session = 0, True
-    try:
-        process = subprocess.Popen(
-            arguments,
-            cwd=cwd,
-            env=scrubbed_environment(extra_env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=flags,
-            start_new_session=new_session,
+    # Output goes to files, not pipes: a pipe would hold all of it in memory, and a descendant
+    # that left the process group could keep one open long after the timeout.
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        try:
+            process = subprocess.Popen(
+                arguments,
+                cwd=cwd,
+                env=scrubbed_environment(extra_env),
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=err,
+                creationflags=flags,
+                start_new_session=new_session,
+            )
+        except OSError as error:
+            return result(None, 0, stderr=f"Cannot start: {error}")
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_tree(process)
+            process.wait()
+        return result(
+            None if timed_out else process.returncode,
+            out.seek(0, os.SEEK_END) + err.seek(0, os.SEEK_END),
+            stdout=_tail(out, tail_chars),
+            stderr=_tail(err, tail_chars),
         )
-    except OSError as error:
-        return result(None, 0, stderr=f"Cannot start: {error}")
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _kill_tree(process)
-        stdout, stderr = process.communicate()
-    return result(
-        None if timed_out else process.returncode,
-        len(stdout) + len(stderr),
-        stdout=_tail(stdout, tail_chars),
-        stderr=_tail(stderr, tail_chars),
-    )
 
 
 def _kill_tree(process: subprocess.Popen[bytes]) -> None:
@@ -157,5 +165,9 @@ def _kill_tree(process: subprocess.Popen[bytes]) -> None:
         os.killpg(process.pid, signal.SIGKILL)
 
 
-def _tail(output: bytes, chars: int) -> str:
-    return output.decode("utf-8", errors="replace")[-chars:]
+def _tail(output: IO[bytes], chars: int) -> str:
+    """Return the last ``chars`` characters of ``output``, reading no more than they can need."""
+    size = output.seek(0, os.SEEK_END)
+    # One character more, so a read that starts inside a character still holds ``chars`` whole.
+    output.seek(max(0, size - (chars + 1) * UTF8_MAX_BYTES))
+    return output.read().decode("utf-8", errors="replace")[-chars:] if chars > 0 else ""

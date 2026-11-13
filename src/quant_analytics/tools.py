@@ -285,7 +285,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         description=RISK_DESCRIPTION + by_reference.replace("{dataset, column}", "{dataset}"),
         permissions=permissions,
         max_output_bytes=500_000,
-        version="2.0.0",
+        version="2.0.1",
     )
     def analyze_risk(params: RiskRequest) -> RiskOutput:
         resolver = _Resolver(store)

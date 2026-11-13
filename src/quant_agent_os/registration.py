@@ -490,7 +490,7 @@ class _Service:
     def __call__(self, **arguments: Any) -> Any:
         values = _json_ready(_plain(arguments))
         url = self.url.format(
-            **{name: urllib.parse.quote(str(values.pop(name)), safe="") for name in self.path_names}
+            **{name: _path_segment(name, values.pop(name)) for name in self.path_names}
         )
         headers = {"Accept": "application/json"}
         if self.token_env:
@@ -534,6 +534,18 @@ class _Service:
             return json.loads(answer)
         except ValueError:
             raise ServiceError(f"The service at {self.url} did not answer with JSON.") from None
+
+
+def _path_segment(name: str, value: Any) -> str:
+    """Return ``value`` as one segment of a URL's path, or raise `ValueError` if it is not one.
+
+    An empty segment, ``.``, and ``..`` would make the request reach another endpoint of the
+    service than the one registered, so they are refused; ``/`` and the rest are escaped.
+    """
+    text = "" if value is None else str(value)
+    if text in ("", ".", ".."):
+        raise ValueError(f"{name} must name one path segment, not {text!r}.")
+    return urllib.parse.quote(text, safe="")
 
 
 def _query_value(hint: Any) -> bool:

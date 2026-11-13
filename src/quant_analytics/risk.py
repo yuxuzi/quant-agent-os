@@ -30,6 +30,9 @@ import numpy as np
 import numpy.typing as npt
 
 FloatArray = npt.NDArray[np.float64]
+# Portfolio volatility below this share of its positions' own (sum of |w_i| vol_i) is rounding
+# left over from an exact hedge, so it counts as zero rather than as a tiny denominator.
+FLAT = 1e-6
 
 
 @dataclass(frozen=True)
@@ -71,13 +74,18 @@ def volatility_contributions(
     asset_returns: Mapping[str, Sequence[float]],
     periods_per_year: int,
 ) -> VolatilityBreakdown:
-    """Decompose portfolio volatility into Euler contributions; None where volatility is zero."""
+    """Decompose portfolio volatility into Euler contributions; None where volatility is zero.
+
+    Volatility that is only rounding left over from an exact hedge counts as zero (`FLAT`).
+    """
     names = list(weights)
     w = np.array([weights[name] for name in names], dtype=np.float64)
     returns = _matrix([asset_returns[name] for name in names])
     covariance = np.atleast_2d(np.cov(returns, rowvar=False, ddof=1)) * periods_per_year
     volatilities = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
     volatility = math.sqrt(max(float(w @ covariance @ w), 0.0))
+    if volatility <= FLAT * float(np.abs(w) @ volatilities):
+        volatility = 0.0
     defined = volatility > 0.0
     marginal = covariance @ w / volatility if defined else None
     contributions = {
@@ -121,6 +129,9 @@ def factor_exposures(
     exposures = betas @ w
     portfolio = returns @ w
     variance = float(np.var(portfolio, ddof=1))
+    scale = float(np.abs(w) @ np.std(returns, axis=0, ddof=1))
+    if math.sqrt(max(variance, 0.0)) <= FLAT * scale:
+        variance = 0.0
     residual = portfolio - design @ (coefficients @ w)
     asset_exposures = {
         name: {factor: float(betas[k, i]) for k, factor in enumerate(factors)}

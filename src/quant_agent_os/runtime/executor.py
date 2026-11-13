@@ -156,7 +156,7 @@ class ToolExecutor:
     matching, unused approval from ``approvals`` for this run, tool, and input hash, or when the
     policy pre-approves those permissions; otherwise the call records ``approval_required``.
 
-    With ``usage`` (a tenant's plan limits, decision 0015), a call whose permissions and input
+    With ``usage`` (a firm's own limits, `quotas.UsageGate`), a call whose permissions and input
     are valid must be admitted before any approval is used or the tool starts; a refusal
     records ``quota_exceeded``. ``max_output_bytes`` caps every tool's own output limit.
 
@@ -267,11 +267,27 @@ class ToolExecutor:
                 )
             pending = self.policy.needs_approval(spec.permissions)
             if pending:
-                granted = (
-                    self.approvals.consume(run_id, spec.name, input_sha256)
-                    if self.approvals is not None and run_id is not None
-                    else None
-                )
+                try:
+                    granted = (
+                        self.approvals.consume(run_id, spec.name, input_sha256)
+                        if self.approvals is not None and run_id is not None
+                        else None
+                    )
+                except Exception as error:  # a ledger that cannot be read approves nothing
+                    failed = record(
+                        "error",
+                        tool_version=spec.version,
+                        error_detail=f"{type(error).__name__}: {error}",
+                    )
+                    return failed.model_copy(
+                        update={
+                            "error": (
+                                f"Tool '{spec.name}' could not check its approval (call "
+                                f"{failed.call_id}). The operator can find the details in the "
+                                "run record."
+                            )
+                        }
+                    )
                 if granted is None:
                     names = ", ".join(sorted(permission.value for permission in pending))
                     return record(
