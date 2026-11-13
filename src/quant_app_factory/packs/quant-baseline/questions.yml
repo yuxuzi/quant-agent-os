@@ -1,5 +1,5 @@
 # Questions for the quant-baseline pack. Add questions rather than renaming or removing them,
-# so `pytemplate update` can replay recorded answers.
+# so a spec written for an earlier version of the pack still works.
 _min_copier_version: "9.4"
 _templates_suffix: .jinja
 

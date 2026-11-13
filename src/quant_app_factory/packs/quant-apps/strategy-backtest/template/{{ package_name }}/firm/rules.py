@@ -1,4 +1,4 @@
-"""Your firm's own portfolio rules. Generated once; later template updates leave this file alone.
+"""Your firm's own portfolio rules. This file is yours to change.
 
 A rule turns signal scores into target weights (bars by assets, as fractions of NAV). Weights at
 bar t may use prices and scores up to bar t only. The backtest lags, drifts, and costs them. A

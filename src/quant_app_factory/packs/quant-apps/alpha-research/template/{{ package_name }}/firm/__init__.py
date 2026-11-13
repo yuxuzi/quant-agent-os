@@ -1,1 +1,1 @@
-"""Your firm's code. Later template updates leave this folder alone."""
+"""Your firm's code. This folder is yours to change."""

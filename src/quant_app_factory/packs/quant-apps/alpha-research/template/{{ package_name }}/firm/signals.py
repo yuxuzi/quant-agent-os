@@ -1,4 +1,4 @@
-"""Your firm's own signals. Generated once; later template updates leave this file alone.
+"""Your firm's own signals. This file is yours to change.
 
 A signal takes prices (bars by assets) and returns scores of the same shape, with NaN where there
 is none. Scores at bar t may use prices up to bar t only: `signals.look_ahead_bars` tests that,

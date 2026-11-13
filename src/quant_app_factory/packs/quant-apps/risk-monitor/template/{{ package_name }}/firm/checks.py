@@ -1,4 +1,4 @@
-"""Your firm's own risk checks. Generated once; later template updates leave this file alone.
+"""Your firm's own risk checks. This file is yours to change.
 
 The limits in ``config.toml`` cover the common cases. For anything else, add a function that takes
 the `RiskView` and returns `Check` results, and list it in ``CHECKS``. Each appears in the report,
