@@ -57,9 +57,8 @@ finished. Tests that metric formulas are correct do not catch that.
 ## Consequences
 
 - Users get a tested project in minutes and own its code.
-- **Fixes don't flow back.** A metric fix reaches new projects. Existing ones built from the built-in
-  pack take it by hand, because they record a local path with no tags, so `pytemplate update` cannot
-  reach them (checked 2026-11-06). If the analytics package (B-13) ships, `metrics` may become a
+- **Fixes don't flow back.** A metric fix reaches new projects. Existing ones take it by hand
+  ([decision 0025](0025-templates-are-starting-points.md)). If the analytics package (B-13) ships, `metrics` may become a
   dependency on it rather than generated code. That would be a later, deliberate change.
 - **Testing grows with each component.** Every combination of components a profile offers
   needs a render test, and the default set needs a smoke test.

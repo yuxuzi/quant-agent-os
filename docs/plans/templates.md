@@ -50,24 +50,35 @@ any change to pytemplate-uv.
 
 ## 3. Steps
 
-- [ ] 1. Require `pytemplate-uv>=3.1,<4`; refresh `uv.lock`; allow `mcp` on `bundled/python`.
-- [ ] 2. Packs: drop the update wording and `_skip_if_exists`; say how to take a fix. Patch versions:
+- [x] 1. Require `pytemplate-uv>=3.1,<4`; refresh `uv.lock`; allow `mcp` on `bundled/python`.
+- [x] 2. Packs: drop the update wording and `_skip_if_exists`; say how to take a fix. Patch versions:
        `quant-apps` 1.0.1, `quant-baseline` 3.1.1, `agent-tool` 1.0.1.
-- [ ] 3. `template add --commit --digest`; record both in `factory.toml`; `template check` verifies a cached
+- [x] 3. `template add --commit --digest`; record both in `factory.toml`; `template check` verifies a cached
        pack; `template list` prints `pack/profile`, versions, and pins.
-- [ ] 4. Docs: one "Where templates come from" section in the product page; decision 0025; decisions 0009
+- [x] 4. Docs: one "Where templates come from" section in the product page; decision 0025; decisions 0009
        and 0022 point to it; the backlog row closes; the changelog.
-- [ ] 5. Verify: tests, lint, format, types, and the opt-in factory smoke test.
+- [x] 5. Verify: tests, lint, format, types, and the opt-in factory smoke test.
 
 ## 4. Acceptance criteria
 
-- No file outside `CHANGELOG.md` and `docs/plans/archive/` mentions `pytemplate update` or a template update.
+- Only `CHANGELOG.md`, this plan, decision 0025, and `docs/plans/archive/` mention `pytemplate update` or a
+  template update.
 - A git pack whose tag moved, or whose files changed, is refused by `template add` with pins, and nothing is
   registered.
 - `template list` shows a name that `qaos app new` accepts for every profile it lists.
 - A spec with `template = "bundled"`, `profile = "python"`, and `components = ["mcp"]` plans.
 
-## 5. Outside this repository
+## 5. Verification (2026-11-12, macOS, CPython 3.13, pytemplate-uv 3.1.0)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Tests | `uv run pytest` | 1260 passed, 30 skipped |
+| Lint, format, and types | `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy` | clean |
+| Generated projects | `QUANT_FACTORY_SMOKE=1 uv run pytest tests/factory/test_factory_smoke.py` | 16 passed |
+
+Not verified locally: the Linux and Windows runners.
+
+## 6. Outside this repository
 
 Each needs the owner's say, and none blocks the steps above: publishing the new pack versions to their public
 repositories, a public repository for `quant-apps`, and listing them in an index.

@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **App Factory needs pytemplate-uv 3.1 or later** (`quant-agent-os[factory]`). Its `python` profile gains the `mcp`
+  component, a standalone MCP server, which a spec may now name.
+- **A generated project is a starting point, and no command upgrades it**
+  ([decision 0025](docs/decisions/0025-templates-are-starting-points.md)). pytemplate-uv 3.1 removed
+  `pytemplate update`. The packs no longer say that later template updates skip `config.toml` and `firm/`, and the
+  `quant-apps` pack drops the rule that made them skip. To take a later fix, generate a fresh project from the newer
+  template and compare. Packs: `quant-apps` 1.0.1, `quant-baseline` 3.1.1, `agent-tool` 1.0.1.
+- **`qaos app template list` prints every template as `pack/profile`,** the name `qaos app new` takes, with each
+  pack's version and where it came from.
+
+### Added
+
+- **Git packs are held to a commit and a digest.** `qaos app template add` records both for what it fetched.
+  `--commit` and `--digest` refuse a pack that differs, so a moved tag cannot change what you build from. The
+  values are the ones pytemplate-uv's `--template-commit` and `--template-digest` take.
+  `qaos app template check NAME` fails when a cached git pack's files changed after it was fetched.
+
 ## [0.3.0] - 2026-11-11
 
 ### Removed

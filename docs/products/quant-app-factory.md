@@ -2,7 +2,7 @@
 
 **Quant App Factory** is the optional application-engineering product of Quant-Agent-OS, off by
 default on the server. It turns a typed application spec into a scaffolded, checked, packaged Python project. It uses
-[`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3 as a library (`pytemplate.api`),
+[`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) 3.1 or later as a library (`pytemplate.api`),
 behind the replaceable `ScaffoldProvider` port. Only one adapter module imports it.
 
 ```text
@@ -13,7 +13,7 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `template` and `profile` | Built from | Depends on Quant-Agent-OS |
 | --- | --- | --- |
 | `agent-tool`, `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
-| `bundled`, `python` | pytemplate-uv's bundled `python` profile | No |
+| `bundled`, `python` | pytemplate-uv's bundled `python` profile (`container`, `mcp`) | No |
 | `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
 | `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal, and a signal file | No |
 | `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with walk-forward | No |
@@ -22,8 +22,29 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `quant-baseline`, `quant-lab` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
 | `path/to/pack`, your profile | your own pack | Up to the pack |
 
-On the command line, `qaos app new` also takes the shortcuts `alpha-research`, `strategy-backtest`,
-`risk-monitor`, `performance-report`, `agent-tool`, `quant-lab`, `python`, and `fastapi`.
+On the command line, every template is `pack/profile`, such as `qaos app new quant-apps/risk-monitor my-risk`.
+`qaos app template list` prints those names. A built-in profile's own name also works: `alpha-research`,
+`strategy-backtest`, `risk-monitor`, `performance-report`, `agent-tool`, `quant-lab`, `python`, and `fastapi`.
+
+For tools an AI client calls, choose by where they run. `agent-tool` builds tools for a Quant-Agent-OS server,
+behind its permissions, approvals, and audit. `python` with the `mcp` component builds a standalone MCP server
+that does not depend on the platform.
+
+## Where templates come from
+
+| Source | Named | It changes when |
+| --- | --- | --- |
+| Built in: `quant-apps`, `quant-baseline`, `agent-tool`, and pytemplate-uv's `bundled` profiles | `quant-apps/risk-monitor` | You upgrade `quant-agent-os` |
+| Your own pack: a fork of a built-in profile, or any pack directory | The name you registered | You edit it |
+| A git pack, yours or someone else's | The name you registered | Never. It is fetched once at a tag and held to that commit and a digest of its files |
+
+A generated project is a starting point, and it is yours from the first commit
+([decision 0025](../decisions/0025-templates-are-starting-points.md)). No command upgrades it from a newer
+template. Its `.pytemplate.toml` records the pack, the pack's version, and your answers. To take a later fix,
+generate a fresh project from the newer template with those answers, and compare the two.
+
+Read a pack you did not write before you use it. Rendering runs no pack code, but the generated project's
+dependencies and tests run when you check it.
 
 ## Applications for each stage of a fund's work
 
@@ -42,7 +63,7 @@ The stages exchange ordinary CSV files with a date column, so you can use one al
 | --- | --- | --- |
 | 1 | Set conventions and data | `config.toml` |
 | 2 | Choose what appears, such as each audience's tear sheet | `config.toml` |
-| 3 | Add your own signals, rules, sections, checks, and file formats | the project's `firm/` folder, which template updates skip |
+| 3 | Add your own signals, rules, sections, checks, and file formats | the project's `firm/` folder |
 | 4 | Change anything else | Any file: you own the code, and its known-answer tests catch mistakes |
 
 Each project's `AGENTS.md` gives a coding assistant the same rules. The `agent-tools` component serves an application's
@@ -70,9 +91,9 @@ information ratio. They differ in three ways:
   only in generated projects; Sortino, Calmar, omega, tail ratio, stability, value at risk, and alpha
   only on the platform.
 
-A generated project does not receive later fixes by itself, and its `LIMITATIONS.md` says so.
-`pytemplate update` cannot reach one built from a built-in pack, because the project records a local
-path with no tags: apply a fix by hand, using [CHANGELOG.md](../../CHANGELOG.md) to see what changed.
+A generated project does not receive later fixes by itself, and its `LIMITATIONS.md` says so. Use
+[CHANGELOG.md](../../CHANGELOG.md) to see what changed, then apply the fix by hand or compare with a fresh
+project, as [above](#where-templates-come-from).
 
 ## Use
 
@@ -86,7 +107,8 @@ uv run qaos app check app.toml     # re-run an existing project's checks
 uv run qaos app settings set identity.author "Ada Lovelace"   # ~/.quant-agent-os/factory.toml
 uv run qaos serve --toolsets factory          # describe_template, check_spec for Claude
 uv run qaos app template fork quant-baseline/quant-lab packs/mine   # make it yours
-uv run qaos app template add gh:org/packs --name firm --ref v1.0.0 # pinned git pack
+uv run qaos app template list                     # every template, as pack/profile
+uv run qaos app template add gh:org/packs --name firm --ref v1.0.0 --commit SHA --digest HASH
 ```
 
 A small spec, which `app plan` previews and `app create` builds:
@@ -232,7 +254,9 @@ Each part of the pack has one job:
 - **`components/`:** add a component there.
 
 `qaos app template add gh:your-org/quant-packs --name firm --ref v1.0.0` registers a pack
-from git, pinned to a tag and cached locally, so plans stay offline.
+from git, fetched once and cached locally, so plans stay offline. It prints and records the commit and a digest
+of the files. Give those to colleagues: with `--commit` and `--digest`, their `template add` refuses anything
+else, even if the tag is moved.
 
 ## From Python
 

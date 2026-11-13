@@ -154,6 +154,9 @@ password_env = "RESEARCH_PG_PASSWORD"   # the variable's name, never the passwor
 [templates.firm-backtest]  # added by `qaos app template add`
 source = "gh:firm/quant-packs"
 ref = "v1.2.0"
+commit = "<the commit v1.2.0 named when it was fetched>"
+digest = "<SHA-256 of the fetched files>"
+path = "<home>/packs/firm-backtest/v1.2.0"
 ```
 
 Edit the file directly, or use `qaos app settings show|set|remove`, for example
@@ -166,15 +169,19 @@ and so are unknown fields.
 
 ### Templates
 
-- **`qaos app template list`** shows the built-in and registered templates.
+- **`qaos app template list`** shows every template as `pack/profile`, the name `qaos app new` takes, with
+  each pack's version and where it came from.
 - **`qaos app template fork quant-baseline/quant-lab DIR [--profile-id ID]`** copies a
   built-in profile into your own pack, checks it, and registers it under the directory's name
   (`--name` to choose).
 - **`qaos app template check NAME_OR_DIR`** loads a pack and plans every profile with
-  default answers.
+  default answers. For a git pack, it first fails if the cached files no longer match the recorded digest.
 - **`qaos app template add DIR --name NAME`** registers a local pack.
 - **`qaos app template add gh:org/repo --name NAME --ref TAG`** fetches a git pack once,
-  at that tag, into `packs/` beside `factory.toml`, so plans stay offline.
+  at that tag, into `packs/` beside `factory.toml`, so plans stay offline. It records the commit and a digest
+  of the files. Add `--commit SHA --digest HASH`, as the pack's author or an index publishes them, to refuse a
+  pack that differs: a tag can be moved, and these cannot. They are the values pytemplate-uv's
+  `--template-commit` and `--template-digest` take.
 
 A spec then says `template = "NAME"` with `profile = "..."`.
 

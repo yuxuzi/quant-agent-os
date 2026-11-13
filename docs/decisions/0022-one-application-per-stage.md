@@ -35,7 +35,7 @@ We compared three groupings:
 - **The stages exchange ordinary files:** a date column, then one numeric column per name, with provenance in
   a `.meta.json` file beside it. So a firm can replace any stage with a system that writes the same file.
 - **A generated application works as generated, and is meant to be changed.** It offers four levels:
-  settings; choosing report sections; adding code in a `firm/` folder that template updates skip; and changing
+  settings; choosing report sections; adding code in a `firm/` folder; and changing
   anything else, with known-answer tests to catch mistakes. Each project has an `AGENTS.md` for coding assistants.
 - **The firm supplies the alpha.** Templates provide the harness around a signal. A firm's named signal is tested
   for look-ahead before each run.
@@ -49,6 +49,6 @@ We compared three groupings:
   every copy byte-identical to the baseline's, along with the other shared files, and holds the new risk measures
   to the platform's.
 - Excel input and output add `openpyxl` to `performance-report` projects, not to the platform.
-- Generated projects still cannot receive fixes through `pytemplate update`, because built-in packs record a local
-  path with no tags. `LIMITATIONS.md` says so. This remains open.
+- Generated projects do not receive later fixes by themselves, and `LIMITATIONS.md` says so.
+  [Decision 0025](0025-templates-are-starting-points.md) settles how a firm takes one.
 - The Excel reader was tested on workbooks built to resemble administrator statements, not on real ones.
