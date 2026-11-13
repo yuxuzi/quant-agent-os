@@ -28,6 +28,14 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 No changes yet.
 
+## 0.4.0
+
+| Tool | Version | Change |
+| --- | --- | --- |
+| `analyze_risk` | 2.0.1 | An exactly hedged portfolio has zero volatility, and undefined contributions and shares, rather than figures computed from floating-point noise. |
+
+A firm's service tool (`FirmApp.call_service`) refuses a path argument that is empty, `.`, or `..`.
+
 ## 0.3.0
 
 | Tool | Version | Change |
