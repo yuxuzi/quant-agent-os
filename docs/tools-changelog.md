@@ -34,7 +34,8 @@ No changes yet.
 | --- | --- | --- |
 | `analyze_risk` | 2.0.1 | An exactly hedged portfolio has zero volatility, and undefined contributions and shares, rather than figures computed from floating-point noise. |
 
-A firm's service tool (`FirmApp.call_service`) refuses a path argument that is empty, `.`, or `..`.
+A firm's service tool (`FirmApp.call_service`) refuses a path argument that is empty, `.`, `..`, or holds `/` or
+`\`.
 
 ## 0.3.0
 

@@ -6,20 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-11-13
+## [0.4.0] - 2026-11-15
 
 ### Fixed
 
 - **A program a tool runs returns at its timeout,** even when a process it started left its process group, and
-  its output goes to temporary files instead of memory. Before, such a process kept the call waiting until it
-  exited, and a noisy program's whole output was held in memory (`run_command`).
-- **A firm's service tool cannot be steered to another endpoint.** A path argument that is empty, `.`, or `..`
-  is refused, where it would have changed which path of the service the call reached (`FirmApp.call_service`).
+  its output no longer grows memory or disk: only the tail is kept as it is read. When a program exits by itself,
+  what it left running in its process group is killed too (POSIX). Before, an escaped process kept the call
+  waiting until it exited, and a noisy program's whole output was held in memory (`run_command`).
+- **A firm's service tool cannot be steered to another endpoint.** A path argument that is empty, `.`, `..`, or
+  holds `/` or `\` is refused, where it could have changed which path of the service the call reached, directly
+  or through a proxy that decodes `%2F` (`FirmApp.call_service`).
+- **Stored runs and logs lose the secrets error messages quote:** a password in a URL, a bearer token, and a
+  value after a secret-sounding name such as `password=`. The log filter also redacts the embedding API keys
+  `qaos` holds.
 - **An exactly hedged portfolio has no volatility** in `analyze_risk` (2.0.1). Rounding left a volatility near
   1e-10, which made a diversification ratio of about 1.5e8 and contributions from noise.
 - **The configured log level applies.** `QUANT_AGENT_OS_LOG_LEVEL` and `log_level` in `config.toml` were read and
-  never used. `qaos` now logs every platform package at that level to stderr, with secrets redacted, and stops
-  when the level is not a known one.
+  never used. `qaos` now logs every platform package at that level to stderr, and stops when the level is not
+  a known one.
 - **An approval store that fails approves nothing, and the call is recorded,** with the detail kept for the
   operator. Before, the error was raised out of the executor, which promises to record failures.
 - **The install commands name a tag that exists.** The README and getting started installed from `v0.3.0`, which
