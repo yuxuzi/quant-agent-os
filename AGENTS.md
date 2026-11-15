@@ -87,8 +87,8 @@ the real results.
 2. `runtime/call.py`, `runtime/approvals.py`, `runtime/runner.py`, `runtime/executor.py`: tool
    calls, approvals, the subprocess runner, and bounded execution.
 3. `evidence/`, `reporting/`, `runs/`: evidence, report models, rendering; the run store,
-   `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker from
-   `observability/logging.py`.
+   `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker and
+   `redact_text` from `observability/logging.py`.
 4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces), `registration.py`
    (`FirmApp`), `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`, `check_app`), `observability/`,
    `cli.py`.

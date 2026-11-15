@@ -56,6 +56,44 @@ def test_the_log_level_applies_to_every_package_once(caplog: pytest.LogCaptureFi
     assert "using key [REDACTED]" in caplog.text  # still propagates, redacted on the way
 
 
+@pytest.mark.parametrize(
+    ("message", "hidden"),
+    [
+        ("cannot connect to postgresql://analyst:hunter2@db/prices", "hunter2"),
+        ("sent Authorization: Bearer abc.def-123", "abc.def-123"),
+        ("bad settings: password=hunter2, user=bob", "hunter2"),
+        ('{"client_secret": "zzz"}', "zzz"),
+    ],
+)
+def test_the_log_filter_redacts_secrets_that_messages_quote(message: str, hidden: str) -> None:
+    record = logging.LogRecord("t", logging.ERROR, __file__, 1, "%s", (message,), None)
+
+    RedactSecretsFilter([]).filter(record)
+
+    assert hidden not in record.getMessage()
+    assert "[REDACTED]" in record.getMessage()
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_qaos_redacts_the_embedding_keys_it_holds(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from typer.testing import CliRunner
+
+    from quant_platform.cli import app
+
+    monkeypatch.setenv("VOYAGE_API_KEY", "pa-not-a-real-key-0123")
+    get_settings.cache_clear()
+    try:
+        CliRunner().invoke(app, ["data", "list"])
+    finally:
+        get_settings.cache_clear()
+    logging.getLogger("quant_research.embed").warning("provider refused pa-not-a-real-key-0123")
+
+    assert "pa-not-a-real-key-0123" not in caplog.text
+    assert "provider refused [REDACTED]" in caplog.text
+
+
 @pytest.mark.usefixtures("package_loggers")
 def test_an_unknown_log_level_stops_qaos(monkeypatch: pytest.MonkeyPatch) -> None:
     from typer.testing import CliRunner

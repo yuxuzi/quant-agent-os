@@ -10,7 +10,7 @@ from typing import Any
 
 from quant_agent_os import __version__
 from quant_agent_os.runs.models import AuditEvent, RunKind, RunRecord, RunStatus, UsageEvent
-from quant_agent_os.runs.redaction import redact
+from quant_agent_os.runs.redaction import redact, redact_error
 from quant_agent_os.runs.store import RunStore, RunStoreError
 from quant_agent_os.runtime.approvals import Approval
 from quant_agent_os.runtime.call import ToolCall
@@ -51,7 +51,8 @@ def _merged_versions(records: list[ToolCallRecord]) -> dict[str, str]:
 class RunRecorder:
     """Write runs, tool calls, and audit events to a `RunStore`.
 
-    Arguments and outputs are redacted (`redact`) before they are stored. Audit events carry
+    Arguments and outputs are redacted (`redact`) before they are stored, and error messages
+    lose the secrets they may quote (`redact_error`). Audit events carry
     only ids, hashes, and statuses. A store failure is logged and never fails the call: losing
     an answer the tool already produced would not make the record more complete.
 
@@ -198,7 +199,12 @@ class RunRecorder:
             toolset=self.toolsets.get(record.tool),
         )
         stored = record.model_copy(
-            update={"arguments": redact(record.arguments), "output": redact(record.output)}
+            update={
+                "arguments": redact(record.arguments),
+                "output": redact(record.output),
+                "error": redact_error(record.error),
+                "error_detail": redact_error(record.error_detail),
+            }
         )
         self._safely(lambda call: self.store.add_call(call, usage), stored)
         self._event(

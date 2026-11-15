@@ -57,6 +57,19 @@ def _show_version(value: bool) -> None:
         raise typer.Exit()
 
 
+def _known_secrets() -> list[str]:
+    """Return the secret values this installation holds, for the log filter to redact."""
+    from quant_agent_os.config import home_env_file
+    from quant_research.config import EmbeddingSettings
+
+    try:
+        embedding = EmbeddingSettings(_env_file=home_env_file())
+    except ValidationError:
+        return []  # `qaos research` reports a bad setting where it is used
+    keys = (embedding.voyage_api_key, embedding.openai_api_key)
+    return [key.get_secret_value() for key in keys if key is not None]
+
+
 @app.callback()
 def _root(
     _version: Annotated[
@@ -72,7 +85,7 @@ def _root(
 ) -> None:
     """Quant-Agent-OS: cited research and computed metrics for AI clients, over MCP."""
     try:
-        configure_logging(get_settings().log_level)
+        configure_logging(get_settings().log_level, secrets=_known_secrets())
     except (ConfigFileError, ValidationError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error

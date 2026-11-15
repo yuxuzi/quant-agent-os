@@ -205,8 +205,9 @@ class FirmApp:
         ``stub`` is a function whose hints and docstring describe the service, as for `expose`;
         its body never runs. Each call sends the arguments to ``url``: as a JSON object with
         POST, or as a query string with GET. A ``{name}`` in the URL's path takes that
-        argument instead, and must be one path segment (no ``/``, ``\\``, ``.``, or ``..``). Data references are read and sent as values, and the JSON answer is
-        checked against the stub's return type. The host is fixed here, redirects are not
+        argument instead, and must be one path segment (no ``/``, ``\\``, ``.``, or ``..``).
+        Data references are read and sent as values, and the JSON answer is checked against
+        the stub's return type. The host is fixed here, redirects are not
         followed, and a larger answer than ``max_output_bytes`` is refused. ``token_env``
         names an environment variable whose value is sent as a bearer token; it is read at
         each call and never shown. The tool needs `network`, which needs an approval for each
