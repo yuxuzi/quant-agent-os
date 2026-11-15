@@ -60,16 +60,6 @@ def test_tutorial_names_no_removed_command() -> None:
         assert removed not in text
 
 
-def test_first_tool_lab_passes_the_contract_and_refuses_bad_input(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    output = run_lab(monkeypatch, capsys, "lab_first_tool.py")
-
-    assert "Contract check passed" in output
-    assert "streak:   3" in output
-    assert "Bad call: invalid_input" in output
-
-
 def test_guardrails_lab_shows_every_refusal_in_order(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -94,7 +84,23 @@ def test_guardrails_lab_shows_every_refusal_in_order(
         ({"status": "denied", "error": "No.", "hint": "Stop."}, "error: No."),
         ({"status": "ok", "output": {"metrics": {"sharpe_ratio": 1.5}}}, "sharpe_ratio: 1.5000"),
         ({"status": "ok", "output": {"spec": {"open_questions": ["a"]}}}, "open questions: 1"),
-        ([], "no runs"),
+        ([], "nothing listed"),
+        (
+            {
+                "status": "ok",
+                "output": {"breaches": 1, "checks": [{"name": "Gross", "breached": True}]},
+            },
+            "breaches: 1 of 1: Gross",
+        ),
+        ({"status": "ok", "output": {"datasets": [{"id": "fund"}]}}, "datasets: fund"),
+        ({"status": "ok", "output": {"result": -0.08, "convention": "Peak"}}, "result: -0.0800"),
+        (
+            {
+                "run": {"principal": "bob"},
+                "calls": [{"tool": "t", "status": "error", "refused": ["x"]}],
+            },
+            "bob called t: error, refused: x",
+        ),
     ],
 )
 def test_show_makes_rest_responses_readable(

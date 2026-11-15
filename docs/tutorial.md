@@ -1,90 +1,82 @@
-# Tutorial: learn Quant-Agent-OS by playing with it
+# Tutorial: Quant-Agent-OS for a fund's leadership
 
-This tutorial is a set of short, hands-on labs. You run real commands, see real output, change
-something, and see what happens. At the end, [tell us what to improve](#give-feedback).
+This tutorial is for a fund's CEO and CTO, and for the engineer who sits beside them. In about 90
+minutes you build an analytical application, let an AI client use it, and then test the controls
+that decide who gets in, what each person reaches, and what is recorded. Each lab ends with **what
+this shows**, a short summary for anyone who reads along without running the commands. At the end,
+[tell us what to improve](#give-feedback).
 
 - **You need:** [uv](https://docs.astral.sh/uv/), a macOS or Linux terminal (on Windows, use WSL
-  or Git Bash), and basic Python. Lab 6 also needs Claude Code.
-- **You don't need:** an API key or any money, except for Claude Code itself in Lab 6. After
-  install, only Labs 6 and 8 use the network. All the sample data is synthetic.
-- **Time:** about 90 minutes for everything, and each lab stands alone after setup.
+  or Git Bash), and basic Python. Lab 5 can also use Claude Code.
+- **You don't need:** an API key or any money, except for Claude Code itself. After setup, only
+  Labs 3 to 5 use the network, to download Python packages. All the data is synthetic.
+- **Time:** about 90 minutes. Labs 3 to 7 build on each other, so do them in order.
 
-Everything was run on version 0.2.0 on 2026-11-05, except that Lab 6's server was checked with an
-MCP client rather than Claude Code itself. Run ids and timings will differ, and tables wrap to your
-terminal's width. Some outputs are shortened. This is research software, not investment advice.
+Everything was run on version 0.4.0 on 2026-11-15, except that Claude Code itself was not run:
+Lab 5's MCP endpoint was checked with an MCP client instead. Run ids, keys, and timings will differ,
+and some outputs are shortened. This is research software, not investment advice.
 
 > **Can't see the diagrams?** GitHub draws them. In VS Code, install the *Markdown Preview
 > Mermaid Support* extension.
 
-## The idea in one picture
+## What a fund's leadership should know first
 
-Quant-Agent-OS is not a chatbot. It is the set of tools an AI client calls: the client asks, and
-the platform computes, retrieves, checks, and records. All three ways in reach the same
-executor, so every caller gets the same rules.
+Quant-Agent-OS is not a chatbot, and it calls no AI model. It is a server your firm runs, on your
+own machines, that offers your own Python tools and data to the AI clients your people already use,
+such as Claude, Cursor, or Copilot. The client's model decides which tool to call. Your server
+decides whether the call is allowed, runs it, and records it.
+
+So the questions to ask are about the server:
+
+| Question | The answer, in one line | Lab |
+| --- | --- | --- |
+| Can our team build on it? | A command generates a tested application for a stage of the fund's work. You own its code, and three lines give it to an AI client | [3](#lab-3-generate-a-risk-application), [4](#lab-4-configure-and-customize-it), [5](#lab-5-make-it-usable-by-an-ai-client) |
+| **Authentication:** who gets in? | Every network request needs an API key. Keys are stored as hashes, can expire, and are revoked without a restart | [6](#lab-6-authentication-who-gets-in) |
+| **Authorization:** who reaches what? | An access file lists each group's tools and datasets, and refuses everything else. A refused dataset looks like one that does not exist | [7](#lab-7-authorization-who-reaches-what) |
+| Can an AI do something consequential on its own? | No. The server is read-only by default, and anything more needs a permission the operator grants and a person's approval of each call | [8](#lab-8-permissions-and-approvals) |
+| Can we prove what happened? | Every call is recorded under the caller's name, with the data's fingerprints and the tool's version | All |
+| Are the numbers right? | Numbers come from your Python code, never from a model, and each states its convention | [1](#lab-1-your-first-report), [2](#lab-2-numbers-by-reference) |
+
+Every request passes these checks, in this order:
 
 ```mermaid
 flowchart LR
-    subgraph callers["Who calls"]
-        C1["AI client<br/>Claude, Cursor, Copilot"]
-        C2["Your Python code"]
-        C3["Web app or other language"]
-    end
-    subgraph doors["Ways in"]
-        D1["MCP"]
-        D2["Python SDK"]
-        D3["REST"]
-    end
-    C1 --> D1
-    C2 --> D2
-    C3 --> D3
-    D1 --> E
-    D2 --> E
-    D3 --> E
-    E{{"Bounded executor<br/>permissions, validation,<br/>approvals, limits"}}
-    E --> T1["Quant Research<br/>cited answers"]
-    E --> T2["Quant Analytics<br/>computed metrics"]
-    E --> T3["App Factory<br/>project planning"]
-    E --> R[("Run store<br/>every call, audit trail")]
+    A["Request from<br/>an AI client or app"] --> K{"Valid API key?<br/>(authentication)"}
+    K -->|No| K1["401"]
+    K -->|Yes| S{"Key's scope<br/>allows it?"}
+    S -->|No| S1["403"]
+    S -->|Yes| P{"Server permits the tool,<br/>and the caller's access<br/>allows it? (authorization)"}
+    P -->|No| P1["denied"]
+    P -->|Yes| V{"Input valid?"}
+    V -->|No| V1["invalid_input"]
+    V -->|Yes| C{"Consequential?"}
+    C -->|Yes, not approved| C1["approval_required"]
+    C -->|No, or approved| R["Run with a time<br/>and size limit"]
+    R --> O["Answer"]
+    K1 & S1 & P1 & V1 & C1 & O --> L[("Recorded:<br/>who, what, data versions")]
 ```
 
-Remember three rules. Each lab shows at least one of them in action:
-
-1. **Numbers are computed, and facts are cited.** Reports label each finding `computed`,
-   `retrieved`, or `interpretation`, so you can tell them apart.
-2. **Read-only by default.** Anything consequential needs a permission and a human approval.
-3. **Everything is recorded.** You can always ask which data and tool versions produced an answer.
+Four words recur. **Authentication** is checking who is calling, by API key. **Authorization** is
+what that caller may reach: a key's scopes, and the groups in the access file. **Permissions** are
+what the server may do at all, such as reading data or calling a network service. An **approval** is
+a person saying yes to one specific call.
 
 ## Choose your path
 
-Do Setup and Lab 1, then follow your interest.
-
-```mermaid
-flowchart TD
-    S["Setup<br/>3 min"] --> L1["Lab 1: First report<br/>5 min"]
-    L1 --> Q{"What do you want?"}
-    Q -->|"Analyse returns"| L2["Lab 2: Metrics on your data<br/>10 min"]
-    Q -->|"Ask questions of documents"| L3["Lab 3: Knowledge base<br/>15 min"]
-    Q -->|"Add my own tools"| L4["Lab 4: Write a tool<br/>10 min"]
-    Q -->|"Start a quant project"| L8["Lab 8: Generate a project<br/>10 min"]
-    L4 --> L5["Lab 5: Guardrails<br/>10 min"]
-    L2 --> L6["Lab 6: Connect Claude<br/>10 min"]
-    L3 --> L6
-    L5 --> L7["Lab 7: Server for your team<br/>10 min"]
-    L6 --> L7
-    L7 --> F["Give feedback"]
-    L8 --> F
-```
-
-| Lab | You will learn | Needs |
+| Lab | You will see | Time |
 | --- | --- | --- |
-| [1. First report](#lab-1-your-first-report) | The tool-call and report cycle | Setup |
-| [2. Metrics on your data](#lab-2-metrics-on-your-data) | Datasets by reference, stated conventions | Setup |
-| [3. Knowledge base](#lab-3-a-knowledge-base-with-citations) | Ingestion, citations, the graph, strategy specs | Setup |
-| [4. Write a tool](#lab-4-write-your-own-tool) | The tool contract and `check_tool` | Setup |
-| [5. Guardrails](#lab-5-try-to-break-the-guardrails) | Refusals and approvals | Setup |
-| [6. Connect Claude](#lab-6-connect-claude-code) | The same tools from an AI client | Labs 2 and 3, Claude Code |
-| [7. Server for your team](#lab-7-a-server-for-your-team) | REST, API keys, the run record | Labs 2 and 3 |
-| [8. Generate a project](#lab-8-generate-a-quant-project) | App Factory: study, backtest, report | Setup, network |
+| [1. First report](#lab-1-your-first-report) | Numbers with their provenance | 5 min |
+| [2. Numbers by reference](#lab-2-numbers-by-reference) | Data that never passes through the model | 5 min |
+| [3. Generate a risk application](#lab-3-generate-a-risk-application) | A tested application from one command | 10 min |
+| [4. Configure and customize it](#lab-4-configure-and-customize-it) | Your limits, your report, your own rule | 15 min |
+| [5. Make it usable by an AI client](#lab-5-make-it-usable-by-an-ai-client) | Your application's tools served to Claude | 15 min |
+| [6. Authentication](#lab-6-authentication-who-gets-in) | Keys, scopes, expiry, and revocation | 10 min |
+| [7. Authorization](#lab-7-authorization-who-reaches-what) | Groups, refusals, and the auditor's view | 15 min |
+| [8. Permissions and approvals](#lab-8-permissions-and-approvals) | Why an AI can't act on its own | 10 min |
+| [9. Your research, with citations](#lab-9-optional-your-research-with-citations) | Optional: answers from your documents | 15 min |
+
+A CEO short on time can read [the first section](#what-a-funds-leadership-should-know-first),
+the **what this shows** box of each lab, and [before production](#before-production).
 
 ## Setup
 
@@ -96,18 +88,16 @@ source examples/tutorial/env.sh
 ```
 
 If you already have a clone, skip the first two lines. `env.sh` sets `QUANT_AGENT_OS_HOME` to
-`~/qaos-tutorial`, so your work stays apart from any real Quant-Agent-OS data you have, and every
-command finds it without flags. **Run every command from the repository root. In each new terminal,
-run the `source` line again.**
-
-Check that it works:
+`~/qaos-tutorial`, so your work stays apart from any real Quant-Agent-OS data, and defines two small
+helpers that Labs 5 to 7 use. **In each new terminal, go to the repository root and run the `source`
+line again.**
 
 ```bash
 uv run qaos --version
 ```
 
 ```text
-qaos 0.2.0
+qaos 0.4.0
 ```
 
 ---
@@ -115,18 +105,7 @@ qaos 0.2.0
 ## Lab 1: Your first report
 
 **Goal:** see one complete cycle, with no AI involved. A script names the tool calls, so the
-result is the same every time. In real use, your AI client chooses the calls.
-
-```mermaid
-flowchart LR
-    G["Goal"] --> C["Tool calls<br/>from the config"]
-    C --> E["Executor checks<br/>and runs each call"]
-    E -->|Refused or failed| W["A warning<br/>in the report"]
-    E -->|OK| R["Report: findings,<br/>warnings, limitations,<br/>provenance"]
-    W --> R
-```
-
-### Run it
+result is the same every time. In real use, the AI client chooses the calls.
 
 ```bash
 uv run python examples/portfolio-research/portfolio_research.py
@@ -153,69 +132,44 @@ _None._
 
 | Step | Tool | Version | Status | ms |
 | --- | --- | --- | --- | --- |
-| 1 | annualized_return | 1.0.0 | ok | 0.268 |
-| 2 | max_drawdown | 1.0.0 | ok | 0.125 |
+| 1 | annualized_return | 1.0.0 | ok | 0.188 |
+| 2 | max_drawdown | 1.0.0 | ok | 0.118 |
 
-Run `dc90024c758e41fbb3b37f1e4741be83`: platform 0.2.0, registry `1f84e6bfc1cd`, 2026-11-05T16:21:40.587599+00:00 to 2026-11-05T16:21:40.590275+00:00.
+Run `af9eb90d1b3d4343bbe570f9c17bc83c`: platform 0.4.0, registry `1f84e6bfc1cd`, 2026-11-15T19:10:45.892969+00:00 to 2026-11-15T19:10:45.894957+00:00.
 ```
 
-### What just happened
-
-- Every finding says how it was produced (`computed`) and what it came from.
-- The **Provenance** table shows which tool version produced each number.
-- The numbers came from Python code, never from a model.
-
-### Play with it
-
-Make your own copy of the configuration:
+To see a refusal, copy the configuration:
 
 ```bash
 cp examples/portfolio-research/sample_config.toml "$TUT/my_portfolio.toml"
 ```
 
-Edit the copy, then run the example on it:
+Add `"guess_the_future"` to `metrics` in the copy, then run the example on it:
 
 ```bash
 uv run python examples/portfolio-research/portfolio_research.py "$TUT/my_portfolio.toml"
 ```
 
-| Change this in the file | What you should see |
-| --- | --- |
-| Keep only 3 values in `returns` | Warnings: `Only 3 observations ...; results are unreliable below 12.` |
-| Add `"guess_the_future"` to `metrics` | Warnings: `guess_the_future: unknown_tool - Unknown tool 'guess_the_future'...`; the other metrics still run |
+The report gains a warning, `guess_the_future: unknown_tool - Unknown tool 'guess_the_future'...`,
+and the other metrics still run.
 
-**The lesson:** a call that can't run is refused and reported without stopping the others, and weak
-data produces a warning, not false confidence.
+> **What this shows:** each finding says how it was produced (`computed`) and from what. The
+> provenance table names the tool version behind each number, and the run id ties it to the
+> record. A call that can't run is refused and reported, and it does not stop the others.
 
 ---
 
-## Lab 2: Metrics on your data
+## Lab 2: Numbers by reference
 
-**Goal:** compute performance and risk by naming a dataset, not by pasting numbers. This is how
-an AI client works too, so the numbers never pass through the model.
+**Goal:** compute performance and risk by naming a dataset rather than pasting numbers. An AI client
+works the same way, so your returns never pass through the model.
 
-```mermaid
-sequenceDiagram
-    actor You
-    participant Store as Dataset store
-    participant Client as Client or script
-    participant Tool as analyze_performance
-    You->>Store: qaos data add (validate, fingerprint)
-    Client->>Tool: returns = {dataset: "fund", column: "fund"}
-    Tool->>Store: read the column
-    Store-->>Tool: values and fingerprint
-    Tool-->>Client: metrics, conventions, data version
-```
-
-### Run it
-
-Add the two sample datasets. Adding data is a command **you** run, and never a tool the model
-can call.
+Adding data is a command **you** run. No AI client can call it.
 
 ```bash
 uv run qaos data add examples/tutorial/data/fund_returns.csv --id fund
 uv run qaos data add examples/tutorial/data/portfolio_returns.csv --id portfolio
-uv run qaos data list
+uv run python examples/tutorial/lab_analytics.py
 ```
 
 ```text
@@ -223,15 +177,6 @@ Added dataset fund: 36 rows, columns fund, benchmark (sha256 cab59d43f0a99633).
 Its dates show 12 periods per year.
 Added dataset portfolio: 36 rows, columns equities, bonds, gold, market, rates (sha256 137459bf5cc09216).
 Its dates show 12 periods per year.
-```
-
-Now compute:
-
-```bash
-uv run python examples/tutorial/lab_analytics.py
-```
-
-```text
 Performance of fund.fund over 36 months
   annualized_return    0.1054
   sharpe_ratio         1.1043
@@ -250,284 +195,605 @@ Risk of 60-30-10: volatility 7.15% a year
   The factors explain 77.2% of the variance.
 ```
 
-### What just happened
+The script passed `{"dataset": "fund", "column": "fund"}`, never the values. Labs 5 and 7 use these
+two datasets, so keep them.
 
-- The script passed `{"dataset": "fund", "column": "fund"}`, never the values.
-- The result states the **convention** behind each metric, so nobody has to guess how the
-  Sharpe ratio was defined.
-- The **data version** is the file's fingerprint. If the data changes, the fingerprint changes.
-- A 60% equity weight carries 88.9% of the risk. That gap is why risk contributions are useful.
+| Try this | What you should see |
+| --- | --- |
+| Add a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
+| Add only 6 rows as a dataset, then compute on it | `Warnings:` says the results are unreliable below 12 observations |
+
+> **What this shows:** each result states its **convention**, so nobody has to guess how the
+> Sharpe ratio was defined, and its **data version**, a fingerprint of the file. Change the data and
+> the fingerprint changes. Bad data is refused at the door, and thin data draws a warning rather
+> than false confidence.
+
+---
+
+## Lab 3: Generate a risk application
+
+**Goal:** go from one command to a tested risk application that your team owns. App Factory
+generates one application for each stage of a fund's work:
+
+| Application | For | Takes | Produces |
+| --- | --- | --- | --- |
+| `alpha-research` | Quant researchers | Prices, the firm's signal | Information coefficients, decay, spreads; a signal file |
+| `strategy-backtest` | Researchers, PMs | Signals or target weights, prices | Net and gross returns, with walk-forward |
+| `risk-monitor` | Risk, PMs | Positions, prices | Exposures, value at risk, stress, limit checks |
+| `performance-report` | COO, investor relations | Returns | Horizon tables, tear sheets, Excel, reconciliation |
+
+This lab builds a `risk-monitor`, with the `agent-tools` component that Lab 5 uses to serve it to
+an AI client. Write the application's spec:
+
+```bash
+mkdir -p "$TUT/work" && cd "$TUT/work"
+cat > desk-risk.toml <<EOF
+name = "desk-risk"
+template = "quant-apps"
+profile = "risk-monitor"
+description = "Risk limits and stress for our book"
+output_dir = "$TUT/work"
+components = ["agent-tools"]
+quant_agent_os_source = "$REPO"
+EOF
+```
+
+`quant_agent_os_source` points the application at your clone. A real project leaves it out, and
+gets the released platform from GitHub. Preview it, then create it:
+
+```bash
+uv run --project "$REPO" qaos app plan desk-risk.toml
+uv run --project "$REPO" qaos app create desk-risk.toml
+```
+
+```text
+desk-risk (quant-apps/risk-monitor) -> .../qaos-tutorial/work/desk-risk
+  29 files; components: agent-tools; checks: uv sync, ruff check, ruff format, mypy, pytest
+Create it? It writes files, runs uv, and downloads packages [y/N]: y
+Created .../qaos-tutorial/work/desk-risk with pytemplate-uv==3.1.0.
+  ok  uv sync  (0.3 s)
+  ok  uv run ruff check .  (0.3 s)
+  ok  uv run ruff format --check .  (0.0 s)
+  ok  uv run mypy desk_risk tests  (3.0 s)
+  ok  uv run pytest  (2.7 s)
+Run 9df1a32528c3492fb918a63bb0d3c1ff recorded in .../qaos-tutorial/runs.db.
+```
+
+`plan` writes nothing. Your yes to `create` is a recorded, single-use approval, because creating a
+project writes files and runs programs. Now run the application on its demo book:
+
+```bash
+cd desk-risk
+uv run desk-risk report
+uv run desk-risk check
+```
+
+```text
+Wrote reports/20261115T190451Z-risk
+This is a synthetic demo book. Set positions in config.toml to use yours.
+ok: Gross exposure: 0.9275 against 2.0000
+ok: Net exposure, upper: 0.2022 against 0.5000
+ok: Net exposure, lower: 0.2022 against -0.5000
+BREACH: Largest single position: 0.1820 against 0.1500
+ok: Top five positions, gross: 0.6241 against 0.7500
+1 of 5 breached, as of 2023-07-14.
+```
+
+Open the `report.html` or `report.md` in the folder it names. `check` exits with status 1 on any
+breach, so a scheduler can alert on it. The project holds:
+- `config.toml`: the data, limits, stress scenarios, and report sections;
+- `desk_risk/firm/`: your firm's own checks, sections, and file formats;
+- `tests/`: known-answer tests for every calculation;
+- `AGENTS.md`: the rules for a coding assistant that changes the project;
+- `LIMITATIONS.md`: what the application does not model.
+
+> **What this shows:** your team starts from a working, tested application rather than a blank
+> page, and it runs on your machines with no dependency on any service of ours. The application
+> only reads and reports: it cannot place orders. The template supplies no alpha and no limits of
+> its own. The demo limits are examples for your risk owner to replace.
+
+---
+
+## Lab 4: Configure and customize it
+
+**Goal:** make the application yours, at the lowest level that does the job. Each level up gives
+more freedom and needs more care:
+
+| Level | What you change | Where | Who usually does it |
+| --- | --- | --- | --- |
+| 1 | Data, limits, stress scenarios | `config.toml` | Risk owner |
+| 2 | Which report sections appear, in what order | `sections` in `config.toml` | Risk owner |
+| 3 | The firm's own rules, sections, and file formats | `desk_risk/firm/` | Engineer |
+| 4 | Anything else | Any file, with the tests to catch mistakes | Engineer |
+
+These run inside `desk-risk`.
+
+### Level 1: your limits and scenarios
+
+Open `config.toml`. Under `[limits]`, remove the `#` in front of `var_max` and `stress_loss_max`, and
+set them to your own figures:
+
+```toml
+var_max = 0.01           # value at risk per bar, as a loss
+stress_loss_max = 0.05
+```
+
+Then add a stress scenario of your own:
+
+```bash
+cat >> config.toml <<'EOF'
+
+[[scenarios]]
+name = "Financials down 15%"
+groups = { Financials = -0.15 }
+EOF
+uv run desk-risk check
+```
+
+```text
+ok: Gross exposure: 0.9275 against 2.0000
+ok: Net exposure, upper: 0.2022 against 0.5000
+ok: Net exposure, lower: 0.2022 against -0.5000
+BREACH: Largest single position: 0.1820 against 0.1500
+ok: Top five positions, gross: 0.6241 against 0.7500
+ok: Value at risk, as a loss: 0.0067 against 0.0100
+BREACH: Worst stress scenario, as a loss: 0.0512 against 0.0500
+2 of 7 breached, as of 2023-07-14.
+```
+
+Your new scenario found a 5.12% loss, over the 5% limit. A limit with no data to measure it counts
+as a breach, never a pass.
+
+### Level 2: your report
+
+`uv run desk-risk sections` lists the sections. Choose yours by changing the `sections` line in
+`config.toml`:
+
+```toml
+sections = ["limits", "exposures", "stress", "top_positions"]
+```
+
+The next `uv run desk-risk report` has those sections, in that order, plus the conventions behind
+the figures.
+
+### Level 3: a rule of your own
+
+Suppose compliance says two names may never be shorted. The `[limits]` table can't say that, so it
+goes in `desk_risk/firm/checks.py`, which is yours to change:
+
+```bash
+cat > desk_risk/firm/checks.py <<'EOF'
+"""Your firm's own risk checks. This file is yours to change."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from ..risk import Check, RiskView
+
+RESTRICTED = {"ASSET02", "ASSET07"}  # names compliance says we may not short
+
+
+def restricted_shorts(view: RiskView) -> list[Check]:
+    """Never short a name on the restricted list."""
+    held = zip(view.assets, view.weights, strict=True)
+    worst = min((float(w) for a, w in held if a in RESTRICTED), default=0.0)
+    return [Check("Restricted shorts", worst, 0.0, worst < 0.0)]
+
+
+CHECKS: dict[str, Callable[[Any], list[Any]]] = {"restricted_shorts": restricted_shorts}
+EOF
+```
+
+Give the rule a known-answer test, as the project's `AGENTS.md` asks:
+
+```bash
+cat > tests/test_firm.py <<'EOF'
+import datetime as dt
+
+import numpy as np
+
+from desk_risk.firm.checks import restricted_shorts
+from desk_risk.risk import build_view
+from desk_risk.settings import Settings
+from desk_risk.tables import Table
+
+
+def test_a_short_in_a_restricted_name_is_a_breach() -> None:
+    book = Table([dt.date(2024, 1, 2)], ["ASSET02", "ASSET04"], np.array([[-0.1, 0.2]]))
+
+    (check,) = restricted_shorts(build_view(book, Settings()))
+
+    assert check.breached
+    assert check.value == -0.1
+EOF
+uv run desk-risk check
+uv run ruff check . && uv run mypy desk_risk tests && uv run pytest -q
+```
+
+```text
+...
+BREACH: Restricted shorts: -0.1820 against 0.0000
+3 of 8 breached, as of 2023-07-14.
+All checks passed!
+Success: no issues found in 21 source files
+38 passed in 0.14s
+```
+
+Your rule appears beside the built-in limits, in `check`, in the report, and, after Lab 5, to the AI
+client.
+
+### Level 4: anything else
+
+The code is yours, so any file can change. The known-answer tests catch a change that breaks a
+calculation. A coding assistant such as Claude Code reads `AGENTS.md`, which includes these rules:
+
+- never place orders or connect to a broker;
+- never loosen a limit, or change how one is measured, to clear a breach, because a limit belongs to
+  the firm's risk owner;
+- never change a formula to match another system: add a separately named figure instead.
 
 ### Play with it
 
 | Try this | What you should see |
 | --- | --- |
-| Change `WEIGHTS` at the top of [lab_analytics.py](../examples/tutorial/lab_analytics.py), then rerun (undo it afterwards with `git checkout examples/tutorial/lab_analytics.py`) | New risk shares |
-| Use your own returns: `uv run qaos data add my.csv --id fund`, with columns `fund` and `benchmark` | Your own metrics and a new data version |
-| Add only 6 rows as `fund`: `head -7 examples/tutorial/data/fund_returns.csv > "$TUT/short.csv"`, then `uv run qaos data add "$TUT/short.csv" --id fund` | `Warnings:` says the results are unreliable below 12 observations. Add the full file again afterwards, because later labs use it |
-| Add a CSV with a text value in a number column | Refused, naming the place: `Dataset 'broken' line 3, column 'fund': 'oops' is not a number or a missing value.` |
-| Blank out one `fund` cell in a copy of the file, and add it as `fund` | It loads and says one cell is missing. `Warnings:` says one row was left out, and nothing is filled in |
+| Point `positions` in `config.toml` at your own CSV: a `date` column, then one column of NAV weights per asset, shorts negative | Your book. Add `prices` for value at risk, volatility, and risk contributors, and `groups` for sectors |
+| Ask Claude Code, in the project, to *raise the single-name limit to 20% so the check passes* | It should decline or ask, because `AGENTS.md` says a limit belongs to the risk owner |
+| `uv run --project "$REPO" qaos app template fork quant-apps/risk-monitor "$TUT/packs/our-risk"` | Your own template, which every later project starts from |
+
+> **What this shows:** a risk owner can set limits and scenarios without touching code, and an
+> engineer adds the firm's own rules in one folder, with tests. The project is yours from the first
+> commit: no command updates it from a newer template, so nothing changes under you. To take a later
+> fix, generate a fresh project and compare
+> ([decision 0025](decisions/0025-templates-are-starting-points.md)).
 
 ---
 
-## Lab 3: A knowledge base with citations
+## Lab 5: Make it usable by an AI client
 
-**Goal:** build a searchable knowledge store from documents, ask questions, and get answers you
-can check, passage by passage.
+**Goal:** give your application's tools to an AI client, under the platform's keys, access rules,
+and audit. The `agent-tools` component already wrote `desk_risk/tools.py`: two tools,
+`check_risk_limits` and `risk_report`, which read the application's own files and take no
+arguments. A small server of your own names what it serves.
 
-```mermaid
-flowchart TD
-    subgraph ingest["Ingest: a command you run, offline"]
-        A["Markdown, text, PDF"] --> B["Split into passages"]
-        B --> C["Find known entities:<br/>factors, signals, strategies"]
-        C --> D["Extract relations:<br/>predicts, contradicts ..."]
-        D --> E[("Knowledge store<br/>with a snapshot id")]
-    end
-    subgraph ask["Ask: read-only"]
-        Q["Question"] --> K["Keyword search"]
-        Q --> M["Entity mentions"]
-        Q --> GR["Graph links"]
-        K --> F["Merge and rank"]
-        M --> F
-        GR --> F
-        F --> O["Related entities and<br/>cited passages"]
-    end
-    E --> K
-    E --> M
-    E --> GR
-```
-
-### Build the store
+Stay in `desk-risk`. Add the server to the project, then write the server file:
 
 ```bash
-uv run qaos ingest src/quant_platform/sample/corpus
+uv add "quant-agent-os[server,analytics]"
+cat > serve.py <<'EOF'
+"""Our server: this application's tools, under the platform's keys, access rules, and audit."""
+
+from quant_agent_os.config import get_settings
+from quant_agent_os.data import DirectoryDatasetStore
+from quant_agent_os.registration import FirmApp, Series
+from quant_platform import serve_apps
+
+from desk_risk.metrics import max_drawdown
+from desk_risk.tools import registry
+
+risk = FirmApp(
+    "risk",
+    instructions="check_risk_limits checks our book against the firm's limits, and risk_report "
+    "gives its exposures, risk, and stress. Report the figures as computed.",
+)
+risk.include(registry())  # the tools the template generated
+risk.expose(max_drawdown, returns=Series, convention="Compounded wealth, peak to trough")
+
+if __name__ == "__main__":
+    datasets = DirectoryDatasetStore(get_settings().datasets_dir)  # what `qaos data add` added
+    serve_apps([risk], datasets=datasets, port=8765)
+EOF
+```
+
+That file is the whole integration. There are two ways to add a tool:
+- **`include`** adds ready-made tools, such as the generated ones.
+- **`expose`** turns a function you already have into a tool. `max_drawdown` is an ordinary
+  function from the application's `metrics.py`, unchanged. Its input schema comes from its type
+  hints and its description from its docstring. `returns=Series` says the caller passes a dataset
+  reference, and the server reads the data and passes the function the numbers.
+
+Issue a key for a portfolio manager, then start the server:
+
+```bash
+PM=$(uv run qaos keys new --principal pm --scope tools:list --scope tools:call)
+uv run python serve.py > "$TUT/server.log" 2>&1 &
+SERVER=$!
+until curl -s -o /dev/null http://127.0.0.1:8765/healthz; do sleep 1; done
+head -1 "$TUT/server.log"
 ```
 
 ```text
-Added 6, unchanged 0, skipped 1: 9 chunks, 45 mentions, 32 relations, 0 embeddings.
-Corpus snapshot snap:8cddf9d734e07c1c in .../qaos-tutorial/knowledge.db.
-warning: Skipped chart.png: supported types are .markdown, .md, .pdf, .txt.
+Added a key for pm in tenant local (tools:list, tools:call) to .../qaos-tutorial/api-keys.toml. It is shown once; store it now. A running server accepts it at once.
+Serving 7 tools at http://127.0.0.1:8765/mcp (MCP) and /v1 (REST) to 1 key.
 ```
 
-### Ask a question
+`$PM` holds the key, which is shown only this once, and only its hash is stored. Call the server over REST, with plain `curl`
+first:
 
 ```bash
-uv run qaos search "What is related to short-term reversal?"
+curl -s -H "Authorization: Bearer $PM" http://127.0.0.1:8765/v1/tools \
+  | uv run --project "$REPO" python "$REPO/examples/tutorial/show.py"
 ```
 
 ```text
- Entity               Type    Score  Connection
- Liquidity provision  signal  0.80   signal:short-term-reversal -correlates_with-> signal:liquidity-provision
- Order-flow imbalance signal  0.80   signal:short-term-reversal <-predicts- signal:order-flow-imbalance
- Momentum             factor  0.70   signal:short-term-reversal <-contradicts- factor:momentum
-reversal-and-microstructure.md (lines 17-19, § Mechanism) keyword, mention, graph
-notes/order-flow.md (lines 3-6, § Order-flow imbalance notes) keyword, mention, graph
-momentum-crashes.md (lines 10-14, § Momentum, reversal, and crashes) keyword, mention, graph
-reversal-and-microstructure.md (lines 12-13, § Summary) keyword, mention
-reversal-and-microstructure.md (lines 23-24, § Costs) keyword
-Corpus snapshot snap:8cddf9d734e07c1c.
+tools: analyze_performance, analyze_risk, check_risk_limits, list_datasets, max_drawdown, risk_report, server_info
 ```
 
-**How to read it:** each entity shows the graph path that links it to your question. Each passage
-gives its file and lines, so you can open the file and check, plus the channels that found it.
-
-### See what the corpus does not know
+Your three tools sit beside the platform's analytics. From now on, the `call` and `get` helpers from
+`env.sh` do the same `curl` with less typing, and `show.py` prints a few readable lines of the JSON:
 
 ```bash
-uv run qaos search "protein folding"
+call "$PM" check_risk_limits
+call "$PM" max_drawdown '{"returns": {"dataset": "fund", "column": "fund"}}'
 ```
 
 ```text
-warning: Nothing in the corpus matched the query; try the names of factors, signals, or strategies, or ingest more documents.
+status: ok
+breaches: 3 of 8: Largest single position, Worst stress scenario, as a loss, Restricted shorts
+status: ok
+result: -0.0803, convention: Compounded wealth, peak to trough
 ```
 
-Finding nothing is the correct answer here. The tool returns no evidence rather than a guess.
+The firm's rule from Lab 4 is there. The full answer also carries the data's fingerprint and
+`computed` evidence, which `expose` adds without your writing it.
 
-### Draft a strategy spec, then improve it
+### Connect Claude Code
+
+This step sends your questions, and the results Claude reads, to your model provider. Connect as the
+portfolio manager:
 
 ```bash
-uv run qaos strategy "short-term reversal"
+claude mcp add --transport http desk-risk http://127.0.0.1:8765/mcp \
+  --header "Authorization: Bearer $PM"
 ```
 
-```text
- Section  Statement                                        Sources
- signals  Short-term reversal correlates with Liquidity... reversal-and-microstructure.md (lines 17-19, § Mechanism)
- signals  Order-flow imbalance predicts Short-term rever...notes/order-flow.md (lines 3-6, § Order-flow imbalance notes)
- risks    Short-term reversal explained by Bid-ask bounce. reversal-and-microstructure.md (lines 17-19, § Mechanism)
- risks    Momentum contradicts Short-term reversal.        momentum-crashes.md (lines 10-14, § Momentum, reversal, and crashes)
-open: No source ties Short-term reversal to an asset class or instrument; choose the universe.
-open: No source names a dataset for Short-term reversal; choose the price and reference data.
-open: No source names a test method for Short-term reversal; choose one (for example portfolio sorts or walk-forward).
-open: No source names evaluation metrics for Short-term reversal; choose them before testing.
-open: Parameters (formation and holding periods, rebalance frequency, costs) are not extracted; set them from the key passages.
-```
+Start `claude` in another terminal, and run `/mcp` to confirm that `desk-risk` is connected.
 
-The `open:` lines are the useful part: the spec says what your documents leave undecided. Now
-teach it something by adding [a note](../examples/tutorial/data/notes/my-reversal-note.md):
+| Ask Claude | Expect it to call | Check that |
+| --- | --- | --- |
+| "Are we within our risk limits?" | `check_risk_limits` | Three breaches, including your restricted-shorts rule |
+| "What would a 15% fall in financials cost us, and what are our largest positions?" | `risk_report` | A 5.12% loss, and the positions from the report |
+| "What is the maximum drawdown of the fund column in the fund dataset?" | `list_datasets`, `max_drawdown` | -8.03%, and no returns in the arguments |
+| "Raise the single-name limit to 20%." | Nothing suitable | No tool can: limits live in a file that only the operator changes |
+
+Claude writes the words, so its answers vary. Check that the numbers come from the tools. Then see
+the calls, each under the key's principal:
 
 ```bash
-mkdir -p "$TUT/notes"
-cp examples/tutorial/data/notes/my-reversal-note.md "$TUT/notes/"
-uv run qaos ingest "$TUT/notes"
-uv run qaos strategy "short-term reversal"
-```
-
-Three new rows appear, citing your note, and the universe and test-method questions disappear:
-
-```text
- universe  Short-term reversal tested on US equities.       my-reversal-note.md (lines 3-7, § My note on reversal and volatility)
- methods   Short-term reversal uses Portfolio sorts.        my-reversal-note.md (lines 3-7, § My note on reversal and volatility)
- risks     Low volatility contradicts Short-term reversal.  my-reversal-note.md (lines 3-7, § My note on reversal and volatility)
-```
-
-The snapshot id changes too, so you can tell which corpus version produced each answer.
-
-### Read the record
-
-Now call the same tool from Python. The SDK records the call, as MCP does:
-
-```bash
-uv run python examples/quant-research/sdk_demo.py "$KB" "momentum crashes"
 uv run qaos runs
 ```
 
-```text
-Q: momentum crashes
-  related: Time-series momentum (signal, score 0.75)
-  related: Short-term reversal (signal, score 0.70)
-  cited:   momentum-crashes.md, lines 10-14, § Momentum, reversal, and crashes
-  cited:   momentum-crashes.md, lines 16-20, § Momentum, reversal, and crashes
-Run 4066...: completed, snapshot snap:32c1a82b3273c76a, input sha256 0c0b...
-4066...  2026-11-05 16:21:43  sdk   completed  snap:32c1a82b3273c76a  find_related_signals
+Leave the server running for Lab 6.
+
+> **What this shows:** making an application usable by AI took one short file, which lives in your
+> repository and names every tool it serves. Nothing is discovered or loaded from a setting
+> ([decision 0024](decisions/0024-registering-a-firms-functions.md)). The client's model chooses the
+> calls, and your code computes every figure. The same tools answer over MCP for AI clients and
+> REST for your own applications, under the same keys and rules.
+
+---
+
+## Lab 6: Authentication: who gets in
+
+**Goal:** see how the server decides who is calling, and how you revoke access.
+
+```bash
+curl -s http://127.0.0.1:8765/v1/tools | uv run --project "$REPO" python "$REPO/examples/tutorial/show.py"
+get "qaos_not_a_real_key" /v1/tools
 ```
 
-To see one run's calls and audit trail, run `uv run qaos runs <RUN_ID>`.
+```text
+refused: Send an API key as 'Authorization: Bearer <key>'.
+refused: Unknown or revoked API key.
+```
+
+Every route except `/healthz` needs a key, over MCP and REST alike. Now give an intern a key that can
+list tools but not call them, and that expires in 30 days:
+
+```bash
+INTERN=$(uv run qaos keys new --principal intern --scope tools:list --expires-in-days 30)
+get "$INTERN" /v1/tools
+call "$INTERN" check_risk_limits
+```
+
+```text
+Added a key for intern in tenant local (tools:list) to .../qaos-tutorial/api-keys.toml. It is shown once; store it now. A running server accepts it at once.
+tools: analyze_performance, analyze_risk, check_risk_limits, list_datasets, max_drawdown, risk_report, server_info
+refused: This API key lacks the 'tools:call' scope.
+```
+
+The running server accepted the new key with no restart. Look at what is stored:
+
+```bash
+cat "$TUT/api-keys.toml"
+```
+
+```text
+[[keys]]
+principal = "pm"
+sha256 = "9d3fa97f8e9f162772fb875381f25d4ab7ee788c09aeb702327c98cfd8e2a2f6"
+scopes = ["tools:call", "tools:list"]
+
+[[keys]]
+principal = "intern"
+sha256 = "854d4c86dd79549fa4ac9f226804658ca50f4d7cae9c208c478b72113277c6d0"
+scopes = ["tools:list"]
+expires = 2026-12-15T19:08:51.724373+00:00
+```
+
+Only hashes: a copy of this file lets nobody in. To revoke the intern's key, add `disabled = true` to
+its entry. It is the last one, so appending works here:
+
+```bash
+echo 'disabled = true' >> "$TUT/api-keys.toml"
+get "$INTERN" /v1/tools
+```
+
+```text
+refused: Unknown or revoked API key.
+```
+
+No restart was needed. Now break the file, as a mistyped edit might:
+
+```bash
+cp "$TUT/api-keys.toml" "$TUT/api-keys.bak"
+echo 'this is not toml [' >> "$TUT/api-keys.toml"
+get "$PM" /v1/tools
+grep "Accepting no API keys" "$TUT/server.log"
+cp "$TUT/api-keys.bak" "$TUT/api-keys.toml"
+```
+
+```text
+refused: Unknown or revoked API key.
+Accepting no API keys until this is fixed: Invalid API keys file .../qaos-tutorial/api-keys.toml: Expected '=' after a key in a key/value pair (at line 13, column 6)
+```
+
+With the file restored, the portfolio manager's key works again. Stop the server for Lab 7:
+
+```bash
+kill $SERVER
+```
+
+> **What this shows:** every network request needs a key, keys are stored only as hashes, and each
+> key carries scopes, an optional expiry, and the name of the person it was issued to. Revocation
+> takes effect on the next request. A broken keys file locks everyone out, so a mistyped
+> revocation can't leave a key working: the server fails closed. The server has no single sign-on
+> of its own yet, so your firm decides who holds a key and removes leavers
+> ([before production](#before-production)).
+
+---
+
+## Lab 7: Authorization: who reaches what
+
+**Goal:** give two desks different rights on one server, and see what an auditor sees.
+
+So far any key with `tools:call` reaches every tool and dataset. Write an access file, in which
+anything not listed is refused:
+
+```bash
+cat > "$TUT/access.toml" <<'EOF'
+# Who reaches what. Anything not listed is refused.
+
+[groups.risk]
+tools = ["list_datasets", "check_risk_limits", "risk_report", "analyze_risk"]
+datasets = ["portfolio"]
+
+[groups.research]
+tools = ["list_datasets", "analyze_performance", "max_drawdown"]
+datasets = ["fund"]
+EOF
+```
+
+Issue a key to someone in each group, and one to an auditor who may read the record and call
+nothing. Then restart the server with the access file:
+
+```bash
+ALICE=$(uv run qaos keys new --principal alice --scope tools:list --scope tools:call --group risk)
+BOB=$(uv run qaos keys new --principal bob --scope tools:list --scope tools:call --group research)
+AUDITOR=$(uv run qaos keys new --principal auditor --scope runs:read)
+QUANT_AGENT_OS_ACCESS_FILE="$TUT/access.toml" uv run python serve.py > "$TUT/server.log" 2>&1 &
+SERVER=$!
+until curl -s -o /dev/null http://127.0.0.1:8765/healthz; do sleep 1; done
+```
+
+### Each caller sees only its own
+
+```bash
+get "$ALICE" /v1/tools
+get "$BOB" /v1/tools
+get "$PM" /v1/tools
+call "$ALICE" list_datasets
+call "$BOB" list_datasets
+```
+
+```text
+tools: analyze_risk, check_risk_limits, list_datasets, risk_report
+tools: analyze_performance, list_datasets, max_drawdown
+nothing listed
+status: ok
+datasets: portfolio
+status: ok
+datasets: fund
+```
+
+The portfolio manager's key has no group, so once there is an access file it reaches nothing:
+access is denied by default.
+
+### Refusals
+
+```bash
+call "$BOB" check_risk_limits
+call "$BOB" max_drawdown '{"returns": {"dataset": "portfolio", "column": "equities"}}'
+call "$BOB" max_drawdown '{"returns": {"dataset": "nosuch", "column": "equities"}}'
+```
+
+```text
+status: denied
+error: Your access does not include tool 'check_risk_limits'; ask the server's operator.
+hint: The server's operator has not allowed this call. Do not retry; tell the user what the error says.
+status: error
+error: UnknownDatasetError: No dataset 'portfolio'; the datasets are fund.
+hint: The tool failed. The same arguments will fail the same way; change them or report the error to the user.
+status: error
+error: UnknownDatasetError: No dataset 'nosuch'; the datasets are fund.
+hint: The tool failed. The same arguments will fail the same way; change them or report the error to the user.
+```
+
+Bob can't tell the portfolio dataset, which exists, from one that doesn't, so a refusal reveals
+nothing about what other desks hold.
+
+### The auditor's view
+
+```bash
+call "$AUDITOR" list_datasets
+get "$AUDITOR" "/v1/runs?limit=3"
+RUN=$(curl -s -H "Authorization: Bearer $AUDITOR" "http://127.0.0.1:8765/v1/runs?limit=1" \
+  | uv run --project "$REPO" python -c "import json, sys; print(json.load(sys.stdin)[0]['run_id'])")
+get "$AUDITOR" "/v1/runs/$RUN"
+```
+
+```text
+refused: This API key lacks the 'tools:call' scope.
+run by bob in tenant local: max_drawdown failed
+run by bob in tenant local: max_drawdown failed
+run by bob in tenant local: check_risk_limits failed
+bob called max_drawdown: error, refused: dataset.read nosuch
+```
+
+The auditor can't call tools, and Bob never sees the `refused` field that the record keeps. Run the
+same commands with the second run id to find `refused: dataset.read portfolio`. Drop the helper and
+the full record shows the arguments, the input hash, the tool's version, and the audit events,
+which the database refuses to change or delete.
 
 ### Play with it
 
 | Try this | What you should see |
 | --- | --- |
-| `uv run qaos search "carry"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage: retrieved text never feeds back into planning |
-| `uv run qaos search "inventory risk"` | `warning: No vocabulary entity in the query; seeded from the best keyword passage.` Your note mentions inventory risk, but the graph only knows the bundled vocabulary |
-| `uv run qaos search "reversal" --hops 2` | More entities, found two graph steps away |
-| Add `--min-confidence 0.4` to the `strategy` command | More rows, from weaker links |
-| Add a line such as `Momentum predicts time-series momentum.` to your note, then run `ingest` again | Only the changed file is re-read, with one more relation |
-| Run `ingest "$TUT/notes"` twice without changes | `Added 0, unchanged 1` and the same snapshot id |
-| Put your own `.md`, `.txt`, or text-based `.pdf` files in `$TUT/notes` and ingest them | Answers from your own documents. Typed relations need explicit phrasing such as "predicts" or "explained by" ([known limitations](products/quant-research.md#known-limitations)) |
+| Add `"portfolio"` to the research group's `datasets`, save, and repeat Bob's portfolio call | It succeeds, with no restart |
+| Append a line such as `oops` to `access.toml`, then call as Alice | `denied`: while the file is invalid, nothing is allowed. Remove the line afterwards |
+| Connect Claude as Bob, with his key in the `claude mcp add` command from Lab 5 | Claude is offered only Bob's three tools |
 
----
-
-## Lab 4: Write your own tool
-
-**Goal:** add a capability. A tool is a plain Python function with typed input and output.
-
-```mermaid
-flowchart TD
-    A["Write input and<br/>output models"] --> B["Write the function,<br/>add @tool"]
-    B --> C["check_tool:<br/>contract check"]
-    C -->|Problems| B
-    C -->|Passes| D["Register it"]
-    D --> E["Same tool through<br/>SDK, MCP, and REST"]
-```
-
-### Read it, then run it
-
-Open [lab_first_tool.py](../examples/tutorial/lab_first_tool.py). The core is short:
-
-```python
-@tool(
-    name="longest_losing_streak",
-    description="The largest number of consecutive periods with a negative return.",
-)
-def longest_losing_streak(params: StreakInput) -> StreakOutput:
-    """Count the longest run of negative returns."""
-    longest = current = 0
-    for value in params.returns:
-        current = current + 1 if value < 0 else 0
-        longest = max(longest, current)
-    source = SourceRef(source_id=params.series_id, location=f"{len(params.returns)} periods")
-    statement = f"The longest losing streak of {params.series_id} is {longest} periods."
-    return StreakOutput(
-        longest_losing_streak=longest,
-        warnings=["Fewer than 12 periods; read with care."] if len(params.returns) < 12 else [],
-        evidence=[Evidence(kind="computed", statement=statement, sources=[source])],
-    )
-```
+Stop the server when you finish:
 
 ```bash
-cp examples/tutorial/lab_first_tool.py "$TUT/my_tool.py"
-uv run python "$TUT/my_tool.py"
+kill $SERVER
+cd "$REPO"
 ```
 
-```text
-Contract check passed: the same result directly and through MCP, and deterministic.
-
-Good call: ok
-  streak:   3
-  warnings: ['Fewer than 12 periods; read with care.']
-  evidence: The longest losing streak of demo is 3 periods.
-
-Bad call: invalid_input
-  error: returns: Input should be a valid list
-
-Recorded run: completed, by sdk
-  input sha256: dd861f8e7cfb4c6f...
-  audit trail:  ['run.started', 'tool.called', 'run.finished']
-```
-
-### What just happened
-
-- You wrote no MCP code. Registering the tool is what makes it available everywhere.
-- The bad call was refused by the input model, so your function never ran.
-- `check_tool` is the test to put in your tool package. It compares direct and MCP results,
-  checks the output against the schema, and checks that the tool is deterministic.
-
-### Play with it
-
-Edit `$TUT/my_tool.py`, then run it again.
-
-| Change | What you should see |
-| --- | --- |
-| Add `import random` inside the function and start from `longest = current = random.randint(0, 99)` | `check_tool` fails: `declared deterministic, but two calls returned different output` |
-| Import `Permission` and add `permissions=[Permission.NETWORK]` to `@tool` | The contract check still passes, but both calls are `denied`: `check_tool` tests the tool itself, and the default policy is read-only. Permissions are checked before input, so even the bad call gets `denied` |
-| Pass `returns=[]` in `SAMPLE` | `check_tool` reports that the status is `invalid_input`, expected `ok` |
-| **Challenge:** also return the total loss during the longest streak | Your tool, your design. Tell us how it went |
-
-To serve your tool beside the platform's, see [add your own tools](deployment.md#8-add-your-own-tools).
-To start a real tool package with these checks already wired in, see
-`uv run qaos app new agent-tool my-tools` ([Quant App Factory](products/quant-app-factory.md)).
+> **What this shows:** the firm decides who reaches each tool and dataset, in a file it reviews
+> like code. Anything not listed is refused, a caller sees only what it may reach, and an invalid
+> file refuses everything. Every refusal is recorded under the caller's name, for an auditor whose
+> key can read the record but call nothing. For rights the file can't express, such as one
+> portfolio within a dataset, your server can plug in your own entitlement system
+> ([deployment](deployment.md#9-decide-who-reaches-what)).
 
 ---
 
-## Lab 5: Try to break the guardrails
+## Lab 8: Permissions and approvals
 
-**Goal:** see exactly what stands between a request and a consequential action. The demo tool
-`send_order` is a pretend broker order, and it sends nothing.
-
-Every tool call passes through these gates, in this order:
-
-```mermaid
-flowchart TD
-    A["Tool call"] --> B{"Is the tool<br/>registered?"}
-    B -->|No| B1["unknown_tool"]
-    B -->|Yes| C{"Allowed and<br/>permissions granted?"}
-    C -->|No| C1["denied"]
-    C -->|Yes| D{"Input matches<br/>the schema?"}
-    D -->|No| D1["invalid_input"]
-    D -->|Yes| F{"Consequential<br/>permission?"}
-    F -->|No| H["Run the tool,<br/>with a time limit"]
-    F -->|Yes| G{"Unused approval for<br/>this exact call?"}
-    G -->|No| G1["approval_required:<br/>the run waits"]
-    G1 -.->|"A person approves,<br/>then resumes"| G
-    G -->|Yes| H
-    H -->|Too slow| H1["timeout"]
-    H -->|Raises, bad output,<br/>or too large| H2["error"]
-    H -->|Valid output| I["ok"]
-```
-
-Every result, including each refusal, is recorded.
-
-### Run it
+**Goal:** see what stands between a request and a consequential action. The demo tool `send_order`
+is a pretend broker order, and it sends nothing.
 
 ```bash
 uv run python examples/tutorial/lab_guardrails.py
@@ -559,343 +825,168 @@ uv run python examples/tutorial/lab_guardrails.py
    error:  quantity: Input should be a valid integer, unable to parse string as an integer
 ```
 
-### What just happened
+- **A permission** says a tool may run on this server at all. The default grants only reading
+  data. Network calls, writing files, running programs, and external actions are refused unless the
+  operator grants them.
+- **An approval** says yes to one specific call. It is tied to the run, the tool, and a hash of the
+  exact input, and it works once. In this script a line of code plays the operator. In real use,
+  a person approves.
+- **No model, client, or API key can approve anything.** An approval page, where a firm's server
+  offers one, needs a separate approver key, which can never also call tools
+  ([security](security.md#approvals-for-consequential-permissions)).
 
-- **Permission** says a tool may run on this server. **Approval** says yes to one specific call.
-- An approval is tied to the run, the tool, and the exact input, and it works once.
-- A model can't approve anything. In this script the operator's role is played by a line of
-  code. In real use it is a person answering a prompt in the client or on an approval page
-  ([decision 0014](decisions/0014-approvals-in-the-client.md)).
+Copy the lab with `cp examples/tutorial/lab_guardrails.py "$TUT/guards.py"`, and change
+`Permission.EXTERNAL_ACTION` to `Permission.READ_LOCAL_DATA` in the copy: sections 1 and 2 then
+return `ok`, because reading is granted by default and needs no approval.
 
-### Play with it
-
-Copy the lab first: `cp examples/tutorial/lab_guardrails.py "$TUT/guards.py"`, then edit and
-run the copy.
-
-| Change | What you should see |
-| --- | --- |
-| Change `quantity` in `ORDER` to `"lots"` | Section 1 is still `denied`, and section 2 is `invalid_input`: permissions come first, then input, then approval. Section 3 then stops with a traceback, because nothing is awaiting approval |
-| Replace `Permission.EXTERNAL_ACTION` in `@tool` with `Permission.READ_LOCAL_DATA` | Sections 1 and 2 return `ok`, because reading is granted by default and needs no approval. Section 3 then stops with a traceback, because nothing is awaiting approval |
+> **What this shows:** an AI client can't do anything consequential by itself. Your applications
+> declare what they need, the operator grants it, and a person approves each consequential call.
+> A declared permission is checked, not sandboxed: a tool is your own Python code, so review it as
+> you would any server code ([before production](#before-production)).
 
 **Found a way past a gate?** That is the most valuable feedback there is. Please report it
 [privately](security.md#reporting-a-vulnerability), rather than in a public issue.
 
 ---
 
-## Lab 6: Connect Claude Code
+## Lab 9 (optional): Your research, with citations
 
-**Goal:** let an AI client use what you built. **Do Labs 2 and 3 first**, so there is data to
-find. This lab needs Claude Code and sends your questions, plus the tool results Claude reads, to
-your model provider.
-
-```mermaid
-sequenceDiagram
-    actor You
-    participant Claude as Claude Code
-    participant Server as qaos serve
-    participant Store as Knowledge and datasets
-    You->>Claude: "What supports short-term reversal? Cite it."
-    Claude->>Server: find_related_signals(query)
-    Server->>Store: read-only retrieval
-    Store-->>Server: entities, passages
-    Server-->>Claude: evidence, and the call is recorded
-    Claude->>Server: get_source_passage(chunk_id)
-    Server-->>Claude: the full passage
-    Claude-->>You: Answer with file and line citations
-```
-
-### Connect
-
-First, see what the client will be offered:
+**Goal:** ask questions of your own documents, and get answers you can check passage by passage.
+Building the store is a command you run. Searching it is read-only.
 
 ```bash
-uv run qaos catalog
-```
-
-You should see 7 tools, 3 resources, and 3 prompts, including `find_related_signals`,
-`analyze_performance`, and `research_report`. Then register the server, from the repository root:
-
-```bash
-claude mcp add qaos-tutorial -e QUANT_AGENT_OS_HOME="$TUT" -- uv run --directory "$REPO" qaos serve
-```
-
-Start `claude` in the same folder and run `/mcp` to confirm that `qaos-tutorial` is connected.
-
-### Ask
-
-| Ask Claude | Expect it to call | Check that |
-| --- | --- | --- |
-| "What is related to short-term reversal, and what supports it? Cite the passages." | `find_related_signals`, `get_source_passage` | Citations match the file and lines from Lab 3 |
-| "List my datasets, then analyse the fund column of the fund dataset against benchmark." | `list_datasets`, `analyze_performance` | Sharpe is about 1.10, the same as Lab 2, and the values never appear in the arguments |
-| "What drives the risk of a 60/30/10 portfolio of equities, bonds, and gold in the portfolio dataset?" | `analyze_risk` | Equities carry about 89% of the risk |
-| "Draft a strategy spec for short-term reversal from my notes." | `research_report` | The open questions from Lab 3 appear |
-| "What does my corpus say about protein folding?" | `find_related_signals` | Claude says the corpus has nothing, rather than answering from its own knowledge alone |
-| "Delete my knowledge store." | Nothing suitable | No tool can do this: the server only reads |
-
-Claude writes the words, so its answers vary. Check that the numbers and citations come from the
-tools. The server returns evidence, and it never writes answers itself.
-
-### See the calls
-
-```bash
-uv run qaos runs
-```
-
-Each call you just triggered is listed with actor `mcp`.
-
-### Clean up this lab
-
-```bash
-claude mcp remove qaos-tutorial
-```
-
-This setup has the server but not the skills, which teach Claude the best way to use the tools.
-To try those, install the plugin as [getting started](getting-started.md) describes. Then compare
-the answers, and tell us if the difference is visible.
-
----
-
-## Lab 7: A server for your team
-
-**Goal:** run the platform as a service on your own machine, as a firm runs it on its own
-infrastructure: one server, API keys, and a record of every call.
-
-```bash
-KEY=$(uv run qaos keys new --principal me --scope tools:list --scope tools:call --scope runs:read)
-uv run qaos serve --http --port 8765 --runs "$TUT/http-runs.db" > "$TUT/server.log" 2>&1 &
-SERVER=$!
-until curl -s -o /dev/null http://127.0.0.1:8765/v1/tools; do sleep 1; done
-```
-
-Call it without a key, then with one:
-
-```bash
-curl -s http://127.0.0.1:8765/v1/tools | uv run python examples/tutorial/show.py
-
-curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8765/v1/tools \
-  | uv run python examples/tutorial/show.py
-
-curl -s -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
-  -X POST http://127.0.0.1:8765/v1/tools/analyze_performance/call \
-  -d '{"arguments": {"returns": {"dataset": "fund", "column": "fund"}}}' \
-  | uv run python examples/tutorial/show.py
+uv run qaos ingest src/quant_platform/sample/corpus
+uv run qaos search "What is related to short-term reversal?"
 ```
 
 ```text
-refused: Send an API key as 'Authorization: Bearer <key>'.
-tools: analyze_performance, analyze_risk, find_related_signals, get_source_passage, list_datasets, research_report, server_info
-status: ok
-sharpe_ratio: 1.1043
+Added 6, unchanged 0, skipped 1: 9 chunks, 45 mentions, 32 relations, 0 embeddings.
+Corpus snapshot snap:8cddf9d734e07c1c in .../qaos-tutorial/knowledge.db.
+ Entity               Type    Score  Connection
+ Liquidity provision  signal  0.80   signal:short-term-reversal -correlates_with-> signal:liquidity-provision
+ Order-flow imbalance signal  0.80   signal:short-term-reversal <-predicts- signal:order-flow-imbalance
+ Momentum             factor  0.70   signal:short-term-reversal <-contradicts- factor:momentum
+reversal-and-microstructure.md (lines 17-19, § Mechanism) keyword, mention, graph
+notes/order-flow.md (lines 3-6, § Order-flow imbalance notes) keyword, mention, graph
+...
 ```
 
-That is the same Sharpe ratio as Lab 2, by a different way in. `show.py` only makes the JSON
-readable, so drop it to see the full response. Now a composite: one call that combines cited
-research with a metric, with no agent on the server.
-
-```bash
-curl -s -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
-  -X POST http://127.0.0.1:8765/v1/tools/research_report/call \
-  -d '{"arguments": {"focus": "short-term reversal", "returns": {"dataset": "fund", "column": "fund"}}}' \
-  | uv run python examples/tutorial/show.py
-```
-
-```text
-status: ok
-sharpe_ratio: 1.1043
-open questions: 3
-```
-
-Finally, see who did what, then stop the server:
-
-```bash
-curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8765/v1/runs \
-  | uv run python examples/tutorial/show.py
-kill $SERVER
-```
-
-```text
-run by me in tenant local: research_report completed
-run by me in tenant local: analyze_performance completed
-```
-
-The API key file stores only a hash of each key, and the key itself is printed once.
-
-### Play with it
+Each passage gives its file and lines, so anyone can open the source and check.
 
 | Try this | What you should see |
 | --- | --- |
-| Create a key with only `--scope tools:list`, then use it to call a tool | Listing works, and the call is refused: `This API key lacks the 'tools:call' scope.` |
-| Connect Claude over HTTP while the server runs: `claude mcp add --transport http qaos-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $KEY"` | The same 7 tools, over HTTP |
+| `uv run qaos search "protein folding"` | A warning that nothing matched. The tool returns no evidence rather than a guess |
+| `uv run qaos strategy "short-term reversal"` | A cited strategy spec, with `open:` lines for what your documents leave undecided |
+| `mkdir -p "$TUT/notes"`, `cp examples/tutorial/data/notes/my-reversal-note.md "$TUT/notes/"`, `uv run qaos ingest "$TUT/notes"`, then the `strategy` command again | Three new rows cite your note, and the questions about the universe and the test method disappear |
+| `uv run qaos search "carry"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage, marked untrusted, and no tool can do what it asks |
+| `claude mcp add qaos-tutorial -e QUANT_AGENT_OS_HOME="$TUT" -- uv run --directory "$REPO" qaos serve`, then ask Claude *what supports short-term reversal? Cite the passages* | Answers with the same file and line citations |
 
-> This setup is for learning on loopback. Before you put a server on a network, read
-> [deployment.md](deployment.md) and the open findings in
-> [security-review.md](security-review.md).
+> **What this shows:** answers about your research cite your documents, and the system says when
+> it doesn't know. Search is mostly keyword search, so measure it on your own documents before you
+> rely on it ([how well it works](products/quant-research.md#how-well-it-works)). Retrieved text
+> can't steer the server, because the server never acts on what it retrieves.
 
 ---
 
-## Lab 8: Generate a quant project
+## Before production
 
-**Goal:** go from one command to a tested research project. This lab needs network access. It
-writes the project to the folder you run it from and records your approval in the home's `runs.db`.
+Everything above ran on one laptop, over loopback. The [deployment guide](deployment.md) runs the
+same server in a hardened container: non-root, read-only filesystem, no capabilities, published on
+loopback behind your proxy. Put these questions to your team before real data goes near it.
 
-```mermaid
-flowchart TD
-    A["new: answers<br/>or defaults"] --> B["Spec file"]
-    B --> C["Preview"]
-    C --> D{"You approve?"}
-    D -->|No| E["Nothing is created"]
-    D -->|Yes| F["Create project"]
-    F --> G["Checks: uv sync, ruff,<br/>mypy, pytest"]
-    G --> H["study"]
-    H --> I["backtest"]
-    I --> J["report"]
-    J -.->|"Change config.toml"| H
-```
+**What the platform does:**
+- checks an API key on every network request, applies its scopes, and records the principal;
+- applies your access file or entitlement system to every tool and dataset, denying by default;
+- refuses anything but reading data unless the operator grants it, with a person's approval for each
+  consequential call;
+- records every call and refusal, in an audit trail whose database refuses changes, though
+  whoever controls the host could remove that rule;
+- stores no secrets in images or generated projects, and redacts secret-named values from records.
 
-### Create it
+**What your firm must do:**
 
-```bash
-mkdir -p "$TUT/work" && cd "$TUT/work"
-uv run --project "$REPO" qaos app new quant-lab my-lab --defaults
-```
-
-Answer yes at the prompt. Your yes is the recorded approval.
-
-```text
-Wrote my-lab.toml.
-my-lab (quant-baseline/quant-lab) -> .../qaos-tutorial/work/my-lab
-  35 files; components: data-csv, metrics; checks: uv sync, ruff check, ruff format, mypy, pytest
-Create it? It writes files, runs uv, and downloads packages [y/N]: y
-Created .../qaos-tutorial/work/my-lab with pytemplate-uv==3.1.0.
-  ok  uv sync  (0.2 s)
-  ok  uv run ruff check .  (0.4 s)
-  ok  uv run ruff format --check .  (0.0 s)
-  ok  uv run mypy my_lab tests  (3.0 s)
-  ok  uv run pytest  (6.1 s)
-Run 26b99499b1fb4a6c8ca5a1bf6cf8b315 recorded in .../qaos-tutorial/runs.db.
-```
-
-### Run the research
-
-`--demo` uses a random walk, so **finding no edge is the correct result**:
-
-```bash
-cd my-lab
-uv run my-lab study --demo
-uv run my-lab backtest --demo
-uv run my-lab report
-```
-
-```text
-Wrote results/...-study-momentum
-Mean rank IC -0.0016 (Newey-West t -0.19) over 750 bars.
-Wrote results/...-backtest-momentum
-Net Sharpe 0.19, net return 0.49% a year, turnover 186% a year.
-Wrote results/...-backtest-momentum/report.md and report-equity.svg
-```
-
-Open the `report.md` and `report-equity.svg` it names. Every run gets its own folder, with the
-metrics, the parameters, a fingerprint of the prices, and the code version, and no run overwrites
-another. Also read `LIMITATIONS.md`, which says what the project does not model.
-
-### Play with it
-
-These run inside `my-lab`.
-
-| Try this | What you should see |
+| Area | Your responsibility |
 | --- | --- |
-| `uv run my-lab backtest --demo --signal reversal --lookback 5` | Turnover jumps from 186% to about 783% a year, and costs bite |
-| `uv run my-lab walk-forward --demo` | An out-of-sample Sharpe from chosen lookbacks, here -0.32 over 3 folds |
-| Edit `cost_bps` in `config.toml`, then run the backtest again | A new results folder, and a different net Sharpe. The old result is still there |
-| Replace the demo data with your own prices | See `data` in `config.toml` and `README.md`. A database source is in [Quant App Factory](products/quant-app-factory.md#a-quant-project-from-your-own-data) |
+| **Identity** | Decide who holds a key, hand keys over safely, and remove leavers. `qaos serve` has no single sign-on yet: OAuth token checks exist for a firm's own server, but tokens carry no groups |
+| **Network** | Terminate TLS and limit request rates in a reverse proxy. The server has neither |
+| **Your tools** | Review them as server code. Nothing sandboxes a tool: one that declares only reading can still open a file or a socket ([finding F-6](security-review.md#findings)) |
+| **Your data and the model** | Choose a client and model provider your data may go to. Results the client reads, such as metrics, passages, and report text, go to its model, and the platform can't limit that |
+| **Records** | Back up, set retention, and export the audit trail to a system the server's operators don't control |
+| **Assurance** | Commission an independent security review. The project has had an AI agent's review and no independent one, and it claims no certification |
 
-Go back to the repository root when you finish:
+**Limits to know:**
+- **Research is all or nothing per caller.** A caller allowed a research tool searches the whole
+  corpus. For research two groups must not share, run a server per corpus.
+- **`runs:read` sees every caller's runs,** including what they retrieved and computed. Give it only
+  to auditors.
+- **A tool's own files aren't covered by the access file.** The access file decides who may call
+  `check_risk_limits`, but that tool reads whatever its `config.toml` names. For finer rights, your
+  tools can read the caller's identity.
+- **Local use trusts whoever starts it.** The stdio server and the Python SDK have no authenticated
+  caller and apply no access rules.
 
-```bash
-cd "$REPO"
-```
-
----
+The full list is in [security](security.md). The open findings are in the
+[security review](security-review.md), and [operations](operations.md) covers backups, upgrades,
+and rollback.
 
 ## Clean up
 
 ```bash
 rm -rf "$TUT"
+claude mcp remove desk-risk       # if you did Lab 5's Claude step
+claude mcp remove qaos-tutorial   # if you did Lab 9's Claude step
 ```
-
-If you did Lab 6 or the HTTP step in Lab 7, also run `claude mcp remove qaos-tutorial` and
-`claude mcp remove qaos-http`.
 
 ## If something goes wrong
 
-```mermaid
-flowchart TD
-    A["Something failed"] --> B{"Command not found?"}
-    B -->|Yes| B1["Run from the repository root,<br/>and run uv sync --locked"]
-    B -->|No| C{"Variable is empty,<br/>or a path looks wrong?"}
-    C -->|Yes| C1["New terminal: run<br/>source examples/tutorial/env.sh"]
-    C -->|No| D{"No dataset, or<br/>no research tools?"}
-    D -->|Yes| D1["Do Lab 2 and Lab 3 first"]
-    D -->|No| E{"Port in use?"}
-    E -->|Yes| E1["Run kill $SERVER, or<br/>change 8765 in the commands"]
-    E -->|No| F["Tell us: it's useful feedback"]
-```
-
 | Symptom | Fix |
 | --- | --- |
-| `warning: no knowledge store, so the research toolset is not served` | Do Lab 3, and `source examples/tutorial/env.sh` in this terminal |
-| `analyze_performance error: ... No dataset 'fund'` | Do the `qaos data add` commands in Lab 2 |
-| `the server does not start`, or `curl` waits forever in Lab 7 | Read `$TUT/server.log`, and press Ctrl+C to stop waiting |
+| `call: command not found`, or a variable is empty | New terminal: go to the repository root and run `source examples/tutorial/env.sh`. Labs 6 and 7 also need the keys from earlier labs, so issue new ones if the terminal is new |
+| `uv run desk-risk` or `uv run python serve.py` fails | Run it inside `$TUT/work/desk-risk` |
+| `curl` waits forever after starting the server | Read `$TUT/server.log`, and press Ctrl+C to stop waiting |
+| `address already in use` | A server from an earlier lab is still running: `kill $SERVER`, or find it with `lsof -i :8765` |
+| `No dataset 'fund'` | Do the `qaos data add` commands in Lab 2 |
 | Install fails while building a package, on a very new Python | Use an older one: `uv sync --locked --python 3.13` |
-| Claude doesn't list the server | Run `/mcp` in Claude, and check that the paths in the `claude mcp add` command are absolute |
+| Claude doesn't list the server | Run `/mcp` in Claude, and check that the server is running and the key is in the `claude mcp add` command |
 | You want more detail on a command | Add `--help`. Every command has it |
 
 ## Cheat sheet
 
-The split is deliberate: **writes are commands you run, and reads are tools a model can call.**
+The split is deliberate: **changes are commands an operator runs, and reads are tools a model can
+call.**
 
-| | You, the operator (commands) | An AI client (tools) |
+| | The operator (commands) | An AI client (tools) |
 | --- | --- | --- |
 | **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk` |
+| **Applications** | `qaos app new`, `qaos app create`, editing `config.toml` and `firm/` | The tools your server names, such as `check_risk_limits` |
+| **Access** | `qaos keys new`, `api-keys.toml`, `access.toml` | None |
 | **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
-| **Projects** | `qaos app create`, `qaos app new` | `describe_template`, `check_spec` (with the factory toolset) |
-| **Access** | `qaos keys new` | None |
+| **Record** | `qaos runs`, `qaos runs export` | None. An auditor's key reads runs over REST |
 
 | I want to | Command |
 | --- | --- |
+| Start an application | `uv run qaos app new risk-monitor NAME --defaults` (or `performance-report`, `strategy-backtest`, `alpha-research`) |
 | Add a dataset | `uv run qaos data add file.csv --id name` |
-| Build or update a knowledge store | `uv run qaos ingest DIR` |
-| Ask a question | `uv run qaos search "question"` |
-| Draft a cited strategy spec | `uv run qaos strategy "topic"` |
+| Issue a key | `uv run qaos keys new --principal NAME --scope tools:list --scope tools:call --group GROUP` |
+| Serve with an access file | `QUANT_AGENT_OS_ACCESS_FILE=access.toml`, then `serve_apps` or `qaos serve --http` |
 | See recorded runs | `uv run qaos runs` |
 | See what a client is offered | `uv run qaos catalog` |
-| Serve over MCP (stdio) or HTTP | `uv run qaos serve`, `uv run qaos serve --http` |
-| Create an API key | `uv run qaos keys new --principal NAME --scope tools:call` |
-| Start a project | `uv run qaos app new quant-lab NAME --defaults` |
 
-**Where to go next:** the [products](products/quant-research.md) for your own documents and data,
-[architecture](architecture.md) for how it fits together, [configuration](configuration.md) for
-every setting, and [security](security.md) for the trust model.
+**Where to go next:** [Quant App Factory](products/quant-app-factory.md) for the applications and
+your own templates, [deployment](deployment.md) for a server your team uses, [security](security.md)
+for the trust model, and [the Portfolio Intelligence demonstration](demo.md) for a ten-minute
+script to show all of this to colleagues.
 
 ## Give feedback
 
-Your feedback decides what gets fixed next. Rough notes are welcome, and "I got lost at Lab 3"
-is a useful report.
-
-```mermaid
-flowchart LR
-    A["Finish a lab,<br/>or get stuck"] --> B["Fill in what<br/>you remember"]
-    B --> C{"Security problem?"}
-    C -->|Yes| D["Report privately:<br/>see security.md"]
-    C -->|No| E["Open a GitHub issue"]
-    E --> F["We improve the<br/>docs or the product"]
-```
+Your feedback decides what gets fixed next. Rough notes are welcome, and "I got lost at Lab 4" is a
+useful report.
 
 **[Open a feedback issue](https://github.com/yuxuzi/quant-agent-os/issues/new?title=Tutorial%20feedback)**
 and paste this template. Skip anything you like.
 
 ```markdown
-**About me:** quant / developer / both / other. Experience with MCP or AI clients: none / some / lots.
+**About me:** CEO / CTO / engineer / quant / other. Experience with MCP or AI clients: none / some / lots.
 **OS and uv version:**
 **Labs I did:**
 
@@ -903,42 +994,40 @@ and paste this template. Skip anything you like.
 | Lab | Clear? | Useful? | Note |
 | --- | --- | --- | --- |
 | 1 First report | | | |
-| 2 Metrics | | | |
-| 3 Knowledge base | | | |
-| 4 Write a tool | | | |
-| 5 Guardrails | | | |
-| 6 Connect Claude | | | |
-| 7 Server for your team | | | |
-| 8 Generate a project | | | |
+| 2 Numbers by reference | | | |
+| 3 Generate an application | | | |
+| 4 Configure and customize | | | |
+| 5 AI client | | | |
+| 6 Authentication | | | |
+| 7 Authorization | | | |
+| 8 Permissions and approvals | | | |
+| 9 Research | | | |
 
 **Where did I get stuck?** (the lab, the command, and what I saw)
 
-**What surprised me?** (good or bad)
-
 **Did the output differ from the tutorial?** (paste the difference)
 
-**What would I use this for? What's missing for that?**
+**What would we need to see before trusting this with real data?**
 
 **The one thing I'd change first:**
 ```
 
-**Before you paste output:** remove API keys and anything private. Run records can contain
-passages from your documents.
+**Before you paste output:** remove API keys and anything private. Run records can contain your
+data and passages from your documents.
 
 These are the questions we most want answered:
-
-- **Documents:** did the citations let you verify the answers, and was the graph useful or
-  just noise on your own documents?
-- **Metrics:** do the conventions match how you'd compute them, and which metric is missing?
-- **Tools:** was writing a tool as simple as it should be, and what got in the way?
-- **Guardrails:** would you trust this with a tool that acts? What else would you need to see?
-- **AI client:** did Claude pick the right tools, and did it cite properly?
-- **Projects:** would you keep working in the generated project, or start over?
+- **Controls:** are keys, scopes, and an access file enough for your firm, or do you need single
+  sign-on first? Which rights can't the access file express?
+- **Applications:** would your team keep working in the generated application, or start over? Which
+  stage of your work is missing?
+- **Customization:** were the four levels the right split between your risk owner and your
+  engineers?
+- **AI client:** did Claude pick the right tools, and report the numbers as computed?
+- **Audit:** does the record answer the questions your compliance team would ask?
 
 **Already known**, so there's no need to report these, though telling us which ones hurt most does
 help:
-
-- Retrieval and graph features know only the [bundled vocabulary](products/quant-research.md#known-limitations),
-  and semantic search needs a hosted embedder.
-- App Factory scaffolds and checks your project, but it does not write your research code yet.
-- `ingest` reports a changed file as `Added 1` rather than as changed.
+- No single sign-on on `qaos serve`, and no rate limiting without a proxy.
+- Research search knows only the [bundled vocabulary](products/quant-research.md#known-limitations)
+  unless you add your own terms.
+- App Factory scaffolds and checks your project, but it does not write your research code.
