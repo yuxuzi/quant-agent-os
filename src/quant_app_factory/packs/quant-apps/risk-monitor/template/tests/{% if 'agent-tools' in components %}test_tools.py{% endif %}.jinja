@@ -6,7 +6,14 @@ import pytest
 from quant_agent_os.testing import check_tool
 from quant_agent_os.tools import READ_ONLY
 
+from {{ package_name }}.firm.checks import CHECKS
 from {{ package_name }}.tools import CONFIG_VARIABLE, TOOLS, check_risk_limits, registry, risk_report
+
+
+@pytest.fixture(autouse=True)
+def _without_firm_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in list(CHECKS):  # the firm's own checks have their own tests
+        monkeypatch.delitem(CHECKS, name)
 
 
 @pytest.fixture

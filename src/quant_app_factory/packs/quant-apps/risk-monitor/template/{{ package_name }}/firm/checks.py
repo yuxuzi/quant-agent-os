@@ -10,9 +10,8 @@ and a breach makes ``check`` exit 1. For example::
     def no_shorts_in_restricted(view: RiskView) -> list[Check]:
         \"\"\"Never short an asset on the restricted list.\"\"\"
         restricted = {"ASSET03"}
-        worst = min(
-            (w for a, w in zip(view.assets, view.weights) if a in restricted), default=0.0
-        )
+        held = zip(view.assets, view.weights, strict=True)
+        worst = min((w for a, w in held if a in restricted), default=0.0)
         return [Check("Restricted shorts", float(worst), 0.0, worst < 0.0)]
 
 
