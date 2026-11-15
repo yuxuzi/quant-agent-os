@@ -118,14 +118,14 @@ def test_a_get_service_becomes_a_tool_that_needs_network(
     app.call_service(desk_limits, url=f"{url}/desks/{{desk}}/limits", method="GET")
 
     (spec,) = app.tools()
-    record = _run(app, {"desk": "growth/a", "as_of": "2024-03-31"})
+    record = _run(app, {"desk": "growth a", "as_of": "2024-03-31"})
 
     assert Permission.NETWORK in spec.permissions
     assert spec.description == "A desk's risk limits, from the limits service."
     assert spec.input_model.model_json_schema()["required"] == ["desk"]
     assert record.status == "ok" and record.output is not None, record.error
     assert exchange.requests[0]["method"] == "GET"
-    assert exchange.requests[0]["path"] == "/desks/growth%2Fa/limits?as_of=2024-03-31"
+    assert exchange.requests[0]["path"] == "/desks/growth%20a/limits?as_of=2024-03-31"
     assert record.output["var_limit"] == 1_000_000.0 and record.output["currency"] == "USD"
     (evidence,) = record.output["evidence"]
     assert evidence["kind"] == "retrieved"
@@ -279,7 +279,7 @@ def test_literals_and_lists_go_in_a_query_and_check_tool_passes(
     assert exchange.requests[0]["path"] == "/figure?v=2&desk=value&days=1&days=5"
 
 
-@pytest.mark.parametrize("desk", ["..", ".", ""])
+@pytest.mark.parametrize("desk", ["..", ".", "", "../positions", "a/b", "a\\b"])
 def test_a_path_argument_cannot_reach_another_endpoint(
     service: tuple[str, Exchange], desk: str
 ) -> None:

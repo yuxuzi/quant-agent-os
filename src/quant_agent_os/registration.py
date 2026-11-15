@@ -205,7 +205,7 @@ class FirmApp:
         ``stub`` is a function whose hints and docstring describe the service, as for `expose`;
         its body never runs. Each call sends the arguments to ``url``: as a JSON object with
         POST, or as a query string with GET. A ``{name}`` in the URL's path takes that
-        argument instead. Data references are read and sent as values, and the JSON answer is
+        argument instead, and must be one path segment (no ``/``, ``\\``, ``.``, or ``..``). Data references are read and sent as values, and the JSON answer is
         checked against the stub's return type. The host is fixed here, redirects are not
         followed, and a larger answer than ``max_output_bytes`` is refused. ``token_env``
         names an environment variable whose value is sent as a bearer token; it is read at
@@ -539,12 +539,13 @@ class _Service:
 def _path_segment(name: str, value: Any) -> str:
     """Return ``value`` as one segment of a URL's path, or raise `ValueError` if it is not one.
 
-    An empty segment, ``.``, and ``..`` would make the request reach another endpoint of the
-    service than the one registered, so they are refused; ``/`` and the rest are escaped.
+    An empty segment, ``.``, ``..``, or a value holding ``/`` or ``\\`` could make the request
+    reach another endpoint than the one registered: directly, or through a proxy that decodes
+    ``%2F`` before it normalizes the path. Those are refused; everything else is escaped.
     """
     text = "" if value is None else str(value)
-    if text in ("", ".", ".."):
-        raise ValueError(f"{name} must name one path segment, not {text!r}.")
+    if text in ("", ".", "..") or "/" in text or "\\" in text:
+        raise ValueError(f"{name} must name one path segment, without '/' or '\\', not {text!r}.")
     return urllib.parse.quote(text, safe="")
 
 
