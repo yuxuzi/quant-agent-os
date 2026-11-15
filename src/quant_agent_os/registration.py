@@ -205,8 +205,9 @@ class FirmApp:
         ``stub`` is a function whose hints and docstring describe the service, as for `expose`;
         its body never runs. Each call sends the arguments to ``url``: as a JSON object with
         POST, or as a query string with GET. A ``{name}`` in the URL's path takes that
-        argument instead. Data references are read and sent as values, and the JSON answer is
-        checked against the stub's return type. The host is fixed here, redirects are not
+        argument instead, and must be one path segment (no ``/``, ``\\``, ``.``, or ``..``).
+        Data references are read and sent as values, and the JSON answer is checked against
+        the stub's return type. The host is fixed here, redirects are not
         followed, and a larger answer than ``max_output_bytes`` is refused. ``token_env``
         names an environment variable whose value is sent as a bearer token; it is read at
         each call and never shown. The tool needs `network`, which needs an approval for each
@@ -490,7 +491,7 @@ class _Service:
     def __call__(self, **arguments: Any) -> Any:
         values = _json_ready(_plain(arguments))
         url = self.url.format(
-            **{name: urllib.parse.quote(str(values.pop(name)), safe="") for name in self.path_names}
+            **{name: _path_segment(name, values.pop(name)) for name in self.path_names}
         )
         headers = {"Accept": "application/json"}
         if self.token_env:
@@ -534,6 +535,19 @@ class _Service:
             return json.loads(answer)
         except ValueError:
             raise ServiceError(f"The service at {self.url} did not answer with JSON.") from None
+
+
+def _path_segment(name: str, value: Any) -> str:
+    """Return ``value`` as one segment of a URL's path, or raise `ValueError` if it is not one.
+
+    An empty segment, ``.``, ``..``, or a value holding ``/`` or ``\\`` could make the request
+    reach another endpoint than the one registered: directly, or through a proxy that decodes
+    ``%2F`` before it normalizes the path. Those are refused; everything else is escaped.
+    """
+    text = "" if value is None else str(value)
+    if text in ("", ".", "..") or "/" in text or "\\" in text:
+        raise ValueError(f"{name} must name one path segment, without '/' or '\\', not {text!r}.")
+    return urllib.parse.quote(text, safe="")
 
 
 def _query_value(hint: Any) -> bool:

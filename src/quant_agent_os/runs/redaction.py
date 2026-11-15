@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import SecretBytes, SecretStr
 
-from quant_agent_os.observability.logging import REDACTED
+from quant_agent_os.observability.logging import REDACTED, redact_text
 
 _SECRET_KEY = re.compile(
     r"(?:api[_-]?key|token|secret|password|passwd|authorization|credential)", re.I
@@ -31,3 +31,8 @@ def redact(value: Any) -> Any:
     if isinstance(value, list | tuple):
         return [redact(item) for item in value]
     return value
+
+
+def redact_error(text: str | None) -> str | None:
+    """Return a stored error message with the secrets it may quote redacted (`redact_text`)."""
+    return None if text is None else redact_text(text)

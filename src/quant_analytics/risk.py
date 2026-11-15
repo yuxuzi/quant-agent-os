@@ -12,6 +12,9 @@ squares (decision 0010). Both decompositions are exact identities, checked by kn
   Percent contributions sum to one; a negative one means the position hedges the rest.
 - The diversification ratio is ``sum(|w_i| vol_i) / vol``; it is at least one for long-only
   portfolios.
+- A portfolio volatility under a millionth of ``sum(|w_i| vol_i)`` is rounding left over from an
+  exact hedge, and counts as zero (`FLAT`). Contributions, percents, the diversification ratio,
+  and the factor shares are then undefined (None), so the sums above hold whenever they exist.
 - Factor exposures are OLS slopes of each asset's returns on all factors at once, with an
   intercept. The portfolio's exposure is the weighted sum of asset exposures, which equals the
   slope of the portfolio's own regression.
@@ -30,6 +33,9 @@ import numpy as np
 import numpy.typing as npt
 
 FloatArray = npt.NDArray[np.float64]
+# Portfolio volatility below this share of its positions' own (sum of |w_i| vol_i) is rounding
+# left over from an exact hedge, so it counts as zero rather than as a tiny denominator.
+FLAT = 1e-6
 
 
 @dataclass(frozen=True)
@@ -71,13 +77,18 @@ def volatility_contributions(
     asset_returns: Mapping[str, Sequence[float]],
     periods_per_year: int,
 ) -> VolatilityBreakdown:
-    """Decompose portfolio volatility into Euler contributions; None where volatility is zero."""
+    """Decompose portfolio volatility into Euler contributions; None where volatility is zero.
+
+    Volatility that is only rounding left over from an exact hedge counts as zero (`FLAT`).
+    """
     names = list(weights)
     w = np.array([weights[name] for name in names], dtype=np.float64)
     returns = _matrix([asset_returns[name] for name in names])
     covariance = np.atleast_2d(np.cov(returns, rowvar=False, ddof=1)) * periods_per_year
     volatilities = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
     volatility = math.sqrt(max(float(w @ covariance @ w), 0.0))
+    if volatility <= FLAT * float(np.abs(w) @ volatilities):
+        volatility = 0.0
     defined = volatility > 0.0
     marginal = covariance @ w / volatility if defined else None
     contributions = {
@@ -107,8 +118,9 @@ def factor_exposures(
     """Regress each asset on the factors; split the portfolio's variance among them.
 
     Needs more periods than factors plus one. Shares and R squared are None when the portfolio
-    returns do not vary. ``collinear`` means the factors are linearly dependent, so the
-    exposures are one of many solutions (the smallest) and should not be read one by one.
+    returns do not vary, or vary less than `FLAT` of its positions' own volatility.
+    ``collinear`` means the factors are linearly dependent, so the exposures are one of many
+    solutions (the smallest) and should not be read one by one.
     """
     names, factors = list(weights), list(factor_returns)
     w = np.array([weights[name] for name in names], dtype=np.float64)
@@ -121,6 +133,9 @@ def factor_exposures(
     exposures = betas @ w
     portfolio = returns @ w
     variance = float(np.var(portfolio, ddof=1))
+    scale = float(np.abs(w) @ np.std(returns, axis=0, ddof=1))
+    if math.sqrt(max(variance, 0.0)) <= FLAT * scale:
+        variance = 0.0
     residual = portfolio - design @ (coefficients @ w)
     asset_exposures = {
         name: {factor: float(betas[k, i]) for k, factor in enumerate(factors)}

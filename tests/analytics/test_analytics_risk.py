@@ -206,3 +206,17 @@ def test_flat_short_and_collinear_inputs_are_flagged() -> None:
 def test_bad_inputs_are_refused_with_the_reason(fields: dict[str, Any], message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         RiskInput(portfolio_id="x", periods_per_year=12, **fields)
+
+
+def test_an_exact_hedge_has_no_volatility_rather_than_rounding_noise() -> None:
+    # 0.3 of a and -3 of a tenth of a cancel exactly, except for floating-point rounding.
+    tenth = [0.1 * value for value in A]
+    weights, returns = {"a": 0.3, "b": -3.0}, {"a": A, "b": tenth}
+
+    breakdown = risk.volatility_contributions(weights, returns, 12)
+    factors = risk.factor_exposures(weights, returns, {"market": B})
+
+    assert breakdown.volatility == 0.0
+    assert breakdown.diversification_ratio is None
+    assert all(item.percent is None for item in breakdown.contributions.values())
+    assert factors.variance_shares is None and factors.r_squared is None

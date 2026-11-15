@@ -202,7 +202,8 @@ risk.call_service(
 
 - The stub's hints and docstring give the schemas, as for `expose`. With POST, the arguments go as a JSON
   object, and data references are read and sent as values, with missing values as null. With GET, they go
-  in the query string, and a `{name}` in the path takes that argument.
+  in the query string, and a `{name}` in the path takes that argument. A path argument must be one segment:
+  empty, `.`, `..`, and values with `/` or `\` are refused, so a caller cannot reach another endpoint.
 - The answer must be JSON that matches the stub's return type. Results carry `retrieved` evidence naming
   the service, and the data's fingerprints.
 - The host is fixed in your code. Redirects are not followed, and an answer over the size limit is

@@ -161,6 +161,27 @@ def test_redaction_covers_secret_types_and_secret_named_keys() -> None:
     }
 
 
+@tool(name="leaky", description="Fails with a message that quotes its connection string.")
+def leaky(params: Query) -> Answer:
+    if params.query == "caller":
+        raise ValueError("cannot read postgresql://desk:hunter2@db/prices")
+    raise RuntimeError("cannot connect: password=hunter2")
+
+
+@pytest.mark.parametrize("query", ["caller", "internal"])
+def test_stored_errors_lose_the_secrets_they_quote(query: str) -> None:
+    store = MemoryRunStore()
+    executor = ToolExecutor(ToolRegistry([leaky]), PermissionPolicy())
+
+    record = RunRecorder(store).call(executor, ToolCall(tool="leaky", arguments={"query": query}))
+    stored = store.get_run(record.run_id or "")
+
+    assert stored is not None
+    (call,) = stored.calls
+    kept = f"{call.error} {call.error_detail}"
+    assert "hunter2" not in kept and "[REDACTED]" in kept
+
+
 def test_sqlite_runs_survive_reopening(tmp_path: Path) -> None:
     path = tmp_path / "runs.db"
     first = SqliteRunStore(path)

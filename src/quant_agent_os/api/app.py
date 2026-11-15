@@ -49,8 +49,8 @@ class CallResponse(BaseModel):
     """The record of one call: ``output`` is set when ``status`` is ``ok``, else ``error``.
 
     A failure also carries ``hint`` (what to do next) and ``retryable``, as MCP reports it. A
-    call refused by its tenant's plan limits (``quota_exceeded``) is answered 429, with
-    ``retry_after_seconds`` here and in the ``Retry-After`` header (decision 0015).
+    call a usage gate refuses (``quota_exceeded``) is answered 429, and one refused because the
+    server is busy 503, with ``retry_after_seconds`` here and in the ``Retry-After`` header.
     """
 
     run_id: str | None

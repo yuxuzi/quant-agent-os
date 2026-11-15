@@ -1,12 +1,14 @@
 """Unit tests for settings, logging redaction, and the CLI."""
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from quant_agent_os.config import ConfigFileError, Settings, home_dir
-from quant_agent_os.observability import RedactSecretsFilter
+from quant_agent_os.config import ConfigFileError, Settings, get_settings, home_dir
+from quant_agent_os.observability import RedactSecretsFilter, configure_logging
+from quant_agent_os.observability.logging import HANDLER_NAME, PACKAGES
 from quant_agent_os.tools import Permission
 
 
@@ -25,6 +27,88 @@ def test_logging_filter_redacts_secrets() -> None:
     RedactSecretsFilter(["sk-secret"]).filter(record)
 
     assert record.getMessage() == "key=[REDACTED]"
+
+
+@pytest.fixture
+def package_loggers() -> Iterator[None]:
+    """Restore the platform's loggers after a test configures them."""
+    saved = {
+        name: (logging.getLogger(name).level, list(logging.getLogger(name).handlers))
+        for name in PACKAGES
+    }
+    yield
+    for name, (level, handlers) in saved.items():
+        logging.getLogger(name).setLevel(level)
+        logging.getLogger(name).handlers = handlers
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_the_log_level_applies_to_every_package_once(caplog: pytest.LogCaptureFixture) -> None:
+    configure_logging("debug", secrets=["sk-secret"])
+    configure_logging("DEBUG", secrets=["sk-secret"])
+
+    logging.getLogger("quant_research.ingest").debug("using key %s", "sk-secret")
+
+    for name in PACKAGES:
+        logger = logging.getLogger(name)
+        assert logger.level == logging.DEBUG
+        assert [h.get_name() for h in logger.handlers].count(HANDLER_NAME) == 1
+    assert "using key [REDACTED]" in caplog.text  # still propagates, redacted on the way
+
+
+@pytest.mark.parametrize(
+    ("message", "hidden"),
+    [
+        ("cannot connect to postgresql://analyst:hunter2@db/prices", "hunter2"),
+        ("sent Authorization: Bearer abc.def-123", "abc.def-123"),
+        ("bad settings: password=hunter2, user=bob", "hunter2"),
+        ('{"client_secret": "zzz"}', "zzz"),
+    ],
+)
+def test_the_log_filter_redacts_secrets_that_messages_quote(message: str, hidden: str) -> None:
+    record = logging.LogRecord("t", logging.ERROR, __file__, 1, "%s", (message,), None)
+
+    RedactSecretsFilter([]).filter(record)
+
+    assert hidden not in record.getMessage()
+    assert "[REDACTED]" in record.getMessage()
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_qaos_redacts_the_embedding_keys_it_holds(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from typer.testing import CliRunner
+
+    from quant_platform.cli import app
+
+    monkeypatch.setenv("VOYAGE_API_KEY", "pa-not-a-real-key-0123")
+    get_settings.cache_clear()
+    try:
+        CliRunner().invoke(app, ["data", "list"])
+    finally:
+        get_settings.cache_clear()
+    logging.getLogger("quant_research.embed").warning("provider refused pa-not-a-real-key-0123")
+
+    assert "pa-not-a-real-key-0123" not in caplog.text
+    assert "provider refused [REDACTED]" in caplog.text
+
+
+@pytest.mark.usefixtures("package_loggers")
+def test_an_unknown_log_level_stops_qaos(monkeypatch: pytest.MonkeyPatch) -> None:
+    from typer.testing import CliRunner
+
+    from quant_platform.cli import app
+
+    monkeypatch.setenv("QUANT_AGENT_OS_LOG_LEVEL", "LOUD")
+    get_settings.cache_clear()
+    try:
+        result = CliRunner().invoke(app, ["data", "list"])
+    finally:
+        get_settings.cache_clear()
+
+    assert result.exit_code == 1
+    assert "LOUD" in result.output
 
 
 def test_permissions_can_be_granted_through_the_environment(

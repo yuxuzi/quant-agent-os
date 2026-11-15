@@ -71,3 +71,58 @@ def test_only_the_tail_of_long_output_is_kept(tmp_path: Path) -> None:
 
     assert len(result.stdout_tail) == OUTPUT_TAIL_CHARS
     assert result.output_bytes > 100000
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a new session is how a POSIX child escapes")
+def test_a_timeout_returns_even_if_a_descendant_escaped_the_process_group(tmp_path: Path) -> None:
+    # The escaped process inherits the output streams; waiting on them would outlast the timeout.
+    escaped = "import time; time.sleep(8)"
+    parent = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {escaped!r}], start_new_session=True); "
+        "print('started', flush=True); time.sleep(60)"
+    )
+    started = time.perf_counter()
+
+    result = run_command([PYTHON, "-c", parent], cwd=tmp_path, timeout=2)
+
+    assert result.timed_out
+    assert time.perf_counter() - started < 6
+    assert "started" in result.stdout_tail
+
+
+def test_the_tail_keeps_whole_characters_and_both_streams(tmp_path: Path) -> None:
+    program = (
+        "import sys; sys.stdout.buffer.write(('é' * 50).encode()); "
+        "sys.stderr.write('warned'); sys.exit(3)"
+    )
+
+    result = run_command([PYTHON, "-c", program], cwd=tmp_path, timeout=30, tail_chars=10)
+
+    assert (result.exit_code, result.stdout_tail, result.stderr_tail) == (3, "é" * 10, "warned")
+    assert result.output_bytes == 106
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no process group to sweep")
+def test_what_a_program_leaves_running_in_its_group_is_killed_when_it_exits(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "survived"
+    child = f"import time, pathlib; time.sleep(2); pathlib.Path({str(marker)!r}).write_text('x')"
+    parent = f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}])"
+
+    result = run_command([PYTHON, "-c", parent], cwd=tmp_path, timeout=30)
+
+    assert result.ok
+    time.sleep(2.5)
+    assert not marker.exists()
+
+
+def test_large_output_is_counted_but_only_its_tail_kept(tmp_path: Path) -> None:
+    program = "import sys; [sys.stdout.write('y' * 1_000_000) for _ in range(50)]; print('end')"
+
+    result = run_command([PYTHON, "-c", program], cwd=tmp_path, timeout=60, tail_chars=10)
+
+    assert result.ok
+    assert result.output_bytes == 50_000_000 + len("end" + os.linesep)
+    assert result.stdout_tail == ("y" * 10 + "end" + os.linesep)[-10:]
