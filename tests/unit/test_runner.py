@@ -101,3 +101,28 @@ def test_the_tail_keeps_whole_characters_and_both_streams(tmp_path: Path) -> Non
 
     assert (result.exit_code, result.stdout_tail, result.stderr_tail) == (3, "é" * 10, "warned")
     assert result.output_bytes == 106
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no process group to sweep")
+def test_what_a_program_leaves_running_in_its_group_is_killed_when_it_exits(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "survived"
+    child = f"import time, pathlib; time.sleep(2); pathlib.Path({str(marker)!r}).write_text('x')"
+    parent = f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}])"
+
+    result = run_command([PYTHON, "-c", parent], cwd=tmp_path, timeout=30)
+
+    assert result.ok
+    time.sleep(2.5)
+    assert not marker.exists()
+
+
+def test_large_output_is_counted_but_only_its_tail_kept(tmp_path: Path) -> None:
+    program = "import sys; [sys.stdout.write('y' * 1_000_000) for _ in range(50)]; print('end')"
+
+    result = run_command([PYTHON, "-c", program], cwd=tmp_path, timeout=60, tail_chars=10)
+
+    assert result.ok
+    assert result.output_bytes == 50_000_000 + len("end" + os.linesep)
+    assert result.stdout_tail == ("y" * 10 + "end" + os.linesep)[-10:]

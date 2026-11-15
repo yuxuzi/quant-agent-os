@@ -13,7 +13,7 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
+import threading
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -54,6 +54,10 @@ ENV_ALLOWLIST = frozenset(
 )
 OUTPUT_TAIL_CHARS = 4000
 UTF8_MAX_BYTES = 4  # the most bytes one character takes
+READ_BYTES = 65536
+# How long a finished call waits for the rest of its output: enough to drain the pipes, not to
+# wait for a process that escaped the group and still holds them.
+DRAIN_SECONDS = 2.0
 
 
 class CommandResult(BaseModel):
@@ -94,10 +98,12 @@ def run_command(
     """Run ``command`` in ``cwd`` and return its result; failures are results, never raised.
 
     The program gets `scrubbed_environment` and no stdin. When ``timeout`` (seconds) expires,
-    its whole process tree is killed, and the call returns even if a descendant that left the
-    tree lives on. Only the last ``tail_chars`` characters of each stream are kept (raise it
-    for programs whose whole output is needed, such as JSON results); the rest stays on disk
-    until the call returns, never in memory.
+    its whole process tree is killed; when it exits by itself, what it left running in its
+    process group is killed too (POSIX). The call returns on time even if a descendant that
+    left the group keeps the output streams open. Only the last ``tail_chars`` characters of
+    each stream are kept (raise it for programs whose whole output is needed, such as JSON
+    results): output is read as it comes and the rest discarded, so neither memory nor disk
+    grows with it.
     """
     started = time.perf_counter()
     arguments = [str(part) for part in command]
@@ -121,34 +127,82 @@ def run_command(
         flags, new_session = subprocess.CREATE_NEW_PROCESS_GROUP, False
     else:
         flags, new_session = 0, True
-    # Output goes to files, not pipes: a pipe would hold all of it in memory, and a descendant
-    # that left the process group could keep one open long after the timeout.
-    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-        try:
-            process = subprocess.Popen(
-                arguments,
-                cwd=cwd,
-                env=scrubbed_environment(extra_env),
-                stdin=subprocess.DEVNULL,
-                stdout=out,
-                stderr=err,
-                creationflags=flags,
-                start_new_session=new_session,
-            )
-        except OSError as error:
-            return result(None, 0, stderr=f"Cannot start: {error}")
-        try:
-            process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_tree(process)
-            process.wait()
-        return result(
-            None if timed_out else process.returncode,
-            out.seek(0, os.SEEK_END) + err.seek(0, os.SEEK_END),
-            stdout=_tail(out, tail_chars),
-            stderr=_tail(err, tail_chars),
+    try:
+        process = subprocess.Popen(
+            arguments,
+            cwd=cwd,
+            env=scrubbed_environment(extra_env),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=flags,
+            start_new_session=new_session,
         )
+    except OSError as error:
+        return result(None, 0, stderr=f"Cannot start: {error}")
+    assert process.stdout is not None and process.stderr is not None  # both are pipes
+    out = _Tail(process.stdout, (tail_chars + 1) * UTF8_MAX_BYTES)
+    err = _Tail(process.stderr, (tail_chars + 1) * UTF8_MAX_BYTES)
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _kill_tree(process)
+        process.wait()
+    else:
+        _kill_group(process)  # nothing it started outlives it
+    # A descendant that left the group may hold the pipes open; the call does not wait for it.
+    deadline = time.monotonic() + DRAIN_SECONDS
+    out.finish(deadline)
+    err.finish(deadline)
+    return result(
+        None if timed_out else process.returncode,
+        out.total + err.total,
+        stdout=out.text(tail_chars),
+        stderr=err.text(tail_chars),
+    )
+
+
+class _Tail:
+    """Reads a stream on its own thread to the end, keeping its last ``limit`` bytes."""
+
+    def __init__(self, stream: IO[bytes], limit: int) -> None:
+        self.total = 0
+        self._stream = stream
+        self._limit = limit
+        self._kept = bytearray()
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._read, name="run-command-output", daemon=True)
+        self._thread.start()
+
+    def _read(self) -> None:
+        try:
+            while chunk := self._stream.read1(READ_BYTES):  # type: ignore[attr-defined]
+                with self._lock:
+                    self.total += len(chunk)
+                    self._kept += chunk
+                    del self._kept[: max(0, len(self._kept) - self._limit)]
+        except (OSError, ValueError):
+            pass  # an unreadable stream ends what is kept
+        finally:
+            self._stream.close()
+
+    def finish(self, deadline: float) -> None:
+        """Wait until ``deadline`` (`time.monotonic`) at most for the end of the stream."""
+        self._thread.join(max(0.0, deadline - time.monotonic()))
+
+    def text(self, chars: int) -> str:
+        """Return the last ``chars`` characters read so far."""
+        with self._lock:
+            kept = bytes(self._kept)
+        return kept.decode("utf-8", errors="replace")[-chars:] if chars > 0 else ""
+
+
+def _kill_group(process: subprocess.Popen[bytes]) -> None:
+    """Kill what ``process`` left running in its process group after it exited (POSIX)."""
+    if sys.platform != "win32":
+        with contextlib.suppress(ProcessLookupError, PermissionError):  # none left
+            os.killpg(process.pid, signal.SIGKILL)
 
 
 def _kill_tree(process: subprocess.Popen[bytes]) -> None:
@@ -163,11 +217,3 @@ def _kill_tree(process: subprocess.Popen[bytes]) -> None:
         return
     with contextlib.suppress(ProcessLookupError):  # already gone
         os.killpg(process.pid, signal.SIGKILL)
-
-
-def _tail(output: IO[bytes], chars: int) -> str:
-    """Return the last ``chars`` characters of ``output``, reading no more than they can need."""
-    size = output.seek(0, os.SEEK_END)
-    # One character more, so a read that starts inside a character still holds ``chars`` whole.
-    output.seek(max(0, size - (chars + 1) * UTF8_MAX_BYTES))
-    return output.read().decode("utf-8", errors="replace")[-chars:] if chars > 0 else ""
