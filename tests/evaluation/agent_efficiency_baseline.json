@@ -47,7 +47,7 @@
     "analyze_portfolio_risk": {
       "argument_bytes": 123,
       "calls": 2,
-      "result_bytes": 2701,
+      "result_bytes": 2739,
       "skill": "quant-analytics",
       "skill_bytes": 2837,
       "success": true,
@@ -108,7 +108,7 @@
     "calls": 10,
     "definition_bytes": 6457,
     "instruction_bytes": 817,
-    "result_bytes": 31563,
+    "result_bytes": 31601,
     "skill_bytes": 10309,
     "skill_description_bytes": 1114,
     "success_rate": 1.0,
