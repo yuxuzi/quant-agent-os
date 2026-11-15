@@ -31,6 +31,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
@@ -916,6 +917,33 @@ def _code_version(function: Callable[..., Any]) -> str | None:
             return f"{distribution} {importlib.metadata.version(distribution)}"
         except importlib.metadata.PackageNotFoundError:
             continue
+    try:
+        source = Path(inspect.getfile(function)).resolve()
+    except (TypeError, OSError):
+        return None
+    return _editable_version(package, source)
+
+
+def _editable_version(package: str, source: Path) -> str | None:
+    """The version of an editable install whose ``.pth`` path holds ``package`` at ``source``.
+
+    An editable install records only a ``.pth`` file, so `packages_distributions` cannot name
+    the package that a project under development serves from its own source tree.
+    """
+    for distribution in importlib.metadata.distributions():
+        for file in distribution.files or []:
+            if file.suffix != ".pth":
+                continue
+            try:
+                lines = (file.read_text() or "").splitlines()
+            except (OSError, UnicodeDecodeError):
+                continue
+            for line in lines:
+                if not line.strip() or line.startswith(("#", "import")):
+                    continue
+                root = Path(line.strip()).resolve()
+                if source == root / f"{package}.py" or source.is_relative_to(root / package):
+                    return f"{distribution.metadata['Name']} {distribution.version}"
     return None
 
 

@@ -1,5 +1,6 @@
 """Registering a firm's functions (decision 0024): schemas, data by reference, and provenance."""
 
+import importlib.metadata
 import json
 import math
 import re
@@ -441,6 +442,13 @@ def test_declared_permissions_are_kept_beside_reading_data(store: Store) -> None
 def test_the_code_version_names_the_installed_package() -> None:
     assert (_code_version(BaseModel.model_validate) or "").startswith("pydantic ")
     assert _code_version(historical_var) is None  # a test module is not an installed package
+
+
+def test_the_code_version_names_a_package_installed_from_its_source_tree() -> None:
+    # The checkout is an editable install, which records only a .pth file.
+    version = importlib.metadata.version("quant-agent-os")
+
+    assert _code_version(FirmApp.expose) == f"quant-agent-os {version}"
 
 
 # Docstrings

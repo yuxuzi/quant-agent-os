@@ -19,6 +19,9 @@ All notable changes to this project are documented here. The format follows
 - **A firm's own check no longer breaks a generated `risk-monitor`'s tests.** The tests of the built-in limits and
   tools ran every check in `firm/checks.py` too, so adding one, as the project invites, failed them. The example
   in that file also failed the project's lint (`zip` without `strict`).
+- **A tool registered with `FirmApp.expose` names its code's version when the package is an editable install,**
+  as a project under development usually is. Before, `code_version` was empty, because an editable install
+  records only a `.pth` file.
 
 ## [0.4.0] - 2026-11-15
 

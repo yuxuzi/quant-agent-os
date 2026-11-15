@@ -535,8 +535,8 @@ status: ok
 result: -0.0803, convention: Compounded wealth, peak to trough
 ```
 
-The firm's rule from Lab 4 is there. The full answer also carries the data's fingerprint and
-`computed` evidence, which `expose` adds without your writing it.
+The firm's rule from Lab 4 is there. The full answer also carries the data's fingerprint, the code's
+version (`desk-risk 0.1.0`), and `computed` evidence, which `expose` adds without your writing it.
 
 ### Connect Claude Code
 
