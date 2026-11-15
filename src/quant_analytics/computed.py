@@ -49,8 +49,11 @@ RISK_CONVENTIONS = {
     "weights": "constant over the sample (rebalanced every period); may be negative",
     "volatility": "sqrt(w' S w), S the sample covariance (n - 1) times periods per year",
     "contributions": "Euler: marginal (S w)_i / vol, component w_i * marginal, percent "
-    "component / vol; components sum to volatility, percents to one",
+    "component / vol; components sum to volatility, percents to one; undefined when "
+    "volatility is zero",
     "diversification_ratio": "sum(|w_i| vol_i) / portfolio volatility",
+    "flat": f"a portfolio volatility under {risk.FLAT:g} of sum(|w_i| vol_i) is rounding from an "
+    "exact hedge and counts as zero",
     "exposures": "OLS slopes on all factors at once, with an intercept; the portfolio's is "
     "the weighted sum of asset exposures",
     "variance_shares": "b_k (F b)_k / var in sample, F the factor covariance; the specific "
@@ -294,7 +297,10 @@ def portfolio_risk(params: RiskInput) -> RiskOutput:
     for asset, values in params.asset_returns.items():
         warnings += _unit_warnings(asset, values)
     if breakdown.volatility == 0.0:
-        warnings.append(f"{name} does not vary, so its volatility contributions are undefined.")
+        warnings.append(
+            f"{name} does not vary, or varies only by rounding (an exact hedge), so its "
+            "volatility contributions are undefined."
+        )
     statements = [f"Annualised volatility of {name} is {breakdown.volatility:.2%}."]
     statements += [
         f"{asset} contributes {item.percent:.1%} of the volatility of {name}."

@@ -12,6 +12,9 @@ squares (decision 0010). Both decompositions are exact identities, checked by kn
   Percent contributions sum to one; a negative one means the position hedges the rest.
 - The diversification ratio is ``sum(|w_i| vol_i) / vol``; it is at least one for long-only
   portfolios.
+- A portfolio volatility under a millionth of ``sum(|w_i| vol_i)`` is rounding left over from an
+  exact hedge, and counts as zero (`FLAT`). Contributions, percents, the diversification ratio,
+  and the factor shares are then undefined (None), so the sums above hold whenever they exist.
 - Factor exposures are OLS slopes of each asset's returns on all factors at once, with an
   intercept. The portfolio's exposure is the weighted sum of asset exposures, which equals the
   slope of the portfolio's own regression.
@@ -115,8 +118,9 @@ def factor_exposures(
     """Regress each asset on the factors; split the portfolio's variance among them.
 
     Needs more periods than factors plus one. Shares and R squared are None when the portfolio
-    returns do not vary. ``collinear`` means the factors are linearly dependent, so the
-    exposures are one of many solutions (the smallest) and should not be read one by one.
+    returns do not vary, or vary less than `FLAT` of its positions' own volatility.
+    ``collinear`` means the factors are linearly dependent, so the exposures are one of many
+    solutions (the smallest) and should not be read one by one.
     """
     names, factors = list(weights), list(factor_returns)
     w = np.array([weights[name] for name in names], dtype=np.float64)
