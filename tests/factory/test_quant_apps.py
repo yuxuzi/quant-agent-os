@@ -45,8 +45,9 @@ def _folder(path: Path) -> Path:
     return path
 
 
-def _render(tmp_path: Path, profile: str) -> Path:
-    report = AppFactory(PytemplateUvScaffolder()).create(_spec(tmp_path, profile), run_checks=False)
+def _render(tmp_path: Path, profile: str, **fields: Any) -> Path:
+    spec = _spec(tmp_path, profile, **fields)
+    report = AppFactory(PytemplateUvScaffolder()).create(spec, run_checks=False)
     return Path(report.project_path)
 
 
@@ -200,6 +201,19 @@ def test_value_at_risk_agrees_with_the_platform(risk_metrics: Any) -> None:
 @pytest.mark.parametrize("profile", QUANT_APP_PROFILES)
 def test_each_generated_application_passes_its_own_tests(tmp_path: Path, profile: str) -> None:
     project = _render(tmp_path, profile)
+
+    done = _run_python(project, "-m", "pytest", "-q", "-p", "no:cacheprovider")
+
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-2000:]
+
+
+def test_a_firm_check_leaves_the_risk_monitors_own_tests_passing(tmp_path: Path) -> None:
+    """firm/checks.py invites a firm's own rule; the built-in limits' tests must not run it."""
+    project = _render(tmp_path, "risk-monitor", components=["agent-tools"])
+    (project / "fund_app" / "firm" / "checks.py").write_text(
+        "from ..risk import Check\n"
+        "CHECKS = {'always': lambda view: [Check('Always', 1.0, 0.0, True)]}\n"
+    )
 
     done = _run_python(project, "-m", "pytest", "-q", "-p", "no:cacheprovider")
 

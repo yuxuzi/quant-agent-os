@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The tutorial is written for a fund's CEO and CTO,** and checked on 0.4.0. It generates a `risk-monitor`
+  application, customizes it at each of the four levels, serves it to an AI client with `FirmApp`, and then
+  tests authentication (keys, scopes, expiry, revocation) and authorization (an access file, refusals, and an
+  auditor's key), each lab ending with what it shows. `examples/tutorial/env.sh` gains `call` and `get`
+  helpers, and `lab_first_tool.py` is removed: Lab 5 registers an existing function with `expose` instead.
+
+### Fixed
+
+- **A firm's own check no longer breaks a generated `risk-monitor`'s tests.** The tests of the built-in limits and
+  tools ran every check in `firm/checks.py` too, so adding one, as the project invites, failed them. The example
+  in that file also failed the project's lint (`zip` without `strict`).
+- **A tool registered with `FirmApp.expose` names its code's version when the package is an editable install,**
+  as a project under development usually is. Before, `code_version` was empty, because an editable install
+  records only a `.pth` file.
+
 ## [0.4.0] - 2026-11-15
 
 ### Fixed

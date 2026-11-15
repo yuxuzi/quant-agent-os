@@ -35,6 +35,8 @@ ASSETS = ["A", "B", "C"]
 @pytest.fixture(autouse=True)
 def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)  # no config.toml unless a test writes one
+    for name in list(CHECKS):  # the firm's own checks have their own tests
+        monkeypatch.delitem(CHECKS, name)
 
 
 def _positions(*rows: list[float]) -> Table:
