@@ -273,7 +273,7 @@ uv run --project "$REPO" qaos app create desk-risk.toml
 
 ```text
 desk-risk (quant-apps/risk-monitor) -> .../qaos-tutorial/work/desk-risk
-  29 files; components: agent-tools; checks: uv sync, ruff check, ruff format, mypy, pytest
+  23 files; components: agent-tools; checks: uv sync, ruff check, ruff format, mypy, pytest
 Create it? It writes files, runs uv, and downloads packages [y/N]: y
 Created .../qaos-tutorial/work/desk-risk with pytemplate-uv==3.1.0.
   ok  uv sync  (0.3 s)
@@ -309,7 +309,8 @@ Open the `report.html` or `report.md` in the folder it names. `check` exits with
 breach, so a scheduler can alert on it. The project holds:
 - `config.toml`: the data, limits, stress scenarios, and report sections;
 - `desk_risk/firm/`: your firm's own checks, sections, and file formats;
-- `tests/`: known-answer tests for every calculation;
+- `tests/`: tests of the application's own calculations. Its formulas, tables, and reports come from
+  Quant Toolbox, an MIT library in the platform's wheel, tested there and pinned in `pyproject.toml`;
 - `AGENTS.md`: the rules for a coding assistant that changes the project;
 - `LIMITATIONS.md`: what the application does not model.
 
@@ -426,11 +427,11 @@ cat > tests/test_firm.py <<'EOF'
 import datetime as dt
 
 import numpy as np
+from quant_toolbox.data import Table
 
 from desk_risk.firm.checks import restricted_shorts
 from desk_risk.risk import build_view
 from desk_risk.settings import Settings
-from desk_risk.tables import Table
 
 
 def test_a_short_in_a_restricted_name_is_a_breach() -> None:
@@ -450,8 +451,8 @@ uv run ruff check . && uv run mypy desk_risk tests && uv run pytest -q
 BREACH: Restricted shorts: -0.1820 against 0.0000
 3 of 8 breached, as of 2023-07-14.
 All checks passed!
-Success: no issues found in 21 source files
-38 passed in 0.14s
+Success: no issues found in 15 source files
+22 passed in 0.17s
 ```
 
 Your rule appears beside the built-in limits, in `check`, in the report, and, after Lab 5, to the AI
@@ -509,8 +510,8 @@ from quant_agent_os.config import get_settings
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.registration import FirmApp, Series
 from quant_platform import serve_apps
+from quant_toolbox.performance import max_drawdown
 
-from desk_risk.metrics import max_drawdown
 from desk_risk.tools import registry
 
 risk = FirmApp(
@@ -536,7 +537,7 @@ the `qaos` command in the application's environment, so from here `uv run qaos` 
 `serve.py` is the whole integration. There are two ways to add a tool:
 - **`include`** adds ready-made tools, such as the generated ones.
 - **`expose`** turns a function you already have into a tool. `max_drawdown` is an ordinary
-  function from the application's `metrics.py`, unchanged. Its input schema comes from its type
+  function from Quant Toolbox, the library the application computes with, unchanged. Its input schema comes from its type
   hints and its description from its docstring. `returns=Series` says the caller passes a dataset
   reference, and the server reads the data and passes the function the numbers.
 
@@ -600,7 +601,8 @@ result: -0.0803, convention: Compounded wealth, peak to trough
 ```
 
 The firm's rule from Lab 4 is there. The full answer also carries the data's fingerprint, the code's
-version (`desk-risk 0.1.0`), and `computed` evidence, which `expose` adds without your writing it.
+version (`quant-agent-os 0.5.0`, the release whose toolbox computed it), and `computed` evidence, which
+`expose` adds without your writing it.
 
 ### Connect Claude Code
 

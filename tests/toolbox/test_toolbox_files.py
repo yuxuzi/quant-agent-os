@@ -340,3 +340,32 @@ def test_provenance_names_inputs_code_and_time() -> None:
     assert found["created"] == "2024-05-01T00:00:00+00:00"
     assert found["data_fingerprint"] == "sha256:abc" and found["source"] == "demo"
     assert found["code_version"]["package"] == "1.2.3"
+
+
+def test_group_exposures_sum_net_and_gross_and_sort_by_gross() -> None:
+    assets = ["A", "B", "C", "D"]
+    weights = np.array([0.3, -0.2, 0.1, 0.0])
+
+    found = risk.group_exposures(assets, weights, {"A": "Tech", "B": "Tech", "C": "Energy"})
+
+    assert list(found) == ["Tech", "Energy"]
+    assert found["Tech"] == pytest.approx((0.1, 0.5))
+    assert found["Energy"] == pytest.approx((0.1, 0.1))
+    assert risk.group_exposures(["X"], np.array([0.4]), {}) == {risk.UNGROUPED: (0.4, 0.4)}
+
+
+def test_simulated_history_applies_todays_weights_and_treats_gaps_as_flat() -> None:
+    returns = np.array([[0.01, 0.02], [np.nan, -0.01], [0.03, 0.0]])
+
+    history = risk.simulated_returns(np.array([0.5, -0.5]), returns)
+
+    assert history.tolist() == pytest.approx([-0.005, 0.005, 0.015])
+
+
+def test_concentration_measures_of_a_book() -> None:
+    book = risk.exposures(np.array([0.4, 0.3, -0.2, 0.05, 0.03, 0.02]))
+
+    assert book.largest == pytest.approx(0.4)
+    assert book.top_five == pytest.approx(0.98)
+    assert book.positions == 6
+    assert risk.exposures(np.zeros(3)).effective_positions == 0.0

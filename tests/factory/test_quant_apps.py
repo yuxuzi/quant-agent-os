@@ -154,7 +154,7 @@ def test_no_application_carries_its_own_copy_of_the_library(pack: Path) -> None:
 def test_applications_import_only_the_toolbox_public_names(pack: Path) -> None:
     private = sorted(
         f"{path.relative_to(pack).as_posix()}: {line.strip()}"
-        for path in pack.rglob("*.py*")
+        for path in [*pack.rglob("*.py"), *pack.rglob("*.py.jinja")]
         for line in path.read_text("utf-8").splitlines()
         if "quant_toolbox." in line and "import" in line and "._" in line.split("import")[0]
     )

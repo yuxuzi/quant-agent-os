@@ -117,6 +117,8 @@ class ArchitecturePlanner:
             reasons.append(
                 "A user pack: pytemplate-uv checks its profile, components, and answers."
             )
+            if "quant_agent_os_source" in spec.model_fields_set:  # a fork of a built-in pack
+                data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)
         if spec.components:
             reasons.append(f"Optional components requested: {', '.join(spec.components)}.")
         return AppPlan(

@@ -256,6 +256,19 @@ def test_structured_results_are_flattened_beside_the_provenance(
     assert output["data_versions"] and output["evidence"]
 
 
+def test_a_toolbox_metric_is_exposed_as_it_is(store: Store) -> None:
+    """Quant Toolbox hints a series as an array or a list; the server passes the array."""
+    pytest.importorskip("numpy")
+    from quant_toolbox.performance import max_drawdown
+
+    app = FirmApp("risk")
+    app.expose(max_drawdown, returns=Series, convention="Compounded wealth, peak to trough")
+
+    record = check_tool(_tools(app, store)["max_drawdown"], {"returns": SERIES})
+
+    assert record.output["result"] <= 0.0
+
+
 def test_numpy_and_pandas_values_go_in_and_come_back_as_plain_values(
     store: Store,
 ) -> None:
