@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
-import json
-import math
-import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from quant_toolbox import audit
+from quant_toolbox.data import Table, TableError, demo_book, load_table
+from quant_toolbox.report import Document, TextBlock, render_html, render_markdown, to_dict
+
 from . import __version__
-from .document import Document, TextBlock, render_html, render_markdown, to_dict
 from .firm.loaders import LOADERS
 from .risk import RiskView, build_view
 from .sections import available
 from .settings import Settings
-from .tables import Table, TableError, load_table
 
 CONVENTIONS = [
     "Positions are weights of NAV, with shorts negative.",
@@ -36,8 +34,6 @@ def open_view(
 ) -> RiskView:
     """Load the settings' files into a `RiskView`, or the demo when they say so."""
     if positions is None and settings.positions == "demo":
-        from .synthetic import demo_book
-
         book, prices, groups = demo_book()
         return build_view(book, settings, prices=prices, groups=groups, as_of=as_of)
     table = load_table(positions or base / settings.positions, LOADERS)
@@ -87,57 +83,20 @@ def fingerprint(table: Table) -> str:
 def write_report(document: Document, view: RiskView, root: Path, *, source: str) -> Path:
     """Write a new run folder with the HTML, Markdown, and JSON forms; return the folder."""
     created = dt.datetime.now(dt.UTC)
-    stamp = re.sub(r"[^0-9TZ]", "", created.strftime("%Y%m%dT%H%M%SZ"))
-    folder = _new_folder(root, f"{stamp}-risk")
-    (folder / "report.html").write_text(render_html(document), "utf-8")
+    folder = audit.new_run_folder(root, audit.run_name("risk", created))
+    charts = view.settings.charts
+    (folder / "report.html").write_text(render_html(document, charts=charts), "utf-8")
     (folder / "report.md").write_text(render_markdown(document), "utf-8")
     results: dict[str, Any] = {
         **to_dict(document),
-        "provenance": {
-            "created": created.isoformat(timespec="seconds"),
-            "source": source,
-            "positions_fingerprint": fingerprint(view.history),
-            "as_of": view.as_of.isoformat(),
-            "code_version": {"package": __version__, "git": _git_describe()},
-        },
+        "provenance": audit.provenance(
+            version=__version__,
+            where=Path(__file__),
+            fingerprints={"positions_fingerprint": view.history.fingerprint()},
+            now=created,
+            source=source,
+            as_of=view.as_of.isoformat(),
+        ),
     }
-    (folder / "results.json").write_text(
-        json.dumps(_clean(results), indent=2, sort_keys=True) + "\n", "utf-8"
-    )
+    audit.write_json(folder / "results.json", results)
     return folder
-
-
-def _new_folder(root: Path, name: str) -> Path:
-    attempt = 1
-    while True:
-        folder = root / (name if attempt == 1 else f"{name}-{attempt}")
-        try:
-            folder.mkdir(parents=True)
-            return folder
-        except FileExistsError:
-            attempt += 1
-
-
-def _git_describe() -> str | None:
-    try:
-        described = subprocess.run(
-            ["git", "describe", "--always", "--dirty"],
-            cwd=Path(__file__).resolve().parent,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return (described.stdout.strip() or None) if described.returncode == 0 else None
-
-
-def _clean(value: Any) -> Any:
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    if isinstance(value, dict):
-        return {key: _clean(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_clean(item) for item in value]
-    return value

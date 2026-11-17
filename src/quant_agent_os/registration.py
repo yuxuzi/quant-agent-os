@@ -608,6 +608,7 @@ def _inputs(
         )
         target, optional = _without_none(hint)
         if marker is not None:
+            target = _data_member(target)
             _check_data_target(tool_name, name, marker, target)
         elif _library(target):
             raise ToolContractError(
@@ -645,6 +646,15 @@ def _input_model(
     )
     _check_schema(tool_name, model, "input")
     return model
+
+
+def _data_member(target: Any) -> Any:
+    """For a data parameter hinted as a union, such as ``ndarray | Sequence[float]``, the member
+    the server builds: a NumPy array if the union has one, otherwise its first member."""
+    if get_origin(target) not in (Union, types.UnionType):
+        return target
+    members = list(get_args(target))
+    return next((member for member in members if _library(member) == "numpy"), members[0])
 
 
 def _check_data_target(tool_name: str, name: str, marker: DataMarker, target: Any) -> None:

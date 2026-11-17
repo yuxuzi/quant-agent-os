@@ -2,6 +2,7 @@
 
 - Status: accepted (decided by the owner, 2026-11-06; counsel to review before first commercial use)
 - Date: 2026-11-06
+- Amended by: [0026](0026-quant-toolbox.md): `src/quant_toolbox/` stays MIT too
 - Closes: open question O-4
 - Amends: [0015](0015-metering-quotas-and-entitlements.md) (Q-18) and
   [0017](0017-hosted-behind-a-command-group.md)
@@ -20,7 +21,7 @@ Changing now is cheap: the repository has one human author, no forks, and no out
   make non-production use of the code. Production use needs a commercial licence.
 - **Change Date:** the fourth anniversary of each version's first public distribution, the longest the licence allows.
 - **Change License:** Apache 2.0.
-- **What stays MIT:** `skills/`, `clients/`, and `src/quant_app_factory/packs/`. Skills are copied into clients, and
+- **What stays MIT:** `skills/`, `clients/`, `src/quant_app_factory/packs/`, and (from 0.5.0) `src/quant_toolbox/`. Skills are copied into clients, and
   a generated project must carry only the licence its owner chooses.
 - **One licence for the rest.** One wheel holds every product ([decision 0018](0018-one-wheel.md)), so editions are
   contract terms and not separate packages. No code checks a licence key.

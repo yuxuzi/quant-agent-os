@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from quant_toolbox.report import Document, render_markdown
 
-from .document import Document, render_markdown
 from .reconcile import as_block, reconcile
 from .reporting import build_context, build_document, load_returns, open_returns, write_report
 from .sections import available, describe

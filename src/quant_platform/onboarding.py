@@ -32,7 +32,7 @@ SERVER_NAME = "quant-agent-os"
 # Each extra, the module that shows it is installed, and what is lost without it.
 EXTRAS = {
     "server": ("mcp", "`qaos serve` cannot run"),
-    "analytics": ("empyrical", "no metrics tools"),
+    "analytics": ("numpy", "no metrics tools"),
     "pdf": ("pypdf", "PDFs are skipped at ingestion"),
     "parquet": ("pyarrow", "`qaos data add` takes CSV only"),
     "postgres": ("psycopg", "SQLite stores only"),

@@ -1,5 +1,7 @@
-"""Quant Analytics: performance metrics with documented conventions, as Quant-Agent-OS tools.
+"""Quant Analytics: performance and risk metrics with documented conventions, as tools.
 
-`quant_analytics.metrics` is plain Python and imports nothing from the platform;
-`quant_analytics.tools` registers it as typed, read-only tools (`analytics_tools()`).
+The numbers come from Quant Toolbox (`quant_toolbox.performance` and `.risk`), the library the
+generated applications use too, so a tool call and a generated report compute the same way.
+`quant_analytics.computed` adds typed inputs and outputs, warnings, and ``computed`` evidence;
+`quant_analytics.tools` registers them as read-only tools (`analytics_tools()`).
 """

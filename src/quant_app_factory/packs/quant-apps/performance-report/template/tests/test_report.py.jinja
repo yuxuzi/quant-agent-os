@@ -7,25 +7,17 @@ from typing import Any
 
 import numpy as np
 import pytest
+from quant_toolbox.data import Table, TableError, demo_returns
+from quant_toolbox.report import Column, TableBlock
 from typer.testing import CliRunner
 
 from {{ package_name }} import sections as section_module
 from {{ package_name }}.cli import app
 from {{ package_name }}.context import Context
-from {{ package_name }}.document import Column, Document, TableBlock, render_html, render_markdown
-from {{ package_name }}.excel import load_workbook_table, write_workbook
 from {{ package_name }}.firm.sections import SECTIONS as FIRM_SECTIONS
 from {{ package_name }}.reconcile import reconcile
 from {{ package_name }}.reporting import build_context, build_document, check_data, load_returns
-from {{ package_name }}.risk_metrics import (
-    calmar_ratio,
-    expected_shortfall,
-    sortino_ratio,
-    value_at_risk,
-)
 from {{ package_name }}.settings import ExcelSource, Settings, SettingsError, Tearsheet, load_settings
-from {{ package_name }}.synthetic import demo_returns
-from {{ package_name }}.tables import Table, TableError, load_csv, read_meta, save_table
 
 runner = CliRunner()
 DATES = [dt.date(2024, 1, 31), dt.date(2024, 2, 29), dt.date(2024, 3, 31)]
@@ -43,30 +35,6 @@ def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def _write_csv(path: Path, text: str) -> Path:
     path.write_text(text, "utf-8")
     return path
-
-
-# Risk measures
-
-
-def test_value_at_risk_and_shortfall_have_known_answers() -> None:
-    returns = np.array([-0.05, -0.03, -0.01, 0.01, 0.02])
-
-    assert value_at_risk(returns, 0.25) == pytest.approx(-0.03)
-    assert expected_shortfall(returns, 0.25) == pytest.approx(-0.04)
-
-
-def test_sortino_and_calmar_have_known_answers() -> None:
-    returns = np.array([0.02, -0.01, 0.02, -0.01])
-
-    assert sortino_ratio(returns, 12) == pytest.approx(
-        0.005 * 12 / (np.sqrt(0.00005) * np.sqrt(12))
-    )
-    assert calmar_ratio(np.array([0.10, -0.10]), 2) == pytest.approx(-0.01 / 0.10)
-
-
-def test_ratios_without_downside_are_undefined_not_infinite() -> None:
-    assert np.isnan(sortino_ratio(np.array([0.01, 0.02]), 12))
-    assert np.isnan(calmar_ratio(np.array([0.01, 0.02]), 12))
 
 
 # Choosing sections
@@ -185,6 +153,15 @@ def test_settings_refuse_unknown_keys_and_bad_values(tmp_path: Path) -> None:
         load_settings(path)
 
 
+def test_charts_are_static_unless_the_settings_ask(tmp_path: Path) -> None:
+    assert Settings().charts == "static"
+    path = _write_csv(tmp_path / "c.toml", 'charts = "interactive"\n')
+    assert load_settings(path).charts == "interactive"
+    path = _write_csv(tmp_path / "c.toml", 'charts = "animated"\n')
+    with pytest.raises(SettingsError, match="charts must be one of"):
+        load_settings(path)
+
+
 def test_settings_read_tear_sheets_and_excel_position(tmp_path: Path) -> None:
     path = _write_csv(
         tmp_path / "c.toml",
@@ -196,36 +173,6 @@ def test_settings_read_tear_sheets_and_excel_position(tmp_path: Path) -> None:
 
     assert settings.tearsheets["a"].sections == ["risk"]
     assert settings.excel == ExcelSource("R", 3)
-
-
-# Files between applications
-
-
-def test_a_saved_table_reads_back_with_its_provenance(tmp_path: Path) -> None:
-    table = _table(net=[0.01, np.nan, -0.02])
-
-    path = save_table(
-        tmp_path / "returns.csv", table, made_by="test", inputs={"prices": "sha256:x"}
-    )
-
-    again = load_csv(path)
-    assert again.fingerprint() == table.fingerprint()
-    assert read_meta(path)["inputs"] == {"prices": "sha256:x"}
-    assert read_meta(path)["fingerprint"] == f"sha256:{table.fingerprint()}"
-
-
-@pytest.mark.parametrize(
-    ("text", "message"),
-    [
-        ("date,A\n2024-02-01,0.1\n2024-01-01,0.1\n", "ascending"),
-        ("date,A,A\n2024-02-01,0.1,0.1\n", "unique"),
-        ("date,A\n01/31/2024,0.1\n", "not an ISO date"),
-        ("date,A\n2024-01-31,abc\n", "line 2: 'abc' is not a number"),
-    ],
-)
-def test_bad_files_say_what_to_fix(tmp_path: Path, text: str, message: str) -> None:
-    with pytest.raises(TableError, match=message):
-        load_csv(_write_csv(tmp_path / "bad.csv", text))
 
 
 # Reconciliation
@@ -263,119 +210,25 @@ def test_no_shared_book_is_an_error_naming_both_sides() -> None:
         reconcile(_table(A=[0.0, 0.0, 0.0]), _table(B=[0.0, 0.0, 0.0]), 1.0)
 
 
-# Output safety
-
-
-def test_html_and_markdown_escape_names_from_the_data() -> None:
-    document = Document(
-        "<script>x</script>",
-        blocks=[TableBlock("T", [Column("<b>", "text")], [["<img src=x onerror=y>|z"]])],
-    )
-
-    html = render_html(document)
-    assert "<script>x" not in html and "<img" not in html and "<b>" not in html
-    assert "\\|z" in render_markdown(document)
-
-
-def test_undefined_values_show_as_na() -> None:
-    document = Document("t", blocks=[TableBlock("T", [Column("v")], [[None], [float("nan")]])])
-
-    assert render_markdown(document).count("n/a") == 2
-
-
 # Excel
 
 
-def test_a_workbook_with_title_rows_and_totals_reads_correctly(tmp_path: Path) -> None:
+def test_the_excel_settings_say_where_the_table_starts(tmp_path: Path) -> None:
     openpyxl = pytest.importorskip("openpyxl")
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Returns"
-    sheet.append(["Administrator statement"])
-    sheet.append([])
-    sheet.append(["Date", "A", "B"])
-    sheet.append([dt.datetime(2024, 1, 31), 0.01, None])
-    sheet.append([dt.date(2024, 2, 29), 0.02, 0.03])
-    sheet.append([None, "Total", 0.03])
+    for row in (["Administrator statement"], [], ["Date", "A"]):
+        sheet.append(row)
+    for day, value in zip(DATES, [0.01, 0.02, 0.03], strict=True):
+        sheet.append([day, value])
     path = tmp_path / "admin.xlsx"
     workbook.save(path)
 
-    table = load_workbook_table(path, ExcelSource("Returns", 3))
+    table = load_returns(path, Settings(excel=ExcelSource("Returns", 3)))
 
-    assert table.dates == DATES[:2]
-    assert table.columns == ["A", "B"]
-    assert table.values[0, 0] == pytest.approx(0.01)
-    assert np.isnan(table.values[0, 1])
-
-
-def test_a_bad_date_with_dates_after_it_is_an_error_not_a_short_table(tmp_path: Path) -> None:
-    openpyxl = pytest.importorskip("openpyxl")
-    workbook = openpyxl.Workbook()
-    workbook.active.append(["Date", "A"])
-    workbook.active.append([dt.date(2024, 1, 31), 0.01])
-    workbook.active.append(["29 Feb", 0.02])
-    workbook.active.append([dt.date(2024, 3, 31), 0.03])
-    path = tmp_path / "typo.xlsx"
-    workbook.save(path)
-
-    with pytest.raises(TableError, match="row 3: '29 Feb' is not a date, but dates follow"):
-        load_workbook_table(path)
-
-
-def test_a_text_date_format_in_the_first_row_says_what_to_do(tmp_path: Path) -> None:
-    openpyxl = pytest.importorskip("openpyxl")
-    workbook = openpyxl.Workbook()
-    workbook.active.append(["Date", "A"])
-    workbook.active.append(["01/31/2024", 0.01])
-    path = tmp_path / "us.xlsx"
-    workbook.save(path)
-
-    with pytest.raises(TableError, match="not an ISO date"):
-        load_workbook_table(path)
-
-
-def test_a_workbook_read_at_the_wrong_row_says_how_to_fix_it(tmp_path: Path) -> None:
-    openpyxl = pytest.importorskip("openpyxl")
-    workbook = openpyxl.Workbook()
-    workbook.active.append(["Administrator statement"])
-    path = tmp_path / "admin.xlsx"
-    workbook.save(path)
-
-    with pytest.raises(TableError, match="Set header_row"):
-        load_workbook_table(path)
-
-
-def test_a_missing_sheet_names_those_available(tmp_path: Path) -> None:
-    openpyxl = pytest.importorskip("openpyxl")
-    path = tmp_path / "a.xlsx"
-    openpyxl.Workbook().save(path)
-
-    with pytest.raises(TableError, match="no sheet 'Nope'"):
-        load_workbook_table(path, ExcelSource("Nope"))
-
-
-def test_written_workbooks_hold_numbers_and_never_formulas(tmp_path: Path) -> None:
-    openpyxl = pytest.importorskip("openpyxl")
-    document = Document(
-        "t",
-        blocks=[
-            TableBlock(
-                "Returns: by/book",
-                [Column("Book", "text"), Column("YTD")],
-                [["=HYPERLINK(1)", 0.05], ["A", None]],
-                note="@note",
-            )
-        ],
-    )
-
-    path = write_workbook(document, tmp_path / "out.xlsx")
-
-    sheet = openpyxl.load_workbook(path).worksheets[1]
-    assert sheet["A2"].value == "'=HYPERLINK(1)"
-    assert sheet["A2"].data_type == "s"
-    assert sheet["B2"].value == pytest.approx(0.05)
-    assert sheet["B2"].number_format == "0.00%"
-    assert sheet["A5"].value == "'@note"
+    assert table.dates == DATES
+    assert table.column("A")[1] == pytest.approx(0.02)
 
 
 def test_a_report_can_be_rebuilt_from_an_excel_file(tmp_path: Path) -> None:
@@ -410,7 +263,8 @@ def test_report_writes_every_format_with_provenance(tmp_path: Path) -> None:
     results = json.loads((folder / "results.json").read_text())
     assert results["provenance"]["source"] == "demo"
     assert results["provenance"]["data_fingerprint"].startswith("sha256:")
-    assert "<svg" in (folder / "report.html").read_text()
+    page = (folder / "report.html").read_text()
+    assert "<svg" in page and "<script" not in page
 
 
 def test_two_runs_never_overwrite_each_other(tmp_path: Path) -> None:

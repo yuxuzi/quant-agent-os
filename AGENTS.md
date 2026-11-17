@@ -18,9 +18,16 @@ is not a chatbot.
   and the generated project's checks run through the subprocess runner. Its template packs are in
   `quant_app_factory/packs/`: `agent-tool`, `quant-baseline`, and `quant-apps`, with one application per
   stage of a fund's work ([decision 0022](docs/decisions/0022-one-application-per-stage.md)).
-- **Quant Analytics** (`src/quant_analytics`): performance metrics from empyrical-reloaded
-  ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `metrics.py` imports
-  numerical libraries only; `tools.py` registers `analyze_performance` and friends.
+- **Quant Toolbox** (`src/quant_toolbox`): the MIT library under Quant Analytics and every generated
+  application ([decision 0026](docs/decisions/0026-quant-toolbox.md)). Seven subpackages in layers,
+  `data` → `performance` → `risk`, `research` → `report`, `audit` → `testing`; a layer imports only
+  earlier ones, and only their public names. Only numpy at module level: pygal, plotly, openpyxl,
+  pandas, and empyrical load in the function that needs them. Metrics run on empyrical when it is
+  installed and on numpy otherwise, held equal by `tests/toolbox/test_backends.py`. Its public API is
+  locked in `tests/toolbox/api.lock.json`.
+- **Quant Analytics** (`src/quant_analytics`): performance and risk metrics as tools, computed by Quant
+  Toolbox ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `computed.py` adds typed
+  results, warnings, and evidence; `tools.py` registers `analyze_performance` and friends.
 - **Sign-in and approvals** (`quant_platform.identity`): OAuth token checks and the browser approval page,
   for a firm's own server; no command serves them yet. Each customer hosts its own installation, and
   there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
@@ -37,8 +44,9 @@ is not a chatbot.
   ([plan](docs/plans/archive/agent-surface.md), P3).
 
 Core must never import a product, and the products must not import each other. Only the
-platform server imports every product, and nothing imports it. Quantitative
-analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
+platform server imports every product, and nothing imports it. Quant Toolbox imports nothing of the
+platform; only Quant Analytics and the platform server import it, and the generated applications
+depend on it. Quantitative analytics live in a separate package and are registered as tools. `pytemplate-uv` is an
 third-party library of App Factory ([decision 0006](docs/decisions/0006-pytemplate-uv-as-a-library.md)):
 - Import only its public `pytemplate.api`, and only in
   `quant_app_factory/infrastructure/pytemplate_uv.py`, behind the `ScaffoldProvider` port.
@@ -51,7 +59,7 @@ have one route: README, then [getting started](docs/getting-started.md), then th
 [tutorial](docs/tutorial.md). Someone running a server reads [deployment](docs/deployment.md), then
 [operations](docs/operations.md).
 
-One wheel holds all five import names ([decision 0018](docs/decisions/0018-one-wheel.md)), and
+One wheel holds all six import names ([decision 0018](docs/decisions/0018-one-wheel.md)), and
 `qaos` (`quant_platform.cli`) is the one command. Each product's `cli.py` is a Typer app it mounts,
 and each `tools.py` holds what serving needs, so serving imports no command module. Importing
 `quant_platform.cli` must work with no extra installed; a test checks that.
@@ -71,6 +79,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
 | Regenerate client bundles (after changing a skill) | `uv run python scripts/client_bundles.py` |
 | Update the tool lock (after a tool version bump) | `uv run python scripts/tool_lock.py --update` |
+| Update Quant Toolbox's API lock (after an intended API change, with a changelog entry) | `QUANT_TOOLBOX_UPDATE_LOCK=1 uv run pytest tests/toolbox/test_api_lock.py` |
 | Research evaluation | `uv run python tests/research/research_eval.py` (add `--update` to rebaseline) |
 | Team-server smoke test and upgrade drill (need Docker; CI runs them) | `deploy/smoke-test.sh [postgres]`, `deploy/upgrade-test.sh [postgres]` |
 | App Factory smoke test (opt-in; needs network) | `QUANT_FACTORY_SMOKE=1 uv run pytest tests/factory/test_factory_smoke.py` |
@@ -95,7 +104,8 @@ the real results.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a
 direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
-(opt-in quality evaluations).
+(opt-in quality evaluations). Each product's own tests are in `tests/<product>`; `tests/toolbox`
+runs every toolbox test under both metrics backends.
 
 ## Invariants
 
@@ -147,8 +157,9 @@ direct call), `tests/integration` (end-to-end, offline), and `tests/evaluation`
   RAG": keyword search does most of the ranking, and the graph is small
   ([results](docs/products/quant-research.md#how-well-it-works)). A quality claim cites a measurement.
 - **Docs stay true.** `tests/contract/test_docs.py` checks relative links and the commands the README
-  and getting started teach. Generated metrics stay in step with the platform's
-  (`tests/factory/test_metric_parity.py`).
+  and getting started teach. Generated applications carry no copy of Quant Toolbox
+  (`tests/factory/test_quant_apps.py`), and its public API changes only with its lock and a changelog
+  entry (`tests/toolbox/test_api_lock.py`).
 
 ## Conventions
 

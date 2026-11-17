@@ -14,8 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
+from quant_toolbox.report import to_dict
 
-from .document import to_dict
 from .reporting import build_context, build_document, open_returns
 from .settings import Settings, load_settings
 

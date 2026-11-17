@@ -70,30 +70,44 @@ Each project's `AGENTS.md` gives a coding assistant the same rules. The `agent-t
 calculations to AI clients through a firm's own server. The templates supply no alpha: momentum and reversal are textbook
 examples, and a firm's named signal is tested for look-ahead before each run.
 
-A quant-lab project has one `metrics` module, with documented conventions and
-known-answer tests. Each also has bias tests (no look-ahead, a real trade lag, costs that only
-cost) and a `LIMITATIONS.md`. Optional components are `data-parquet`, `data-database`
-(PostgreSQL, SQLite, or DuckDB, read-only, with a `check-connection` command), and `agent-tools`. A
-spec can name a connection saved in `factory.toml` (`connection = "research-pg"`).
+A quant-lab project has bias tests (no look-ahead, a real trade lag, costs that only cost) and a
+`LIMITATIONS.md`. Optional components are `data-parquet`, `data-database` (PostgreSQL, SQLite, or DuckDB,
+read-only, with a `check-connection` command), and `agent-tools`. A spec can name a connection saved in
+`factory.toml` (`connection = "research-pg"`).
 
-## Generated metrics and the platform's
+## Formulas come from Quant Toolbox
 
-A quant-lab project owns a numpy copy of its metrics,
-so it stays portable ([decision 0009](../decisions/0009-quant-baseline-templates.md)).
-`tests/factory/test_metric_parity.py` holds that copy to `quant_analytics.metrics` on annualised
-return, volatility, Sharpe, maximum drawdown, hit rate, beta, active return, tracking error, and
-information ratio. They differ in three ways:
-- An undefined metric is NaN in a generated project and None on the platform.
-- A generated metric drops missing values itself, one series at a time, except `active_metrics` and
-  `beta`, which use bars where both are present. The platform's tools leave out and count missing
-  rows first, so its metric functions never see them.
-- Each has metrics the other lacks: Newey-West t-statistics, information coefficients, and turnover
-  only in generated projects; Sortino, Calmar, omega, tail ratio, stability, value at risk, and alpha
-  only on the platform.
+A generated project holds its business logic: its settings, its `firm/` code, its commands, the order in
+which it runs things, and its report sections. Its formulas, tables, reports, charts, and run records come
+from [Quant Toolbox](quant-toolbox.md), the library Quant Analytics uses too
+([decision 0026](../decisions/0026-quant-toolbox.md)). Its `pyproject.toml` depends on
+`quant-agent-os[toolbox]` (performance-report adds `excel`) from the release that generated it:
 
-A generated project does not receive later fixes by itself, and its `LIMITATIONS.md` says so. Use
-[CHANGELOG.md](../../CHANGELOG.md) to see what changed, then apply the fix by hand or compare with a fresh
-project, as [above](#where-templates-come-from).
+```toml
+[tool.uv.sources]
+quant-agent-os = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.5.0" }
+```
+
+So its numbers change only when you move that tag. To take a later fix to a formula or a report, edit `rev`,
+then run `uv sync` and the project's tests. A fix to the application's own code still arrives the way
+[above](#where-templates-come-from) says: compare with a fresh project. The project installs this wheel for
+its MIT toolbox only, and the platform's server only with `agent-tools`. Charts are static SVG; set
+`charts = "interactive"` in `config.toml` and add the `interactive` extra for plotly charts.
+
+To use another definition of a figure, add a separately named one in the project, so that both keep theirs.
+
+What moved to the toolbox, measured in lines of each template's package and tests (Python and Jinja files,
+0.4.0 against 0.5.0):
+
+| Application | Package | Tests |
+| --- | --- | --- |
+| alpha-research | 1,609 to 643 | 551 to 372 |
+| strategy-backtest | 2,067 to 969 | 958 to 509 |
+| risk-monitor | 1,876 to 1,039 | 447 to 275 |
+| performance-report | 2,075 to 954 | 785 to 343 |
+| quant-lab | 2,092 to 1,154 | 1,334 to 710 |
+
+The tests that left check the toolbox, in `tests/toolbox`; a project keeps the tests of its own code.
 
 ## Use
 

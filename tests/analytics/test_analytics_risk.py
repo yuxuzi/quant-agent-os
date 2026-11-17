@@ -14,9 +14,10 @@ import pytest
 from pydantic import ValidationError
 
 from quant_agent_os.testing import check_tool
-from quant_analytics import metrics, risk
 from quant_analytics.computed import RiskInput, portfolio_risk
 from quant_analytics.tools import analytics_tools
+from quant_toolbox import performance as metrics
+from quant_toolbox import risk
 
 MONTHLY = 12
 # Orthogonal, zero-mean patterns: sum(a * b) = sum(a * e) = sum(b * e) = 0 over 12 periods.

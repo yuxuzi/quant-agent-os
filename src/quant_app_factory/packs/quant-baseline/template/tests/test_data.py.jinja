@@ -48,7 +48,7 @@ def test_date_values_and_midnight_datetimes_are_dates() -> None:
         ("date,AAA\n2024-01-02,10\n2024-01-02,11\n", "unique"),
         ("date,AAA\n1/9/2024,10\n1/10/2024,11\n", "YYYY-MM-DD"),
         ("date,AAA\n2024-01-02,10\n2024-01-03,-1\n", "positive"),
-        ("date,AAA\n2024-01-02,10\n", "at least two rows"),
+        ("date,AAA\n2024-01-02,10\n", "at least two dates"),
     ],
 )
 def test_bad_price_files_explain_the_problem(tmp_path: Path, body: str, message: str) -> None:

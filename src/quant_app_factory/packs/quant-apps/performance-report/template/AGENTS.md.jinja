@@ -11,15 +11,21 @@ generated, and it is meant to be changed. Change it in the smallest way that doe
 3. **`{{ package_name }}/firm/loaders.py`**: a new file format, as a function that returns a `Table`.
 4. **Any other file**, if those cannot do it. Keep such changes small and tested.
 
-This project is yours: no command upgrades it from a newer template. To take a later fix,
-generate a fresh project from the newer template and compare; `.pytemplate.toml` records the
-template, its version, and your answers. Changes kept in `config.toml` and
-`{{ package_name }}/firm/` keep that comparison small.
+Formulas, tables, reports, charts, and run records come from Quant Toolbox
+(`quant_toolbox`, MIT), at the version `pyproject.toml` pins in `[tool.uv.sources]`
+(`quant-agent-os[toolbox,excel]`). This project holds the business logic: settings, sections,
+tear sheets, reconciliation, and the command line. To take a newer toolbox, move the tag, run
+`uv sync`, and run the tests. To take a later fix to this project's own code, generate a fresh
+project from the newer template and compare; `.pytemplate.toml` records the template, its
+version, and your answers. Changes kept in `config.toml` and `{{ package_name }}/firm/` keep that
+comparison small.
 
 ## Rules that protect the numbers
 
-- Do not change a formula in `metrics.py`, `risk_metrics.py`, or `horizons.py` to make a report
-  match another figure. Find out why they differ with `{{ project_name }} reconcile`, and say so.
+- Do not redefine a Quant Toolbox metric or horizon to make a report match another figure. Find
+  out why they differ with `{{ project_name }} reconcile`, and say so.
+- Import only the toolbox's public names (`from quant_toolbox.performance import ...`), never a
+  module whose name starts with an underscore.
 - A firm that defines a metric differently adds its own named section, and leaves the original
   in place, so that both numbers keep their definitions.
 - Keep the known-answer tests passing. If one must change, say which and why in the commit message.

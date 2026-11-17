@@ -3,7 +3,7 @@
 Add a function that takes the `RiskView` and returns blocks, list it in ``SECTIONS``, and name it
 under ``sections`` in ``config.toml``. A section with a built-in's name replaces it. For example::
 
-    from ..document import Block, Column, TableBlock
+    from quant_toolbox.report import Block, Column, TableBlock
     from ..risk import RiskView
 
 

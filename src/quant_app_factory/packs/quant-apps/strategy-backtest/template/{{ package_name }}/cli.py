@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from quant_toolbox.data import Table, save_table
+from quant_toolbox.report import comparison_markdown, equity_chart, run_markdown
+from quant_toolbox.report.svg import chart_svg
 
 from .backtest import run_with_tables
 from .data import Panel, open_panel
 from .parameters import ParameterError, Parameters, load_parameters
-from .report import equity_svg, render_comparison, render_markdown
 from .results import latest_run, load_results, save_run
-from .tables import Table, save_table
 from .walk_forward import run_walk_forward
 
 app = typer.Typer(help=__doc__, no_args_is_help=True)
@@ -147,16 +148,16 @@ def report(
         loaded = [(folder.name, load_results(folder)) for folder in folders]
         path = out or (folders[0] / "report.md" if len(folders) == 1 else RESULTS / "comparison.md")
         path.parent.mkdir(parents=True, exist_ok=True)
-        svg = equity_svg(loaded)
+        block = equity_chart(loaded)
         chart = None
-        if svg:
+        if block is not None:
             chart = path.with_suffix(".svg")
-            chart.write_text(svg, "utf-8")
+            chart.write_text(chart_svg(block, standalone=True), "utf-8")
         name = chart.name if chart else None
         text = (
-            render_markdown(loaded[0][1], name)
+            run_markdown(loaded[0][1], name)
             if len(loaded) == 1
-            else render_comparison(loaded, name)
+            else comparison_markdown(loaded, name)
         )
         path.write_text(text, "utf-8")
     except ValueError as error:

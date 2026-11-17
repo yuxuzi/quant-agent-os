@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from quant_toolbox.data import FloatArray, Table, demo_panel, load_csv, read_meta, save_table
 from typer.testing import CliRunner
 
 from {{ package_name }} import config
@@ -12,10 +13,7 @@ from {{ package_name }}.backtest import run_with_tables
 from {{ package_name }}.cli import app
 from {{ package_name }}.firm.rules import RULES
 from {{ package_name }}.firm.signals import SIGNALS
-from {{ package_name }}.metrics import FloatArray
 from {{ package_name }}.parameters import ParameterError, Parameters
-from {{ package_name }}.synthetic import demo_panel
-from {{ package_name }}.tables import Table, load_csv, read_meta, save_table
 
 runner = CliRunner()
 

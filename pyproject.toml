@@ -1,11 +1,11 @@
 [project]
 name = "quant-agent-os"
-version = "0.4.0"
+version = "0.5.0"
 description = "Quantitative research tools with cited, computed evidence, served to AI clients over MCP: cited keyword search with entity linking over your own corpus, performance and risk metrics by dataset reference, and application generation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "BUSL-1.1 AND MIT"
-license-files = ["LICENSE", "src/quant_app_factory/packs/LICENSE"]
+license-files = ["LICENSE", "src/quant_app_factory/packs/LICENSE", "src/quant_toolbox/LICENSE"]
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 keywords = ["quant", "agents", "llm", "mcp", "research"]
 classifiers = [
@@ -28,7 +28,7 @@ dependencies = [
     "typer>=0.12",
 ]
 
-# One wheel holds the five import names (decision 0018); each extra brings a product's dependencies.
+# One wheel holds the six import names (decision 0018); each extra brings a product's dependencies.
 [project.scripts]
 qaos = "quant_platform.cli:main"
 
@@ -52,11 +52,19 @@ parquet = ["pandas>=3,<4", "pyarrow>=26,<27"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 # Embeddings on this machine (fastembed, ONNX). Not in `all`: no onnxruntime wheel for Python 3.15.
 local-embeddings = ["fastembed>=0.9,<0.10"]
-# The metric formulas (decision 0010): empyrical, not pyfolio, which adds only plotting.
-analytics = ["empyrical-reloaded>=0.7,<0.8"]
+# Quant Toolbox (decision 0026): numpy, and pygal for static SVG charts. Generated apps need it.
+toolbox = ["numpy>=1.26", "pygal>=3.1,<4"]
+# Interactive HTML charts in reports (plotly's graph objects; plotly express would need pandas).
+interactive = ["quant-agent-os[toolbox]", "plotly>=7,<8"]
+# Reading and writing Excel workbooks.
+excel = ["openpyxl>=3.1,<4"]
+# The preferred metrics backend (decision 0010): empyrical, not pyfolio, which adds only plotting.
+empyrical = ["empyrical-reloaded>=0.7,<0.8"]
+# The analytics tools: the toolbox, computing through empyrical.
+analytics = ["quant-agent-os[toolbox,empyrical]"]
 # The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.
 factory = ["pytemplate-uv>=3.1,<4"]
-all = ["quant-agent-os[analytics,factory,parquet,pdf,postgres,server]"]
+all = ["quant-agent-os[analytics,excel,factory,interactive,parquet,pdf,postgres,server]"]
 
 [dependency-groups]
 dev = [
@@ -71,10 +79,11 @@ dev = [
 # Supply-chain cool-off: dependencies added by this project (and their new transitive
 # dependencies) lock only releases at least two weeks old. Move the date forward deliberately
 # when upgrading. Quant Analytics' empyrical-reloaded stack (B-13) and the api extra's
-# fastapi and opentelemetry-api (B-18), and psycopg (B-14) use 2026-10-18; pyarrow uses 2026-10-22.
+# fastapi and opentelemetry-api (B-18), and psycopg (B-14) use 2026-10-18; pyarrow uses 2026-10-22;
+# Quant Toolbox's pygal, plotly, and openpyxl (decision 0026) use 2026-11-03.
 # pytemplate-uv is exempt: it is first-party (same author), and the App Factory
 # needs its 3.0 API.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z", pygal = "2026-11-03T00:00:00Z", plotly = "2026-11-03T00:00:00Z", narwhals = "2026-11-03T00:00:00Z", openpyxl = "2026-11-03T00:00:00Z", et-xmlfile = "2026-11-03T00:00:00Z", importlib-metadata = "2026-11-03T00:00:00Z", zipp = "2026-11-03T00:00:00Z" }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
@@ -87,6 +96,7 @@ module-name = [
     "quant_app_factory",
     "quant_platform",
     "quant_research",
+    "quant_toolbox",
 ]
 
 [tool.ruff]
@@ -96,6 +106,10 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Template code is checked by the generated project's own ruff, where quant_toolbox is third-party.
+"src/quant_app_factory/packs/**" = ["I001"]
+
 [tool.ruff.lint.isort]
 known-first-party = [
     "quant_agent_os",
@@ -103,6 +117,7 @@ known-first-party = [
     "quant_research",
     "quant_app_factory",
     "quant_platform",
+    "quant_toolbox",
 ]
 
 [tool.mypy]
@@ -114,7 +129,11 @@ files = ["src", "examples"]
 exclude = ["src/quant_app_factory/packs/"]
 
 [[tool.mypy.overrides]]
-module = ["empyrical", "empyrical.*"]  # untyped; quant_analytics.metrics types its boundary
+module = ["pygal", "pygal.*", "plotly", "plotly.*", "openpyxl", "openpyxl.*"]  # untyped, or optional
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["empyrical", "empyrical.*"]  # untyped; quant_toolbox.performance types its boundary
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -130,7 +149,7 @@ filterwarnings = [
     # starlette 1.8's TestClient prefers httpx2; httpx (already locked via mcp) still works.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
-addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov=quant_platform --cov-report=term-missing"
+addopts = "-ra --cov=quant_agent_os --cov=quant_analytics --cov=quant_research --cov=quant_app_factory --cov=quant_platform --cov=quant_toolbox --cov-report=term-missing"
 
 [tool.coverage.run]
 branch = true

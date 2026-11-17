@@ -16,11 +16,14 @@ from pydantic import (
     model_validator,
 )
 
+from quant_agent_os import __version__
 from quant_app_factory.domain import toml_text
 from quant_app_factory.domain.secrets import ENV_NAME, secret_problem
 
 PythonVersion = Literal["3.11", "3.12", "3.13", "3.14", "3.15"]
-DEFAULT_QUANT_AGENT_OS_SOURCE = "git+https://github.com/yuxuzi/quant-agent-os"
+# Generated projects install Quant Toolbox (and, with agent-tools, the platform) from the release
+# that generated them, so a project's numbers do not change until its owner moves the tag.
+DEFAULT_QUANT_AGENT_OS_SOURCE = f"git+https://github.com/yuxuzi/quant-agent-os@v{__version__}"
 _ONE_LINE = re.compile(r'^[^"\\\n]+$')  # what pytemplate-uv's questions accept
 
 BUILT_IN_TEMPLATES = frozenset({"agent-tool", "quant-apps", "quant-baseline", "bundled"})
@@ -114,7 +117,10 @@ class AppSpec(BaseModel):
     )
     quant_agent_os_source: str = Field(
         default=DEFAULT_QUANT_AGENT_OS_SOURCE,
-        description="agent-tool only: a git+https URL or a local path to quant-agent-os",
+        description=(
+            "Where a project installs quant-agent-os from (Quant Toolbox, and the platform for "
+            "agent tools): a git+https URL, with @tag to pin it, or a local path"
+        ),
     )
 
     @model_validator(mode="before")

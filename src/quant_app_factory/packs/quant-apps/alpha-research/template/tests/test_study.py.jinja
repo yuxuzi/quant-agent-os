@@ -1,0 +1,83 @@
+"""The study finds a planted signal, finds nothing in noise, and scores what a lagged trade earns.
+
+The statistics themselves (information coefficients, Newey-West t-statistics, forward returns)
+come from Quant Toolbox, which tests them; these tests check how this application uses them.
+"""
+
+from collections.abc import Iterator
+
+import numpy as np
+import pytest
+from quant_toolbox.data import FloatArray, Panel, business_days, random_walk_panel
+from quant_toolbox.research import ic_summary
+
+from {{ package_name }}.config import TRADE_LAG
+from {{ package_name }}.firm.signals import SIGNALS
+from {{ package_name }}.parameters import Parameters
+from {{ package_name }}.signals import compute
+from {{ package_name }}.study import run_study
+
+
+def _planted(delay: int, strength: float = 0.3) -> Panel:
+    """A panel whose firm signal ``planted`` predicts the return ``delay`` bars after the next."""
+    prices, signal = random_walk_panel(signal_strength=strength, delay=delay)
+
+    def planted(history: FloatArray) -> FloatArray:
+        return signal[: history.shape[0]]
+
+    SIGNALS["planted"] = planted
+    assets = [f"A{index:02d}" for index in range(prices.shape[1])]
+    return Panel(business_days(prices.shape[0]), assets, prices)
+
+
+@pytest.fixture(autouse=True)
+def _forget_planted() -> Iterator[None]:
+    yield
+    SIGNALS.pop("planted", None)
+
+
+def test_the_study_finds_a_tradable_planted_signal() -> None:
+    results = run_study(_planted(delay=TRADE_LAG), Parameters(signal="planted"))
+
+    metrics = results["metrics"]
+    assert metrics["mean_rank_ic"] > 0.1
+    assert metrics["rank_ic_t_stat"] > 5
+    assert metrics["spread_annualized_return"] > 0
+    assert results["series"]["ic_decay_mean_rank_ic"][0] > 0.1
+
+
+def test_the_study_scores_what_a_lagged_trade_can_earn() -> None:
+    # The edge lasts one bar: a study at the signal's own close would promote it, but a trade
+    # one bar later cannot earn it, and neither does the default study.
+    panel = _planted(delay=0)
+
+    at_close = run_study(panel, Parameters(signal="planted", lag=0))["metrics"]
+    lagged = run_study(panel, Parameters(signal="planted"))["metrics"]
+
+    assert at_close["mean_rank_ic"] > 0.1
+    assert abs(lagged["mean_rank_ic"]) < 0.03
+
+
+def test_noise_has_no_ic() -> None:
+    results = run_study(_planted(delay=TRADE_LAG, strength=0.0), Parameters(signal="planted"))
+
+    assert abs(results["metrics"]["mean_rank_ic"]) < 0.03
+
+
+def test_no_built_in_signal_finds_ic_on_random_walks_across_seeds() -> None:
+    means = []
+    for seed in range(40):
+        prices, _ = random_walk_panel(n_bars=300, n_assets=20, seed=seed)
+        means.append(ic_summary(compute("reversal", prices, lookback=5), prices)["mean_rank_ic"])
+
+    standard_error = np.std(means, ddof=1) / np.sqrt(len(means))
+    assert abs(np.mean(means)) < 3 * standard_error
+
+
+def test_the_results_say_how_they_were_computed() -> None:
+    results = run_study(_planted(delay=TRADE_LAG), Parameters(signal="planted", max_horizon=3))
+
+    assert len(results["series"]["ic_decay_mean_rank_ic"]) == 3
+    assert results["parameters"]["lag"] == TRADE_LAG
+    assert {"timing", "ic", "t_stat", "spread", "delistings"} <= set(results["conventions"])
+    assert results["limitations"]

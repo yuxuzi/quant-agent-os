@@ -29,10 +29,10 @@ pytestmark = pytest.mark.skipif(
             {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)},
         ),
         (("bundled", "python"), {}),
-        (("quant-apps", "alpha-research"), {}),
-        (("quant-apps", "strategy-backtest"), {}),
-        (("quant-apps", "risk-monitor"), {}),
-        (("quant-apps", "performance-report"), {}),
+        (("quant-apps", "alpha-research"), {"quant_agent_os_source": str(ROOT)}),
+        (("quant-apps", "strategy-backtest"), {"quant_agent_os_source": str(ROOT)}),
+        (("quant-apps", "risk-monitor"), {"quant_agent_os_source": str(ROOT)}),
+        (("quant-apps", "performance-report"), {"quant_agent_os_source": str(ROOT)}),
         (
             ("quant-apps", "performance-report"),
             {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
@@ -49,9 +49,15 @@ pytestmark = pytest.mark.skipif(
             ("quant-apps", "strategy-backtest"),
             {"components": ["agent-tools"], "quant_agent_os_source": str(ROOT)},
         ),
-        (("quant-baseline", "quant-lab"), {}),
-        (("quant-baseline", "quant-lab"), {"answers": {"frequency": "weekly"}}),
-        (("quant-baseline", "quant-lab"), {"answers": {"frequency": "monthly"}}),
+        (("quant-baseline", "quant-lab"), {"quant_agent_os_source": str(ROOT)}),
+        (
+            ("quant-baseline", "quant-lab"),
+            {"answers": {"frequency": "weekly"}, "quant_agent_os_source": str(ROOT)},
+        ),
+        (
+            ("quant-baseline", "quant-lab"),
+            {"answers": {"frequency": "monthly"}, "quant_agent_os_source": str(ROOT)},
+        ),
         (
             ("quant-baseline", "quant-lab"),
             {"components": ["data-parquet", "agent-tools"], "quant_agent_os_source": str(ROOT)},
@@ -106,6 +112,7 @@ def test_a_database_project_passes_its_checks_and_connects(tmp_path: Path) -> No
             "output_dir": str(tmp_path),
             "components": ["data-database"],
             "answers": {"db_name": database.as_posix()},
+            "quant_agent_os_source": str(ROOT),
         }
     )
 
@@ -149,6 +156,7 @@ def test_a_forked_pack_with_a_new_question_builds_a_passing_project(tmp_path: Pa
             "description": "A forked research project",
             "output_dir": str(out),
             "answers": {"desk": "rates"},
+            "quant_agent_os_source": str(ROOT),
         }
     )
 

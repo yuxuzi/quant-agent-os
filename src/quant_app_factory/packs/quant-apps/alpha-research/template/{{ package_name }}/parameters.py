@@ -7,11 +7,11 @@ or wrong types are refused with a message that names them, so a typo never goes 
 from __future__ import annotations
 
 import dataclasses
-import json
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from quant_toolbox.data import dump_config, load_config
 
 from . import config
 
@@ -57,42 +57,13 @@ class Parameters:
         )
 
 
-_FIELDS = {field.name: field for field in dataclasses.fields(Parameters)}
-
-
 def load_parameters(path: Path) -> Parameters:
     """Read ``path`` (TOML, flat keys named like `Parameters` fields) over the defaults."""
-    try:
-        data = tomllib.loads(path.read_text("utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as error:
-        raise ParameterError(f"Cannot read {path}: {error}") from error
-    unknown = sorted(set(data) - set(_FIELDS))
-    if unknown:
-        known = ", ".join(_FIELDS)
-        raise ParameterError(f"{path}: unknown keys {', '.join(unknown)}; use {known}.")
-    for key, value in data.items():
-        if not _type_ok(_FIELDS[key].type, value):
-            raise ParameterError(f"{path}: {key} must be {_FIELDS[key].type}, not {value!r}.")
-    return Parameters(**data)
+    return load_config(path, Parameters, ParameterError)
 
 
 def dump_parameters(parameters: Parameters) -> str:
     """``parameters`` as TOML that `load_parameters` reads back unchanged."""
-    lines = ["# The parameters this run used. Re-run it with --config pointing here."]
-    for name, value in dataclasses.asdict(parameters).items():
-        if value is not None:
-            lines.append(f"{name} = {json.dumps(value)}")
-    return "\n".join(lines) + "\n"
-
-
-def _type_ok(annotation: object, value: object) -> bool:
-    text = str(annotation)
-    if text.startswith("tuple"):
-        return isinstance(value, list) and all(_type_ok("int", item) for item in value)
-    if isinstance(value, bool):
-        return False
-    if text.startswith("str"):
-        return isinstance(value, str)
-    if text.startswith("int"):
-        return isinstance(value, int)
-    return isinstance(value, int | float)  # float fields accept whole numbers
+    return dump_config(
+        parameters, "The parameters this run used. Re-run it with --config pointing here."
+    )

@@ -50,7 +50,7 @@ def test_a_fork_keeps_one_profile_and_the_components_it_can_use(tmp_path: Path) 
     profiles = sorted(p.name for p in pack.iterdir() if (p / "profile.toml").exists())
     assert manifest["id"] == "my-pack"
     assert profiles == ["quant-lab"]
-    assert components == ["agent-tools", "data-csv", "data-database", "data-parquet", "metrics"]
+    assert components == ["agent-tools", "data-csv", "data-database", "data-parquet"]
     assert _factory().check_template(pack.as_posix()).ok
 
 
@@ -66,7 +66,7 @@ def test_a_renamed_profile_still_renders_its_own_files(tmp_path: Path) -> None:
     assert {
         "my_app/study.py",
         "my_app/backtest.py",
-        "my_app/report.py",
+        "my_app/walk_forward.py",
         "my_app/database.py",
     } <= set(preview.files)
     assert "my_app/tools.py" not in preview.files

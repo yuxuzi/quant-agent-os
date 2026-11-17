@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from quant_toolbox.data import FloatArray, Panel, aligned, load_table
+from quant_toolbox.performance import bar_returns, summarize
+from quant_toolbox.research import ic_decay, ic_summary, quantile_spread, signal_autocorrelation
+
 from . import config, signals
-from .data import Panel, aligned
-from .evaluation import ic_decay, ic_summary, quantile_spread, signal_autocorrelation
 from .firm.loaders import LOADERS
-from .metrics import FloatArray, bar_returns, summarize
 from .parameters import Parameters
-from .tables import load_table
 
 LIMITATIONS = [
     "Prices are taken as given: survivorship, corporate actions, and point-in-time data are "

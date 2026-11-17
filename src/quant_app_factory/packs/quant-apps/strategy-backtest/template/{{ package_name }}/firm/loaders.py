@@ -8,7 +8,7 @@ built-in readers for that suffix. For example, for US dates in a ``.dat`` export
 
     import numpy as np
 
-    from ..tables import Table
+    from quant_toolbox.data import Table
 
 
     def read_admin_export(path: Path) -> Table:
@@ -23,6 +23,6 @@ built-in readers for that suffix. For example, for US dates in a ``.dat`` export
 
 from __future__ import annotations
 
-from ..tables import Loader
+from quant_toolbox.data import Loader
 
 LOADERS: dict[str, Loader] = {}

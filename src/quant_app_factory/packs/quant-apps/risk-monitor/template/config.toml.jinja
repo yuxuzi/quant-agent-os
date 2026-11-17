@@ -9,6 +9,7 @@ var_cutoff = 0.05
 lookback = {{ {"daily": 252, "weekly": 104, "monthly": 36}[frequency] }}      # bars of past returns for value at risk, volatility, and contributions
 top_positions = 10
 firm_name = ""
+charts = "static"   # static SVG; "interactive" needs `uv add "quant-agent-os[interactive]"`
 
 # Your choice of sections, in your order. `{{ project_name }} sections` lists them.
 sections = ["limits", "exposures", "groups", "top_positions", "risk", "contributors", "stress", "exposure_history"]

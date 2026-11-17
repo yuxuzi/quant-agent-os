@@ -18,9 +18,12 @@ This application is a tested starting point, not a risk system of record.
 - **Missing returns count as 0** in the simulation, which understates risk for illiquid assets.
 - **Not real time.** It runs when you run it, on the files it is given. No market-hours monitoring.
 - **It places no orders** and connects to no broker.
-- **Later fixes.** This project owns a copy of its code. A fix made to the template later does not
-  reach it by itself. Check the Quant-Agent-OS changelog, and apply fixes by hand, or generate a fresh
+- **Later fixes.** The formulas, tables, and reports come from Quant Toolbox at the version
+  `pyproject.toml` pins: to take a fix there, move that tag and run the tests. The rest of the
+  code is this project's own: a fix made to the template later does not reach it by itself. Check
+  the Quant-Agent-OS changelog, and apply fixes by hand, or generate a fresh
   project from the newer template and compare.
 
-What the tests guard: exposure and concentration, contributions that sum to 1, stress arithmetic,
-limit direction, breaches when data is missing, and no data used after the as-of date.
+What the tests guard: this project's tests cover stress arithmetic, limit direction, breaches when
+data is missing, and no data used after the as-of date. Quant Toolbox's own tests cover exposure
+and concentration, contributions that sum to 1, and every risk measure's known answers.

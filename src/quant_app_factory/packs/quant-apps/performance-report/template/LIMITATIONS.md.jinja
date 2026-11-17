@@ -16,10 +16,15 @@ This application is a tested starting point, not a finished reporting system.
   irregular dates gives approximate annualised figures.
 - **Partial periods.** A first or last month or year may be partial; check the dates shown.
 - **Excel charts.** The workbook holds tables; charts are in the HTML report.
-- **Later fixes.** This project owns a copy of its code. A fix made to the template later does not
-  reach it by itself. Check the Quant-Agent-OS changelog, and apply fixes by hand, or generate a fresh
-  project from the newer template and compare.
+- **Later fixes.** Formulas, tables, and reports come from Quant Toolbox at the tag
+  `pyproject.toml` pins: a toolbox fix arrives when you move the tag and the tests pass. This
+  project's own code (sections, settings, reconciliation, the command line) does not change by
+  itself: check the Quant-Agent-OS changelog, or generate a fresh project from the newer template
+  and compare.
+- **Charts.** Reports draw static SVG charts. Interactive charts (`charts = "interactive"`) need
+  plotly: `uv add "quant-agent-os[interactive]"`.
 - **No interpretation.** Reports print computed figures only. Commentary is yours to write.
 
-What the tests guard: metric formulas, horizon boundaries (known answers), monthly compounding,
-reconciliation, section selection, and escaping of text in every output.
+What this project's tests guard: tear sheets and section selection, settings, data notes,
+reconciliation, Excel input, and the command line. Quant Toolbox's own tests guard the metric
+formulas, horizon boundaries, monthly compounding, and escaping of text in every output.

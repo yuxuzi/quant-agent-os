@@ -5,9 +5,9 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-from .metrics import FloatArray
+from quant_toolbox.data import FloatArray, Table
+
 from .settings import Settings
-from .tables import Table
 
 
 @dataclass(frozen=True)

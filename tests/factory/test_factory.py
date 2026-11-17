@@ -15,6 +15,7 @@ import pytest
 from pytemplate import api
 from typer.testing import CliRunner
 
+from quant_agent_os import __version__
 from quant_agent_os.runs import SqliteRunStore
 from quant_agent_os.runtime.runner import CommandResult
 from quant_agent_os.sdk import Platform
@@ -243,7 +244,8 @@ def test_the_default_source_is_the_git_repository(tmp_path: Path) -> None:
 
     pyproject = tomllib.loads((Path(report.project_path) / "pyproject.toml").read_text())
     assert pyproject["tool"]["uv"]["sources"]["quant-agent-os"] == {
-        "git": "https://github.com/yuxuzi/quant-agent-os"
+        "git": "https://github.com/yuxuzi/quant-agent-os",
+        "rev": f"v{__version__}",  # pinned to the release that generated it
     }
     assert report.checks_passed is None
 

@@ -7,10 +7,10 @@ one-month short-term reversal.
 
 from __future__ import annotations
 
-import numpy as np
+from quant_toolbox import research
+from quant_toolbox.data import FloatArray
 
 from . import config
-from .metrics import FloatArray
 
 PARAMETERS = {
     "momentum": {"lookback": config.MOMENTUM_LOOKBACK, "skip": config.MOMENTUM_SKIP},
@@ -22,23 +22,12 @@ def momentum(
     prices: FloatArray, lookback: int = config.MOMENTUM_LOOKBACK, skip: int = config.MOMENTUM_SKIP
 ) -> FloatArray:
     """Return from bar t - ``lookback`` to bar t - ``skip`` (12-1 momentum by default)."""
-    if not 0 <= skip < lookback:
-        raise ValueError(f"momentum needs 0 <= skip < lookback; got {skip} and {lookback}.")
-    signal = np.full(prices.shape, np.nan)
-    if prices.shape[0] > lookback:
-        recent = prices[lookback - skip : prices.shape[0] - skip]
-        signal[lookback:] = recent / prices[:-lookback] - 1.0
-    return signal
+    return research.momentum(prices, lookback, skip)
 
 
 def reversal(prices: FloatArray, lookback: int = config.REVERSAL_LOOKBACK) -> FloatArray:
     """Minus the return over the last ``lookback`` bars (recent losers score high)."""
-    if lookback < 1:
-        raise ValueError(f"reversal needs a lookback of at least 1 bar, got {lookback}.")
-    signal = np.full(prices.shape, np.nan)
-    if prices.shape[0] > lookback:
-        signal[lookback:] = -(prices[lookback:] / prices[:-lookback] - 1.0)
-    return signal
+    return research.reversal(prices, lookback)
 
 
 def parameters(name: str, **overrides: int | None) -> dict[str, int]:

@@ -2,6 +2,7 @@
 
 - Status: proposed
 - Date: 2026-10-31
+- Amended by: [0026](0026-quant-toolbox.md): generated projects import their metrics from Quant Toolbox instead of copying them
 
 ## Context
 

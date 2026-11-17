@@ -1,7 +1,9 @@
 """Package boundaries (decision 0003): Core imports no product; products stay independent.
 
 The platform server (`quant_platform`) is the composition root: it imports every product, and
-nothing imports it.
+nothing imports it. Quant Toolbox (`quant_toolbox`, decision 0026) is a library under Quant
+Analytics and the generated applications: it imports nothing of the platform, and only Quant
+Analytics and the platform server import it.
 
 pytemplate-uv is a third-party library of the App Factory only, and only its scaffolder adapter
 imports it, so another `ScaffoldProvider` can replace it.
@@ -19,17 +21,21 @@ PACKAGES = {
     "quant_research": ROOT / "src" / "quant_research",
     "quant_app_factory": ROOT / "src" / "quant_app_factory",
     "quant_platform": ROOT / "src" / "quant_platform",
+    "quant_toolbox": ROOT / "src" / "quant_toolbox",
 }
 # quant_platform is the composition root: it may import every product, and nothing imports it.
 PRODUCTS = {"quant_analytics", "quant_research", "quant_app_factory"}
 FORBIDDEN = {
-    "quant_agent_os": PRODUCTS | {"quant_platform", "pytemplate"},
+    "quant_agent_os": PRODUCTS | {"quant_platform", "pytemplate", "quant_toolbox"},
     "quant_analytics": PRODUCTS - {"quant_analytics"} | {"quant_platform", "pytemplate"},
-    "quant_research": PRODUCTS - {"quant_research"} | {"quant_platform", "pytemplate"},
-    "quant_app_factory": PRODUCTS - {"quant_app_factory"} | {"quant_platform"},
+    "quant_research": PRODUCTS - {"quant_research"}
+    | {"quant_platform", "pytemplate", "quant_toolbox"},
+    "quant_app_factory": PRODUCTS - {"quant_app_factory"} | {"quant_platform", "quant_toolbox"},
     "quant_platform": {"pytemplate"},
+    "quant_toolbox": PRODUCTS | {"quant_agent_os", "quant_platform", "pytemplate"},
 }
 PYTEMPLATE_ADAPTER = PACKAGES["quant_app_factory"] / "infrastructure" / "pytemplate_uv.py"
+PACKS = PACKAGES["quant_app_factory"] / "packs"
 
 
 def _imported_roots(path: Path) -> set[str]:
@@ -47,6 +53,7 @@ def test_package_imports_respect_ownership_boundaries(package: str) -> None:
     violations = [
         f"{path.relative_to(ROOT)} imports {name}"
         for path in sorted(PACKAGES[package].rglob("*.py"))
+        if PACKS not in path.parents  # template packs are code for generated projects
         for name in sorted(_imported_roots(path) & FORBIDDEN[package])
     ]
 

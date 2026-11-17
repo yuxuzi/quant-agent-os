@@ -10,23 +10,35 @@ import calendar
 from collections.abc import Callable
 
 import numpy as np
-
-from .context import Context
-from .document import Block, ChartBlock, Column, TableBlock, TextBlock
-from .firm.sections import SECTIONS as FIRM_SECTIONS
-from .horizons import calendar_years as years_of
-from .horizons import drawdowns as episodes
-from .horizons import horizon_return, monthly_returns, underwater, wealth
-from .metrics import (
+from quant_toolbox.performance import (
     active_metrics,
     annualized_return,
     annualized_volatility,
     beta,
+    calmar_ratio,
+    expected_shortfall,
     hit_rate,
+    horizon_return,
     max_drawdown,
+    monthly_returns,
     sharpe_ratio,
+    sortino_ratio,
+    value_at_risk,
 )
-from .risk_metrics import calmar_ratio, expected_shortfall, sortino_ratio, value_at_risk
+from quant_toolbox.performance import calendar_years as years_of
+from quant_toolbox.performance import drawdowns as episodes
+from quant_toolbox.report import (
+    Block,
+    Column,
+    TableBlock,
+    TextBlock,
+    equity_curve,
+    rolling_sharpe_chart,
+    underwater_chart,
+)
+
+from .context import Context
+from .firm.sections import SECTIONS as FIRM_SECTIONS
 
 Section = Callable[[Context], list[Block]]
 MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
@@ -199,38 +211,29 @@ def correlation(context: Context) -> list[Block]:
     ]
 
 
+def _books(context: Context) -> dict[str, np.ndarray]:
+    return {book: context.returns(book) for book in context.books.columns}
+
+
 def equity(context: Context) -> list[Block]:
     """Growth of 1, per book and for the benchmark."""
-    series = {book: wealth(context.returns(book)).tolist() for book in context.books.columns}
+    series = _books(context)
     if context.benchmark is not None:
-        series[context.benchmark_name] = wealth(context.benchmark).tolist()
-    return [ChartBlock(title="Growth of 1", dates=context.dates, series=series)]
+        series[context.benchmark_name] = context.benchmark
+    return [equity_curve(context.dates, series)]
 
 
-def underwater_chart(context: Context) -> list[Block]:
+def underwater_chart_section(context: Context) -> list[Block]:
     """Drawdown from the running peak, per book."""
-    series = {book: underwater(context.returns(book)).tolist() for book in context.books.columns}
-    return [ChartBlock(title="Drawdown from peak", dates=context.dates, series=series)]
+    return [underwater_chart(context.dates, _books(context))]
 
 
 def rolling_sharpe(context: Context) -> list[Block]:
     """One-year rolling Sharpe ratio, per book."""
-    rate = context.settings.periods_per_year
-    series: dict[str, list[float]] = {}
-    for book in context.books.columns:
-        values = context.returns(book)
-        rolled = [float("nan")] * len(values)
-        for end in range(rate, len(values) + 1):
-            rolled[end - 1] = sharpe_ratio(
-                values[end - rate : end], rate, context.settings.risk_free
-            )
-        series[book] = rolled
+    settings = context.settings
     return [
-        ChartBlock(
-            title="Rolling one-year Sharpe",
-            dates=context.dates,
-            series=series,
-            note=f"Over {rate} bars; blank until a full window exists.",
+        rolling_sharpe_chart(
+            context.dates, _books(context), settings.periods_per_year, risk_free=settings.risk_free
         )
     ]
 
@@ -249,7 +252,7 @@ BUILT_IN: dict[str, Section] = {
     "drawdowns": drawdowns,
     "correlation": correlation,
     "equity": equity,
-    "underwater": underwater_chart,
+    "underwater": underwater_chart_section,
     "rolling_sharpe": rolling_sharpe,
     "data_notes": data_notes,
 }

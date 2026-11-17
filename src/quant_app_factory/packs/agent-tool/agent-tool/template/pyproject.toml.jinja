@@ -13,7 +13,12 @@ dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]
 
 [tool.uv.sources]
 {%- if quant_agent_os_source.startswith('git+') %}
+{%- set pin = quant_agent_os_source[4:].rpartition('@') %}
+{%- if pin[1] and '/' not in pin[2] %}
+quant-agent-os = { git = "{{ pin[0] }}", rev = "{{ pin[2] }}" }
+{%- else %}
 quant-agent-os = { git = "{{ quant_agent_os_source[4:] }}" }
+{%- endif %}
 {%- else %}
 quant-agent-os = { path = "{{ quant_agent_os_source }}", editable = true }
 {%- endif %}

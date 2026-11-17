@@ -103,7 +103,7 @@ def test_an_unknown_built_in_profile_lists_the_offered_ones(tmp_path: Path) -> N
 @pytest.mark.parametrize(
     ("fields", "portable"),
     [
-        ({"template": "quant-baseline", "profile": "quant-lab"}, True),
+        ({"template": "quant-baseline", "profile": "quant-lab"}, False),  # Quant Toolbox
         (
             {"template": "quant-baseline", "profile": "quant-lab", "components": ["agent-tools"]},
             False,
@@ -127,15 +127,14 @@ def test_one_project_holds_the_study_backtest_and_report(tmp_path: Path) -> None
     assert {
         "config.toml",
         "LIMITATIONS.md",
-        "momo_lab/metrics.py",
         "momo_lab/parameters.py",
         "momo_lab/study.py",
         "momo_lab/backtest.py",
-        "momo_lab/report.py",
-        "tests/test_timing.py",
+        "momo_lab/results.py",
+        "tests/test_strategy.py",
         "tests/test_parameters.py",
     } <= files
-    assert not {"momo_lab/tools.py", "momo_lab/database.py"} & files
+    assert not {"momo_lab/tools.py", "momo_lab/database.py", "momo_lab/metrics.py"} & files
 
 
 def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) -> None:
@@ -150,8 +149,8 @@ def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) ->
 
     assert {"momo_lab/tools.py", "tests/test_tools.py"} <= set(preview.files)
     assert "pyarrow>=15" in preview.dependencies
-    assert "quant-agent-os" in preview.dependencies
-    assert sorted(preview.components) == ["agent-tools", "data-csv", "data-parquet", "metrics"]
+    assert "quant-agent-os[toolbox]" in preview.dependencies
+    assert sorted(preview.components) == ["agent-tools", "data-csv", "data-parquet"]
 
 
 def test_answers_reach_the_generated_code(tmp_path: Path) -> None:

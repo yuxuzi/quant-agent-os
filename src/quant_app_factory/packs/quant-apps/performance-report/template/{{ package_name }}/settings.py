@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .horizons import is_horizon
+from quant_toolbox.performance import is_horizon
+from quant_toolbox.report import CHART_MODES
 
 
 class SettingsError(ValueError):
@@ -58,6 +59,7 @@ class Settings:
     default_tearsheet: str = "pm"
     tearsheets: dict[str, Tearsheet] = field(default_factory=lambda: dict(DEFAULT_TEARSHEETS))
     excel: ExcelSource = field(default_factory=ExcelSource)
+    charts: str = "static"  # static SVG; interactive or interactive-cdn need plotly
 
     def __post_init__(self) -> None:
         problems = [
@@ -71,6 +73,10 @@ class Settings:
                 (not 0.0 < self.var_cutoff < 0.5, "var_cutoff must be between 0 and 0.5"),
                 (self.top_drawdowns < 1, "top_drawdowns must be at least 1"),
                 (not self.horizons, "horizons must name at least one horizon"),
+                (
+                    self.charts not in CHART_MODES,
+                    f"charts must be one of {', '.join(CHART_MODES)}",
+                ),
                 (
                     self.default_tearsheet not in self.tearsheets,
                     f"default_tearsheet {self.default_tearsheet!r} is not in tearsheets",
@@ -98,6 +104,7 @@ _FLAT = {
     "top_drawdowns": int,
     "firm_name": str,
     "default_tearsheet": str,
+    "charts": str,
 }
 
 

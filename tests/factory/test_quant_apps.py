@@ -7,24 +7,20 @@ checks, and locked install run in the opt-in smoke test, and in `test_factory_sm
 from __future__ import annotations
 
 import filecmp
-import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from quant_analytics import metrics as analytics
 from quant_app_factory import AppFactory, AppSpec, PlanningError, PytemplateUvScaffolder
 from quant_app_factory import cli as factory_cli
 from quant_app_factory.domain.planner import BUILT_IN_PACKS, QUANT_APP_PROFILES, QUANT_APPS_PACK
 
 PACKAGE = "{{ package_name }}"
-RETURNS = np.random.default_rng(7).normal(0.0005, 0.01, 504)
 
 
 def _spec(tmp_path: Path, profile: str, **fields: Any) -> AppSpec:
@@ -87,7 +83,7 @@ def test_every_application_can_be_customized_and_explains_how(tmp_path: Path, pr
     files = set(preview.files)
 
     assert {"config.toml", "AGENTS.md", "README.md", "LIMITATIONS.md"} <= files
-    assert {"fund_app/cli.py", "fund_app/metrics.py", "fund_app/firm/loaders.py"} <= files
+    assert {"fund_app/cli.py", "fund_app/firm/loaders.py"} <= files
     assert "fund_app/tools.py" not in files
 
 
@@ -123,29 +119,58 @@ def test_the_new_command_knows_each_application(
     assert f'profile = "{profile}"' in (tmp_path / "my-app.toml").read_text()
 
 
-# One copy of the numbers
+# One copy of the numbers: Quant Toolbox (decision 0026)
+
+PACKS = [QUANT_APPS_PACK, BUILT_IN_PACKS["quant-baseline"]]
+LIBRARY_MODULES = (
+    "metrics.py",
+    "risk_metrics.py",
+    "tables.py",
+    "document.py",
+    "horizons.py",
+    "excel.py",
+    "evaluation.py",
+    "report.py",
+    "synthetic.py",
+)
 
 
-def test_every_application_shares_the_baseline_metrics_exactly() -> None:
-    baseline = BUILT_IN_PACKS["quant-baseline"] / "template" / PACKAGE / "metrics.py"
+@pytest.mark.parametrize(
+    "pack", [QUANT_APPS_PACK, BUILT_IN_PACKS["quant-baseline"]], ids=["apps", "baseline"]
+)
+def test_no_application_carries_its_own_copy_of_the_library(pack: Path) -> None:
+    copies = sorted(
+        path.relative_to(pack).as_posix()
+        for name in LIBRARY_MODULES
+        for path in pack.glob(f"**/template/{PACKAGE}/{name}")
+    )
 
-    for profile in QUANT_APP_PROFILES:
-        copy = QUANT_APPS_PACK / profile / "template" / PACKAGE / "metrics.py"
-        assert filecmp.cmp(baseline, copy, shallow=False), f"{profile} has its own metrics.py"
+    assert copies == [], "These belong in Quant Toolbox, imported from quant_toolbox"
+
+
+@pytest.mark.parametrize(
+    "pack", [QUANT_APPS_PACK, BUILT_IN_PACKS["quant-baseline"]], ids=["apps", "baseline"]
+)
+def test_applications_import_only_the_toolbox_public_names(pack: Path) -> None:
+    private = sorted(
+        f"{path.relative_to(pack).as_posix()}: {line.strip()}"
+        for path in [*pack.rglob("*.py"), *pack.rglob("*.py.jinja")]
+        for line in path.read_text("utf-8").splitlines()
+        if "quant_toolbox." in line and "import" in line and "._" in line.split("import")[0]
+    )
+
+    assert private == []
 
 
 @pytest.mark.parametrize(
     ("relative", "profiles"),
     [
-        (f"{PACKAGE}/tables.py", QUANT_APP_PROFILES),
         (f"{PACKAGE}/firm/loaders.py", QUANT_APP_PROFILES),
         ("pyproject.toml.jinja", QUANT_APP_PROFILES),
-        (f"{PACKAGE}/document.py", ("risk-monitor", "performance-report")),
-        (f"{PACKAGE}/risk_metrics.py", ("risk-monitor", "performance-report")),
         (f"{PACKAGE}/data.py", ("alpha-research", "strategy-backtest")),
         (f"{PACKAGE}/signals.py", ("alpha-research", "strategy-backtest")),
         (f"{PACKAGE}/firm/signals.py", ("alpha-research", "strategy-backtest")),
-        (f"{PACKAGE}/evaluation.py", ("alpha-research", "strategy-backtest")),
+        (f"{PACKAGE}/results.py", ("alpha-research", "strategy-backtest")),
     ],
 )
 def test_shared_files_stay_identical(relative: str, profiles: tuple[str, ...]) -> None:
@@ -155,44 +180,12 @@ def test_shared_files_stay_identical(relative: str, profiles: tuple[str, ...]) -
         assert filecmp.cmp(first, other, shallow=False), f"{other} differs from {first}"
 
 
-def _module(profile: str, name: str) -> Any:
-    """Load one standalone module from the pack, as a generated project holds it."""
-    path = QUANT_APPS_PACK / profile / "template" / PACKAGE / f"{name}.py"
-    source = path.read_text().replace("from .metrics import", "from metrics_for_test import")
-    spec = importlib.util.spec_from_loader(f"pack_{name}", loader=None)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
-    exec(compile(source, str(path), "exec"), module.__dict__)
-    return module
+def test_the_default_source_pins_this_release() -> None:
+    from quant_agent_os import __version__
 
-
-@pytest.fixture
-def risk_metrics(monkeypatch: pytest.MonkeyPatch) -> Any:
-    path = QUANT_APPS_PACK / "performance-report" / "template" / PACKAGE / "metrics.py"
-    spec = importlib.util.spec_from_file_location("metrics_for_test", path)
-    assert spec is not None and spec.loader is not None
-    metrics = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, "metrics_for_test", metrics)
-    spec.loader.exec_module(metrics)
-    return _module("performance-report", "risk_metrics")
-
-
-@pytest.mark.parametrize("periods", [252, 52, 12])
-def test_risk_measures_agree_with_the_platform(risk_metrics: Any, periods: int) -> None:
-    values = list(RETURNS)
-
-    assert risk_metrics.sortino_ratio(RETURNS, periods) == pytest.approx(
-        analytics.sortino_ratio(values, periods), abs=1e-10
-    )
-    assert risk_metrics.calmar_ratio(RETURNS, periods) == pytest.approx(
-        analytics.calmar_ratio(values, periods), abs=1e-10
-    )
-
-
-def test_value_at_risk_agrees_with_the_platform(risk_metrics: Any) -> None:
-    assert risk_metrics.value_at_risk(RETURNS, 0.05) == pytest.approx(
-        analytics.value_at_risk(list(RETURNS), 0.05), abs=1e-12
-    )
+    for pack in ("quant-apps", "quant-baseline", "agent-tool"):
+        questions = (BUILT_IN_PACKS[pack] / "questions.yml").read_text("utf-8")
+        assert f"quant-agent-os@v{__version__}\n" in questions, pack
 
 
 # Each application's own tests, and the chain between them

@@ -217,6 +217,7 @@ def test_new_uses_a_saved_connection_without_asking_its_details(
         "",
         "",
         "",
+        "",  # where to install quant-agent-os (the default)
         "",
         "n",
     ]
@@ -251,6 +252,7 @@ def test_new_asks_for_a_new_sqlite_database_and_saves_it(
         "",
         "",
         "",
+        "",  # where to install quant-agent-os (the default)
         "",
         database.as_posix(),
         "",

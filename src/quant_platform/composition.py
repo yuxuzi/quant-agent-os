@@ -50,7 +50,7 @@ ANALYTICS_INSTRUCTIONS = (
 PLATFORM_INSTRUCTIONS = "Quant-Agent-OS: quantitative research tools with cited, computed evidence."
 # The module each optional toolset needs, and the extra that brings it.
 TOOLSET_NEEDS: dict[Toolset, tuple[str, str]] = {
-    "analytics": ("empyrical", "install the quant-agent-os[analytics] extra"),
+    "analytics": ("numpy", "install the quant-agent-os[analytics] extra"),
     "factory": ("pytemplate", "install the quant-agent-os[factory] extra"),
 }
 REPORT_INSTRUCTIONS = (

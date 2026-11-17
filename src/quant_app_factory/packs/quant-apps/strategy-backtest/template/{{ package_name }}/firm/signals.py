@@ -6,7 +6,7 @@ and every run of a firm signal uses it. For example::
 
     import numpy as np
 
-    from ..metrics import FloatArray
+    from quant_toolbox.data import FloatArray
 
 
     def low_volatility(prices: FloatArray) -> FloatArray:
@@ -27,6 +27,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ..metrics import FloatArray
+from quant_toolbox.data import FloatArray
 
 SIGNALS: dict[str, Callable[[FloatArray], FloatArray]] = {}

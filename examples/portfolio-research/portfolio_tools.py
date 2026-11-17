@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_agent_os.tools import ToolRegistry, tool
-from quant_analytics import metrics
-from quant_analytics.computed import CONVENTIONS, MIN_OBSERVATIONS
+from quant_analytics.computed import MIN_OBSERVATIONS
+from quant_toolbox import performance
 
 __all__ = [
     "MetricOutput",
@@ -73,8 +73,7 @@ def _computed(statement: str, params: SeriesInput) -> Evidence:
 )
 def annualized_return(params: ReturnsInput) -> MetricOutput:
     """Compound the returns and annualize by ``periods_per_year``."""
-    value = metrics.annualized_return(params.returns, params.periods_per_year)
-    assert value is not None  # finite returns above -1 compound to a finite growth
+    value = performance.annualized_return(params.returns, params.periods_per_year)
     return MetricOutput(
         metric="annualized_return",
         value=value,
@@ -90,12 +89,11 @@ def annualized_return(params: ReturnsInput) -> MetricOutput:
 )
 def max_drawdown(params: SeriesInput) -> MetricOutput:
     """Track cumulative wealth and its running peak."""
-    value = metrics.max_drawdown(params.returns)
-    assert value is not None  # finite returns above -1 give a finite drawdown
+    value = performance.max_drawdown(params.returns)
     return MetricOutput(
         metric="max_drawdown",
         value=value,
-        convention=CONVENTIONS["max_drawdown"],
+        convention=performance.conventions()["max_drawdown"],
         warnings=_warnings(params),
         evidence=[_computed(f"Maximum drawdown of {params.series_id} is {value:.2%}.", params)],
     )

@@ -23,8 +23,12 @@ template, its version, and your answers. Changes kept in `config.toml` and
 - Do not loosen a limit, or change how one is measured, to clear a breach. A limit belongs to the
   firm's risk owner.
 - A figure with no data is a breach, never a pass. Keep it that way.
-- Do not change a formula in `metrics.py`, `risk_metrics.py`, or `risk.py` to match another system.
-  Add a separately named figure, so that both keep their definitions.
+- Formulas, tables, reports, and run records come from Quant Toolbox (`quant_toolbox`, from
+  `quant-agent-os[toolbox]`, MIT) at the version `pyproject.toml` pins. Do not copy and edit them
+  here, or change how `risk.py` measures a limit, to match another system: add a separately named
+  figure in this project, so that both keep their definitions.
+- To take a newer Quant Toolbox, move the tag in `pyproject.toml`, run `uv sync`, and run the
+  tests. Its changelog says what changed.
 - Keep the known-answer tests passing, and add one for any new calculation.
 - Use no data dated after the as-of date.
 - Reports hold computed figures only. Do not write interpretation or trading advice into them.

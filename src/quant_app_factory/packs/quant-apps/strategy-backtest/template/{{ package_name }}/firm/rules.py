@@ -7,7 +7,7 @@ For example::
 
     import numpy as np
 
-    from ..metrics import FloatArray
+    from quant_toolbox.data import FloatArray
     from ..parameters import Parameters
 
 
@@ -32,6 +32,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ..metrics import FloatArray
+from quant_toolbox.data import FloatArray
 
 RULES: dict[str, Callable[[FloatArray, FloatArray, Any], FloatArray]] = {}
