@@ -56,4 +56,8 @@ def describe(data: Any) -> list[str]:
 
 
 if __name__ == "__main__":
-    print("\n".join(describe(json.load(sys.stdin))))
+    text = sys.stdin.read()
+    if not text.strip():
+        print("no answer: is the server running? Lab 5 starts it in a second terminal.")
+    else:
+        print("\n".join(describe(json.loads(text))))

@@ -4,6 +4,8 @@ import io
 import json
 import re
 import runpy
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -112,6 +114,27 @@ def test_show_makes_rest_responses_readable(
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(response)))
 
     assert expected in run_lab(monkeypatch, capsys, "show.py")
+
+
+def test_show_says_when_no_server_answered(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+
+    assert "is the server running?" in run_lab(monkeypatch, capsys, "show.py")
+
+
+def test_env_sh_finds_the_clone_from_any_folder(tmp_path: Path) -> None:
+    script = f'source "{LABS / "env.sh"}" >/dev/null && echo "$REPO"'
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+
+    for shell in ("bash", "zsh"):
+        if shutil.which(shell) is None:
+            continue
+        result = subprocess.run(
+            [shell, "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True
+        )
+        assert result.stdout.strip() == str(ROOT), (shell, result.stderr)
 
 
 def test_tutorial_links_resolve() -> None:

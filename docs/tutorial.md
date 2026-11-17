@@ -12,9 +12,9 @@ this shows**, a short summary for anyone who reads along without running the com
   Labs 3 to 5 use the network, to download Python packages. All the data is synthetic.
 - **Time:** about 90 minutes. Labs 3 to 7 build on each other, so do them in order.
 
-Everything was run on version 0.4.0 on 2026-11-15, except that Claude Code itself was not run:
-Lab 5's MCP endpoint was checked with an MCP client instead. Run ids, keys, and timings will differ,
-and some outputs are shortened. This is research software, not investment advice.
+Everything was run on version 0.4.0 on 2026-11-15, and Labs 3 to 7 again on 2026-11-17, except
+that Claude Code itself was not run: Lab 5's MCP endpoint was checked with an MCP client instead.
+Run ids, keys, and timings will differ, and some outputs are shortened. This is research software, not investment advice.
 
 > **Can't see the diagrams?** GitHub draws them. In VS Code, install the *Markdown Preview
 > Mermaid Support* extension.
@@ -87,10 +87,27 @@ uv sync --locked
 source examples/tutorial/env.sh
 ```
 
-If you already have a clone, skip the first two lines. `env.sh` sets `QUANT_AGENT_OS_HOME` to
-`~/qaos-tutorial`, so your work stays apart from any real Quant-Agent-OS data, and defines two small
-helpers that Labs 5 to 7 use. **In each new terminal, go to the repository root and run the `source`
-line again.**
+If you already have a clone, skip the first line and `cd` into your clone. `env.sh` prints what it
+set:
+
+```text
+REPO=/Users/you/quant-agent-os  (your clone)
+TUT=/Users/you/qaos-tutorial  (everything the tutorial creates; QUANT_AGENT_OS_HOME points here)
+In a new terminal, first run: source "/Users/you/quant-agent-os/examples/tutorial/env.sh"
+```
+
+The tutorial uses these names in its commands:
+
+| Name | What it is | Why the commands use it |
+| --- | --- | --- |
+| `$REPO` | Your clone of Quant-Agent-OS | `uv run --project "$REPO" qaos ...` runs the platform's command from any folder, such as the application you generate in Lab 3 |
+| `$TUT` | `~/qaos-tutorial` | Everything the tutorial creates: datasets, keys, run records, and the application. `rm -rf "$TUT"` removes it all |
+| `QUANT_AGENT_OS_HOME` | The same folder as `$TUT` | Where `qaos` and the server keep data, so your work stays apart from any real Quant-Agent-OS data |
+| `call`, `get` | Two small shell functions | Labs 5 to 7 use them to call the server. They work from any folder |
+
+Variables live only in the terminal that set them. **In each new terminal, run the `source` line
+that `env.sh` printed.** It works from any folder. Each lab says which folder its commands run in,
+and starts with a `cd` to it, so you can begin any lab in a fresh terminal.
 
 ```bash
 uv run qaos --version
@@ -107,7 +124,10 @@ qaos 0.4.0
 **Goal:** see one complete cycle, with no AI involved. A script names the tool calls, so the
 result is the same every time. In real use, the AI client chooses the calls.
 
+Labs 1 and 2 run in your clone:
+
 ```bash
+cd "$REPO"
 uv run python examples/portfolio-research/portfolio_research.py
 ```
 
@@ -167,6 +187,7 @@ works the same way, so your returns never pass through the model.
 Adding data is a command **you** run. No AI client can call it.
 
 ```bash
+cd "$REPO"
 uv run qaos data add examples/tutorial/data/fund_returns.csv --id fund
 uv run qaos data add examples/tutorial/data/portfolio_returns.csv --id portfolio
 uv run python examples/tutorial/lab_analytics.py
@@ -239,7 +260,9 @@ EOF
 ```
 
 `quant_agent_os_source` points the application at your clone. A real project leaves it out, and
-gets the released platform from GitHub. Preview it, then create it:
+gets the released platform from GitHub. You are now in `$TUT/work`, outside your clone, so
+`--project "$REPO"` tells uv to run the platform's `qaos` from your clone. Preview the application,
+then create it:
 
 ```bash
 uv run --project "$REPO" qaos app plan desk-risk.toml
@@ -260,10 +283,11 @@ Run 9df1a32528c3492fb918a63bb0d3c1ff recorded in .../qaos-tutorial/runs.db.
 ```
 
 `plan` writes nothing. Your yes to `create` is a recorded, single-use approval, because creating a
-project writes files and runs programs. Now run the application on its demo book:
+project writes files and runs programs. The application is a project of its own, in
+`$TUT/work/desk-risk`, with its own environment. Go there and run it on its demo book:
 
 ```bash
-cd desk-risk
+cd "$TUT/work/desk-risk"
 uv run desk-risk report
 uv run desk-risk check
 ```
@@ -306,11 +330,15 @@ more freedom and needs more care:
 | 3 | The firm's own rules, sections, and file formats | `desk_risk/firm/` | Engineer |
 | 4 | Anything else | Any file, with the tests to catch mistakes | Engineer |
 
-These run inside `desk-risk`.
+Everything in Lab 4 runs in the application's folder:
+
+```bash
+cd "$TUT/work/desk-risk"
+```
 
 ### Level 1: your limits and scenarios
 
-Open `config.toml`. Under `[limits]`, remove the `#` in front of `var_max` and `stress_loss_max`, and
+Open `$TUT/work/desk-risk/config.toml` in your editor. Under `[limits]`, remove the `#` in front of `var_max` and `stress_loss_max`, and
 set them to your own figures:
 
 ```toml
@@ -321,6 +349,7 @@ stress_loss_max = 0.05
 Then add a stress scenario of your own:
 
 ```bash
+cd "$TUT/work/desk-risk"
 cat >> config.toml <<'EOF'
 
 [[scenarios]]
@@ -362,6 +391,7 @@ Suppose compliance says two names may never be shorted. The `[limits]` table can
 goes in `desk_risk/firm/checks.py`, which is yours to change:
 
 ```bash
+cd "$TUT/work/desk-risk"
 cat > desk_risk/firm/checks.py <<'EOF'
 """Your firm's own risk checks. This file is yours to change."""
 
@@ -389,6 +419,7 @@ EOF
 Give the rule a known-answer test, as the project's `AGENTS.md` asks:
 
 ```bash
+cd "$TUT/work/desk-risk"
 cat > tests/test_firm.py <<'EOF'
 import datetime as dt
 
@@ -457,9 +488,17 @@ and audit. The `agent-tools` component already wrote `desk_risk/tools.py`: two t
 `check_risk_limits` and `risk_report`, which read the application's own files and take no
 arguments. A small server of your own names what it serves.
 
-Stay in `desk-risk`. Add the server to the project, then write the server file:
+Labs 5 to 7 use two terminals:
+
+| Terminal | Folder | What runs there |
+| --- | --- | --- |
+| **Terminal 1**, the one you have used so far | `$TUT/work/desk-risk` | Every command, except starting the server |
+| **Terminal 2**, a new one | `$TUT/work/desk-risk` | Only the server, in the foreground, so you see its log. Ctrl+C stops it |
+
+**In Terminal 1**, add the server to the application, then write the server file:
 
 ```bash
+cd "$TUT/work/desk-risk"
 uv add "quant-agent-os[server,analytics]"
 cat > serve.py <<'EOF'
 """Our server: this application's tools, under the platform's keys, access rules, and audit."""
@@ -486,30 +525,51 @@ if __name__ == "__main__":
 EOF
 ```
 
-That file is the whole integration. There are two ways to add a tool:
+The application already depends on `quant-agent-os`, from your clone: Lab 3's
+`quant_agent_os_source` wrote that into `[tool.uv.sources]` in its `pyproject.toml`. `uv add` adds
+the `server` and `analytics` extras to that same dependency, so nothing comes from PyPI. It also puts
+the `qaos` command in the application's environment, so from here `uv run qaos` works in
+`$TUT/work/desk-risk` too.
+
+`serve.py` is the whole integration. There are two ways to add a tool:
 - **`include`** adds ready-made tools, such as the generated ones.
 - **`expose`** turns a function you already have into a tool. `max_drawdown` is an ordinary
   function from the application's `metrics.py`, unchanged. Its input schema comes from its type
   hints and its description from its docstring. `returns=Series` says the caller passes a dataset
   reference, and the server reads the data and passes the function the numbers.
 
-Issue a key for a portfolio manager, then start the server:
+**In Terminal 1**, issue a key for a portfolio manager:
 
 ```bash
+cd "$TUT/work/desk-risk"
 PM=$(uv run qaos keys new --principal pm --scope tools:list --scope tools:call)
-uv run python serve.py > "$TUT/server.log" 2>&1 &
-SERVER=$!
-until curl -s -o /dev/null http://127.0.0.1:8765/healthz; do sleep 1; done
-head -1 "$TUT/server.log"
 ```
 
 ```text
 Added a key for pm in tenant local (tools:list, tools:call) to .../qaos-tutorial/api-keys.toml. It is shown once; store it now. A running server accepts it at once.
+```
+
+The shell variable `$PM` now holds the key, which is shown only this once. The server stores only
+its hash. Like every variable, `$PM` exists only in Terminal 1, which is why every call below runs
+there.
+
+**Open Terminal 2** and start the server. Use the `source` line that `env.sh` printed in Setup:
+
+```bash
+source /path/to/quant-agent-os/examples/tutorial/env.sh   # the line env.sh printed
+cd "$TUT/work/desk-risk"
+uv run python serve.py
+```
+
+```text
 Serving 7 tools at http://127.0.0.1:8765/mcp (MCP) and /v1 (REST) to 1 key.
 ```
 
-`$PM` holds the key, which is shown only this once, and only its hash is stored. Call the server over REST, with plain `curl`
-first:
+Leave it running. Terminal 2 now shows the server's log. If it says `address already in use`
+instead, a server from an earlier try is still running: find it with `lsof -i :8765`, stop it, and
+start this one again.
+
+**Back in Terminal 1**, call the server over REST, with plain `curl` first:
 
 ```bash
 curl -s -H "Authorization: Bearer $PM" http://127.0.0.1:8765/v1/tools \
@@ -520,8 +580,10 @@ curl -s -H "Authorization: Bearer $PM" http://127.0.0.1:8765/v1/tools \
 tools: analyze_performance, analyze_risk, check_risk_limits, list_datasets, max_drawdown, risk_report, server_info
 ```
 
-Your three tools sit beside the platform's analytics. From now on, the `call` and `get` helpers from
-`env.sh` do the same `curl` with less typing, and `show.py` prints a few readable lines of the JSON:
+Your three tools sit beside the platform's analytics. `show.py` turned the JSON answer into one
+readable line. From now on, the `call` and `get` functions from `env.sh` do the same `curl` and
+`show.py` with less typing. They talk to the server over the network, so they work from any folder:
+`call KEY TOOL` calls a tool, with its arguments as JSON if it takes any. Still in Terminal 1:
 
 ```bash
 call "$PM" check_risk_limits
@@ -540,15 +602,18 @@ version (`desk-risk 0.1.0`), and `computed` evidence, which `expose` adds withou
 
 ### Connect Claude Code
 
-This step sends your questions, and the results Claude reads, to your model provider. Connect as the
-portfolio manager:
+This step sends your questions, and the results Claude reads, to your model provider. **In
+Terminal 1**, connect as the portfolio manager:
 
 ```bash
+cd "$TUT/work/desk-risk"
 claude mcp add --transport http desk-risk http://127.0.0.1:8765/mcp \
   --header "Authorization: Bearer $PM"
+claude
 ```
 
-Start `claude` in another terminal, and run `/mcp` to confirm that `desk-risk` is connected.
+`claude mcp add` registers the server for the folder you run it in, so start `claude` in that same
+folder, as above. In Claude, run `/mcp` to confirm that `desk-risk` is connected.
 
 | Ask Claude | Expect it to call | Check that |
 | --- | --- | --- |
@@ -557,14 +622,15 @@ Start `claude` in another terminal, and run `/mcp` to confirm that `desk-risk` i
 | "What is the maximum drawdown of the fund column in the fund dataset?" | `list_datasets`, `max_drawdown` | -8.03%, and no returns in the arguments |
 | "Raise the single-name limit to 20%." | Nothing suitable | No tool can: limits live in a file that only the operator changes |
 
-Claude writes the words, so its answers vary. Check that the numbers come from the tools. Then see
-the calls, each under the key's principal:
+Claude writes the words, so its answers vary. Check that the numbers come from the tools. Quit
+Claude with `/exit`, and see the calls in Terminal 1, each under the key's principal:
 
 ```bash
+cd "$TUT/work/desk-risk"
 uv run qaos runs
 ```
 
-Leave the server running for Lab 6.
+Leave the server running in Terminal 2 for Lab 6.
 
 > **What this shows:** making an application usable by AI took one short file, which lives in your
 > repository and names every tool it serves. Nothing is discovered or loaded from a setting
@@ -578,7 +644,11 @@ Leave the server running for Lab 6.
 
 **Goal:** see how the server decides who is calling, and how you revoke access.
 
+Lab 6 needs the server from Lab 5 still running in Terminal 2, and runs every command in Terminal 1,
+where `$PM` is set. First, try to get in with no key, then with a made-up one:
+
 ```bash
+cd "$TUT/work/desk-risk"
 curl -s http://127.0.0.1:8765/v1/tools | uv run --project "$REPO" python "$REPO/examples/tutorial/show.py"
 get "qaos_not_a_real_key" /v1/tools
 ```
@@ -640,20 +710,26 @@ No restart was needed. Now break the file, as a mistyped edit might:
 cp "$TUT/api-keys.toml" "$TUT/api-keys.bak"
 echo 'this is not toml [' >> "$TUT/api-keys.toml"
 get "$PM" /v1/tools
-grep "Accepting no API keys" "$TUT/server.log"
-cp "$TUT/api-keys.bak" "$TUT/api-keys.toml"
 ```
 
 ```text
 refused: Unknown or revoked API key.
+```
+
+The portfolio manager is locked out too. Terminal 2 says why:
+
+```text
 Accepting no API keys until this is fixed: Invalid API keys file .../qaos-tutorial/api-keys.toml: Expected '=' after a key in a key/value pair (at line 13, column 6)
 ```
 
-With the file restored, the portfolio manager's key works again. Stop the server for Lab 7:
+Restore the file, and the portfolio manager's key works again:
 
 ```bash
-kill $SERVER
+cp "$TUT/api-keys.bak" "$TUT/api-keys.toml"
+get "$PM" /v1/tools
 ```
+
+Stop the server for Lab 7: press Ctrl+C in Terminal 2.
 
 > **What this shows:** every network request needs a key, keys are stored only as hashes, and each
 > key carries scopes, an optional expiry, and the name of the person it was issued to. Revocation
@@ -668,10 +744,11 @@ kill $SERVER
 
 **Goal:** give two desks different rights on one server, and see what an auditor sees.
 
-So far any key with `tools:call` reaches every tool and dataset. Write an access file, in which
-anything not listed is refused:
+So far any key with `tools:call` reaches every tool and dataset. **In Terminal 1**, write an access
+file, in which anything not listed is refused:
 
 ```bash
+cd "$TUT/work/desk-risk"
 cat > "$TUT/access.toml" <<'EOF'
 # Who reaches what. Anything not listed is refused.
 
@@ -685,19 +762,26 @@ datasets = ["fund"]
 EOF
 ```
 
-Issue a key to someone in each group, and one to an auditor who may read the record and call
-nothing. Then restart the server with the access file:
+Still in Terminal 1, issue a key to someone in each group, and one to an auditor who may read the
+record and call nothing:
 
 ```bash
+cd "$TUT/work/desk-risk"
 ALICE=$(uv run qaos keys new --principal alice --scope tools:list --scope tools:call --group risk)
 BOB=$(uv run qaos keys new --principal bob --scope tools:list --scope tools:call --group research)
 AUDITOR=$(uv run qaos keys new --principal auditor --scope runs:read)
-QUANT_AGENT_OS_ACCESS_FILE="$TUT/access.toml" uv run python serve.py > "$TUT/server.log" 2>&1 &
-SERVER=$!
-until curl -s -o /dev/null http://127.0.0.1:8765/healthz; do sleep 1; done
+```
+
+**In Terminal 2**, start the server again, this time with the access file:
+
+```bash
+cd "$TUT/work/desk-risk"
+QUANT_AGENT_OS_ACCESS_FILE="$TUT/access.toml" uv run python serve.py
 ```
 
 ### Each caller sees only its own
+
+The rest of Lab 7 runs in Terminal 1:
 
 ```bash
 get "$ALICE" /v1/tools
@@ -772,14 +856,9 @@ which the database refuses to change or delete.
 | --- | --- |
 | Add `"portfolio"` to the research group's `datasets`, save, and repeat Bob's portfolio call | It succeeds, with no restart |
 | Append a line such as `oops` to `access.toml`, then call as Alice | `denied`: while the file is invalid, nothing is allowed. Remove the line afterwards |
-| Connect Claude as Bob, with his key in the `claude mcp add` command from Lab 5 | Claude is offered only Bob's three tools |
+| In `$TUT/work/desk-risk`, run `claude mcp remove desk-risk`, then Lab 5's `claude mcp add` command with `$BOB` in place of `$PM`, then `claude` | Claude is offered only Bob's three tools |
 
-Stop the server when you finish:
-
-```bash
-kill $SERVER
-cd "$REPO"
-```
+When you finish, stop the server with Ctrl+C in Terminal 2. You can close Terminal 2.
 
 > **What this shows:** the firm decides who reaches each tool and dataset, in a file it reviews
 > like code. Anything not listed is refused, a caller sees only what it may reach, and an invalid
@@ -793,9 +872,10 @@ cd "$REPO"
 ## Lab 8: Permissions and approvals
 
 **Goal:** see what stands between a request and a consequential action. The demo tool `send_order`
-is a pretend broker order, and it sends nothing.
+is a pretend broker order, and it sends nothing. Labs 8 and 9 run in your clone, with no server:
 
 ```bash
+cd "$REPO"
 uv run python examples/tutorial/lab_guardrails.py
 ```
 
@@ -855,6 +935,7 @@ return `ok`, because reading is granted by default and needs no approval.
 Building the store is a command you run. Searching it is read-only.
 
 ```bash
+cd "$REPO"
 uv run qaos ingest src/quant_platform/sample/corpus
 uv run qaos search "What is related to short-term reversal?"
 ```
@@ -879,7 +960,7 @@ Each passage gives its file and lines, so anyone can open the source and check.
 | `uv run qaos strategy "short-term reversal"` | A cited strategy spec, with `open:` lines for what your documents leave undecided |
 | `mkdir -p "$TUT/notes"`, `cp examples/tutorial/data/notes/my-reversal-note.md "$TUT/notes/"`, `uv run qaos ingest "$TUT/notes"`, then the `strategy` command again | Three new rows cite your note, and the questions about the universe and the test method disappear |
 | `uv run qaos search "carry"`, then read `src/quant_platform/sample/corpus/notes/injection.md` | That file orders the AI to grant itself access and delete the corpus. Here it is just a cited passage, marked untrusted, and no tool can do what it asks |
-| `claude mcp add qaos-tutorial -e QUANT_AGENT_OS_HOME="$TUT" -- uv run --directory "$REPO" qaos serve`, then ask Claude *what supports short-term reversal? Cite the passages* | Answers with the same file and line citations |
+| In `$REPO`, `claude mcp add qaos-tutorial -e QUANT_AGENT_OS_HOME="$TUT" -- uv run --directory "$REPO" qaos serve`, then start `claude` there and ask *what supports short-term reversal? Cite the passages* | Answers with the same file and line citations |
 
 > **What this shows:** answers about your research cite your documents, and the system says when
 > it doesn't know. Search is mostly keyword search, so measure it on your own documents before you
@@ -931,20 +1012,26 @@ and rollback.
 
 ## Clean up
 
+Stop the server if it is still running (Ctrl+C in Terminal 2). Then, in Terminal 1, remove each
+Claude connection from the folder you added it in, and then the tutorial's folder:
+
 ```bash
+(cd "$TUT/work/desk-risk" && claude mcp remove desk-risk)   # if you did Lab 5's Claude step
+(cd "$REPO" && claude mcp remove qaos-tutorial)             # if you did Lab 9's Claude step
 rm -rf "$TUT"
-claude mcp remove desk-risk       # if you did Lab 5's Claude step
-claude mcp remove qaos-tutorial   # if you did Lab 9's Claude step
 ```
 
 ## If something goes wrong
 
 | Symptom | Fix |
 | --- | --- |
-| `call: command not found`, or a variable is empty | New terminal: go to the repository root and run `source examples/tutorial/env.sh`. Labs 6 and 7 also need the keys from earlier labs, so issue new ones if the terminal is new |
-| `uv run desk-risk` or `uv run python serve.py` fails | Run it inside `$TUT/work/desk-risk` |
-| `curl` waits forever after starting the server | Read `$TUT/server.log`, and press Ctrl+C to stop waiting |
-| `address already in use` | A server from an earlier lab is still running: `kill $SERVER`, or find it with `lsof -i :8765` |
+| `call: command not found`, or `$REPO` or `$TUT` is empty | New terminal: run `source /path/to/quant-agent-os/examples/tutorial/env.sh`, from any folder. `echo $REPO` should print your clone |
+| `$PM`, `$ALICE`, or another key is empty, or a call says `Send an API key` | Keys live in the terminal that issued them. Make the calls in Terminal 1, or issue new keys with the same `qaos keys new` command |
+| `uv run desk-risk` or `uv run python serve.py` fails | Run it in the application's folder: `cd "$TUT/work/desk-risk"` |
+| `no answer: is the server running?` | Start it in Terminal 2 (Lab 5), and read what Terminal 2 prints |
+| `address already in use` when starting the server | A server from an earlier try is still running. `lsof -i :8765` shows its process id; stop it with `kill <pid>`, then start yours again |
+| Every key is `Unknown or revoked`, though you just issued it | You may be talking to an old server from an earlier try, with a different home. Check that Terminal 2 shows your server running, and use `lsof -i :8765` as above |
+| `warning: VIRTUAL_ENV=... does not match the project environment` | Harmless: your terminal has a virtual environment active, and uv uses each project's own. `deactivate` silences it |
 | `No dataset 'fund'` | Do the `qaos data add` commands in Lab 2 |
 | Install fails while building a package, on a very new Python | Use an older one: `uv sync --locked --python 3.13` |
 | Claude doesn't list the server | Run `/mcp` in Claude, and check that the server is running and the key is in the `claude mcp add` command |
