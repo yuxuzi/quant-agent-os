@@ -16,19 +16,21 @@ mkdir -p "$TUT"
 
 # Labs 5 to 7 call the tutorial server at port 8765 as the holder of a key, and print the answer
 # readably: `call KEY TOOL '{"name": value}'` calls a tool, and `get KEY /v1/...` reads a route.
-# Both work from any folder.
+# Both work from any folder, and give up after 60 seconds; a tool's default time limit is 10 seconds.
 call() {
   local arguments="${3:-}"
   [ -n "$arguments" ] || arguments='{}'
-  curl -sS -H "Authorization: Bearer $1" -H 'content-type: application/json' -X POST \
+  curl -sS --connect-timeout 5 --max-time 60 \
+    -H "Authorization: Bearer $1" -H 'content-type: application/json' -X POST \
     "http://127.0.0.1:8765/v1/tools/$2/call" -d "{\"arguments\": $arguments}" \
     | uv run --project "$REPO" python "$REPO/examples/tutorial/show.py"
 }
 get() {
-  curl -sS -H "Authorization: Bearer $1" "http://127.0.0.1:8765$2" \
+  curl -sS --connect-timeout 5 --max-time 60 -H "Authorization: Bearer $1" "http://127.0.0.1:8765$2" \
     | uv run --project "$REPO" python "$REPO/examples/tutorial/show.py"
 }
 
 echo "REPO=$REPO  (your clone)"
 echo "TUT=$TUT  (everything the tutorial creates; QUANT_AGENT_OS_HOME points here)"
-echo "In a new terminal, first run: source \"$REPO/examples/tutorial/env.sh\""
+# Quoted for the shell, so the line is safe to paste whatever the clone's path holds.
+printf 'In a new terminal, first run: source %q\n' "$REPO/examples/tutorial/env.sh"

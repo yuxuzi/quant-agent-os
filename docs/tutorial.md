@@ -107,7 +107,9 @@ The tutorial uses these names in its commands:
 
 Variables live only in the terminal that set them. **In each new terminal, run the `source` line
 that `env.sh` printed.** It works from any folder. Each lab says which folder its commands run in,
-and starts with a `cd` to it, so you can begin any lab in a fresh terminal.
+and starts with a `cd` to it, so you can begin any lab in a fresh terminal. One thing `env.sh` can't
+bring back: the API keys that Labs 5 to 7 keep in variables such as `$PM`, which are shown only once.
+Labs 6 and 7 start with the command that issues a new one, in case your terminal is new.
 
 ```bash
 uv run qaos --version
@@ -645,7 +647,16 @@ Leave the server running in Terminal 2 for Lab 6.
 **Goal:** see how the server decides who is calling, and how you revoke access.
 
 Lab 6 needs the server from Lab 5 still running in Terminal 2, and runs every command in Terminal 1,
-where `$PM` is set. First, try to get in with no key, then with a made-up one:
+where `$PM` is set. If Terminal 1 is new, source `env.sh` there, and this line issues the portfolio
+manager a new key. It does nothing when `$PM` is already set. A reissued key leaves the old one
+working, so `api-keys.toml` then lists `pm` twice:
+
+```bash
+cd "$TUT/work/desk-risk"
+[ -n "$PM" ] || PM=$(uv run qaos keys new --principal pm --scope tools:list --scope tools:call)
+```
+
+First, try to get in with no key, then with a made-up one:
 
 ```bash
 cd "$TUT/work/desk-risk"
@@ -763,10 +774,12 @@ EOF
 ```
 
 Still in Terminal 1, issue a key to someone in each group, and one to an auditor who may read the
-record and call nothing:
+record and call nothing. Lab 7 also uses the portfolio manager's `$PM`, so if Terminal 1 is new,
+issue that again too:
 
 ```bash
 cd "$TUT/work/desk-risk"
+[ -n "$PM" ] || PM=$(uv run qaos keys new --principal pm --scope tools:list --scope tools:call)
 ALICE=$(uv run qaos keys new --principal alice --scope tools:list --scope tools:call --group risk)
 BOB=$(uv run qaos keys new --principal bob --scope tools:list --scope tools:call --group research)
 AUDITOR=$(uv run qaos keys new --principal auditor --scope runs:read)
@@ -1028,7 +1041,7 @@ rm -rf "$TUT"
 | `call: command not found`, or `$REPO` or `$TUT` is empty | New terminal: run `source /path/to/quant-agent-os/examples/tutorial/env.sh`, from any folder. `echo $REPO` should print your clone |
 | `$PM`, `$ALICE`, or another key is empty, or a call says `Send an API key` | Keys live in the terminal that issued them. Make the calls in Terminal 1, or issue new keys with the same `qaos keys new` command |
 | `uv run desk-risk` or `uv run python serve.py` fails | Run it in the application's folder: `cd "$TUT/work/desk-risk"` |
-| `no answer: is the server running?` | Start it in Terminal 2 (Lab 5), and read what Terminal 2 prints |
+| `no answer: is the server running in Terminal 2...` | Start it in Terminal 2 (Lab 5), and read what Terminal 2 prints. `curl` prints the reason above it: no connection, or no answer within 60 seconds |
 | `address already in use` when starting the server | A server from an earlier try is still running. `lsof -i :8765` shows its process id; stop it with `kill <pid>`, then start yours again |
 | Every key is `Unknown or revoked`, though you just issued it | You may be talking to an old server from an earlier try, with a different home. Check that Terminal 2 shows your server running, and use `lsof -i :8765` as above |
 | `warning: VIRTUAL_ENV=... does not match the project environment` | Harmless: your terminal has a virtual environment active, and uv uses each project's own. `deactivate` silences it |
