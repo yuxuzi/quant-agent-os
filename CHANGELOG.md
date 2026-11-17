@@ -6,13 +6,51 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Quant Toolbox** (`quant_toolbox`), the library under Quant Analytics and every generated application,
+  so a formula, a table reader, or a report renderer exists once ([decision 0026](docs/decisions/0026-quant-toolbox.md),
+  [product page](docs/products/quant-toolbox.md)). MIT licensed, and it imports nothing of the platform. Seven
+  subpackages in layers: `data` (tables, price panels, configuration files, checks, synthetic data),
+  `performance` (metrics, horizons, drawdowns), `risk` (exposures, Euler contributions, factors, stress),
+  `research` (signal statistics, weights, the backtest engine), `report` (documents, charts, run reports),
+  `audit` (provenance and run folders), and `testing` (bias checks for a firm's own signals and strategies).
+  - **empyrical first, numpy otherwise.** Metrics run through empyrical-reloaded when it is installed and
+    through the toolbox's numpy formulas when not; the toolbox cleans inputs first, so both answer the same,
+    and a test holds them to 1e-12 on clean data and on constant, one-sided, short, and gappy series.
+    `QUANT_TOOLBOX_BACKEND=numpy` forces one. Omega, tail ratio, stability, and alpha gained numpy forms.
+  - **Only numpy is required.** pygal draws static SVG charts (the default, with no script and no link),
+    plotly's graph objects draw interactive ones, openpyxl reads and writes workbooks, and pandas converts
+    tables for notebooks; each loads in the function that needs it, and a missing one names its extra.
+  - **A locked API.** `tests/toolbox/api.lock.json` records every public name and signature; a change needs
+    the lock rewritten and an entry here.
+- **Extras:** `toolbox` (numpy, pygal), `interactive` (plotly), `excel` (openpyxl), and `empyrical`.
+  `analytics` is now `toolbox` plus `empyrical`.
+
 ### Changed
+
+- **Quant Analytics computes through Quant Toolbox.** `quant_analytics.metrics` and `quant_analytics.risk`
+  are removed; import `quant_toolbox.performance` and `quant_toolbox.risk`, whose undefined metrics are NaN
+  rather than None. The tools' names, schemas, and numbers are unchanged, and `conventions["source"]` names
+  the backend. The analytics toolset needs numpy rather than empyrical, so it also runs on the numpy backend.
+- **Generated applications build on Quant Toolbox** (`quant-apps` 2.0.0, `quant-baseline` 4.0.0). A project
+  depends on `quant-agent-os[toolbox]` from the release that generated it, `@v0.5.0` by default, and every
+  profile asks where to install it from (`quant_agent_os_source`; a git source's `@ref` becomes a uv `rev`).
+  It no longer carries copies of `metrics.py`, `risk_metrics.py`, `tables.py`, `document.py`, `horizons.py`,
+  `excel.py`, `evaluation.py`, `report.py`, or `synthetic.py`, and its tests cover its own code, with bias
+  checks from `quant_toolbox.testing`. Reports draw charts with pygal, or with plotly when `config.toml` sets
+  `charts = "interactive"`. To take a later toolbox fix, move the tag and run the project's tests.
 
 - **The tutorial is written for a fund's CEO and CTO,** and checked on 0.4.0. It generates a `risk-monitor`
   application, customizes it at each of the four levels, serves it to an AI client with `FirmApp`, and then
   tests authentication (keys, scopes, expiry, revocation) and authorization (an access file, refusals, and an
   auditor's key), each lab ending with what it shows. `examples/tutorial/env.sh` gains `call` and `get`
   helpers, and `lab_first_tool.py` is removed: Lab 5 registers an existing function with `expose` instead.
+
+### Removed
+
+- **`quant-lab`'s `metrics` component.** Its metrics come from Quant Toolbox in every project, so a spec that
+  names the component is refused.
 
 ### Fixed
 

@@ -1,20 +1,23 @@
 # Quant Analytics
 
-**Quant Analytics** holds performance and risk metrics with documented conventions, and
-registers them as Quant-Agent-OS tools, so a portfolio workflow can compute them on a firm's own datasets by reference. It imports no LLM library. The performance formulas
-are empyrical-reloaded's ([decision 0010](../decisions/0010-analytics-on-empyrical.md)).
+**Quant Analytics** registers performance and risk metrics as Quant-Agent-OS tools, so a portfolio workflow
+can compute them on a firm's own datasets by reference. It imports no LLM library. The numbers come from
+[Quant Toolbox](quant-toolbox.md), the library the generated applications use too, so a tool call and a
+generated report compute the same way ([decision 0026](../decisions/0026-quant-toolbox.md)):
 
-- `quant_analytics.metrics`: plain functions on empyrical. They cover annualised return and
-  volatility, Sharpe, Sortino, Calmar, Omega, maximum drawdown, tail ratio, stability, value
-  at risk, and hit rate. Against a benchmark, they add alpha, beta, active return, tracking
-  error, and information ratio. The conventions are in the module docstring.
-- `quant_analytics.risk`: portfolio risk on numpy, because empyrical has none:
+- **Performance** (`quant_toolbox.performance`): annualised return and volatility, Sharpe, Sortino, Calmar,
+  Omega, maximum drawdown, tail ratio, stability, value at risk, and hit rate; against a benchmark, alpha,
+  beta, active return, tracking error, and information ratio. They run through empyrical-reloaded when it is
+  installed, as the `analytics` extra installs it ([decision 0010](../decisions/0010-analytics-on-empyrical.md)),
+  and through the toolbox's numpy formulas otherwise; a test holds the two to 1e-12, and each output's
+  `conventions["source"]` names which ran.
+- **Risk** (`quant_toolbox.risk`), on numpy, because empyrical has none:
   - Euler volatility contributions (marginal, component, and percent), which add up to the
     portfolio's volatility;
   - OLS factor exposures;
   - each factor's share of the portfolio variance, with the specific share as the remainder.
-- `quant_analytics.computed`: typed results over those two, with conventions, warnings, and
-  `computed` evidence.
+- `quant_analytics.computed`: typed results over those, with conventions, warnings, and
+  `computed` evidence. An undefined metric is `null`.
 - `quant_analytics.tools`: the tools (`analytics_tools()`). Series come as values, or as
   references to dataset columns, which need `read_local_data`.
   - `analyze_performance` returns every metric of a series.

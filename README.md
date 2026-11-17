@@ -99,6 +99,7 @@ registry = ToolRegistry([total_return])
 src/quant_agent_os/      core: tool contract, executor, evidence, runs, MCP, REST, SDK
 src/quant_research/      Quant Research
 src/quant_analytics/     Quant Analytics
+src/quant_toolbox/       Quant Toolbox: the MIT library under analytics and generated apps
 src/quant_app_factory/   Quant App Factory and its template packs
 src/quant_platform/      `qaos`, one server for every toolset, sign-in, and approvals
 skills/                  instruction-only skills; clients/: Cursor and VS Code bundles
@@ -112,7 +113,8 @@ examples/  scripts/  tests/  docs/
 - [Getting started](docs/getting-started.md), then the [tutorial](docs/tutorial.md)
 - Products: [Quant Research](docs/products/quant-research.md),
   [Quant Analytics](docs/products/quant-analytics.md),
-  [Quant App Factory](docs/products/quant-app-factory.md)
+  [Quant App Factory](docs/products/quant-app-factory.md), and the library under them,
+  [Quant Toolbox](docs/products/quant-toolbox.md)
 - [Configuration](docs/configuration.md), [security](docs/security.md), and a
   [team server in Docker](docs/deployment.md) with its [operations](docs/operations.md)
 - [Architecture](docs/architecture.md), [decisions](docs/decisions/), and

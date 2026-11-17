@@ -2,6 +2,7 @@
 
 - Status: accepted (direction from the owner, 2026-11-07)
 - Date: 2026-11-07
+- Amended by: [0026](0026-quant-toolbox.md): `metrics.py` and the other shared files are no longer copied into each project
 - Amends: [0009](0009-quant-baseline-templates.md)
 
 ## Context

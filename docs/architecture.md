@@ -8,14 +8,15 @@ still open is in [ENGINEERING_REVIEW_PLAN.md](ENGINEERING_REVIEW_PLAN.md).
 Quant-Agent-OS gives AI clients quantitative research tools with cited, computed evidence, over MCP,
 REST, and a Python SDK. It is not a chatbot, and it calls no model: the client supplies the conversation
 and the plan ([decision 0016](decisions/0016-clients-orchestrate.md)). The expected customer is a firm
-or team that hosts it themselves. One wheel holds five import names
+or team that hosts it themselves. One wheel holds six import names
 ([decision 0018](decisions/0018-one-wheel.md)), and `qaos` is the one command.
 
 | Package | Role | Extra |
 | --- | --- | --- |
 | `quant_agent_os` | Core: tool contract, executor, evidence, runs, interfaces | base |
 | `quant_research` | Cited keyword search with entity linking and a small graph of extracted facts, plus optional semantic search | none; `pdf`, `postgres`, `local-embeddings` add to it |
-| `quant_analytics` | Performance and risk metrics ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `analytics` |
+| `quant_toolbox` | The MIT library under Quant Analytics and every generated application: tables, metrics, risk, research, reports, run records ([decision 0026](decisions/0026-quant-toolbox.md)) | `toolbox`; `interactive`, `excel`, `empyrical` add to it |
+| `quant_analytics` | Performance and risk metrics as tools, computed by Quant Toolbox ([decision 0010](decisions/0010-analytics-on-empyrical.md)) | `analytics` |
 | `quant_app_factory` | Generates tested Python projects, through [`pytemplate-uv`](https://pypi.org/project/pytemplate-uv/) | `factory` |
 | `quant_platform` | The composition root: `qaos`, one server for every toolset, `research_report`, prompts, sign-in, and approvals | `server` |
 
@@ -37,8 +38,9 @@ or team that hosts it themselves. One wheel holds five import names
  ┌─────┴──────────┐      ┌───────┴────────┐      ┌─────────┴──────────┐
  │ Quant Research │      │ Quant Analytics│      │ Quant App Factory  │
  └─────┬──────────┘      └───────┬────────┘      └─────────┬──────────┘
- KnowledgeStore adapters    empyrical-reloaded      ScaffoldProvider port
- (SQLite · PostgreSQL)                              pytemplate-uv adapter
+ KnowledgeStore adapters    Quant Toolbox           ScaffoldProvider port
+ (SQLite · PostgreSQL)      (empyrical or numpy)    pytemplate-uv adapter
+                                                     generated apps ─▶ Quant Toolbox
 
  User-owned: documents, data, databases, and any embedding key
 ```
@@ -93,7 +95,9 @@ Rules, enforced by `tests/contract/test_import_boundaries.py`:
 - Only `quant_platform` imports every product, and nothing imports it.
 - Only `quant_app_factory/infrastructure/pytemplate_uv.py` imports `pytemplate-uv`, and only
   `pytemplate.api` ([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)).
-- `quant_analytics.metrics` imports numerical libraries only.
+- `quant_toolbox` imports nothing of the platform, and only Quant Analytics and `quant_platform` import it.
+  Inside it, a subpackage imports only earlier layers' public names, and only numpy at module level
+  (`tests/toolbox/test_layers.py`).
 - Importing `quant_platform.cli` works with no extra installed, and serving imports no `cli` module.
 
 Core imports downward only: `tools` → `runtime` → `evidence`, `reporting`, `runs` → `config`, `data`,
@@ -246,11 +250,19 @@ citation and location validity, and empty-query accuracy. `graph_eval.py` scores
 a mock world with a known answer key. `real_corpus.py` scores 21 real papers and is opt-in, because `fetch`
 needs a network. Tests fail on any drop below their baselines.
 
+## Quant Toolbox
+
+Seven subpackages in layers: `data`; `performance`; `risk` and `research`; `report` and `audit`; `testing`. The
+metrics empyrical has run through it when it imports, and through numpy formulas otherwise; a test holds them
+to 1e-12. pygal draws static charts and plotly interactive ones, each loaded only when used. The public API is
+locked ([Quant Toolbox](products/quant-toolbox.md)).
+
 ## Quant Analytics
 
-`analyze_performance` and `analyze_risk` take dataset references, or small inline examples.
-`quant_analytics.metrics` adapts empyrical-reloaded and states its conventions; `risk.py` computes volatility
-contributions and factor exposures with numpy. Before a metric runs, the tools infer the frequency from the
+`analyze_performance` and `analyze_risk` take dataset references, or small inline examples. The numbers come
+from Quant Toolbox: through empyrical-reloaded when it is installed, and the toolbox's numpy formulas, held
+equal to it, otherwise; volatility contributions and factor exposures are numpy in both. Each output's
+conventions name the backend. Before a metric runs, the tools infer the frequency from the
 dates, join series on them, and leave out and count missing rows. They refuse when frequency or alignment
 cannot be established, and warn when returns look like percentages. Known-answer tests pin the conventions
 ([Quant Analytics](products/quant-analytics.md)).
@@ -258,9 +270,9 @@ cannot be established, and warn when returns look like percentages. Known-answer
 ## Quant App Factory
 
 The factory turns a reviewable spec into a tested project. It is off by default on the server, and creating
-files is a command the user runs. Generated quant projects stay portable, so they hold their own numpy metrics
-and do not receive later fixes by themselves
-([details](products/quant-app-factory.md#generated-metrics-and-the-platforms)).
+files is a command the user runs. Generated quant projects hold their business logic and import their
+formulas, tables, reports, and run records from Quant Toolbox, pinned to the release that generated them
+([details](products/quant-app-factory.md#formulas-come-from-quant-toolbox)).
 
 ```text
 describe_template ──▶ person, through a client or `qaos app new` ──▶ spec.toml (the draft)

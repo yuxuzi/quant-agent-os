@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-11-01
+- Amended by: [0026](0026-quant-toolbox.md): the formulas live in Quant Toolbox, which prefers empyrical and falls back to numpy formulas held equal to it
 
 ## Context
 
