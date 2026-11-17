@@ -90,7 +90,7 @@ def load_table(path: Path, loaders: Mapping[str, Loader] | None = None) -> Table
         return load_csv(path)
     raise TableError(
         f"Cannot read {path.name}; use a .csv file, or add a loader for "
-        f"{path.suffix or 'this file'} in firm/loaders.py."
+        f"{path.suffix or 'this file'} (a generated application has firm/loaders.py for that)."
     )
 
 
@@ -161,8 +161,8 @@ def parse_date(value: Any) -> dt.date:
         except ValueError:
             pass
     raise TableError(
-        f"{text!r} is not an ISO date; write dates as YYYY-MM-DD, or add a loader in "
-        "firm/loaders.py."
+        f"{text!r} is not an ISO date; write dates as YYYY-MM-DD, or add a loader for the file "
+        "that reads its dates."
     )
 
 
