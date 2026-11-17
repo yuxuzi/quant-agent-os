@@ -4,8 +4,8 @@ Add a function that takes the `Context` and returns blocks, list it in ``SECTION
 in a tear sheet in ``config.toml``. For example::
 
     from ..context import Context
-    from ..document import Block, Column, TableBlock
-    from ..horizons import horizon_return
+    from quant_toolbox.report import Block, Column, TableBlock
+    from quant_toolbox.performance import horizon_return
 
 
     def ytd_by_book(context: Context) -> list[Block]:

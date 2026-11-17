@@ -54,7 +54,8 @@ class AppPlan(BaseModel):
     request: ScaffoldRequest
     reasons: list[str] = Field(default_factory=list)
     portable: bool | None = Field(
-        description="Whether the app runs without Quant-Agent-OS; None for a user pack"
+        description="Whether the app runs without anything from Quant-Agent-OS, not even Quant "
+        "Toolbox; None for a user pack"
     )
 
 
@@ -87,24 +88,24 @@ class ArchitecturePlanner:
                 "encodes the platform's tool contract and its contract tests.",
                 "The package depends on quant-agent-os on purpose: its tools run on the platform.",
             ]
-        elif template == "quant-baseline":
+        elif template in {"quant-baseline", "quant-apps"}:
+            if template == "quant-baseline":
+                reasons.append(
+                    "A quant-lab project holds study, backtest, and report, sharing data, "
+                    "signals, and one config.toml, with bias tests and a LIMITATIONS.md."
+                )
+            else:
+                reasons.append(
+                    f"A {profile} project is one stage of the investment process: code that "
+                    "works as generated and that the firm customizes, with known-answer tests."
+                )
+            data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)
+            portable = False
             reasons.append(
-                "A quant-lab project is portable numpy code: study, backtest, and report "
-                "share data, signals, metrics, and one config.toml, with known-answer tests, "
-                "bias tests, and a LIMITATIONS.md."
+                "Its formulas, tables, reports, and run records come from Quant Toolbox "
+                "(quant-agent-os[toolbox], MIT), pinned to the release that generated it."
             )
             if "agent-tools" in spec.components:
-                data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)
-                portable = False
-                reasons.append("agent-tools adds Quant-Agent-OS tool wrappers and that dependency.")
-        elif template == "quant-apps":
-            reasons.append(
-                f"A {profile} project is one stage of the investment process: portable code that "
-                "works as generated and that the firm customizes, with known-answer tests."
-            )
-            if "agent-tools" in spec.components:
-                data["quant_agent_os_source"] = _source(spec.quant_agent_os_source)
-                portable = False
                 reasons.append("agent-tools adds Quant-Agent-OS tool wrappers and that dependency.")
         elif template == "bundled":
             reasons.append(

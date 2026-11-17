@@ -7,11 +7,11 @@ one-month short-term reversal. A firm's own signals, in ``firm/signals.py``, sit
 
 from __future__ import annotations
 
-import numpy as np
+from quant_toolbox import research
+from quant_toolbox.data import FloatArray
 
 from . import config
 from .firm.signals import SIGNALS as FIRM_SIGNALS
-from .metrics import FloatArray
 
 PARAMETERS = {
     "momentum": {"lookback": config.MOMENTUM_LOOKBACK, "skip": config.MOMENTUM_SKIP},
@@ -23,23 +23,12 @@ def momentum(
     prices: FloatArray, lookback: int = config.MOMENTUM_LOOKBACK, skip: int = config.MOMENTUM_SKIP
 ) -> FloatArray:
     """Return from bar t - ``lookback`` to bar t - ``skip`` (12-1 momentum by default)."""
-    if not 0 <= skip < lookback:
-        raise ValueError(f"momentum needs 0 <= skip < lookback; got {skip} and {lookback}.")
-    signal = np.full(prices.shape, np.nan)
-    if prices.shape[0] > lookback:
-        recent = prices[lookback - skip : prices.shape[0] - skip]
-        signal[lookback:] = recent / prices[:-lookback] - 1.0
-    return signal
+    return research.momentum(prices, lookback, skip)
 
 
 def reversal(prices: FloatArray, lookback: int = config.REVERSAL_LOOKBACK) -> FloatArray:
     """Minus the return over the last ``lookback`` bars (recent losers score high)."""
-    if lookback < 1:
-        raise ValueError(f"reversal needs a lookback of at least 1 bar, got {lookback}.")
-    signal = np.full(prices.shape, np.nan)
-    if prices.shape[0] > lookback:
-        signal[lookback:] = -(prices[lookback:] / prices[:-lookback] - 1.0)
-    return signal
+    return research.reversal(prices, lookback)
 
 
 def parameters(name: str, **overrides: int | None) -> dict[str, int]:
@@ -77,18 +66,7 @@ def describe(chosen: dict[str, int]) -> str:
 def look_ahead_bars(name: str, prices: FloatArray) -> list[int]:
     """Return bars where ``name`` changes when later prices are removed: it must be empty.
 
-    A signal at bar t may use prices up to bar t only. This recomputes the signal on prices cut
-    off at several bars and compares; a signal that passes can still leak in ways prices cannot
-    show, such as restated fundamentals.
+    A signal that passes can still leak in ways prices cannot show, such as restated
+    fundamentals.
     """
-    full = compute(name, prices)
-    bad: list[int] = []
-    bars = prices.shape[0]
-    for cut in sorted({bars // 4, bars // 2, 3 * bars // 4, bars - 1}):
-        if cut < 1:
-            continue
-        partial = compute(name, prices[: cut + 1])
-        same = np.isclose(partial, full[: cut + 1], equal_nan=True, rtol=1e-12, atol=1e-12)
-        if not bool(same.all()):
-            bad.append(cut)
-    return bad
+    return research.look_ahead_bars(lambda history: compute(name, history), prices)
