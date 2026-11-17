@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The tutorial's Labs 5 to 7 work as written, from any folder.** `examples/tutorial/env.sh` finds the clone
+  it is in, so sourcing it in a new terminal, or from the generated application, no longer points `$REPO` at the
+  wrong folder; it prints what it set and the line to source in a new terminal, and drops the unused `KB`. The
+  server runs in the foreground in a second terminal, so a port still held by an earlier server shows as an error
+  instead of a silent "Unknown or revoked API key". Each lab starts with a `cd` to its folder, the Claude Code
+  step starts and removes its connection in the folder it was added in, and `call` says when no server answered.
+
 - **A firm's own check no longer breaks a generated `risk-monitor`'s tests.** The tests of the built-in limits and
   tools ran every check in `firm/checks.py` too, so adding one, as the project invites, failed them. The example
   in that file also failed the project's lint (`zip` without `strict`).

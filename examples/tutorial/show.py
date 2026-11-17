@@ -56,4 +56,10 @@ def describe(data: Any) -> list[str]:
 
 
 if __name__ == "__main__":
-    print("\n".join(describe(json.load(sys.stdin))))
+    text = sys.stdin.read()
+    if not text.strip():
+        sys.exit(
+            "no answer: is the server running in Terminal 2, and did it answer within 60 seconds? "
+            "Lab 5 starts it."
+        )
+    print("\n".join(describe(json.loads(text))))

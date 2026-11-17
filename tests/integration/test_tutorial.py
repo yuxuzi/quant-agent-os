@@ -4,6 +4,9 @@ import io
 import json
 import re
 import runpy
+import shlex
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -112,6 +115,56 @@ def test_show_makes_rest_responses_readable(
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(response)))
 
     assert expected in run_lab(monkeypatch, capsys, "show.py")
+
+
+def test_show_fails_when_no_server_answered(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(sys, "argv", [str(LABS / "show.py")])
+
+    with pytest.raises(SystemExit) as stopped:
+        runpy.run_path(str(LABS / "show.py"), run_name="__main__")
+
+    assert "is the server running" in str(stopped.value.code)  # a message exits with status 1
+
+
+def _shell(shell: str, folder: Path, script: str) -> subprocess.CompletedProcess[str]:
+    if shutil.which(shell) is None:
+        # macOS always has zsh, and CI runs there, so the zsh path cannot go untested.
+        assert not (shell == "zsh" and sys.platform == "darwin"), "zsh is missing on macOS"
+        pytest.skip(f"{shell} is not installed")
+    env = {"HOME": str(folder), "PATH": "/usr/bin:/bin"}
+    return subprocess.run(
+        [shell, "-c", script], cwd=folder, env=env, capture_output=True, text=True
+    )
+
+
+# On Windows, `bash` is often the WSL launcher; the tutorial sends Windows readers to WSL.
+posix_shells = pytest.mark.skipif(sys.platform == "win32", reason="env.sh is for bash and zsh")
+
+
+@posix_shells
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_env_sh_finds_the_clone_from_any_folder(tmp_path: Path, shell: str) -> None:
+    result = _shell(
+        shell, tmp_path, f'source {shlex.quote(str(LABS / "env.sh"))} && echo "REPO is $REPO"'
+    )
+
+    assert f"REPO is {ROOT}" in result.stdout, result.stderr
+
+
+@posix_shells
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_env_sh_prints_a_source_line_that_is_safe_to_paste(tmp_path: Path, shell: str) -> None:
+    clone = tmp_path / "a $(touch pwned) clone"
+    shutil.copytree(LABS, clone / "examples" / "tutorial")
+    env_sh = shlex.quote(str(clone / "examples" / "tutorial" / "env.sh"))
+
+    printed = _shell(shell, tmp_path, f"source {env_sh}").stdout
+    line = next(text for text in printed.splitlines() if "first run: source" in text)
+    pasted = _shell(shell, tmp_path, line.split("first run: ", 1)[1] + ' && echo "REPO is $REPO"')
+
+    assert f"REPO is {clone}" in pasted.stdout, pasted.stderr
+    assert not (tmp_path / "pwned").exists()
 
 
 def test_tutorial_links_resolve() -> None:
