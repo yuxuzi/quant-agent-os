@@ -16,10 +16,10 @@
     "write_json": "def(path: 'Path', payload: 'Any') -> 'Path'"
   },
   "quant_toolbox.data": {
-    "BoolArray": "def(*args, **kwargs)",
+    "BoolArray": "array alias: ndarray",
     "ConfigError": "class",
-    "FloatArray": "def(*args, **kwargs)",
-    "Loader": "def(*args, **kwargs)",
+    "FloatArray": "array alias: ndarray",
+    "Loader": "callable: (Path) -> Table",
     "MIN_OBSERVATIONS": "constant: int",
     "OUTLIER": "constant: float",
     "PERCENT_LIKE": "constant: float",
@@ -55,11 +55,11 @@
   "quant_toolbox.performance": {
     "BACKENDS": "constant: tuple",
     "BACKEND_VARIABLE": "constant: str",
-    "BoolArray": "def(*args, **kwargs)",
+    "BoolArray": "array alias: ndarray",
     "Drawdown": "dataclass(peak: dt.date | None, trough: dt.date, recovered: dt.date | None, depth: float)",
-    "FloatArray": "def(*args, **kwargs)",
+    "FloatArray": "array alias: ndarray",
     "METRIC_NAMES": "constant: tuple",
-    "Series": "constant: UnionType",
+    "Series": "union: Sequence | ndarray",
     "active_metrics": "def(returns: 'Series', benchmark: 'Series', periods_per_year: 'int', *, backend: 'str | None' = None) -> 'dict[str, float]'",
     "all_metrics": "def(returns: 'Series', periods_per_year: 'int', risk_free: 'float' = 0.0, *, backend: 'str | None' = None) -> 'dict[str, float]'",
     "alpha": "def(returns: 'Series', market: 'Series', periods_per_year: 'int', risk_free: 'float' = 0.0, *, backend: 'str | None' = None) -> 'float'",
@@ -96,10 +96,10 @@
     "wealth": "def(returns: 'FloatArray') -> 'FloatArray'"
   },
   "quant_toolbox.report": {
-    "Block": "constant: UnionType",
+    "Block": "union: ChartBlock | TableBlock | TextBlock",
     "CHART_MODES": "constant: tuple",
     "COLOURS": "constant: tuple",
-    "Cell": "constant: UnionType",
+    "Cell": "union: None | float | int | str",
     "ChartBlock": "dataclass(title: str, dates: list[dt.date], series: dict[str, list[float]], note: str, kind: str, labels: list[str], percent: bool)",
     "Column": "dataclass(name: str, kind: str)",
     "Document": "dataclass(title: str, subtitle: str, blocks: list[Block])",
@@ -180,8 +180,8 @@
     "volatility_contributions": "def(weights: 'Mapping[str, float]', asset_returns: 'Mapping[str, Sequence[float]]', periods_per_year: 'int') -> 'VolatilityBreakdown'"
   },
   "quant_toolbox.testing": {
-    "Signal": "def(*args, **kwargs)",
-    "Strategy": "def(*args, **kwargs)",
+    "Signal": "callable: (ndarray) -> ndarray",
+    "Strategy": "callable: (ndarray) -> ndarray",
     "assert_costs_only_cost": "def(strategy_at_cost: 'Callable[[float], FloatArray]', costs: 'Sequence[float]' = (0.0, 5.0, 50.0)) -> 'None'",
     "assert_future_does_not_change_the_past": "def(strategy: 'Strategy', prices: 'FloatArray | None' = None, cut: 'int | None' = None) -> 'None'",
     "assert_no_edge_on_random_walks": "def(strategy: 'Strategy', *, seeds: 'int' = 40, bars: 'int' = 500, assets: 'int' = 20) -> 'None'",

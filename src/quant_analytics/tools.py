@@ -37,6 +37,7 @@ from quant_analytics.computed import (
     portfolio_risk,
 )
 from quant_analytics.references import ColumnRef
+from quant_toolbox.performance import backend as metrics_backend
 
 PERFORMANCE_DESCRIPTION = (
     "Performance of a returns series, from empyrical: annualised return and volatility, "
@@ -232,7 +233,12 @@ def _frequency(supplied: int | None, dates: list[date] | None) -> tuple[int, str
 
 
 def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
-    """Return a registry with `analyze_performance` and `analyze_risk`, reading from ``store``."""
+    """Return a registry with `analyze_performance` and `analyze_risk`, reading from ``store``.
+
+    The metrics backend is chosen here, so importing empyrical, with pandas and scipy, happens when
+    the server starts and not inside a first call's time limit.
+    """
+    metrics_backend()
     permissions = [] if store is None else [Permission.READ_LOCAL_DATA]
     by_reference = "" if store is None else BY_REFERENCE
 

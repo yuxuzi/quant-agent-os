@@ -58,14 +58,15 @@ def run_backtest(
     asset_returns, exits = bar_returns(prices, delisting_return)
     priced = np.isfinite(prices)
     gone = np.cumsum(exits, axis=0) > 0  # delisted on or before this bar
-    held = np.zeros(weights.shape)
-    gross = np.zeros(held.shape[0])
-    traded = np.zeros(held.shape[0])
-    drifted = np.zeros(weights.shape[1])  # the book at the last close, before trading
+    bars, assets = int(weights.shape[0]), int(weights.shape[-1])
+    held: FloatArray = np.zeros((bars, assets))
+    gross: FloatArray = np.zeros(bars)
+    traded: FloatArray = np.zeros(bars)
+    drifted: FloatArray = np.zeros(assets)  # the book at the last close, before trading
     first: int | None = None
-    for bar in range(1, held.shape[0]):
+    for bar in range(1, bars):
         close = bar - 1  # trades for this bar happen at the previous close
-        target = weights[close - lag] if close >= lag else np.zeros(weights.shape[1])
+        target = weights[close - lag] if close >= lag else np.zeros(assets)
         if first is None and np.any(target != 0.0):
             first = close
         due = first is not None and (close - first) % rebalance_every == 0
@@ -77,7 +78,7 @@ def run_backtest(
         if growth > 0.0:
             drifted = held[bar] * (1.0 + asset_returns[bar]) / growth
         else:  # the book lost everything
-            drifted = np.zeros(weights.shape[1])
+            drifted = np.zeros(assets)
     net = gross - traded * cost_bps / 10_000.0
     forced = (exits & (held != 0.0)).sum(axis=1).astype(np.float64)
     return BacktestResult(gross=gross, net=net, turnover=traded, held=held, forced_exits=forced)

@@ -12,13 +12,15 @@ major one after 1.0. Adding a name is a feature, and nothing else.
 
 from __future__ import annotations
 
+import collections.abc
 import dataclasses
 import importlib
 import inspect
 import json
 import os
+import types
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, get_args, get_origin
 
 import pytest
 
@@ -29,6 +31,15 @@ UPDATE = os.environ.get("QUANT_TOOLBOX_UPDATE_LOCK") == "1"
 
 
 def _describe(value: Any) -> str:
+    origin = get_origin(value)
+    if origin in (Union, types.UnionType):  # a type alias; its type's name varies by Python
+        members = sorted(_name(member) for member in get_args(value))
+        return f"union: {' | '.join(members)}"
+    if origin is collections.abc.Callable:
+        arguments, result = get_args(value)
+        return f"callable: ({', '.join(_name(item) for item in arguments)}) -> {_name(result)}"
+    if _name(value) == "ndarray":
+        return "array alias: ndarray"
     if dataclasses.is_dataclass(value) and isinstance(value, type):
         fields = ", ".join(f"{field.name}: {field.type}" for field in dataclasses.fields(value))
         return f"dataclass({fields})"
@@ -40,6 +51,16 @@ def _describe(value: Any) -> str:
     if callable(value):
         return f"def{inspect.signature(value)}"
     return f"constant: {type(value).__name__}"
+
+
+def _name(member: Any) -> str:
+    """A stable name: numpy's array aliases are spelled differently by version."""
+    if "ndarray" in str(member).lower():
+        return "ndarray"
+    if member is type(None):
+        return "None"
+    origin = get_origin(member)
+    return getattr(origin or member, "__name__", str(member))
 
 
 def _surface() -> dict[str, dict[str, str]]:

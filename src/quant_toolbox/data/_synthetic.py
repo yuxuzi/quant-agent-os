@@ -37,8 +37,8 @@ def random_walk_panel(
     shift = 1 + delay
     if n_bars > shift:
         returns[shift:] += signal_strength * volatility * signal[:-shift]
-    prices = 100.0 * np.cumprod(1.0 + returns, axis=0)
-    return prices, signal
+    prices = np.asarray(100.0 * np.cumprod(1.0 + returns, axis=0), dtype=np.float64)
+    return prices, np.asarray(signal, dtype=np.float64)
 
 
 def demo_panel() -> Panel:

@@ -114,7 +114,7 @@ def calendar_years(dates: list[dt.date], returns: FloatArray) -> dict[int, float
 def wealth(returns: FloatArray) -> FloatArray:
     """Return compounded wealth from 1; a missing return leaves it unchanged."""
     values = np.nan_to_num(np.asarray(returns, dtype=np.float64))
-    return np.cumprod(1.0 + values)
+    return np.asarray(np.cumprod(1.0 + values), dtype=np.float64)
 
 
 def underwater(returns: FloatArray) -> FloatArray:
