@@ -18,10 +18,10 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from quant_analytics import metrics as analytics
 from quant_app_factory import AppFactory, AppSpec, PlanningError, PytemplateUvScaffolder
 from quant_app_factory import cli as factory_cli
 from quant_app_factory.domain.planner import BUILT_IN_PACKS, QUANT_APP_PROFILES, QUANT_APPS_PACK
+from quant_toolbox import performance as analytics
 
 PACKAGE = "{{ package_name }}"
 RETURNS = np.random.default_rng(7).normal(0.0005, 0.01, 504)

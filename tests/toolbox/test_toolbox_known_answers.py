@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from quant_analytics import metrics
+from quant_toolbox import performance as metrics
 
 RETURNS = [0.02, -0.01, 0.03, -0.02, 0.01, 0.0]
 MONTHLY = 12
@@ -46,7 +46,6 @@ def test_downside_and_drawdown_ratios() -> None:
     downside = math.sqrt(float(np.mean(np.minimum(values, 0.0) ** 2))) * math.sqrt(MONTHLY)
     annual = metrics.annualized_return(RETURNS, MONTHLY)
     drawdown = metrics.max_drawdown(RETURNS)
-    assert annual is not None and drawdown is not None
 
     assert metrics.sortino_ratio(RETURNS, MONTHLY) == pytest.approx(
         values.mean() * MONTHLY / downside
@@ -86,19 +85,19 @@ def test_benchmark_metrics_of_a_known_relation() -> None:
     assert result["information_ratio"] == pytest.approx(active.mean() * MONTHLY / error)
 
 
-def test_undefined_metrics_are_none_not_infinite() -> None:
+def test_undefined_metrics_are_nan_not_infinite() -> None:
     flat = [0.01] * 6
 
-    assert metrics.sharpe_ratio(flat, MONTHLY) is None
-    assert metrics.annualized_volatility(flat, MONTHLY) == 0.0
-    assert metrics.benchmark_metrics(flat, flat, MONTHLY)["information_ratio"] is None
+    assert math.isnan(metrics.sharpe_ratio(flat, MONTHLY))
+    assert metrics.annualized_volatility(flat, MONTHLY) == pytest.approx(0.0, abs=1e-12)
+    assert math.isnan(metrics.benchmark_metrics(flat, flat, MONTHLY)["information_ratio"])
 
 
 @pytest.mark.parametrize(("value", "count"), [(0.01, 50), (0.1, 7), (0.0003, 50), (0.0, 50)])
 def test_a_constant_series_has_no_sharpe_despite_floating_point_noise(
     value: float, count: int
 ) -> None:
-    assert metrics.sharpe_ratio([value] * count, DAILY) is None
+    assert math.isnan(metrics.sharpe_ratio([value] * count, DAILY))
 
 
 def test_a_constant_gap_to_the_benchmark_has_no_information_ratio() -> None:
@@ -107,4 +106,4 @@ def test_a_constant_gap_to_the_benchmark_has_no_information_ratio() -> None:
     result = metrics.benchmark_metrics(list(returns), list(returns + 0.001), DAILY)
 
     assert result["active_return"] == pytest.approx(-0.252)
-    assert result["information_ratio"] is None
+    assert math.isnan(result["information_ratio"])

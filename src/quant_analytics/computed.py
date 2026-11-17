@@ -1,63 +1,38 @@
-"""Typed, deterministic results over `quant_analytics.metrics` and `.risk`.
+"""Typed, deterministic results over Quant Toolbox's `performance` and `risk` (decision 0026).
 
-`quant_analytics.tools` resolves what a caller passes into these inputs. Every output carries the
+`quant_analytics.tools` resolves what a caller passes into these inputs. The numbers come from
+`quant_toolbox`: through empyrical-reloaded when it is installed, or the toolbox's numpy formulas,
+which give the same answers; ``conventions["source"]`` names which. Every output carries the
 metric conventions, warnings for short samples, and ``computed`` evidence that names the series
-it came from.
+it came from. An undefined metric, NaN in the toolbox, is None here.
 """
 
 from __future__ import annotations
 
 import math
-import statistics
-from collections.abc import Sequence
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from quant_agent_os.evidence import Evidence, SourceRef
-from quant_analytics import metrics, risk
+from quant_toolbox import data, report, risk
+from quant_toolbox import performance as metrics
 
-MIN_OBSERVATIONS = 12
+MIN_OBSERVATIONS = data.MIN_OBSERVATIONS
 MAX_ASSETS = 500
 MAX_FACTORS = 50
-PERCENT_LIKE = 0.2  # a typical period's return above this is more likely percent than fraction
-CONVENTIONS = {
-    "source": "empyrical-reloaded (the metrics behind pyfolio)",
-    "returns": "simple per-period returns, as fractions",
-    "annualized_return": "geometric",
-    "annualized_volatility": "sample standard deviation, times sqrt(periods per year)",
-    "sharpe_ratio": "mean excess over sample deviation, times sqrt(periods per year); "
-    "the annual risk-free rate is divided by periods per year",
-    "sortino_ratio": "mean return over downside deviation (below zero), annualised",
-    "calmar_ratio": "annualised return over the size of the maximum drawdown",
-    "omega_ratio": "probability-weighted gains over losses around a zero return",
-    "max_drawdown": "peak-to-trough on compounded wealth, as a negative fraction",
-    "tail_ratio": "95th percentile return over the absolute 5th percentile",
-    "stability": "R squared of a linear fit to cumulative log returns",
-    "value_at_risk": "5th percentile of per-period returns (historical)",
-    "hit_rate": "share of periods with a positive return",
-    "alpha": "per-period intercept against the benchmark, compounded over a year",
-    "beta": "OLS slope on the benchmark",
-    "active_return": "annualised arithmetic mean of returns minus benchmark",
-    "tracking_error": "annualised volatility of active returns",
-    "information_ratio": "excess Sharpe against the benchmark, annualised",
-}
+PERCENT_LIKE = data.PERCENT_LIKE
+RISK_CONVENTIONS = risk.CONVENTIONS
+FACTOR_CONVENTIONS = risk.FACTOR_CONVENTIONS
 
 
-RISK_CONVENTIONS = {
-    "source": "numpy sample covariance and least squares (empyrical has no risk decomposition)",
-    "returns": "simple per-period returns, as fractions, aligned by period",
-    "weights": "constant over the sample (rebalanced every period); may be negative",
-    "volatility": "sqrt(w' S w), S the sample covariance (n - 1) times periods per year",
-    "contributions": "Euler: marginal (S w)_i / vol, component w_i * marginal, percent "
-    "component / vol; components sum to volatility, percents to one; none below "
-    f"{risk.FLAT:g} of sum(|w_i| vol_i)",
-    "diversification_ratio": "sum(|w_i| vol_i) / portfolio volatility",
-    "exposures": "OLS slopes on all factors at once, with an intercept; the portfolio's is "
-    "the weighted sum of asset exposures",
-    "variance_shares": "b_k (F b)_k / var in sample, F the factor covariance; the specific "
-    "share is residual variance / var; shares sum to one and factor shares to R squared",
-}
-FACTOR_CONVENTIONS = frozenset({"exposures", "variance_shares"})
+def __getattr__(name: str) -> object:
+    """``CONVENTIONS``: every metric's convention, naming the backend that computes them now.
+
+    Computed on use, so importing this module does not import empyrical.
+    """
+    if name == "CONVENTIONS":
+        return metrics.conventions()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class ReturnsInput(BaseModel):
@@ -214,22 +189,16 @@ class PerformanceOutput(BaseModel):
 
 
 def _sample_warnings(params: ReturnsInput) -> list[str]:
-    if len(params.returns) < MIN_OBSERVATIONS:
-        return [
-            f"Only {len(params.returns)} observations for {params.series_id}; "
-            f"results are unreliable below {MIN_OBSERVATIONS}."
-        ]
-    return []
+    return data.short_sample(params.series_id, len(params.returns))
 
 
-def _unit_warnings(name: str, values: Sequence[float]) -> list[str]:
-    typical = statistics.median(abs(value) for value in values)
-    if typical <= PERCENT_LIKE:
-        return []
-    return [
-        f"Returns of {name} look like percentages (typical size {typical:g}); the tools expect "
-        "fractions, 0.01 for 1%, and these results would be wrong if so."
-    ]
+def _unit_warnings(name: str, values: list[float]) -> list[str]:
+    return data.percent_like(name, values)
+
+
+def _defined(value: float) -> float | None:
+    """The toolbox's NaN for an undefined metric becomes None in tool output."""
+    return value if math.isfinite(value) else None
 
 
 def _computed(statement: str, params: ReturnsInput) -> Evidence:
@@ -243,25 +212,15 @@ def _computed(statement: str, params: ReturnsInput) -> Evidence:
 def performance(params: PerformanceInput) -> PerformanceOutput:
     """Compute every metric of ``params.returns`` (and against ``params.benchmark``)."""
     returns, periods = params.returns, params.periods_per_year
-    values: dict[str, float | None] = {
-        "annualized_return": metrics.annualized_return(returns, periods),
-        "annualized_volatility": metrics.annualized_volatility(returns, periods),
-        "sharpe_ratio": metrics.sharpe_ratio(returns, periods, params.risk_free),
-        "sortino_ratio": metrics.sortino_ratio(returns, periods),
-        "calmar_ratio": metrics.calmar_ratio(returns, periods),
-        "omega_ratio": metrics.omega_ratio(returns, periods),
-        "max_drawdown": metrics.max_drawdown(returns),
-        "tail_ratio": metrics.tail_ratio(returns),
-        "stability": metrics.stability(returns),
-        "value_at_risk": metrics.value_at_risk(returns),
-        "hit_rate": metrics.hit_rate(returns),
-    }
+    computed = metrics.all_metrics(returns, periods, params.risk_free)
     warnings = _sample_warnings(params) + _unit_warnings(params.series_id, returns)
     if params.benchmark is not None:
-        values |= metrics.benchmark_metrics(returns, params.benchmark, periods, params.risk_free)
+        computed |= metrics.benchmark_metrics(returns, params.benchmark, periods, params.risk_free)
+    values = {name: _defined(value) for name, value in computed.items()}
     if values["sharpe_ratio"] is None:
         warnings.append(f"{params.series_id} does not vary, so its Sharpe ratio is undefined.")
-    shown = {name: CONVENTIONS[name] for name in ("source", "returns", *values)}
+    conventions = metrics.conventions()
+    shown = {name: conventions[name] for name in ("source", "returns", *values)}
     shown["periods_per_year"] = str(periods)
     evidence = [
         _computed(f"{_label(name)} of {params.series_id} is {_format(name, value)}.", params)
@@ -364,23 +323,8 @@ def portfolio_risk(params: RiskInput) -> RiskOutput:
 
 
 def _label(name: str) -> str:
-    return name.replace("_", " ").capitalize()
-
-
-RATIOS = frozenset(
-    {
-        "sharpe_ratio",
-        "sortino_ratio",
-        "calmar_ratio",
-        "omega_ratio",
-        "tail_ratio",
-        "stability",
-        "beta",
-        "information_ratio",
-    }
-)
+    return report.label(name)
 
 
 def _format(name: str, value: float) -> str:
-    ratio = name in RATIOS
-    return f"{value:.2f}" if ratio else f"{value:.2%}"
+    return report.format_metric(name, value, ratio_digits=2)

@@ -19,8 +19,8 @@ import pytest
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.runtime import ToolCall, ToolCallRecord, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy
-from quant_analytics import metrics
 from quant_analytics.tools import analytics_tools
+from quant_toolbox import performance as metrics
 
 generator = random.Random(7)
 DAILY = [generator.gauss(0.0005, 0.01) for _ in range(300)]
