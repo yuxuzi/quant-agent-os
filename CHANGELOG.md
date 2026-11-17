@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-17
+
+Quant Toolbox is new in this release and versioned with it; while it is 0.x, a minor release may change its
+API, always with an entry here.
+
 ### Added
 
 - **Quant Toolbox** (`quant_toolbox`), the library under Quant Analytics and every generated application,
@@ -40,6 +45,11 @@ All notable changes to this project are documented here. The format follows
   `excel.py`, `evaluation.py`, `report.py`, or `synthetic.py`, and its tests cover its own code, with bias
   checks from `quant_toolbox.testing`. Reports draw charts with pygal, or with plotly when `config.toml` sets
   `charts = "interactive"`. To take a later toolbox fix, move the tag and run the project's tests.
+- **`FirmApp.expose` takes a data parameter hinted as a union with a NumPy array,** such as Quant Toolbox's
+  `ndarray | Sequence[float]`, and passes the array, so a toolbox metric can be exposed unchanged. The
+  tutorial's Lab 5 exposes `quant_toolbox.performance.max_drawdown`.
+- **A spec's `quant_agent_os_source` reaches a user pack,** so a fork of a built-in pack installs Quant Toolbox
+  from where the spec says.
 
 - **The tutorial is written for a fund's CEO and CTO,** and checked on 0.4.0. It generates a `risk-monitor`
   application, customizes it at each of the four levels, serves it to an AI client with `FirmApp`, and then

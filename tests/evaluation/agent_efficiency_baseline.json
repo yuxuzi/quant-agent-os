@@ -59,7 +59,7 @@
     "check_an_app_spec": {
       "argument_bytes": 184,
       "calls": 2,
-      "result_bytes": 7801,
+      "result_bytes": 7251,
       "skill": "quant-app-factory",
       "skill_bytes": 2458,
       "success": true,
@@ -108,7 +108,7 @@
     "calls": 10,
     "definition_bytes": 6457,
     "instruction_bytes": 817,
-    "result_bytes": 31601,
+    "result_bytes": 31051,
     "skill_bytes": 10309,
     "skill_description_bytes": 1114,
     "success_rate": 1.0,

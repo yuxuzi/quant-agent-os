@@ -96,7 +96,18 @@ its MIT toolbox only, and the platform's server only with `agent-tools`. Charts 
 
 To use another definition of a figure, add a separately named one in the project, so that both keep theirs.
 
-<!-- line counts: filled in by step 4.7 -->
+What moved to the toolbox, measured in lines of each template's package and tests (Python and Jinja files,
+0.4.0 against 0.5.0):
+
+| Application | Package | Tests |
+| --- | --- | --- |
+| alpha-research | 1,609 to 643 | 551 to 372 |
+| strategy-backtest | 2,067 to 969 | 958 to 509 |
+| risk-monitor | 1,876 to 1,039 | 447 to 275 |
+| performance-report | 2,075 to 954 | 785 to 343 |
+| quant-lab | 2,092 to 1,154 | 1,334 to 710 |
+
+The tests that left check the toolbox, in `tests/toolbox`; a project keeps the tests of its own code.
 
 ## Use
 

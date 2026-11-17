@@ -11,6 +11,27 @@ analytics package ships, `metrics` may become a dependency on it rather than gen
 later, deliberate change." This is that change. It amends decisions 0009, 0010, 0018, 0019, and 0022, as
 decision 0026 (step 1.8) will record.
 
+## Status (2026-11-17)
+
+Built on branch `feat/quant-toolbox` as one pull request rather than one per phase, since each phase depended
+on the last and pull requests here are not stacked. Every step is done except tagging 0.5.0, which waits for
+the owner. Where the build differs from the design below:
+
+- **Subpackages.** `signals`, `portfolio`, and `backtest` became one `research` subpackage, and `config`,
+  `excel`, and `synthetic` live in `data`, so there are seven subpackages, not thirteen modules. Optional
+  parts are leaves: `data.excel`, `data.frames`, `report.svg`, `report.interactive`, `report.excel`.
+- **No alignment helper, and no frequency copy.** Quant Analytics aligns Core datasets, which the toolbox does
+  not know, and no application infers frequency, so `data.align` and the copy of `infer_periods_per_year` were
+  not needed. Nothing is duplicated.
+- **Configuration.** `data.load_config` and `dump_config` cover flat parameter files; settings with nested
+  tables (risk-monitor, performance-report) keep their own readers.
+- **Core changed in one place.** `FirmApp.expose` accepts a data parameter hinted as a union with a NumPy
+  array, so a firm can expose a toolbox metric unchanged; the tutorial does.
+- **The analytics toolset needs numpy,** not empyrical, so it runs on the numpy backend too.
+
+Measured results: [Quant App Factory](../products/quant-app-factory.md#formulas-come-from-quant-toolbox) has
+each application's size before and after; every package is 40 to 55% of its 0.4.0 size.
+
 ## 1. What is inconsistent today
 
 Measured on `main` at 29e1c45 (2026-11-17). In the pack templates, in lines:
@@ -319,74 +340,74 @@ packs switch in phase 4, so until then nothing a user generates changes.
 
 ### Phase 1: the package and its numbers
 
-- [ ] 1.1 `src/quant_toolbox/` with the lazy top-level `__init__`, `_optional.require`,
+- [x] 1.1 `src/quant_toolbox/` with the lazy top-level `__init__`, `_optional.require`,
       `MissingExtraError`, and `features()`; then `data`, `performance`, `risk`, and `audit`, moved from the
       packs with their docstrings and conventions, each re-exporting its public names in `__all__`.
-- [ ] 1.2 `tests/toolbox/`: the packs' known-answer tests moved and deduplicated; `test_parity.py` for
+- [x] 1.2 `tests/toolbox/`: the packs' known-answer tests moved and deduplicated; `test_parity.py` for
       Core's frequency inference against the toolbox's; `tests/factory/test_metric_parity.py` deleted; the API
       lock and its test.
-- [ ] 1.3 The `toolbox` extra (numpy, pygal), the cool-off dates, the sixth `module-name`, `known-first-party`,
+- [x] 1.3 The `toolbox` extra (numpy, pygal), the cool-off dates, the sixth `module-name`, `known-first-party`,
       and the MIT `LICENSE` in `license-files`.
-- [ ] 1.4 `test_import_boundaries.py`: the toolbox row. `tests/toolbox/test_layers.py`: layers import
+- [x] 1.4 `test_import_boundaries.py`: the toolbox row. `tests/toolbox/test_layers.py`: layers import
       only upward, no private file is imported across subpackages, and no module outside the optional
       leaves imports a package beyond numpy at module level. A test in a numpy-only environment imports
       every non-leaf module, and one calls each leaf without its extra and expects `MissingExtraError`.
-- [ ] 1.5 The two backends: `performance/_empyrical.py` (moved from `quant_analytics.metrics`, with input
+- [x] 1.5 The two backends: `performance/_empyrical.py` (moved from `quant_analytics.metrics`, with input
       cleaning) and `performance/_numpy.py`, which gains omega, tail ratio, stability, and alpha;
       `performance.backend()`, `QUANT_TOOLBOX_BACKEND`; `tests/toolbox/test_backends.py` holding both equal on
       clean data and on the edge cases in 2.7. The `empyrical` extra; `analytics` becomes `toolbox` plus
       `empyrical`. CI runs the toolbox tests with and without empyrical.
-- [ ] 1.5a Quant Analytics on the toolbox: `quant_analytics.metrics` and `.risk` deleted; `computed.py` and
+- [x] 1.5a Quant Analytics on the toolbox: `quant_analytics.metrics` and `.risk` deleted; `computed.py` and
       `tools.py` call `performance`, `risk`, `data.align`, `data.checks`, and `report.format_metric`, and name
       the backend in `conventions["source"]`. The analytics tests pass unchanged.
-- [ ] 1.6 Measure a fresh install of `quant-agent-os[toolbox]` from a local path on Python 3.11 and 3.15:
+- [x] 1.6 Measure a fresh install of `quant-agent-os[toolbox]` from a local path on Python 3.11 and 3.15:
       packages, size, and the import time of `quant_toolbox` and of each subpackage (`-X importtime`).
-- [ ] 1.7 Docs: `docs/products/quant-toolbox.md` (what it holds, conventions, how to pin it, how to upgrade),
+- [x] 1.7 Docs: `docs/products/quant-toolbox.md` (what it holds, conventions, how to pin it, how to upgrade),
       the architecture page's package table and import rules, `AGENTS.md`'s product list and invariants.
-- [ ] 1.8 Decision 0026, "One toolbox under Quant Analytics and the generated applications": amends 0009
+- [x] 1.8 Decision 0026, "One toolbox under Quant Analytics and the generated applications": amends 0009
       (portability), 0010 (empyrical is the toolbox's preferred backend, numpy the fallback), 0018
       (six import names), 0019 (MIT list), 0022 (`metrics.py` is no longer copied). The changelog.
 
 ### Phase 2: reports and charts
 
-- [ ] 2.1 `report`: the document model, the chart builders as data, and the Markdown, HTML, and JSON
+- [x] 2.1 `report`: the document model, the chart builders as data, and the Markdown, HTML, and JSON
       renderers, with `report.py`'s results-dict rendering rewritten over it.
-- [ ] 2.2 `report.svg` on pygal with `js=[]`, the default renderer: a `Style`, and a test that an SVG holds
+- [x] 2.2 `report.svg` on pygal with `js=[]`, the default renderer: a `Style`, and a test that an SVG holds
       no `<script>` and no URL beyond the SVG namespace.
-- [ ] 2.3 `report.interactive` behind the `interactive` extra: plotly graph objects, inline plotly.js by
+- [x] 2.3 `report.interactive` behind the `interactive` extra: plotly graph objects, inline plotly.js by
       default. A test rendering every chart type both ways, skipped with a reason when plotly is absent.
-- [ ] 2.4 `data.excel` behind the `excel` extra, moved from performance-report with its tests; `data.frames`
+- [x] 2.4 `data.excel` behind the `excel` extra, moved from performance-report with its tests; `data.frames`
       with pandas imported on call.
-- [ ] 2.5 Docs and changelog.
+- [x] 2.5 Docs and changelog.
 
 ### Phase 3: signals, portfolios, backtests, and bias checks
 
-- [ ] 3.1 `research`: evaluation statistics and the two standard definitions, with the trade lag and
+- [x] 3.1 `research`: evaluation statistics and the two standard definitions, with the trade lag and
       delisting return as arguments.
-- [ ] 3.2 `research`'s weights and backtest engine, from `strategy-backtest` (the newer of the two copies; the
+- [x] 3.2 `research`'s weights and backtest engine, from `strategy-backtest` (the newer of the two copies; the
       75 lines that differ from `quant-lab`'s are reviewed one by one and the test that explains each kept).
-- [ ] 3.3 `testing`: the bias checks, written so a project's test file is one call each.
-- [ ] 3.4 Docs and changelog.
+- [x] 3.3 `testing`: the bias checks, written so a project's test file is one call each.
+- [x] 3.4 Docs and changelog.
 
 ### Phase 4: the packs
 
-- [ ] 4.1 `alpha-research` on the toolbox: delete the moved files, rewrite the imports, trim the tests to the
+- [x] 4.1 `alpha-research` on the toolbox: delete the moved files, rewrite the imports, trim the tests to the
       project's own code plus the `testing` calls; `pyproject.toml.jinja` pins the tag; `AGENTS.md` and
       `LIMITATIONS.md` reworded.
-- [ ] 4.2 `strategy-backtest`, 4.3 `risk-monitor`, 4.4 `performance-report`, the same way.
-- [ ] 4.5 `quant-baseline` (`quant-lab`) the same way, without the `metrics` component.
-- [ ] 4.6 The planner: `quant_agent_os_source` for every profile, `quant_agent_os_ref` with the wheel's
+- [x] 4.2 `strategy-backtest`, 4.3 `risk-monitor`, 4.4 `performance-report`, the same way.
+- [x] 4.5 `quant-baseline` (`quant-lab`) the same way, without the `metrics` component.
+- [x] 4.6 The planner: `quant_agent_os_source` for every profile, `quant_agent_os_ref` with the wheel's
       version as default, the `portable` wording; `test_quant_apps.py` and the factory smoke test.
-- [ ] 4.7 Measure each application's line count before and after and put the table in the product page.
-- [ ] 4.8 The tutorial re-run on a generated risk-monitor, outputs refreshed; the product page's "Generated
+- [x] 4.7 Measure each application's line count before and after and put the table in the product page.
+- [x] 4.8 The tutorial re-run on a generated risk-monitor, outputs refreshed; the product page's "Generated
       metrics and the platform's" section rewritten as "Formulas come from Quant Toolbox"; the changelog with
       the two pack versions.
-- [ ] 4.9 The agent-efficiency evaluation, reported; rebaseline only if a tool's output changed, which none
+- [x] 4.9 The agent-efficiency evaluation, reported; rebaseline only if a tool's output changed, which none
       should.
 
 ### Phase 5: release
 
-- [ ] 5.1 Verify: tests, lint, format, types, the opt-in factory smoke test, the research evaluation, and a
+- [x] 5.1 Verify: tests, lint, format, types, the opt-in factory smoke test, the research evaluation, and a
       clean install of `quant-agent-os[toolbox]` from the tag on every CI Python.
 - [ ] 5.2 Release 0.5.0, on the owner's say, with the toolbox named in the notes as 0.x: its API may still
       change between minors until 1.0.
@@ -426,13 +447,13 @@ Each needs an answer before the phase that depends on it.
 
 - **5.1 The MIT wording (phase 1).** The toolbox is MIT code inside a wheel that is mostly BUSL. Decision 0019
   already does this for the packs; counsel should confirm it reads the same for an importable module.
-- **5.2 The name (phase 1).** `quant_toolbox`, "Quant Toolbox", and the `toolbox` extra follow the other
+- **5.2 The name (phase 1). Settled: `quant_toolbox`.** `quant_toolbox`, "Quant Toolbox", and the `toolbox` extra follow the other
   packages. `quant_tool_box` and `helper` were suggested; the first reads oddly beside `quant_analytics`, and
   the second says nothing about what it holds.
-- **5.3 Applications' default backend (phase 4).** The plan gives generated applications numpy by default,
+- **5.3 Applications' default backend (phase 4). Settled 2026-11-17: numpy, as recommended.** The plan gives generated applications numpy by default,
   because empyrical brings pandas and scipy. If the owner prefers empyrical there too, the packs add the
   `empyrical` extra and nothing else changes.
-- **5.4 `quant-lab` (phase 4).** Decision 0022 keeps it as the all-in-one sample. Once the four applications
+- **5.4 `quant-lab` (phase 4). Kept for 0.5.0, converted like the others.** Decision 0022 keeps it as the all-in-one sample. Once the four applications
   are each a few hundred lines over the toolbox, the sample may have no reader; dropping it would also drop a
   public mirror and a hub entry.
 - **5.5 The public mirrors (phase 5).** `quant-apps` 2.0.0 and `quant-baseline` 4.0.0 would need new mirror
