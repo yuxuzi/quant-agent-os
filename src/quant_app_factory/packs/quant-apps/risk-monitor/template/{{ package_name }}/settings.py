@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from quant_toolbox.report import CHART_MODES
+
 
 class SettingsError(ValueError):
     """Raised when settings are invalid; the message says which and why."""
@@ -59,6 +61,7 @@ class Settings:
     lookback: int = 252  # bars of returns for value at risk, volatility, and contributions
     firm_name: str = ""
     top_positions: int = 10
+    charts: str = "static"  # static (SVG), or interactive / interactive-cdn (plotly)
     sections: list[str] = field(default_factory=lambda: list(DEFAULT_SECTIONS))
     limits: dict[str, float] = field(default_factory=dict)
     scenarios: list[Scenario] = field(default_factory=list)
@@ -71,6 +74,10 @@ class Settings:
                 (not 0.0 < self.var_cutoff < 0.5, "var_cutoff must be between 0 and 0.5"),
                 (self.lookback < 2, "lookback must be at least 2 bars"),
                 (self.top_positions < 1, "top_positions must be at least 1"),
+                (
+                    self.charts not in CHART_MODES,
+                    f"charts must be one of {', '.join(CHART_MODES)}",
+                ),
             )
             if failed
         ]
@@ -91,6 +98,7 @@ _FLAT = {
     "lookback": int,
     "firm_name": str,
     "top_positions": int,
+    "charts": str,
 }
 
 

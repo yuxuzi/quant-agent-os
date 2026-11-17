@@ -7,25 +7,16 @@ from typing import Any
 
 import numpy as np
 import pytest
+from quant_toolbox.data import Table, TableError, demo_book
+from quant_toolbox.testing import assert_future_does_not_change_the_past
 from typer.testing import CliRunner
 
 from {{ package_name }}.cli import app
 from {{ package_name }}.firm.checks import CHECKS
 from {{ package_name }}.monitor import build_document, load_groups
-from {{ package_name }}.risk import (
-    Check,
-    build_view,
-    check_limits,
-    exposures,
-    group_exposures,
-    risk_contributions,
-    simulated_returns,
-    stress_return,
-)
+from {{ package_name }}.risk import Check, build_view, check_limits, scenario_return
 from {{ package_name }}.sections import BUILT_IN, all_checks
 from {{ package_name }}.settings import Scenario, Settings, SettingsError, load_settings
-from {{ package_name }}.synthetic import demo_book
-from {{ package_name }}.tables import Table, TableError
 
 runner = CliRunner()
 DAY = dt.date(2024, 1, 2)
@@ -44,58 +35,10 @@ def _positions(*rows: list[float]) -> Table:
     return Table(days, ASSETS, np.array(rows, dtype=np.float64))
 
 
-def test_exposures_have_known_answers() -> None:
-    book = exposures(np.array([0.5, -0.3, 0.2, 0.0]))
-
-    assert book.gross == pytest.approx(1.0)
-    assert book.net == pytest.approx(0.4)
-    assert book.long == pytest.approx(0.7)
-    assert book.short == pytest.approx(-0.3)
-    assert book.positions == 3
-    assert book.largest == pytest.approx(0.5)
-    assert book.top_five == pytest.approx(1.0)
-    assert book.effective_positions == pytest.approx(1.0 / (0.25 + 0.09 + 0.04))
-
-
-def test_an_empty_book_has_zero_exposure() -> None:
-    assert exposures(np.zeros(3)).effective_positions == 0.0
-
-
-def test_group_exposures_net_and_gross_with_ungrouped_named() -> None:
-    result = group_exposures(ASSETS, np.array([0.5, -0.3, 0.1]), {"A": "Tech", "B": "Tech"})
-
-    assert result["Tech"] == pytest.approx((0.2, 0.8))
-    assert result["Ungrouped"] == pytest.approx((0.1, 0.1))
-    assert list(result) == ["Tech", "Ungrouped"]
-
-
-def test_simulated_returns_apply_todays_weights() -> None:
-    returns = np.array([[0.01, 0.02], [np.nan, -0.01]])
-
-    assert simulated_returns(np.array([0.5, -0.5]), returns) == pytest.approx([-0.005, 0.005])
-
-
-def test_risk_contributions_sum_to_one_and_show_a_hedge_as_negative() -> None:
-    generator = np.random.default_rng(1)
-    market = generator.normal(0, 0.01, 500)
-    returns = np.column_stack([market + generator.normal(0, 0.002, 500), market])
-
-    shares = risk_contributions(np.array([1.0, -0.5]), returns)
-
-    assert shares.sum() == pytest.approx(1.0)
-    assert shares[0] > 1.0 > 0.0 > shares[1]
-
-
-def test_two_equal_uncorrelated_positions_each_contribute_half() -> None:
-    returns = np.array([[0.01, 0.01], [-0.01, 0.01], [0.01, -0.01], [-0.01, -0.01]])
-
-    assert risk_contributions(np.array([0.5, 0.5]), returns) == pytest.approx([0.5, 0.5])
-
-
 def test_stress_uses_group_shocks_over_the_market_shock() -> None:
     scenario = Scenario("s", market=-0.10, groups={"Tech": -0.20})
 
-    result = stress_return(scenario, ASSETS, np.array([0.5, -0.5, 1.0]), {"A": "Tech"})
+    result = scenario_return(scenario, ASSETS, np.array([0.5, -0.5, 1.0]), {"A": "Tech"})
 
     assert result == pytest.approx(0.5 * -0.20 + -0.5 * -0.10 + 1.0 * -0.10)
 
@@ -137,6 +80,28 @@ def test_no_data_after_the_as_of_date_reaches_the_view() -> None:
     assert view.asset_returns is not None
     assert view.asset_returns.shape[0] == 2
     assert float(view.asset_returns.max()) == pytest.approx(0.01)
+
+
+def test_later_prices_never_change_todays_risk_figures() -> None:
+    book, prices, _ = demo_book()
+    settings = Settings(lookback=60)
+
+    def book_returns(values: np.ndarray) -> np.ndarray:
+        table = Table(prices.dates, prices.columns, values)
+        view = build_view(book, settings, prices=table, as_of=book.dates[200])
+        assert view.book_returns is not None
+        return view.book_returns
+
+    assert_future_does_not_change_the_past(book_returns, prices.values, cut=201)
+
+
+def test_charts_can_be_interactive_and_unknown_modes_are_refused(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text('charts = "interactive"\n')
+    assert load_settings(path).charts == "interactive"
+    path.write_text('charts = "animated"\n')
+    with pytest.raises(SettingsError, match="charts must be one of"):
+        load_settings(path)
 
 
 def test_held_assets_without_prices_are_named_and_counted() -> None:

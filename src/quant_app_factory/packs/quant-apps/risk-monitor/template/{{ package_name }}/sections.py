@@ -9,21 +9,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
+from quant_toolbox.report import Block, ChartBlock, Column, TableBlock, TextBlock, bar_chart
+from quant_toolbox.risk import exposures as measure
+from quant_toolbox.risk import group_exposures, risk_shares
 
-from .document import Block, ChartBlock, Column, TableBlock, TextBlock
 from .firm.checks import CHECKS
 from .firm.sections import SECTIONS as FIRM_SECTIONS
-from .risk import (
-    Check,
-    RiskView,
-    check_limits,
-    group_exposures,
-    risk_contributions,
-    stress_return,
-)
-from .risk import (
-    exposures as measure,
-)
+from .risk import Check, RiskView, check_limits, scenario_return
 
 Section = Callable[[RiskView], list[Block]]
 
@@ -97,16 +89,25 @@ def groups(view: RiskView) -> list[Block]:
         return [
             TextBlock("Exposure by group", ["No groups file is set: set groups in config.toml."])
         ]
+    by_group = group_exposures(view.assets, view.weights, view.groups)
     rows: list[list[float | str | None]] = [
-        [name, net, gross]
-        for name, (net, gross) in group_exposures(view.assets, view.weights, view.groups).items()
+        [name, net, gross] for name, (net, gross) in by_group.items()
     ]
     return [
         TableBlock(
             title="Exposure by group",
             columns=[Column("Group", "text"), Column("Net"), Column("Gross")],
             rows=rows,
-        )
+        ),
+        bar_chart(
+            "Exposure by group",
+            list(by_group),
+            {
+                "Net": [net for net, _ in by_group.values()],
+                "Gross": [gross for _, gross in by_group.values()],
+            },
+            percent=True,
+        ),
     ]
 
 
@@ -162,14 +163,13 @@ def contributors(view: RiskView) -> list[Block]:
     """The positions adding most to the book's variance."""
     if view.asset_returns is None:
         return [TextBlock("Risk contributors", ["No prices file is set."])]
-    shares = risk_contributions(view.weights, view.asset_returns)
+    shares = risk_shares(view.weights, view.asset_returns)
     order = np.argsort(-np.abs(shares), kind="mergesort")[: view.settings.top_positions]
+    shown = [int(i) for i in order if shares[int(i)] != 0.0]
     rows: list[list[float | str | None]] = [
-        [view.assets[int(i)], float(view.weights[int(i)]), float(shares[int(i)])]
-        for i in order
-        if shares[int(i)] != 0.0
+        [view.assets[i], float(view.weights[i]), float(shares[i])] for i in shown
     ]
-    return [
+    blocks: list[Block] = [
         TableBlock(
             title="Risk contributors",
             columns=[Column("Asset", "text"), Column("Weight"), Column("Share of variance")],
@@ -177,6 +177,16 @@ def contributors(view: RiskView) -> list[Block]:
             note="Shares of variance sum to 100% over all positions; a hedge shows as negative.",
         )
     ]
+    if shown:
+        blocks.append(
+            bar_chart(
+                "Share of variance",
+                [view.assets[i] for i in shown],
+                {"Share of variance": [float(shares[i]) for i in shown]},
+                percent=True,
+            )
+        )
+    return blocks
 
 
 def stress(view: RiskView) -> list[Block]:
@@ -188,7 +198,7 @@ def stress(view: RiskView) -> list[Block]:
             )
         ]
     rows: list[list[float | str | None]] = [
-        [item.name, stress_return(item, view.assets, view.weights, view.groups)]
+        [item.name, scenario_return(item, view.assets, view.weights, view.groups)]
         for item in view.settings.scenarios
     ]
     return [
@@ -212,6 +222,7 @@ def exposure_history(view: RiskView) -> list[Block]:
                 "Gross": np.abs(values).sum(axis=1).tolist(),
                 "Net": values.sum(axis=1).tolist(),
             },
+            percent=True,
         )
     ]
 

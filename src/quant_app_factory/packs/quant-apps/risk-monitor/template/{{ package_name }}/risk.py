@@ -7,9 +7,11 @@ Conventions:
   returns, over ``lookback`` bars. It describes today's book, not what the fund earned.
 - A missing asset return counts as 0 in that bar. `RiskView.coverage` is the share of gross
   exposure with prices, and an asset with no prices at all adds nothing to the risk figures.
-- Volatility and value at risk follow `metrics` and `risk_metrics`; value at risk is per bar.
+- Volatility, value at risk, and beta follow Quant Toolbox's stated conventions
+  (`quant_toolbox.performance`); value at risk is per bar.
 - A risk contribution is ``w_i * (C w)_i / (w' C w)``, with C the sample covariance of asset
-  returns, so contributions sum to 1. Assets with no prices are left out.
+  returns, so contributions sum to 1 (`quant_toolbox.risk.risk_shares`). Assets with no prices
+  are left out.
 - A stress is a return per asset applied to today's weights, linearly: no second-order effects.
 """
 
@@ -20,89 +22,32 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
+from quant_toolbox.data import FloatArray, Table
+from quant_toolbox.performance import (
+    annualized_volatility,
+    bar_returns,
+    beta,
+    expected_shortfall,
+    value_at_risk,
+)
+from quant_toolbox.risk import exposures, group_exposures, simulated_returns, stress_return
 
-from .metrics import FloatArray, annualized_volatility, bar_returns, beta
-from .risk_metrics import expected_shortfall, value_at_risk
 from .settings import LIMITS, Scenario, Settings
-from .tables import Table
-
-UNGROUPED = "Ungrouped"
 
 
-@dataclass(frozen=True)
-class Exposures:
-    """The size and concentration of a book."""
-
-    gross: float
-    net: float
-    long: float
-    short: float
-    positions: int
-    largest: float  # the largest absolute weight
-    top_five: float  # the sum of the five largest absolute weights
-    effective_positions: float  # 1 / sum of squared shares of gross
-
-
-def exposures(weights: FloatArray) -> Exposures:
-    """Measure one row of weights; NaN counts as no position."""
-    values = np.nan_to_num(np.asarray(weights, dtype=np.float64))
-    sizes = np.sort(np.abs(values))[::-1]
-    gross = float(sizes.sum())
-    effective = 1.0 / float(np.sum((sizes / gross) ** 2)) if gross > 0.0 else 0.0
-    return Exposures(
-        gross=gross,
-        net=float(values.sum()),
-        long=float(values[values > 0.0].sum()),
-        short=float(values[values < 0.0].sum()),
-        positions=int(np.count_nonzero(values)),
-        largest=float(sizes[0]) if sizes.size else 0.0,
-        top_five=float(sizes[:5].sum()),
-        effective_positions=effective,
+def scenario_shocks(scenario: Scenario, assets: list[str], groups: dict[str, str]) -> FloatArray:
+    """Each asset's return under ``scenario``: its group's shock, or the market's."""
+    return np.array(
+        [scenario.groups.get(groups.get(asset, ""), scenario.market) for asset in assets],
+        dtype=np.float64,
     )
 
 
-def group_exposures(
-    assets: list[str], weights: FloatArray, groups: dict[str, str]
-) -> dict[str, tuple[float, float]]:
-    """Return ``{group: (net, gross)}`` for positions held, largest gross first."""
-    totals: dict[str, tuple[float, float]] = {}
-    for asset, weight in zip(assets, np.nan_to_num(weights), strict=True):
-        if weight == 0.0:
-            continue
-        group = groups.get(asset, UNGROUPED)
-        net, gross = totals.get(group, (0.0, 0.0))
-        totals[group] = (net + float(weight), gross + abs(float(weight)))
-    return dict(sorted(totals.items(), key=lambda item: -item[1][1]))
-
-
-def simulated_returns(weights: FloatArray, asset_returns: FloatArray) -> FloatArray:
-    """Today's ``weights`` applied to each past bar's returns (bars by assets)."""
-    result: FloatArray = np.nan_to_num(asset_returns) @ np.nan_to_num(weights)
-    return result
-
-
-def risk_contributions(weights: FloatArray, asset_returns: FloatArray) -> FloatArray:
-    """Each asset's share of the book's variance; they sum to 1, and to 0 for a riskless book."""
-    held = np.nan_to_num(weights)
-    if asset_returns.shape[0] < 2 or not asset_returns.shape[1]:
-        return np.zeros(held.shape)
-    covariance = np.atleast_2d(np.cov(np.nan_to_num(asset_returns), rowvar=False))
-    marginal = covariance @ held
-    variance = float(held @ marginal)
-    if variance <= 0.0:
-        return np.zeros(held.shape)
-    shares: FloatArray = held * marginal / variance
-    return shares
-
-
-def stress_return(
+def scenario_return(
     scenario: Scenario, assets: list[str], weights: FloatArray, groups: dict[str, str]
 ) -> float:
     """The book's return under ``scenario``: each weight times its asset's shock."""
-    total = 0.0
-    for asset, weight in zip(assets, np.nan_to_num(weights), strict=True):
-        total += float(weight) * scenario.groups.get(groups.get(asset, ""), scenario.market)
-    return total
+    return stress_return(weights, scenario_shocks(scenario, assets, groups))
 
 
 @dataclass(frozen=True)
@@ -258,7 +203,7 @@ def _measured(view: RiskView) -> dict[str, float]:
         measured["beta_max"] = abs(figures["beta"])
     if view.settings.scenarios:
         worst = min(
-            stress_return(item, view.assets, view.weights, view.groups)
+            scenario_return(item, view.assets, view.weights, view.groups)
             for item in view.settings.scenarios
         )
         measured["stress_loss_max"] = -worst
