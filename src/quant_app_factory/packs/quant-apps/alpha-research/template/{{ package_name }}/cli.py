@@ -8,15 +8,15 @@ from typing import Annotated
 
 import numpy as np
 import typer
+from quant_toolbox.data import Table, save_table
+from quant_toolbox.report import run_markdown
 
 from .data import open_panel
 from .firm.signals import SIGNALS as FIRM_SIGNALS
 from .parameters import ParameterError, Parameters, load_parameters
-from .report import render_markdown
 from .results import latest_run, load_results, save_run
 from .signals import PARAMETERS, look_ahead_bars
 from .study import run_study, signal_for
-from .tables import Table, save_table
 
 app = typer.Typer(help=__doc__, no_args_is_help=True)
 ConfigOption = Annotated[Path | None, typer.Option(help="The settings (default: config.toml).")]
@@ -140,7 +140,7 @@ def report(
     try:
         folder = run or latest_run(RESULTS)
         path = folder / "report.md"
-        path.write_text(render_markdown(load_results(folder)), "utf-8")
+        path.write_text(run_markdown(load_results(folder)), "utf-8")
     except ValueError as error:
         raise _fail(error) from error
     typer.echo(f"Wrote {path}")

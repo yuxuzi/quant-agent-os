@@ -4,15 +4,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from quant_toolbox.data import FloatArray, Table, TableError, demo_panel, load_csv, read_meta
 from typer.testing import CliRunner
 
 from {{ package_name }}.cli import app
 from {{ package_name }}.data import Panel, aligned, open_panel
 from {{ package_name }}.firm.signals import SIGNALS
-from {{ package_name }}.metrics import FloatArray
 from {{ package_name }}.signals import look_ahead_bars
-from {{ package_name }}.synthetic import demo_panel
-from {{ package_name }}.tables import Table, TableError, load_csv, read_meta
 
 runner = CliRunner()
 
