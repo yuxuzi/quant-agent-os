@@ -28,6 +28,12 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 No changes yet.
 
+## 0.5.0
+
+No tool changed version. `analyze_performance` and `analyze_risk` compute through Quant Toolbox, with the
+same names, schemas, and numbers; `conventions["source"]` names the backend, empyrical-reloaded or the
+toolbox's numpy formulas held equal to it ([decision 0026](decisions/0026-quant-toolbox.md)).
+
 ## 0.4.0
 
 | Tool | Version | Change |
