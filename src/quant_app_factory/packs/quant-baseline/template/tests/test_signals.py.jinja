@@ -2,22 +2,18 @@
 
 import numpy as np
 import pytest
+from quant_toolbox.data import random_walk_panel
+from quant_toolbox.testing import assert_no_look_ahead
 
 from {{ package_name }} import config
 from {{ package_name }}.signals import PARAMETERS, compute, momentum, parameters, reversal
-from {{ package_name }}.synthetic import generate_panel
 
 
 @pytest.mark.parametrize("name", sorted(PARAMETERS))
-def test_future_prices_never_change_past_signals(name: str) -> None:
-    prices, _ = generate_panel(n_bars=400, n_assets=8)
-    changed = prices.copy()
-    changed[300:] *= np.linspace(0.5, 1.5, 8)
+def test_built_in_signals_never_look_ahead(name: str) -> None:
+    prices, _ = random_walk_panel(n_bars=400, n_assets=8)
 
-    original, perturbed = compute(name, prices), compute(name, changed)
-
-    np.testing.assert_array_equal(original[:300], perturbed[:300])
-    assert not np.allclose(original[300:], perturbed[300:], equal_nan=True)
+    assert_no_look_ahead(lambda history: compute(name, history), prices)
 
 
 def test_defaults_are_twelve_one_momentum_and_one_month_reversal() -> None:

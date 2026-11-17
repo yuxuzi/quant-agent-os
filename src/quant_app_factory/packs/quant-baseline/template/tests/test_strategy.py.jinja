@@ -1,0 +1,58 @@
+"""This project's backtests are honest: bias checks on its own strategies, and its exposure modes.
+
+The backtest engine, its timing, drift, costs, and delistings are Quant Toolbox's and are tested
+there. These tests run the strategies this project builds, through `backtest.run`.
+"""
+
+import numpy as np
+import pytest
+from quant_toolbox.data import FloatArray, Panel, business_days, random_walk_panel
+from quant_toolbox.testing import (
+    assert_costs_only_cost,
+    assert_future_does_not_change_the_past,
+    assert_no_edge_on_random_walks,
+)
+
+from {{ package_name }}.backtest import run
+from {{ package_name }}.parameters import Parameters
+
+EXPOSURES = ["dollar-neutral", "beta-neutral", "long-only"]
+
+
+def _panel(prices: FloatArray) -> Panel:
+    assets = [f"A{index:02d}" for index in range(prices.shape[1])]
+    return Panel(business_days(prices.shape[0]), assets, prices)
+
+
+def _net(prices: FloatArray, parameters: Parameters) -> FloatArray:
+    return np.array(run(_panel(prices), parameters)["series"]["net_returns"], dtype=np.float64)
+
+
+@pytest.mark.parametrize("exposure", EXPOSURES)
+def test_future_prices_never_change_past_returns(exposure: str) -> None:
+    chosen = Parameters(signal="momentum", lookback=10, skip=1, exposure=exposure, beta_window=20)
+
+    assert_future_does_not_change_the_past(lambda prices: _net(prices, chosen))
+
+
+def test_higher_costs_never_raise_returns() -> None:
+    prices, _ = random_walk_panel(n_bars=300, n_assets=20)
+
+    assert_costs_only_cost(
+        lambda cost: _net(prices, Parameters(signal="reversal", lookback=5, cost_bps=cost))
+    )
+
+
+def test_no_edge_on_random_walks_across_seeds() -> None:
+    chosen = Parameters(signal="reversal", lookback=5, cost_bps=0.0)
+
+    assert_no_edge_on_random_walks(lambda prices: _net(prices, chosen))
+
+
+def test_a_long_only_book_is_measured_against_the_market() -> None:
+    prices, _ = random_walk_panel(n_bars=300, n_assets=20)
+
+    results = run(_panel(prices), Parameters(signal="reversal", lookback=5, exposure="long-only"))
+
+    assert {"active_return", "tracking_error", "information_ratio"} <= set(results["metrics"])
+    assert "long-only" in results["title"]

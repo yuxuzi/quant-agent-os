@@ -1,8 +1,0 @@
-contract = 1
-id = "metrics"
-name = "Performance metrics"
-description = "Return, volatility, Sharpe, drawdown, turnover, and information coefficients, with documented conventions and known-answer tests."
-version = "1"
-status = "experimental"
-compatible_profiles = ["quant-lab"]
-paths = ["{package}/metrics.py", "tests/test_metrics.py"]

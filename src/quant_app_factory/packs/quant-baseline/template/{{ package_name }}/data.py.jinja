@@ -1,73 +1,25 @@
-"""Price panels: load a wide price table (a date column, then one column per asset)."""
+"""Price panels: load a wide price table (a date column, then one column per asset).
+
+Tables, panels, and dates come from Quant Toolbox (`quant_toolbox.data`); this module chooses
+where the prices come from.
+"""
 
 from __future__ import annotations
 
-import csv
-import datetime as dt
-import hashlib
-import math
-import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-import numpy as np
+from quant_toolbox.data import Panel, TableError, demo_panel, load_csv, parse_date
 
-from .metrics import FloatArray
-
-_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-
-
-class DataError(ValueError):
-    """Raised when a price file cannot be used; the message says what to fix."""
-
-
-@dataclass(frozen=True)
-class Panel:
-    """Prices for ``assets`` (columns) at ``dates`` (rows). Missing prices are NaN."""
-
-    dates: list[dt.date]
-    assets: list[str]
-    prices: FloatArray
-
-    def __post_init__(self) -> None:
-        if self.prices.shape != (len(self.dates), len(self.assets)):
-            raise DataError("prices must have one row per date and one column per asset.")
-        if len(self.dates) < 2:
-            raise DataError("A panel needs at least two dates.")
-        for earlier, later in zip(self.dates, self.dates[1:], strict=False):
-            if later <= earlier:
-                raise DataError(
-                    f"Dates must be unique and in ascending order: {later} follows {earlier}."
-                )
-        finite = self.prices[np.isfinite(self.prices)]
-        if finite.size and float(finite.min()) <= 0.0:
-            raise DataError("Prices must be positive.")
-
-    def fingerprint(self) -> str:
-        """SHA-256 of the dates, assets, and prices: changing any of them changes it."""
-        digest = hashlib.sha256()
-        digest.update("\n".join(day.isoformat() for day in self.dates).encode())
-        digest.update(b"\0" + "\n".join(self.assets).encode() + b"\0")
-        canonical = np.where(np.isfinite(self.prices), self.prices, np.nan)  # one NaN pattern
-        digest.update(np.ascontiguousarray(canonical, dtype="<f8").tobytes())
-        return digest.hexdigest()
-
-
-def load_csv(path: Path) -> Panel:
-    """Read a wide CSV: a header ``date,ASSET1,ASSET2,...`` then one row per date."""
-    with path.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.reader(handle))
-    if len(rows) < 3 or len(rows[0]) < 2:
-        raise DataError(f"{path} needs a header and at least two rows of prices.")
-    header, body = rows[0], rows[1:]
-    prices = np.array([[_number(cell) for cell in row[1:]] for row in body], dtype=np.float64)
-    return Panel(dates=[parse_date(row[0]) for row in body], assets=header[1:], prices=prices)
+DataError = TableError
+__all__ = ["DataError", "Panel", "load_prices", "open_panel", "parse_date"]
 {%- if 'data-parquet' in components %}
 
 
 def load_parquet(path: Path) -> Panel:
     """Read a wide Parquet file with a ``date`` column and one column per asset."""
+    import math
+
+    import numpy as np
     import pyarrow.parquet as pq
 
     table = pq.read_table(path)
@@ -88,8 +40,6 @@ def open_panel(source: str, base: Path = Path()) -> Panel:
     """Load what a ``data`` setting names: "demo", "database" (with the database component),
     or a price file, relative to ``base``."""
     if source == "demo":
-        from .synthetic import demo_panel
-
         return demo_panel()
 {%- if 'data-database' in components %}
     if source == "database":
@@ -105,31 +55,9 @@ def load_prices(path: Path) -> Panel:
     if not path.is_file():
         raise DataError(f"No price file at {path}; set data in config.toml or pass --prices.")
     if path.suffix.lower() == ".csv":
-        return load_csv(path)
+        return Panel.from_table(load_csv(path))
 {%- if 'data-parquet' in components %}
     if path.suffix.lower() == ".parquet":
         return load_parquet(path)
 {%- endif %}
     raise DataError(f"Unsupported price file {path.name}; use a .csv file.")
-
-
-def parse_date(value: Any) -> dt.date:
-    """Read a date: a ``date``, a midnight ``datetime``, or ISO text such as ``2024-01-09``."""
-    if isinstance(value, dt.datetime):
-        if value.time() != dt.time():
-            raise DataError(f"{value} has a time of day; this template uses one price per date.")
-        return value.date()
-    if isinstance(value, dt.date):
-        return value
-    text = str(value).strip()
-    if _ISO_DATE.fullmatch(text):
-        try:
-            return dt.date.fromisoformat(text)
-        except ValueError:
-            pass
-    raise DataError(f"{text!r} is not an ISO date; write dates as YYYY-MM-DD, like 2024-01-09.")
-
-
-def _number(cell: str) -> float:
-    text = cell.strip()
-    return math.nan if text == "" else float(text)

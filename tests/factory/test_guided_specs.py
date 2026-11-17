@@ -106,7 +106,6 @@ def test_describing_a_profile_lists_only_what_it_can_use() -> None:
         "data-csv",
         "data-database",
         "data-parquet",
-        "metrics",
     }
 
 
@@ -290,7 +289,7 @@ def test_new_asks_until_the_spec_is_ready_and_writes_it(
     tmp_path: Path, settings_file: Path
 ) -> None:
     out = tmp_path / "momo.toml"
-    lines = ["momo-lab", "Momentum research", str(tmp_path), "", "weekly", "3", "2.5", "n"]
+    lines = ["momo-lab", "Momentum research", str(tmp_path), "", "weekly", "3", "2.5", "", "n"]
     answers = "\n".join(lines)
 
     result = CliRunner().invoke(

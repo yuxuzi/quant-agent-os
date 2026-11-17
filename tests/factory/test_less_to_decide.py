@@ -90,9 +90,10 @@ def test_components_are_a_numbered_menu_and_postgres_asks_only_for_its_password(
     workspace: Path,
 ) -> None:
     # name, description, directory, component 2 (the second optional one), then frequency,
-    # max_horizon, cost_bps, db_kind=postgres, host, port, name, user, schema, sslmode, query,
-    # read-only; the password variable; do not save; do not create.
-    lines = ["pg-lab", "Research", str(workspace), "2", "", "", "", "postgres"]
+    # max_horizon, cost_bps, where to install quant-agent-os, db_kind=postgres, host, port,
+    # name, user, schema, sslmode, query, read-only; the password variable; do not save; do
+    # not create.
+    lines = ["pg-lab", "Research", str(workspace), "2", "", "", "", "", "postgres"]
     lines += ["db.internal", "", "prices", "", "", "", "", "", "PG_PASSWORD", "", "n"]
 
     result = CliRunner().invoke(
@@ -124,7 +125,7 @@ def test_create_prints_a_summary_not_every_file(workspace: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "lab/metrics.py" not in result.output
-    assert re.search(r"\d+ files; components: data-csv, metrics; checks: uv sync", result.output)
+    assert re.search(r"\d+ files; components: data-csv; checks: uv sync", result.output)
 
 
 # U4: one way to name a target, and every documented spec validates

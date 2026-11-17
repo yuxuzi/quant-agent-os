@@ -79,7 +79,8 @@ def test_report_compares_several_runs_with_a_chart() -> None:
     assert comparison.startswith("# Comparison of 2 runs")
     assert "| | daily | monthly |" in comparison  # labels, without the timestamps
     assert "| rebalance every | 1 |" in comparison
-    assert Path("results/comparison-equity.svg").read_text().count("<polyline") == 2
+    chart = Path("results/comparison-equity.svg").read_text()
+    assert "<script" not in chart and "daily" in chart and "monthly" in chart
 
 
 def test_runs_never_overwrite_each_other_and_take_labels() -> None:

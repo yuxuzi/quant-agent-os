@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from quant_toolbox.report import comparison_markdown, equity_chart, run_markdown
+from quant_toolbox.report.svg import chart_svg
 {%- if 'data-database' in components %}
 from sqlalchemy.exc import SQLAlchemyError
 {%- endif %}
@@ -21,7 +23,6 @@ from .data import Panel, open_panel
 from .database import check_connection
 {%- endif %}
 from .parameters import Parameters, load_parameters
-from .report import equity_svg, render_comparison, render_markdown
 from .results import latest_run, load_results, save_run
 from .study import run_study
 from .walk_forward import run_walk_forward
@@ -307,14 +308,14 @@ def _report(sources: list[Path], out: Path | None) -> None:
         first = sources[0]
         folder = first if first.is_dir() and len(sources) == 1 else first.parent
         out = folder / ("report.md" if len(sources) == 1 else "comparison.md")
-    chart = equity_svg(runs)
-    chart_name = f"{out.stem}-equity.svg" if chart else None
-    if chart and chart_name:
-        out.with_name(chart_name).write_text(chart, "utf-8")
+    block = equity_chart(runs)
+    chart_name = f"{out.stem}-equity.svg" if block is not None else None
+    if block is not None and chart_name:
+        out.with_name(chart_name).write_text(chart_svg(block, standalone=True), "utf-8")
     if len(runs) == 1:
-        text = render_markdown(runs[0][1], chart_name)
+        text = run_markdown(runs[0][1], chart_name)
     else:
-        text = render_comparison(runs, chart_name)
+        text = comparison_markdown(runs, chart_name)
     out.write_text(text, "utf-8")
     typer.echo(f"Wrote {out}" + (f" and {chart_name}" if chart_name else ""))
 

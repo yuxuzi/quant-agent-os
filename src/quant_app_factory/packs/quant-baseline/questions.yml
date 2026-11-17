@@ -209,5 +209,4 @@ components:
     - data-csv
     - data-database
     - data-parquet
-    - metrics
   default: []

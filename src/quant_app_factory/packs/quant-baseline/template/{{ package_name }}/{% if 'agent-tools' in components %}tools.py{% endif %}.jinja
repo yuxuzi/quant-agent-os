@@ -15,11 +15,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
+from quant_toolbox.report import run_markdown
 
 from .backtest import run
 from .data import open_panel
 from .parameters import Parameters, load_parameters
-from .report import render_markdown
 from .study import run_study
 from .walk_forward import run_walk_forward
 
@@ -115,7 +115,7 @@ def walk_forward_signal(params: SignalInput) -> ResultsOutput:
 @tool(name="render_report", description="Render a study or backtest result as Markdown.")
 def render_report(params: ReportInput) -> ReportOutput:
     """Render ``params.results``."""
-    return ReportOutput(markdown=render_markdown(params.results))
+    return ReportOutput(markdown=run_markdown(params.results))
 
 
 TOOLS: list[ToolSpec[Any, Any]] = [
