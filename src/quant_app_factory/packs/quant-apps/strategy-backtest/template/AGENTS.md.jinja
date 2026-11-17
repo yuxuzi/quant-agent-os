@@ -16,6 +16,14 @@ generate a fresh project from the newer template and compare; `.pytemplate.toml`
 template, its version, and your answers. Changes kept in `config.toml` and
 `{{ package_name }}/firm/` keep that comparison small.
 
+## Where the numbers come from
+
+Formulas, tables, reports, and run records come from Quant Toolbox (`quant_toolbox`, installed as
+`quant-agent-os[toolbox]`, MIT), at the version `pyproject.toml` pins. They are tested there, and
+this project holds no copy of them. To use another definition, add a separately named figure in
+this project and test it; never edit the installed toolbox. To take a newer toolbox, move the tag
+in `pyproject.toml`, run `uv sync`, and run the tests.
+
 ## Rules that protect the results
 
 - This is a simulation. It must never place orders or connect to a broker or order system.
@@ -23,7 +31,8 @@ template, its version, and your answers. Changes kept in `config.toml` and
 - Do not lower costs, or skip delistings, to improve a result. Report changes to them.
 - In-sample backtest figures are not evidence of an edge: use walk-forward, and say which is which.
 - Record every signal and grid you try, because trying many inflates the best.
-- Do not change a formula in `metrics.py` to make a result look better or match another figure.
+- Do not redefine a Quant Toolbox metric to make a result look better or match another figure;
+  add a separately named figure instead.
 - Keep the known-answer and bias tests passing. If one must change, say which and why.
 - Add a known-answer test for any new calculation, and a look-ahead test for any new signal.
 - Results are computed figures only. Do not write interpretation or investment advice into them.

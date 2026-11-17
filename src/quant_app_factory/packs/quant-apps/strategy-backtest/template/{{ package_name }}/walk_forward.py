@@ -13,12 +13,17 @@ import math
 from typing import Any
 
 import numpy as np
+from quant_toolbox.data import FloatArray, Panel
+from quant_toolbox.performance import sharpe_ratio, summarize
+from quant_toolbox.research import (
+    forward_returns,
+    information_coefficient,
+    run_backtest,
+    walk_forward_splits,
+)
 
 from . import config, signals
-from .backtest import run_backtest, walk_forward_splits, weights_for
-from .data import Panel
-from .evaluation import forward_returns
-from .metrics import FloatArray, information_coefficient, sharpe_ratio, summarize
+from .backtest import weights_for
 from .parameters import Parameters
 
 LIMITATIONS = [
@@ -138,7 +143,7 @@ def _net(prices: FloatArray, signal: FloatArray, parameters: Parameters) -> Floa
         lag=parameters.lag,
         rebalance_every=parameters.rebalance_every,
         delisting_return=parameters.delisting_return,
-    )["net"]
+    ).net
 
 
 def _span(panel: Panel, window: range) -> list[str]:

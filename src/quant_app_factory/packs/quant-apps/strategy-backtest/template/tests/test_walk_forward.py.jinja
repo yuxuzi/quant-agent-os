@@ -4,11 +4,11 @@ import math
 
 import numpy as np
 import pytest
+from quant_toolbox.data import business_days, random_walk_panel
+from quant_toolbox.research import walk_forward_splits
 
-from {{ package_name }}.backtest import walk_forward_splits
 from {{ package_name }}.data import Panel
 from {{ package_name }}.parameters import Parameters
-from {{ package_name }}.synthetic import dates, generate_panel
 from {{ package_name }}.walk_forward import candidate_lookbacks, run_walk_forward
 
 PARAMETERS = Parameters(signal="reversal", lookbacks=(2, 5, 10), train_bars=120, test_bars=40)
@@ -16,7 +16,7 @@ PARAMETERS = Parameters(signal="reversal", lookbacks=(2, 5, 10), train_bars=120,
 
 def _panel(prices: np.ndarray) -> Panel:
     assets = [f"A{index}" for index in range(prices.shape[1])]
-    return Panel(dates=dates(prices.shape[0]), assets=assets, prices=prices)
+    return Panel(dates=business_days(prices.shape[0]), assets=assets, prices=prices)
 
 
 def _choices(prices: np.ndarray, parameters: Parameters = PARAMETERS) -> list[int]:
@@ -25,7 +25,7 @@ def _choices(prices: np.ndarray, parameters: Parameters = PARAMETERS) -> list[in
 
 @pytest.mark.parametrize("objective", ["sharpe", "ic"])
 def test_test_window_data_never_changes_that_folds_choice(objective: str) -> None:
-    prices, _ = generate_panel(n_bars=400, n_assets=12, signal_strength=0.2)
+    prices, _ = random_walk_panel(n_bars=400, n_assets=12, signal_strength=0.2)
     parameters = Parameters(**{**PARAMETERS.__dict__, "objective": objective})
     baseline = _choices(prices, parameters)
     splits = walk_forward_splits(400, 120, 40, start=12)
@@ -40,7 +40,7 @@ def test_test_window_data_never_changes_that_folds_choice(objective: str) -> Non
 
 
 def test_only_test_windows_are_reported() -> None:
-    prices, _ = generate_panel(n_bars=400, n_assets=12)
+    prices, _ = random_walk_panel(n_bars=400, n_assets=12)
 
     results = run_walk_forward(_panel(prices), PARAMETERS)
 
@@ -82,7 +82,7 @@ def test_the_default_grid_scales_the_standard_lookback() -> None:
 
 
 def test_too_little_data_is_explained() -> None:
-    prices, _ = generate_panel(n_bars=100, n_assets=5)
+    prices, _ = random_walk_panel(n_bars=100, n_assets=5)
 
     with pytest.raises(ValueError, match="Walk-forward needs"):
         run_walk_forward(_panel(prices), PARAMETERS)

@@ -5,11 +5,11 @@ import json
 from pathlib import Path
 
 import numpy as np
+from quant_toolbox.data import business_days, random_walk_panel
 
 from {{ package_name }}.data import Panel
 from {{ package_name }}.parameters import Parameters, load_parameters
 from {{ package_name }}.results import code_version, latest_run, load_results, save_run
-from {{ package_name }}.synthetic import dates, generate_panel
 
 NOW = dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC)
 RESULTS = {"kind": "study", "parameters": {"signal": "momentum"}, "metrics": {"x": 1.0}}
@@ -17,11 +17,11 @@ RESULTS = {"kind": "study", "parameters": {"signal": "momentum"}, "metrics": {"x
 
 def _panel(prices: np.ndarray) -> Panel:
     assets = [f"A{index}" for index in range(prices.shape[1])]
-    return Panel(dates=dates(prices.shape[0]), assets=assets, prices=prices)
+    return Panel(dates=business_days(prices.shape[0]), assets=assets, prices=prices)
 
 
 def test_changing_one_price_changes_the_fingerprint() -> None:
-    prices, _ = generate_panel(n_bars=50, n_assets=4)
+    prices, _ = random_walk_panel(n_bars=50, n_assets=4)
     changed = prices.copy()
     changed[30, 2] *= 1.0001
 
@@ -30,13 +30,13 @@ def test_changing_one_price_changes_the_fingerprint() -> None:
 
 
 def test_the_fingerprint_covers_dates_assets_and_missing_prices() -> None:
-    prices, _ = generate_panel(n_bars=50, n_assets=4)
+    prices, _ = random_walk_panel(n_bars=50, n_assets=4)
     base = _panel(prices)
     gap = prices.copy()
     gap[10, 1] = np.nan
 
     renamed = Panel(dates=base.dates, assets=["A0", "A1", "A2", "B3"], prices=prices)
-    shifted = Panel(dates=dates(50, dt.date(2021, 1, 1)), assets=base.assets, prices=prices)
+    shifted = Panel(dates=business_days(50, dt.date(2022, 1, 3)), assets=base.assets, prices=prices)
     assert len({base.fingerprint(), renamed.fingerprint(), shifted.fingerprint()}) == 3
     assert _panel(gap).fingerprint() == _panel(gap.copy()).fingerprint()
     assert _panel(gap).fingerprint() != base.fingerprint()

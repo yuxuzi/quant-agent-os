@@ -1,0 +1,119 @@
+"""This application's strategies are honest: bias checks, the trade lag, and the exposure modes.
+
+The backtest engine, its timing, drift, costs, and delistings are Quant Toolbox's and are tested
+there. These tests run the strategies this application builds, through `run_with_tables`.
+"""
+
+from collections.abc import Iterator
+
+import numpy as np
+import pytest
+from quant_toolbox.data import FloatArray, Panel, business_days, random_walk_panel
+from quant_toolbox.testing import (
+    assert_costs_only_cost,
+    assert_future_does_not_change_the_past,
+    assert_no_edge_on_random_walks,
+)
+
+from {{ package_name }}.backtest import run_with_tables
+from {{ package_name }}.firm.signals import SIGNALS
+from {{ package_name }}.parameters import Parameters
+
+EXPOSURES = ["dollar-neutral", "beta-neutral", "long-only"]
+
+
+def _panel(prices: FloatArray) -> Panel:
+    assets = [f"A{index:02d}" for index in range(prices.shape[1])]
+    return Panel(business_days(prices.shape[0]), assets, prices)
+
+
+def _net(prices: FloatArray, parameters: Parameters) -> FloatArray:
+    results, _ = run_with_tables(_panel(prices), parameters)
+    return np.array(results["series"]["net_returns"], dtype=np.float64)
+
+
+@pytest.fixture(autouse=True)
+def _forget_firm_signals() -> Iterator[None]:
+    yield
+    SIGNALS.pop("planted", None)
+
+
+def _plant(signal: FloatArray) -> None:
+    def planted(history: FloatArray) -> FloatArray:
+        return signal[: history.shape[0]]
+
+    SIGNALS["planted"] = planted
+
+
+@pytest.mark.parametrize("exposure", EXPOSURES)
+def test_future_prices_never_change_past_returns(exposure: str) -> None:
+    chosen = Parameters(signal="momentum", lookback=10, skip=1, exposure=exposure, beta_window=20)
+
+    assert_future_does_not_change_the_past(lambda prices: _net(prices, chosen))
+
+
+def test_higher_costs_never_raise_returns() -> None:
+    prices, _ = random_walk_panel(n_bars=300, n_assets=20)
+
+    assert_costs_only_cost(
+        lambda cost: _net(prices, Parameters(signal="reversal", lookback=5, cost_bps=cost))
+    )
+
+
+def test_no_edge_on_random_walks_across_seeds() -> None:
+    chosen = Parameters(signal="reversal", lookback=5, cost_bps=0.0)
+
+    assert_no_edge_on_random_walks(lambda prices: _net(prices, chosen))
+
+
+def test_a_next_bar_edge_needs_a_trade_at_the_signals_own_close() -> None:
+    # The edge lasts one bar: the default lag cannot earn it, a trade at the same close could.
+    prices, signal = random_walk_panel(n_bars=750, n_assets=30, signal_strength=0.3, delay=0)
+    _plant(signal)
+    chosen = Parameters(signal="planted", cost_bps=0.0, rebalance_every=1)
+
+    at_close = _net(prices, chosen.updated(lag=0))
+    lagged = _net(prices, chosen)
+
+    assert np.mean(at_close) / np.std(at_close) * np.sqrt(252) > 10
+    assert abs(np.mean(lagged) / np.std(lagged) * np.sqrt(252)) < 1.5
+
+
+def _factor_world(n_bars: int = 800, n_assets: int = 30) -> tuple[FloatArray, FloatArray]:
+    """Returns driven by one market factor, and a signal that is mostly each asset's beta."""
+    generator = np.random.default_rng(11)
+    betas = np.linspace(0.4, 1.6, n_assets)
+    market = generator.standard_normal(n_bars) * 0.01 + 0.0003
+    returns = np.outer(market, betas) + generator.standard_normal((n_bars, n_assets)) * 0.005
+    returns[0] = 0.0
+    prices = 100.0 * np.cumprod(1.0 + returns, axis=0)
+    signal = np.tile(betas, (n_bars, 1)) + generator.standard_normal((n_bars, n_assets)) * 0.05
+    return prices, signal
+
+
+def test_a_beta_neutral_book_has_no_market_beta_where_a_dollar_neutral_one_does() -> None:
+    prices, signal = _factor_world()
+    _plant(signal)
+
+    def realised(exposure: str) -> float:
+        chosen = Parameters(
+            signal="planted", exposure=exposure, beta_window=252, cost_bps=0.0, rebalance_every=1
+        )
+        results, _ = run_with_tables(_panel(prices), chosen)
+        beta: float = results["metrics"]["beta"]
+        return beta
+
+    assert realised("dollar-neutral") > 0.3  # ranking on beta is a market bet in disguise
+    assert abs(realised("beta-neutral")) < 0.05
+
+
+def test_a_long_only_book_is_measured_against_the_market() -> None:
+    prices, _ = random_walk_panel(n_bars=300, n_assets=20)
+
+    results, tables = run_with_tables(
+        _panel(prices), Parameters(signal="reversal", lookback=5, exposure="long-only")
+    )
+
+    assert {"active_return", "tracking_error", "information_ratio"} <= set(results["metrics"])
+    assert (tables["weights.csv"].values >= 0).all()
+    assert "long-only" in results["title"]
