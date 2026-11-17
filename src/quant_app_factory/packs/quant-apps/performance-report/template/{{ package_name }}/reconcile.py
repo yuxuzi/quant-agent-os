@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .document import Column, TableBlock
-from .horizons import monthly_returns
-from .tables import Table, TableError
+from quant_toolbox.data import Table, TableError
+from quant_toolbox.performance import monthly_returns
+from quant_toolbox.report import Column, TableBlock
 
 
 @dataclass(frozen=True)

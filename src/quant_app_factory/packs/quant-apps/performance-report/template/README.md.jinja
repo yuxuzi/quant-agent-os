@@ -43,4 +43,8 @@ It compares each book month by month, lists every break, and exits 1 if anything
 | 3 | Add your own sections and file formats | `{{ package_name }}/firm/` |
 | 4 | Change anything else; you own the code | Everywhere, with the tests to catch mistakes |
 
+The calculations come from Quant Toolbox (`quant_toolbox`), pinned in `pyproject.toml`, so this
+project holds only what is yours. Charts are static SVG; set `charts = "interactive"` in
+`config.toml`, after `uv add "quant-agent-os[interactive]"`, for interactive ones.
+
 `AGENTS.md` tells a coding assistant the same rules. See `LIMITATIONS.md` for what this does not do.
