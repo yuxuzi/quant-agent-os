@@ -580,7 +580,7 @@ curl -s -H "Authorization: Bearer $PM" http://127.0.0.1:8765/v1/tools \
 ```
 
 ```text
-tools: analyze_performance, analyze_risk, check_risk_limits, list_datasets, max_drawdown, risk_report, server_info
+tools: analyze_performance, analyze_risk, analyze_signal, check_risk_limits, list_datasets, max_drawdown, risk_report, run_backtest, server_info
 ```
 
 Your three tools sit beside the platform's analytics. `show.py` turned the JSON answer into one
@@ -682,7 +682,7 @@ call "$INTERN" check_risk_limits
 
 ```text
 Added a key for intern in tenant local (tools:list) to .../qaos-tutorial/api-keys.toml. It is shown once; store it now. A running server accepts it at once.
-tools: analyze_performance, analyze_risk, check_risk_limits, list_datasets, max_drawdown, risk_report, server_info
+tools: analyze_performance, analyze_risk, analyze_signal, check_risk_limits, list_datasets, max_drawdown, risk_report, run_backtest, server_info
 refused: This API key lacks the 'tools:call' scope.
 ```
 
@@ -1059,7 +1059,7 @@ call.**
 
 | | The operator (commands) | An AI client (tools) |
 | --- | --- | --- |
-| **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk` |
+| **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk`, `analyze_signal`, `run_backtest` |
 | **Applications** | `qaos app new`, `qaos app create`, editing `config.toml` and `firm/` | The tools your server names, such as `check_risk_limits` |
 | **Access** | `qaos keys new`, `api-keys.toml`, `access.toml` | None |
 | **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |

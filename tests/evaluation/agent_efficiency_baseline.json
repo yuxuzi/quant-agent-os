@@ -1,22 +1,22 @@
 {
   "servers": {
     "platform": {
-      "client_only_bytes": 18442,
-      "definition_bytes": 6559,
+      "client_only_bytes": 28707,
+      "definition_bytes": 11417,
       "instruction_bytes": 817,
-      "tools": 7
+      "tools": 9
     },
     "platform-with-factory": {
-      "client_only_bytes": 22842,
-      "definition_bytes": 7590,
+      "client_only_bytes": 33107,
+      "definition_bytes": 12448,
       "instruction_bytes": 1145,
-      "tools": 9
+      "tools": 11
     }
   },
   "skills": {
     "quant-analytics": {
-      "description_bytes": 276,
-      "skill_bytes": 2837
+      "description_bytes": 313,
+      "skill_bytes": 3746
     },
     "quant-app-factory": {
       "description_bytes": 282,
@@ -35,9 +35,9 @@
     "analyze_a_series": {
       "argument_bytes": 102,
       "calls": 2,
-      "result_bytes": 7937,
+      "result_bytes": 8889,
       "skill": "quant-analytics",
-      "skill_bytes": 2837,
+      "skill_bytes": 3746,
       "success": true,
       "tools": [
         "analyze_performance",
@@ -47,13 +47,24 @@
     "analyze_portfolio_risk": {
       "argument_bytes": 123,
       "calls": 2,
-      "result_bytes": 3883,
+      "result_bytes": 4051,
       "skill": "quant-analytics",
-      "skill_bytes": 2837,
+      "skill_bytes": 3746,
       "success": true,
       "tools": [
         "analyze_risk",
         "list_datasets"
+      ]
+    },
+    "backtest_a_signal": {
+      "argument_bytes": 75,
+      "calls": 1,
+      "result_bytes": 5233,
+      "skill": "quant-analytics",
+      "skill_bytes": 3746,
+      "success": true,
+      "tools": [
+        "run_backtest"
       ]
     },
     "check_an_app_spec": {
@@ -101,17 +112,29 @@
         "find_related_signals",
         "get_source_passage"
       ]
+    },
+    "study_a_signal": {
+      "argument_bytes": 63,
+      "calls": 2,
+      "result_bytes": 5603,
+      "skill": "quant-analytics",
+      "skill_bytes": 3746,
+      "success": true,
+      "tools": [
+        "analyze_signal",
+        "list_datasets"
+      ]
     }
   },
   "totals": {
-    "argument_bytes": 583,
-    "calls": 10,
-    "definition_bytes": 6559,
+    "argument_bytes": 721,
+    "calls": 13,
+    "definition_bytes": 11417,
     "instruction_bytes": 817,
-    "result_bytes": 36369,
-    "skill_bytes": 10309,
-    "skill_description_bytes": 1114,
+    "result_bytes": 48325,
+    "skill_bytes": 11218,
+    "skill_description_bytes": 1151,
     "success_rate": 1.0,
-    "tools": 7
+    "tools": 9
   }
 }

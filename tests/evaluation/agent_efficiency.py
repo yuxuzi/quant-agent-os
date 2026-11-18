@@ -61,10 +61,13 @@ SKILL_FOR_TASK = {
     "analyze_portfolio_risk": "quant-analytics",
     "report_on_a_signal": "quant-strategy",
     "check_an_app_spec": "quant-app-factory",
+    "study_a_signal": "quant-analytics",
+    "backtest_a_signal": "quant-analytics",
 }
 
 
 ASSETS = {"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}
+INSTRUMENTS = [f"S{number:02d}" for number in range(20)]
 
 
 def daily_returns(seed: int, periods: int = 252) -> list[float]:
@@ -208,6 +211,26 @@ async def check_an_app_spec(client: Client) -> bool:
     return bool(checked.get("check", {}).get("ready"))
 
 
+async def study_a_signal(client: Client) -> bool:
+    """Find the frames, then measure a signal's IC, decay, and quantile spread by reference."""
+    listed = await client.call("list_datasets", {})
+    if not listed.get("datasets"):
+        return False
+    output = await client.call(
+        "analyze_signal", {"signal": {"dataset": "signal"}, "returns": {"dataset": "panel"}}
+    )
+    return output.get("summary", {}).get("mean_rank_ic") is not None
+
+
+async def backtest_a_signal(client: Client) -> bool:
+    """Backtest the same signal as a dollar-neutral book with costs, by reference."""
+    output = await client.call(
+        "run_backtest",
+        {"signal": {"dataset": "signal"}, "returns": {"dataset": "panel"}, "cost_bps": 10},
+    )
+    return output.get("summary", {}).get("sharpe_ratio") is not None
+
+
 TASKS: dict[str, Task] = {
     "search_and_cite": search_and_cite,
     "draft_strategy": draft_strategy,
@@ -215,6 +238,8 @@ TASKS: dict[str, Task] = {
     "analyze_portfolio_risk": analyze_portfolio_risk,
     "report_on_a_signal": report_on_a_signal,
     "check_an_app_spec": check_an_app_spec,
+    "study_a_signal": study_a_signal,
+    "backtest_a_signal": backtest_a_signal,
 }
 
 
@@ -311,7 +336,8 @@ async def _evaluate(default: Catalog, everything: Catalog, workdir: str) -> dict
 
 
 def _datasets(workdir: Path) -> DirectoryDatasetStore:
-    """A year of daily returns for a fund, its benchmark, and three assets, as one dataset."""
+    """A year of daily returns for a fund, its benchmark, and three assets, as one dataset, and a
+    signal with its instruments' returns as two more."""
     columns = {"fund": daily_returns(1), "benchmark": daily_returns(2)}
     columns |= {name: daily_returns(seed) for seed, name in enumerate(ASSETS, 3)}
     days = (date(2025, 1, 1) + timedelta(days=step) for step in range(400))
@@ -325,6 +351,25 @@ def _datasets(workdir: Path) -> DirectoryDatasetStore:
     source.write_text("\n".join(lines) + "\n", "utf-8")
     store = DirectoryDatasetStore(workdir / "datasets")
     store.put("daily", source)
+    # A panel of twenty instruments' daily returns, and a signal that partly knows the next one.
+    panel = [daily_returns(seed, 254) for seed in range(10, 10 + len(INSTRUMENTS))]
+    for name, rows in (
+        ("panel", [[values[row] for values in panel] for row in range(252)]),
+        (
+            "signal",
+            [
+                [
+                    round(values[row + 2] + 0.01 * math.sin(row * at), 4)
+                    for at, values in enumerate(panel)
+                ]
+                for row in range(252)
+            ],
+        ),
+    ):
+        path = workdir / f"{name}.csv"
+        body = [f"{business_days[row]}," + ",".join(map(str, rows[row])) for row in range(252)]
+        path.write_text("\n".join(["date," + ",".join(INSTRUMENTS), *body]) + "\n", "utf-8")
+        store.put(name, path)
     return store
 
 

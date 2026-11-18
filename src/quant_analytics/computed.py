@@ -10,6 +10,8 @@ it came from. An undefined metric, NaN in the toolbox, is None here.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from datetime import date
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -181,6 +183,18 @@ class FactorRisk(BaseModel):
     r_squared: float | None
 
 
+class ModelRisk(BaseModel):
+    """Volatility under a vendor's factor model, split into factors, specific risk, and assets."""
+
+    volatility: float
+    factor_volatility: float
+    specific_volatility: float
+    exposures: dict[str, float]
+    factor_shares: dict[str, float] | None
+    specific_share: float | None
+    contributions: dict[str, float] | None
+
+
 class RiskOutput(BaseModel):
     """Portfolio volatility, its decomposition by asset, and optional factor exposures."""
 
@@ -197,6 +211,13 @@ class RiskOutput(BaseModel):
     effective_positions: float | None = None
     contributions: dict[str, AssetRisk]
     factors: FactorRisk | None
+    historical_stress: dict[str, float] | None = Field(
+        default=None, description="Today's weights over each covered scenario window"
+    )
+    historical_stress_note: str | None = Field(
+        default=None, description="Why scenarios are missing or not covered"
+    )
+    factor_model: ModelRisk | None = None
     conventions: dict[str, str]
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
@@ -395,3 +416,99 @@ def _label(name: str) -> str:
 
 def _format(name: str, value: float) -> str:
     return report.format_metric(name, value, ratio_digits=2, kinds=METRIC_KINDS)
+
+
+DAILY = frozenset({252, 365})
+MODEL_STATEMENTS = 5  # the factors with the largest variance shares get a sentence each
+
+
+def historical_stress(
+    portfolio_id: str,
+    weights: Mapping[str, float],
+    asset_returns: Mapping[str, list[float]],
+    dates: list[date] | None,
+    periods_per_year: int,
+) -> tuple[dict[str, float] | None, str | None, list[Evidence]]:
+    """Today's ``weights`` over each covered `quant_toolbox.risk.SCENARIOS` window.
+
+    Returns the covered scenarios' returns, a note on what is not covered, and evidence. The
+    returns are None, with the reason, when there are no dates or they are not daily.
+    """
+    count = len(risk.SCENARIOS)
+    if periods_per_year not in DAILY:
+        return (
+            None,
+            "Historical stress needs daily returns; these are "
+            f"{periods_per_year} a year, which cover no scenario window.",
+            [],
+        )
+    if dates is None:
+        return None, "Historical stress needs dated returns; these have no dates.", []
+    names = list(weights)
+    found = risk.historical_stress(
+        np.array([weights[name] for name in names], dtype=np.float64),
+        dates,
+        np.column_stack([np.asarray(asset_returns[name], dtype=np.float64) for name in names]),
+    )
+    covered = {name: value for name, value in found.items() if value is not None}
+    if not covered:
+        return (
+            None,
+            f"The dates ({dates[0]} to {dates[-1]}) cover none of the {count} scenario windows "
+            "without a gap.",
+            [],
+        )
+    missing = count - len(covered)
+    note = (
+        f"{missing} of {count} scenario windows are not covered by the dates." if missing else None
+    )
+    source = SourceRef(source_id=portfolio_id, location=f"{len(dates)} dated periods")
+    evidence = [
+        Evidence(
+            kind="computed",
+            statement=f"Today's {portfolio_id} would have returned {value:.2%} over {scenario}.",
+            sources=[source],
+        )
+        for scenario, value in covered.items()
+    ]
+    return covered, note, evidence
+
+
+def model_risk(
+    portfolio_id: str,
+    weights: Mapping[str, float],
+    loadings: Mapping[str, Mapping[str, float]],
+    factor_covariance: Mapping[str, Mapping[str, float]],
+    specific_variance: Mapping[str, float],
+) -> tuple[ModelRisk, list[Evidence]]:
+    """Volatility of ``weights`` under a supplied factor model, with its evidence.
+
+    Covariance and specific variances are annualised. Raises ValueError when they do not line up.
+    """
+    found = risk.factor_risk(weights, loadings, factor_covariance, specific_variance)
+    result = ModelRisk(
+        volatility=found.volatility,
+        factor_volatility=found.factor_volatility,
+        specific_volatility=found.specific_volatility,
+        exposures=found.exposures,
+        factor_shares=found.factor_shares,
+        specific_share=found.specific_share,
+        contributions=found.contributions,
+    )
+    source = SourceRef(
+        source_id=portfolio_id, location=f"{len(weights)} assets, {len(factor_covariance)} factors"
+    )
+    statements = [
+        f"Annualised volatility of {portfolio_id} under the factor model is "
+        f"{found.volatility:.2%}, of which factors {found.factor_volatility:.2%} and specific "
+        f"{found.specific_volatility:.2%} alone."
+    ]
+    if found.factor_shares is not None:
+        largest = sorted(found.factor_shares.items(), key=lambda item: -abs(item[1]))
+        statements += [
+            f"{factor} explains {share:.1%} of the model variance of {portfolio_id}."
+            for factor, share in largest[:MODEL_STATEMENTS]
+        ]
+    return result, [
+        Evidence(kind="computed", statement=statement, sources=[source]) for statement in statements
+    ]
