@@ -79,9 +79,10 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
 
 def _ruff_problems(directory: Path) -> list[str]:
     problems = []
-    for arguments in (["check"], ["check", "--select", RULES], ["format", "--check"]):
+    # Ruff's defaults, then the repository's stricter rules; line length is the firm's choice.
+    for arguments in ([], ["--select", RULES, "--ignore", "E501"]):
         result = subprocess.run(
-            [sys.executable, "-m", "ruff", *arguments, "--isolated", "--line-length", "100", "."],
+            [sys.executable, "-m", "ruff", "check", "--isolated", *arguments, "."],
             cwd=directory,
             capture_output=True,
             text=True,

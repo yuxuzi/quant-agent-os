@@ -296,7 +296,8 @@ uv run pytest legacy_tools/test_tools.py                      # fix, rerun, unti
 For each public function and method it records the signature, which parameters and returns are typed, the
 docstring, and what the body does: pandas or NumPy data, module settings, environment variables, a database,
 files read or written, printing, network calls, programs run, state kept between calls, and a class's state,
-slow set-up, and caches. A private helper's behaviour counts for its callers. Each callable gets a kind:
+slow set-up, and caches. A private helper's behaviour counts for its callers, and a function in a private
+module counts when a public module imports it. Each callable gets a kind:
 
 | Kind | When | The draft |
 | --- | --- | --- |
@@ -312,7 +313,8 @@ it is now.
 **Wrap** writes `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and `stubs.py`
 when there are services, `conftest.py` (puts the legacy package on the path until it is installed), and
 `test_tools.py`. The test runs `check_app` on every tool with an example call over made-up sample data, and
-fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` as written.
+fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` with ruff's default
+settings; under another line length, `ruff check --fix` re-sorts the imports.
 - **TODOs say what to decide**: `TODO(type)` for a guessed hint, `TODO(data)` for a guessed series or frame,
   `TODO(unit)` and `TODO(convention)` for what a number means, `TODO(config)` for module settings and
   constructor arguments, `TODO(doc)` for a missing description, and `TODO(review)` for permissions, files,

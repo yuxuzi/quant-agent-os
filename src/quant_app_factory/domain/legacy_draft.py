@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import sys
 import textwrap
 from dataclasses import dataclass, field
 
@@ -27,21 +28,9 @@ from quant_app_factory.domain.legacy import (
 )
 
 DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py")
-STDLIB = frozenset(
-    {
-        "collections",
-        "contextlib",
-        "dataclasses",
-        "datetime",
-        "math",
-        "pathlib",
-        "sys",
-        "tempfile",
-        "threading",
-        "time",
-        "typing",
-    }
-)
+STDLIB = frozenset(sys.stdlib_module_names)
+# Ruff's default line length: the draft passes ruff with no configuration.
+WIDTH = 88
 PATH_NAME = re.compile(r"(^|_)(path|file|filename|dest|destination|out|output|target)$")
 WINDOW_NAME = re.compile(r"(window|lookback|period|periods|days|horizon|halflife|span|lag|n)$")
 PRICE_NAME = re.compile(r"price|px|close|level|nav")
@@ -68,9 +57,14 @@ class _Imports:
     def add(self, *lines: str) -> None:
         self.lines.update(lines)
 
+    def clashes(self, *lines: str) -> bool:
+        """Whether any of ``lines`` binds a name another import already binds differently."""
+        bound = {_bound(line): line for line in self.lines}
+        return any(bound.get(_bound(line), line) != line for line in lines)
+
     def render(self) -> str:
         """The imports in four groups (future, standard library, third party, local), with
-        names from one module merged into one statement."""
+        names from one module merged into one statement, as isort writes them."""
         plain: dict[str, set[str]] = {}
         names: dict[str, set[str]] = {}
         for line in self.lines:
@@ -83,12 +77,18 @@ class _Imports:
         for module in sorted(plain, key=str.lower):  # straight imports first, as isort does
             groups[self._group(module)] += sorted(plain[module])
         for module in sorted(names, key=str.lower):
+            head = f"from {module} import "
             imported = sorted(names[module], key=_by_type)
             merged = [name for name in imported if " as " not in name]  # isort keeps "as" apart
-            lines = [f"from {module} import {name}" for name in imported if " as " in name]
+            blocks = [
+                (_by_type(name), _wrapped("", head, [name], brackets=False))
+                for name in imported
+                if " as " in name
+            ]
             if merged:
-                lines += _wrapped("", f"from {module} import ", merged, brackets=False)
-            groups[self._group(module)] += sorted(lines, key=lambda line: line.split()[3:])
+                blocks.append((_by_type(merged[0]), _wrapped("", head, merged, brackets=False)))
+            for _, block in sorted(blocks):
+                groups[self._group(module)] += block
         return "\n\n".join("\n".join(group) for group in groups if group)
 
     def _group(self, module: str) -> int:
@@ -100,6 +100,14 @@ class _Imports:
         return 3 if top in self.local else 2
 
 
+def _bound(line: str) -> str:
+    """The name an import line binds."""
+    words = line.split()
+    if "as" in words:
+        return words[-1]
+    return words[-1] if words[0] == "from" else words[1].split(".")[0]
+
+
 def _by_type(name: str) -> tuple[int, str]:
     """isort's order: constants, then classes, then everything else."""
     bare = name.split()[0]
@@ -109,17 +117,17 @@ def _by_type(name: str) -> tuple[int, str]:
 def _wrapped(
     indent: str, head: str, items: list[str], tail: str = "", *, brackets: bool = True
 ) -> list[str]:
-    """``head(items)tail`` on one line when it fits in 99 columns, else one item per line."""
+    """``head(items)tail`` on one line when it fits in `WIDTH` columns, else one per line."""
     opening, closing = ("(", ")") if brackets else ("", "")
     one = f"{indent}{head}{opening}{', '.join(items)}{closing}{tail}"
-    if len(one) <= 99:
+    if len(one) <= WIDTH:
         return [one]
     return [f"{indent}{head}(", *(f"{indent}    {item}," for item in items), f"{indent}){tail}"]
 
 
 def _comment(text: str, indent: str = "") -> list[str]:
-    """``text`` as comment lines of at most 99 columns, continued with an indent."""
-    lines = textwrap.wrap(text, width=97 - len(indent), break_on_hyphens=False)
+    """``text`` as comment lines of at most `WIDTH` columns, continued with an indent."""
+    lines = textwrap.wrap(text, width=WIDTH - 4 - len(indent), break_on_hyphens=False)
     return [f"{indent}# {lines[0]}", *(f"{indent}#   {line}" for line in lines[1:])]
 
 
@@ -278,15 +286,16 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
                 lines.append(f'        extra["{param.name}"] = {param.name}')
         call_args.append("**extra")
     if found.owner is not None:
-        init_args = ", ".join(f"{p.name}={p.name}" for p in kept_init)
-        lines.append(f"    instance = {callee}({init_args})")
-        call = f"instance.{found.name}({', '.join(call_args)})"
+        init_args = [f"{p.name}={p.name}" for p in kept_init]
+        lines += _wrapped("    ", f"instance = {callee}", init_args)
+        function = f"instance.{found.name}"
     else:
-        call = f"{callee}({', '.join(call_args)})"
+        function = callee
     if found.has(Trait.PRINTS):
-        lines += ["    with _quiet():", f"        result = {call}"]
+        lines.append("    with _quiet():")
+        lines += _wrapped("        ", f"result = {function}", call_args)
     else:
-        lines.append(f"    result = {call}")
+        lines += _wrapped("    ", f"result = {function}", call_args)
     if found.has(Trait.RETURNS_NOTHING):
         path = next((p.name for p in params if PATH_NAME.search(p.name)), None)
         message = f'f"Wrote {{{path}}}."' if path else '"Done."'
@@ -306,7 +315,11 @@ def _argument(param: Param) -> str:
 def _legacy_import(found: Found, imports: _Imports) -> str:
     name = found.owner or found.name
     alias = f"Legacy{name}" if found.owner else f"legacy_{name}"
-    imports.add(f"from {found.module} import {name} as {alias}")
+    line = f"from {found.module} import {name} as {alias}"
+    if imports.clashes(line):  # the same name in two modules
+        alias = f"{alias}_{found.module.replace('.', '_')}"
+        line = f"from {found.module} import {name} as {alias}"
+    imports.add(line)
     return alias
 
 
@@ -314,9 +327,15 @@ def _hint(
     param: Param, data: DataKind | None, found: Found, imports: _Imports, todos: list[str]
 ) -> str:
     """The facade's hint for a parameter, reusing the legacy hint where there is one."""
-    if param.annotation is not None:
+    if param.annotation is not None and _reusable(param.annotation, found, imports):
         imports.add(*_imports_for(param.annotation, found))
         return param.annotation
+    if param.annotation is not None:
+        todos.append(
+            f"TODO(type): {param.name}'s legacy hint, {param.annotation}, names something this "
+            "file cannot import; Any stands in."
+        )
+        return "Any"
     if data is not None:
         # Untyped data is most often pandas, and a Series still iterates like a list.
         library = param.library or "pandas"
@@ -340,6 +359,45 @@ def _hint(
         return guess
     todos.append(f"TODO(type): {param.name} has no hint in the legacy code; name its type.")
     return "Any"
+
+
+BUILTIN_HINTS = frozenset(
+    {"int", "float", "str", "bool", "bytes", "complex", "list", "dict", "tuple", "set", "frozenset"}
+    | {"object", "type", "None"}
+)
+
+
+def _reusable(hint: str, found: Found, imports: _Imports) -> bool:
+    """Whether a legacy hint can be written in a drafted file: every name in it is a builtin or
+    has an import line that clashes with no other, and it holds no quoted forward reference."""
+    if imports.clashes(*_imports_for(hint, found)):
+        return False
+    try:
+        tree = ast.parse(hint, mode="eval").body
+    except SyntaxError:
+        return False
+
+    def fine(node: ast.expr) -> bool:
+        if isinstance(node, ast.Subscript):
+            outer = node.value
+            if (isinstance(outer, ast.Name) and outer.id == "Literal") or (
+                isinstance(outer, ast.Attribute) and outer.attr == "Literal"
+            ):
+                return fine(outer)
+            return fine(outer) and fine(node.slice)
+        if isinstance(node, ast.Attribute):
+            return fine(node.value)
+        if isinstance(node, ast.Name):
+            return node.id in BUILTIN_HINTS or node.id in found.imports
+        if isinstance(node, ast.Constant):
+            return node.value is None or node.value is Ellipsis
+        if isinstance(node, ast.Tuple | ast.List):
+            return all(fine(item) for item in node.elts)
+        if isinstance(node, ast.BinOp):
+            return fine(node.left) and fine(node.right)
+        return False
+
+    return fine(tree)
 
 
 def _imports_for(hint: str, found: Found) -> list[str]:
@@ -373,16 +431,22 @@ def _default(param: Param) -> str | None:
     if param.default is None:
         return None
     try:
-        ast.literal_eval(param.default)
+        value = ast.literal_eval(param.default)
     except (ValueError, SyntaxError):
         return None
-    return param.default
+    return json.dumps(value) if isinstance(value, str) else param.default  # "x", as ruff writes
 
 
 def _returns(found: Found, imports: _Imports, todos: list[str]) -> tuple[str, bool]:
     """The facade's return hint, and whether the result goes through ``_json_ready``."""
     if found.has(Trait.RETURNS_NOTHING):
         return "str", False
+    if found.returns is not None and not _reusable(found.returns, found, imports):
+        todos.append(
+            f"TODO(type): the legacy return hint, {found.returns}, names something this file "
+            "cannot import; Any stands in."
+        )
+        return "Any", True
     if found.returns is not None:
         imports.add(*_imports_for(found.returns, found))
         plain = found.returns in ("float", "int", "str", "bool")
@@ -818,8 +882,12 @@ def _server_module(app: str, selected: list[_Selected], legacy: str, services: b
             continue
         options: list[str] = []
         if entry.kind is Kind.EXPOSE:
-            imports.add(f"from {found.module} import {found.name}")
             function = found.name
+            line = f"from {found.module} import {function}"
+            if imports.clashes(line) or function in ("app", "build_app", "main", "SERVICE_URL"):
+                function = f"legacy_{entry.name}"
+                line = f"from {found.module} import {found.name} as {function}"
+            imports.add(line)
             if entry.name != found.name:
                 options.append(f'name="{entry.name}"')
         else:
@@ -899,7 +967,7 @@ def _conftest(source_root: str) -> str:
         else f"Path(__file__).parent / {json.dumps(source_root)}"
     )
     root = f"ROOT = {where}"
-    if len(root) > 99:
+    if len(root) > WIDTH:
         root = f"ROOT = Path(\n    {json.dumps(source_root)}\n)"
     return (
         '"""Lets the draft\'s test import the legacy code; written by `qaos legacy wrap`."""\n\n'

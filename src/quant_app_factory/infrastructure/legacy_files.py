@@ -47,7 +47,8 @@ def find_sources(path: Path) -> tuple[list[ModuleSource], Path]:
     """Return the modules under ``path`` and the directory they import from.
 
     ``path`` is a module file, a package directory, or a directory of modules and packages.
-    Tests, private modules, and ``__main__`` are left out. Raises `LegacyError` when there
+    Tests and ``__main__`` are left out; a private module counts only for the names a public one
+    imports from it. Raises `LegacyError` when there
     is no Python there.
     """
     path = path.resolve()
@@ -85,9 +86,12 @@ def _wanted(relative: Path) -> bool:
     name = relative.name
     if name in ("conftest.py", "setup.py", "__main__.py") or name.startswith("test_"):
         return False
-    if name.endswith("_test.py"):
-        return False
-    return not any(part.startswith("_") and part != "__init__.py" for part in parts)
+    return not name.endswith("_test.py")
+
+
+def _private(relative: Path) -> bool:
+    """Whether a module is private: its own or a package's name starts with an underscore."""
+    return any(part.startswith("_") and part != "__init__.py" for part in relative.parts)
 
 
 def _importable(file: Path, root: Path) -> bool:
@@ -109,7 +113,7 @@ def _source(file: Path, root: Path) -> ModuleSource:
         text = file.read_text("utf-8")
     except (OSError, UnicodeDecodeError) as error:
         raise LegacyError(f"Cannot read {file}: {error}") from error
-    return ModuleSource(".".join(parts), text, is_package)
+    return ModuleSource(".".join(parts), text, is_package, _private(file.relative_to(root)))
 
 
 def dump_inventory(inventory: Inventory, path: Path) -> str:

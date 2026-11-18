@@ -235,3 +235,27 @@ def test_the_command_prints_a_table_json_and_writes_an_inventory(tmp_path: Path)
     }
     assert written.exit_code == 0 and (tmp_path / "inv.toml").exists()
     assert again.exit_code == 1 and "--force" in again.output
+
+
+def test_names_a_package_reexports_from_private_modules_are_public(tmp_path: Path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("from ._impl import vol\n")
+    (package / "_impl.py").write_text(
+        "from typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n    from decimal import Decimal\n\n"
+        "Returns = list[float]\n\n"
+        'def vol(x: Returns, scale: "Decimal | None" = None) -> float:\n'
+        '    """Volatility."""\n    return 0.0\n\n'
+        "def helper() -> int:\n"
+        '    """Not re-exported."""\n    return 1\n'
+    )
+
+    inventory = scan(package)
+    (found,) = inventory.found.values()
+
+    assert found.target == "pkg._impl.vol"
+    assert found.imports == {  # TYPE_CHECKING imports count too
+        "Returns": "from pkg._impl import Returns",
+        "Decimal": "from decimal import Decimal",
+    }

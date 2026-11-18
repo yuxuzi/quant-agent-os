@@ -210,6 +210,7 @@ class ModuleSource:
     name: str
     text: str
     is_package: bool = False  # an __init__.py, whose relative imports start at itself
+    private: bool = False  # under a name starting with "_": public only where re-exported
 
 
 @dataclass
@@ -225,6 +226,8 @@ class _Module:
     functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = field(default_factory=dict)
     classes: dict[str, ast.ClassDef] = field(default_factory=dict)
     public: set[str] | None = None  # from __all__, when given
+    assigned: set[str] = field(default_factory=set)  # names assigned at the top level
+    private: bool = False
 
     def resolve(self, dotted: str) -> str:
         """``dotted`` with its first part replaced by what the module imported under that name."""
@@ -285,13 +288,16 @@ def analyse(sources: Iterable[ModuleSource]) -> tuple[list[Found], list[str]]:
                         module, item, _param_names(item)
                     )
     _propagate(facts)
+    reexported = {origin for m in modules if not m.private for origin in m.imports.values()}
     found: list[Found] = []
     for module in modules:
         for name, node in module.functions.items():
-            if _is_public(module, name):
+            if _is_public(module, name, reexported):
                 found.append(_function(module, node, facts, data_types))
         for name, class_node in module.classes.items():
-            if _is_public(module, name) and not _skipped_class(module, class_node, data_types):
+            if _is_public(module, name, reexported) and not _skipped_class(
+                module, class_node, data_types
+            ):
                 found += _methods(module, class_node, facts, data_types)
     return found, skipped
 
@@ -300,9 +306,9 @@ def analyse(sources: Iterable[ModuleSource]) -> tuple[list[Found], list[str]]:
 
 
 def _index(source: ModuleSource, tree: ast.Module) -> _Module:
-    module = _Module(source.name, tree)
+    module = _Module(source.name, tree, private=source.private)
     package = source.name if source.is_package else source.name.rpartition(".")[0]
-    for node in tree.body:
+    for node in _top_level(tree.body):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 local = alias.asname or alias.name.split(".")[0]
@@ -325,6 +331,7 @@ def _index(source: ModuleSource, tree: ast.Module) -> _Module:
             module.classes[node.name] = node
     for node in tree.body:
         targets, value = _assignment(node)
+        module.assigned.update(targets)
         for target in targets:
             if target == "__all__":
                 module.public = _names_in(value)
@@ -335,6 +342,18 @@ def _index(source: ModuleSource, tree: ast.Module) -> _Module:
                 elif kind != "constant":
                     module.settings[target] = kind
     return module
+
+
+def _top_level(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """A module's statements, with those inside top-level ``if`` and ``try`` blocks, where
+    imports often sit (``if TYPE_CHECKING:``, ``try: import x except ImportError:``)."""
+    for node in body:
+        yield node
+        if isinstance(node, ast.If):
+            yield from _top_level([*node.body, *node.orelse])
+        elif isinstance(node, ast.Try):
+            handlers = [item for handler in node.handlers for item in handler.body]
+            yield from _top_level([*node.body, *handlers, *node.orelse, *node.finalbody])
 
 
 def _absolute(package: str, name: str | None, level: int) -> str:
@@ -384,7 +403,9 @@ def _global_kind(module: _Module, value: ast.expr) -> tuple[str, str]:
     return "setting", ""
 
 
-def _is_public(module: _Module, name: str) -> bool:
+def _is_public(module: _Module, name: str, reexported: set[str]) -> bool:
+    if module.private:
+        return not name.startswith("_") and f"{module.name}.{name}" in reexported
     if module.public is not None:
         return name in module.public
     return not name.startswith("_")
@@ -882,7 +903,7 @@ def _hint_imports(module: _Module, hint: str) -> dict[str, str]:
         head = name.split(".")[0]
         if head in module.import_lines:
             needed[head] = module.import_lines[head]
-        elif head in module.classes:
+        elif head in module.classes or head in module.assigned:
             needed[head] = f"from {module.name} import {head}"
     return needed
 
