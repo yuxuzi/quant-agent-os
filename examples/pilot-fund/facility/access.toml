@@ -1,0 +1,53 @@
+# Kestrel Point Capital (fictional): who reaches what, in the platform's access-file format
+# (decision 0021). Groups are the identity provider's role groups (gateway/users.json). Anything not
+# listed is refused, and a refused dataset looks like a missing one.
+#
+# Datasets the warehouse adapter exposes (see README.md):
+#   market:    px_returns, px_close, bench_returns, adv_usd, fm_loadings, fm_factor_cov, fm_specific
+#   signals:   signals_momentum, signals_carry, signals_value
+#   per desk:  positions_<desk>, weights_<desk>, desk_returns_<desk>  (desk: eq_ls, macro, commod)
+#
+# Tool names other than the platform's own are placeholders for the fund's site/ code.
+
+# Each PM: market data, signals, and their own desk.
+[groups.desk-eq-ls]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "kpc_*",
+]
+datasets = ["px_*", "bench_*", "adv_*", "fm_*", "signals_*", "*_eq_ls"]
+
+[groups.desk-macro]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "kpc_*",
+]
+datasets = ["px_*", "bench_*", "adv_*", "fm_*", "signals_*", "*_macro"]
+
+[groups.desk-commod]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "kpc_*",
+]
+datasets = ["px_*", "bench_*", "adv_*", "fm_*", "signals_*", "*_commod"]
+
+# Risk sees every desk, and alone reaches the risk service.
+[groups.risk]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "kpc_*", "risk_*",
+]
+datasets = ["*"]
+
+# Research: market data and signals, no positions, weights, or desk returns.
+[groups.research]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "kpc_*",
+]
+datasets = ["px_*", "bench_*", "adv_*", "fm_*", "signals_*"]
+
+# Operators check the server is up; they read no data.
+[groups.operators]
+tools = ["server_info", "list_datasets"]
+datasets = []
