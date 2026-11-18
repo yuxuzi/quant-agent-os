@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Four more mock funds** (`examples/mock-funds/`), fictional and offline: a CLO manager on Azure with SQL
+  Server, a long-only equity manager on AWS with Snowflake, an alternatives allocator on Azure with
+  Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
+  tools, store, server, and acceptance cases, and records where the platform falls short in `FINDINGS.md`;
+  `examples/mock-funds/README.md` ranks what they found together. DuckDB joins the dev group for their tests.
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
