@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The analytics tools report more of Quant Toolbox 0.6.0.** `analyze_performance` (2.1.0) adds bias-adjusted
+  skewness and excess kurtosis, the best and worst period, the Sharpe ratio's standard error, the probabilistic
+  Sharpe ratio against 0, and the minimum track record, and with a benchmark, up and down capture and
+  correlation. `analyze_risk` (2.1.0) adds the portfolio's 95% Cornish-Fisher value at risk, its Gaussian
+  expected shortfall, its Herfindahl index, and its effective positions. Every new number states its
+  convention and comes with `computed` evidence; the existing fields are unchanged.
+
 ## [0.6.0] - 2026-11-17
 
 Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in
