@@ -14,7 +14,8 @@ answered by its *stamp*, so a cached dataset is rebuilt only when it must be:
 
 - a ``str`` is SQL returning one value that changes with the data (a version table, a
   ``MAX(loaded_at)``), run before each read;
-- a number is a time to live in seconds (the default is `DEFAULT_TTL_SECONDS`);
+- a number is a time to live in seconds, after which the source is read again (the default is
+  `DEFAULT_TTL_SECONDS`; 0 reads every time);
 - a callable returns any hashable value (a file's mtime, a Delta table version).
 
 A dataset that no SQL can build, such as one that joins two sources and carries a rule, is a
@@ -42,9 +43,7 @@ Stamp = str | int | float | Callable[[], Hashable]
 class Fetch(Protocol):
     """What a derived dataset reads with: SQL on a named source, as normalised `Rows`."""
 
-    def __call__(
-        self, source: str, sql: str, params: Mapping[str, object] | None = None
-    ) -> Rows:
+    def __call__(self, source: str, sql: str, params: Mapping[str, object] | None = None) -> Rows:
         """Run ``sql`` with ``:name`` binds on source ``source``."""
         ...
 
@@ -91,6 +90,7 @@ class SqlDatasetStore:
         self._clock = clock
         self._lock = threading.Lock()
         self._cache: dict[str, tuple[tuple[Hashable, ...], Dataset]] = {}
+        self._ttl: dict[str, tuple[float, int]] = {}
 
     def ids(self) -> list[str]:
         """Return every dataset id, sorted."""
@@ -132,11 +132,11 @@ class SqlDatasetStore:
         except SqlError as error:
             raise SqlError(f"Dataset '{dataset_id}': {error}") from error
 
-    def _fetch(
-        self, source: str, sql: str, params: Mapping[str, object] | None = None
-    ) -> Rows:
+    def _fetch(self, source: str, sql: str, params: Mapping[str, object] | None = None) -> Rows:
         if source not in self.sources:
-            raise UnknownDatasetError(f"No source '{source}'; the sources are {', '.join(self.sources)}.")
+            raise UnknownDatasetError(
+                f"No source '{source}'; the sources are {', '.join(self.sources)}."
+            )
         return fetch_rows(self.sources[source], sql, params)
 
     def _source_of(self, item: SqlDataset) -> str:
@@ -160,5 +160,15 @@ class SqlDatasetStore:
             rows = self._fetch(source, stamp)
             return rows.rows[0][0] if rows.rows else None
         if isinstance(stamp, int | float):
-            return time.monotonic_ns() if stamp <= 0 else int(self._clock() // stamp)
+            return self._generation(source, float(stamp))
         return stamp()
+
+    def _generation(self, source: str, ttl: float) -> int:
+        """Count the time-to-live periods of ``source`` since the first read, from the clock."""
+        now = self._clock()
+        with self._lock:
+            started, generation = self._ttl.get(source, (now, 0))
+            if now - started >= ttl:
+                started, generation = now, generation + 1
+            self._ttl[source] = (started, generation)
+        return generation
