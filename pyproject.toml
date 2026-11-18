@@ -134,7 +134,12 @@ plugins = ["pydantic.mypy"]
 files = ["src", "examples", "packages/quant-toolbox/src"]
 # Template packs hold code for generated projects, which type-check it themselves.
 # The pilot fund's legacy package is untyped on purpose: it is the legacy converter's input.
-exclude = ["src/quant_app_factory/packs/", "examples/pilot-fund/facility/kestrel_quant/"]
+# Each mock fund's legacy package is untyped for the same reason.
+exclude = [
+    "src/quant_app_factory/packs/",
+    "examples/pilot-fund/facility/kestrel_quant/",
+    "examples/mock-funds/[^/]+/facility/legacy/",
+]
 
 [[tool.mypy.overrides]]
 module = ["pygal", "pygal.*", "plotly", "plotly.*", "openpyxl", "openpyxl.*"]  # untyped, or optional
