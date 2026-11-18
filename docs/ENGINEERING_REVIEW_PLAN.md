@@ -4,8 +4,8 @@ What is still open. How the system works is in [architecture.md](architecture.md
 [decisions/](decisions/). Finished plans are in [plans/archive/](plans/archive/), including
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
 The most recent plan was [0.3.0, ready for a first pilot](plans/archive/pilot-ready-release.md),
-released as 0.3.0. [Templates as starting points](plans/templates.md) followed it. Proposed next features,
-design, and user-experience changes are in [proposals after 0.7.0](plans/proposals-0.8.md), for the owner to choose from.
+released as 0.3.0. [Templates as starting points](plans/templates.md) followed it. The current plan is
+[0.8.0, a pilot at a mock multi-asset fund](plans/proposals-0.8.md), which also carries the earlier proposals as a backlog.
 
 ## Open backlog
 
@@ -20,9 +20,9 @@ design, and user-experience changes are in [proposals after 0.7.0](plans/proposa
 
 ## Waiting for a named design partner
 
-Not started, and each needs a user asking for it: `run_backtest` as a platform tool, market-data
-connectors, an LLM extractor, `.ipynb` or `.docx` loaders, serving OAuth sign-in from `qaos serve`, and any model
-provider. Decision 0016 closes server-side synthesis, spec drafting, and code generation (B-12, B-15, B-16,
+Not started, and each needs a user asking for it: market-data connectors, an LLM extractor, `.ipynb` or
+`.docx` loaders, and any model provider. `run_backtest` as a platform tool and OAuth sign-in on `qaos serve` left
+this list by the owner's choice; both are in the [0.8.0 plan](plans/proposals-0.8.md). Decision 0016 closes server-side synthesis, spec drafting, and code generation (B-12, B-15, B-16,
 and B-20) until then.
 
 ## Open questions
@@ -35,5 +35,5 @@ Question numbers are the ones used in the earlier plan.
 - **O-12:** Will pytemplate-uv's roadmap include generic pack authoring that `template fork` can delegate
   to? That is tracked in pytemplate-uv's repository.
 
-A firm with Okta or similar will likely want OAuth sign-in on `qaos serve`. The token checks are in
-`quant_platform.identity`; wiring them in is a security change to decide when the first partner asks.
+OAuth sign-in on `qaos serve` is workstream W2 of the [0.8.0 plan](plans/proposals-0.8.md): opt-in, off by
+default, as the owner approved on 2026-11-17.
