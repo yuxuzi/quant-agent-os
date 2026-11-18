@@ -1,4 +1,5 @@
-"""Sablecroft Alternatives' own server: the platform's toolsets, the fund's Databricks warehouse, and
+"""Sablecroft Alternatives' own server: the platform's toolsets, the fund's Databricks
+warehouse, and
 its own tools, under the fund's Entra ID sign-in and entitlements (decisions 0020, 0024, 0028).
 
 Registration is explicit: this file names every tool the fund serves. Keys, sign-in, the run store,
@@ -7,7 +8,8 @@ permissions, and the access file come from the usual settings. The warehouse is 
 
 Usage (production):  SAB_WAREHOUSE_KIND=databricks python sablecroft_server.py
 Usage (local):       SAB_LAKE_ROOT=/path/to/built/lake python sablecroft_server.py
-                     SAB_LAKE_ROOT=... python sablecroft_server.py acceptance sablecroft_acceptance.toml
+                     SAB_LAKE_ROOT=... python sablecroft_server.py acceptance
+                     sablecroft_acceptance.toml
 """
 
 from __future__ import annotations
@@ -35,29 +37,38 @@ app = FirmApp(
     "sab",
     prefix=True,
     instructions=(
-        "Sablecroft's own tools are prefixed sab_. Private-fund figures (IRR, TVPI, PME) take one fund's "
-        "column of pm_cashflows and pm_nav, and the index in the fund's currency (idx_public SCI_US for USD "
-        "funds, SCI_EU for EUR funds). Hedge-fund returns are monthly: ret_final is lagged 15 to 45 days "
-        "and ret_est is not; say which vintage a number uses. Unsmoothed volatility and the Lo Sharpe "
+        "Sablecroft's own tools are prefixed sab_. Private-fund figures (IRR, TVPI, PME) take"
+        "one fund's "
+        "column of pm_calls, pm_distributions and pm_nav, and the index in the fund's currency"
+        "(idx_public SCI_US for USD "
+        "funds, SCI_EU for EUR funds). Hedge-fund returns are monthly: ret_final is lagged 15 to"
+        "45 days "
+        "and ret_est is not; say which vintage a number uses. Unsmoothed volatility and the Lo"
+        "Sharpe "
         "are estimates, not measurements."
     ),
 )
 app.expose(
     tools.private_fund_returns,
     name="private_fund_returns",
-    cashflows=Series,
+    calls=Series,
+    distributions=Series,
     nav=Series,
-    convention="XIRR actual/365 on signed flows with NAV as a terminal inflow; TVPI = (distributions + "
+    convention="XIRR actual/365 on signed flows with NAV as a terminal inflow; TVPI ="
+    "(distributions + "
     "NAV) / paid-in; DPI = distributions / paid-in; RVPI = NAV / paid-in; the fund's currency",
 )
 app.expose(
     tools.private_fund_pme,
     name="private_fund_pme",
-    cashflows=Series,
+    calls=Series,
+    distributions=Series,
     nav=Series,
     index=Series,
-    convention="Kaplan-Schoar PME = (sum D * I_T/I_t + NAV) / sum C * I_T/I_t; Long-Nickels index IRR = "
-    "XIRR with terminal value of the index units the flows would have bought; index on the last day "
+    convention="Kaplan-Schoar PME = (sum D * I_T/I_t + NAV) / sum C * I_T/I_t; Long-Nickels"
+    "index IRR = "
+    "XIRR with terminal value of the index units the flows would have bought; index on the last"
+    "day "
     "on or before each date",
 )
 app.expose(
@@ -78,7 +89,8 @@ app.expose(
     tools.liquidity_ladder,
     name="liquidity_ladder",
     terms=Frame,
-    convention="Request at the later of as-of and lock-up end; dealing at month/quarter/year-end after "
+    convention="Request at the later of as-of and lock-up end; dealing at month/quarter/year-end"
+    "after "
     "notice; investor-level gate per dealing date on today's position; cash 30 days after dealing",
 )
 app.expose(
@@ -86,7 +98,8 @@ app.expose(
     name="manager_peer_ranking",
     returns=Frame,
     terms=Frame,
-    convention="Trailing Sharpe (geometric annual return / annual vol, zero risk-free) over the last "
+    convention="Trailing Sharpe (geometric annual return / annual vol, zero risk-free) over the"
+    "last "
     "window months with at least min_months returns; rank within strategy, 1 = best",
 )
 app.expose(
@@ -94,7 +107,8 @@ app.expose(
     name="revision_bias",
     estimates=Frame,
     finals=Frame,
-    convention="revision = final - estimate over months with both; t = mean / (sd / sqrt(n)); flagged "
+    convention="revision = final - estimate over months with both; t = mean / (sd / sqrt(n));"
+    "flagged "
     "when |t| > threshold and n >= 12",
 )
 
@@ -125,7 +139,8 @@ def serve() -> None:
 
 
 def acceptance(cases: Path) -> int:
-    """Run the agreed cases as an operator; return 0 when all pass, 1 when any fails, 2 on a bad file."""
+    """Run the agreed cases as an operator; return 0 when all pass, 1 when any fails, 2 on a bad
+    file."""
     try:
         gold, digest = load_gold(cases)
     except GoldFileError as error:

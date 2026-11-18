@@ -16,7 +16,14 @@ import numpy as np
 import pandas as pd
 
 STRATEGIES = (
-    "eq_ls", "macro", "event", "relval", "cta", "multistrat", "illiquid_credit", "real_assets",
+    "eq_ls",
+    "macro",
+    "event",
+    "relval",
+    "cta",
+    "multistrat",
+    "illiquid_credit",
+    "real_assets",
 )
 BUCKETS = (30, 90, 180, 365, 730)  # days from the as-of date to the cash arriving
 PAYOUT_DAYS = 30
@@ -65,39 +72,54 @@ class FundReturns:
     warnings: list[str] = field(default_factory=list)
 
 
-def _flows(cashflows: pd.Series, nav: pd.Series) -> tuple[pd.Series, pd.Timestamp, float, list[str]]:
-    flows = cashflows.dropna()
-    flows = flows[flows != 0.0]
+def _flows(
+    calls: pd.Series, distributions: pd.Series, nav: pd.Series
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Timestamp, float, list[str]]:
+    """Return net signed flows by date, the gross calls and distributions, and the last NAV."""
     last = nav.dropna()
-    if last.empty or flows.empty:
+    calls, distributions = calls.dropna(), distributions.dropna()
+    if last.empty or (calls.empty and distributions.empty):
         raise ValueError("The fund needs at least one cash flow and one NAV.")
     nav_date = last.index[-1]
     warnings: list[str] = []
-    late = flows[flows.index > nav_date]
-    if len(late):
+    late = int((calls.index > nav_date).sum() + (distributions.index > nav_date).sum())
+    if late:
         warnings.append(
-            f"{len(late)} cash flows are dated after the last NAV ({nav_date.date()}) and were left out."
+            f"{late} cash flows are dated after the last NAV ({nav_date.date()}) and were left out."
         )
-        flows = flows[flows.index <= nav_date]
-    return flows, nav_date, float(last.iloc[-1]), warnings
+    calls, distributions = (
+        calls[calls.index <= nav_date],
+        distributions[distributions.index <= nav_date],
+    )
+    flows = distributions.sub(calls, fill_value=0.0)
+    flows = flows[flows != 0.0].sort_index()
+    return flows, calls, distributions, nav_date, float(last.iloc[-1]), warnings
 
 
-def private_fund_returns(cashflows: pd.Series, nav: pd.Series) -> FundReturns:
+def private_fund_returns(calls: pd.Series, distributions: pd.Series, nav: pd.Series) -> FundReturns:
     """IRR, TVPI, DPI, and RVPI of one private fund from its dated cash flows and its NAVs.
 
     Args:
-        cashflows: The fund's signed flows by date, in its currency: calls negative, distributions
-            positive; days without a flow are missing.
+        calls: The fund's capital calls by date, as positive amounts in its currency; days without
+            a call are missing.
+        distributions: Its distributions by date, as positive amounts; days without one are missing.
         nav: The fund's quarter-end NAVs; the last one is the valuation date.
     """
-    flows, nav_date, nav_value, warnings = _flows(cashflows, nav)
-    paid = float(-flows[flows < 0].sum())
-    dist = float(flows[flows > 0].sum())
+    flows, gross_calls, gross_dists, nav_date, nav_value, warnings = _flows(
+        calls, distributions, nav
+    )
+    paid, dist = float(gross_calls.sum()), float(gross_dists.sum())
     days = np.array([(d - flows.index[0]).days for d in [*flows.index, nav_date]], dtype=float)
     irr = xirr(days, np.array([*flows.to_numpy(float), nav_value]))
     return FundReturns(
-        nav_date=str(nav_date.date()), paid_in=paid, distributions=dist, nav=nav_value,
-        tvpi=(dist + nav_value) / paid, dpi=dist / paid, rvpi=nav_value / paid, irr=irr,
+        nav_date=str(nav_date.date()),
+        paid_in=paid,
+        distributions=dist,
+        nav=nav_value,
+        tvpi=(dist + nav_value) / paid,
+        dpi=dist / paid,
+        rvpi=nav_value / paid,
+        irr=irr,
         warnings=warnings,
     )
 
@@ -114,26 +136,39 @@ class FundPme:
     warnings: list[str] = field(default_factory=list)
 
 
-def private_fund_pme(cashflows: pd.Series, nav: pd.Series, index: pd.Series) -> FundPme:
+def private_fund_pme(
+    calls: pd.Series, distributions: pd.Series, nav: pd.Series, index: pd.Series
+) -> FundPme:
     """Kaplan-Schoar and Long-Nickels PME of one private fund against a public index.
 
     Args:
-        cashflows: The fund's signed flows by date (calls negative, distributions positive).
+        calls: The fund's capital calls by date, as positive amounts.
+        distributions: Its distributions by date, as positive amounts.
         nav: The fund's quarter-end NAVs; the last one is the valuation date.
         index: Daily levels of the public index in the fund's currency.
     """
-    flows, nav_date, nav_value, warnings = _flows(cashflows, nav)
+    flows, gross_calls, gross_dists, nav_date, nav_value, warnings = _flows(
+        calls, distributions, nav
+    )
     levels = index.dropna().sort_index()
     if flows.index[0] < levels.index[0]:
         raise ValueError(f"The index starts {levels.index[0].date()}, after the first cash flow.")
-    at = levels.reindex(levels.index.union(flows.index.append(pd.DatetimeIndex([nav_date])))).ffill()
-    end = float(at.loc[nav_date])
-    scale = end / at.loc[flows.index].to_numpy(float)
-    amounts = flows.to_numpy(float)
-    ks = (float(np.sum(amounts[amounts > 0] * scale[amounts > 0])) + nav_value) / float(
-        np.sum(-amounts[amounts < 0] * scale[amounts < 0])
+    every = (
+        flows.index.union(gross_calls.index)
+        .union(gross_dists.index)
+        .append(pd.DatetimeIndex([nav_date]))
     )
-    units = float(np.sum(-amounts / (end / scale)))  # index units the flows would have bought
+    at = levels.reindex(levels.index.union(every)).ffill()
+    end = float(at.loc[nav_date])
+    # Kaplan-Schoar uses the gross flows; netting a call and a distribution of one day would
+    # change the ratio.
+    grow_c = end / at.loc[gross_calls.index].to_numpy(float)
+    grow_d = end / at.loc[gross_dists.index].to_numpy(float)
+    ks = (float(np.sum(gross_dists.to_numpy(float) * grow_d)) + nav_value) / float(
+        np.sum(gross_calls.to_numpy(float) * grow_c)
+    )
+    units = float(np.sum(-flows.to_numpy(float) / at.loc[flows.index].to_numpy(float)))
+    amounts = flows.to_numpy(float)
     days = np.array([(d - flows.index[0]).days for d in [*flows.index, nav_date]], dtype=float)
     fund_irr = xirr(days, np.array([*amounts, nav_value]))
     if units * end <= 0:
@@ -169,7 +204,8 @@ class Unsmoothed:
 
 
 def unsmooth_returns(returns: pd.Series, periods_per_year: int = 12) -> Unsmoothed:
-    """Volatility of a smoothed return series before smoothing, by a simplified Getmansky-Lo-Makarov fit.
+    """Volatility of a smoothed return series before smoothing, by a simplified
+    Getmansky-Lo-Makarov fit.
 
     Model: reported[t] = t0*R[t] + t1*R[t-1] + t2*R[t-2], R iid, weights summing to 1 and not
     increasing (t0 >= t1 >= t2 >= 0). The weights are the grid point (step 0.01) whose implied lag-1
@@ -204,8 +240,14 @@ def unsmooth_returns(returns: pd.Series, periods_per_year: int = 12) -> Unsmooth
     if len(values) < 48:
         warnings.append("Fewer than 48 returns: the fitted weights are noisy.")
     return Unsmoothed(
-        months=len(values), theta=[t0, t1, t2], rho1=rho1, rho2=rho2, reported_vol=sd * annual,
-        unsmoothed_vol=sd * ratio * annual, vol_ratio=ratio, warnings=warnings,
+        months=len(values),
+        theta=[t0, t1, t2],
+        rho1=rho1,
+        rho2=rho2,
+        reported_vol=sd * annual,
+        unsmoothed_vol=sd * ratio * annual,
+        vol_ratio=ratio,
+        warnings=warnings,
     )
 
 
@@ -224,7 +266,8 @@ def lo_adjusted_sharpe(returns: pd.Series, q: int = 12, risk_free_annual: float 
     """Sharpe ratio annualised with Lo's (2002) autocorrelation factor.
 
     Per-period Sharpe = mean excess return / sample sd (n-1). Raw annual = per-period * sqrt(q).
-    Adjusted annual = per-period * eta(q), with eta(q) = q / sqrt(q + 2 * sum_{k=1}^{q-1} (q-k) rho_k)
+    Adjusted annual = per-period * eta(q), with eta(q) = q / sqrt(q + 2 * sum_{k=1}^{q-1} (q-k)
+    rho_k)
     and rho_k the sample autocorrelations (demeaned, divided by the full-sample variance).
 
     Args:
@@ -281,7 +324,11 @@ def _dealing_dates(start: date, months: int) -> Any:
     """Yield dealing dates on or after ``start``: month-ends, quarter-ends, or each 31 December."""
     year, month = start.year, start.month
     while True:
-        last = (date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)) if month < 12 else date(year, 12, 31)
+        last = (
+            (date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1))
+            if month < 12
+            else date(year, 12, 31)
+        )
         if last >= start and (month % months == 0):
             yield last
         month += 1
@@ -289,14 +336,19 @@ def _dealing_dates(start: date, months: int) -> Any:
             month, year = 1, year + 1
 
 
-def liquidity_ladder(terms: pd.DataFrame, as_of: str, payout_days: int = PAYOUT_DAYS) -> LiquidityLadder:
-    """Cash the fund can raise from its hedge-fund managers, by horizon, from their redemption terms.
+def liquidity_ladder(
+    terms: pd.DataFrame, as_of: str, payout_days: int = PAYOUT_DAYS
+) -> LiquidityLadder:
+    """Cash the fund can raise from its hedge-fund managers, by horizon, from their redemption
+    terms.
 
-    A redemption is requested on ``as_of``, or when the lock-up ends if later. The first dealing date
+    A redemption is requested on ``as_of``, or when the lock-up ends if later. The first dealing
+    date
     is the first one on or after the request plus the notice period; dealing dates are month-ends,
     quarter-ends (frequency 3), or 31 December (frequency 12). The gate caps each dealing date at
     ``gate_pct`` of today's position (an investor-level gate, a simplification of fund-level gates);
-    the rest goes at the following dealing dates. Cash arrives ``payout_days`` after dealing. Inactive
+    the rest goes at the following dealing dates. Cash arrives ``payout_days`` after dealing.
+    Inactive
     managers and empty positions are left out.
 
     Args:
@@ -328,7 +380,9 @@ def liquidity_ladder(terms: pd.DataFrame, as_of: str, payout_days: int = PAYOUT_
             if left <= 1e-6:
                 break
         assert first is not None
-        managers.append(ManagerLiquidity(str(manager_id), position, str(first[0]), first[1], tranches))
+        managers.append(
+            ManagerLiquidity(str(manager_id), position, str(first[0]), first[1], tranches)
+        )
     total = math.fsum(totals)
     labels = [f"within {b} days" for b in BUCKETS] + [f"after {BUCKETS[-1]} days"]
     running, buckets = 0.0, []
@@ -423,7 +477,9 @@ class RevisionBias:
     warnings: list[str] = field(default_factory=list)
 
 
-def revision_bias(estimates: pd.DataFrame, finals: pd.DataFrame, t_threshold: float = 3.0) -> RevisionBias:
+def revision_bias(
+    estimates: pd.DataFrame, finals: pd.DataFrame, t_threshold: float = 3.0
+) -> RevisionBias:
     """Mean revision (final minus estimate) per manager, over the months where both exist.
 
     t = mean / (sd(n-1) / sqrt(n)); a manager is flagged when |t| exceeds ``t_threshold`` and it has

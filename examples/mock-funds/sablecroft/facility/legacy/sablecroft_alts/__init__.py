@@ -5,4 +5,12 @@ from sablecroft_alts.liquidity import liquidity_ladder
 from sablecroft_alts.pme import fund_multiples, ks_pme, xirr
 from sablecroft_alts.returns import lo_sharpe, unsmooth
 
-__all__ = ["CONFIG", "fund_multiples", "ks_pme", "liquidity_ladder", "lo_sharpe", "unsmooth", "xirr"]
+__all__ = [
+    "CONFIG",
+    "fund_multiples",
+    "ks_pme",
+    "liquidity_ladder",
+    "lo_sharpe",
+    "unsmooth",
+    "xirr",
+]

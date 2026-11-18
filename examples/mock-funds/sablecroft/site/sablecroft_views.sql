@@ -52,15 +52,26 @@ SELECT period_end, manager_id,
   value_usd / SUM(value_usd) OVER (PARTITION BY period_end) AS value
 FROM sablecroft.curated.fof_positions;
 
+-- The monthly reporters only, renormalised: the platform's analyze_risk needs a return column for every weight.
+CREATE OR REPLACE VIEW sablecroft.serving.v_fof_weights_m AS
+SELECT p.period_end, p.manager_id,
+  p.value_usd / SUM(p.value_usd) OVER (PARTITION BY p.period_end) AS value
+FROM sablecroft.curated.fof_positions p
+JOIN sablecroft.ref.managers m ON m.manager_id = p.manager_id
+WHERE m.frequency = 'M';
+
 CREATE OR REPLACE VIEW sablecroft.serving.v_fof_fund AS
 SELECT period_end, nav_usd, return AS monthly_return FROM sablecroft.curated.fof_fund;
 
--- Signed, in the fund's currency: calls negative, distributions positive.
-CREATE OR REPLACE VIEW sablecroft.serving.v_pm_cashflows AS
-SELECT flow_date, fund_id,
-  SUM(CASE WHEN flow_type = 'call' THEN -amount_local ELSE amount_local END) AS value
-FROM sablecroft.curated.pm_cashflows
-GROUP BY flow_date, fund_id;
+-- Gross flows by day, in the fund's currency, as positive amounts: calls and distributions in two
+-- views, because a call and a distribution can fall on the same day and a signed net would hide both.
+CREATE OR REPLACE VIEW sablecroft.serving.v_pm_calls AS
+SELECT flow_date, fund_id, SUM(amount_local) AS value
+FROM sablecroft.curated.pm_cashflows WHERE flow_type = 'call' GROUP BY flow_date, fund_id;
+
+CREATE OR REPLACE VIEW sablecroft.serving.v_pm_distributions AS
+SELECT flow_date, fund_id, SUM(amount_local) AS value
+FROM sablecroft.curated.pm_cashflows WHERE flow_type = 'distribution' GROUP BY flow_date, fund_id;
 
 CREATE OR REPLACE VIEW sablecroft.serving.v_pm_nav AS
 SELECT nav_date, fund_id, nav_local AS value FROM sablecroft.curated.pm_nav;

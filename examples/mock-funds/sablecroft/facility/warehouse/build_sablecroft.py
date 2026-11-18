@@ -15,7 +15,8 @@ Azure shapes, local directories (nothing here talks to Azure or Databricks):
   warehouse would read them; site/ holds the views and a local stand-in for the warehouse.
 - `known_answers.json`: the planted truths, each with the convention it is stated in.
 
-Everything is fictional and deterministic for a seed. Usage: python build_sablecroft.py OUT_DIR [--seed N]
+Everything is fictional and deterministic for a seed. Usage: python build_sablecroft.py OUT_DIR
+[--seed N]
 """
 
 from __future__ import annotations
@@ -66,26 +67,79 @@ MANAGERS: list[tuple[str, str, str, str, int, str, float, float, float, str]] = 
     ("CT03", "Greywater Futures", "cta", "USD", 15, "M", 0.0010, 0.02, 0.040, "NGFS"),
     ("MS01", "Corvane Multi-Strategy", "multistrat", "USD", 45, "M", 0.0030, 0.10, 0.012, "AHA"),
     ("MS02", "Hexham Platform", "multistrat", "USD", 45, "M", 0.0028, 0.08, 0.011, "AHA"),
-    ("IC01", "Wrenfield Specialty Credit", "illiquid_credit", "USD", 45, "M", 0.0050, 0.20, 0.022, "AHA"),
-    ("IC02", "Lowmoor Private Credit", "illiquid_credit", "USD", 75, "Q", 0.0055, 0.15, 0.018, "AHA"),
+    (
+        "IC01",
+        "Wrenfield Specialty Credit",
+        "illiquid_credit",
+        "USD",
+        45,
+        "M",
+        0.0050,
+        0.20,
+        0.022,
+        "AHA",
+    ),
+    (
+        "IC02",
+        "Lowmoor Private Credit",
+        "illiquid_credit",
+        "USD",
+        75,
+        "Q",
+        0.0055,
+        0.15,
+        0.018,
+        "AHA",
+    ),
     ("RA01", "Thornley Real Assets", "real_assets", "USD", 45, "M", 0.0040, 0.25, 0.020, "AHA"),
     ("RA02", "Bexley Property Income", "real_assets", "EUR", 60, "Q", 0.0035, 0.20, 0.016, "AHA"),
-    ("RA03", "Stannard Core Real Estate", "real_assets", "USD", 60, "Q", 0.0035, 0.22, 0.015, "AHA"),
+    (
+        "RA03",
+        "Stannard Core Real Estate",
+        "real_assets",
+        "USD",
+        60,
+        "Q",
+        0.0035,
+        0.22,
+        0.015,
+        "AHA",
+    ),
 ]
 STRATEGIES = [
-    "eq_ls", "macro", "event", "relval", "cta", "multistrat", "illiquid_credit", "real_assets"
+    "eq_ls",
+    "macro",
+    "event",
+    "relval",
+    "cta",
+    "multistrat",
+    "illiquid_credit",
+    "real_assets",
 ]
 # (lockup months, notice days, redemption frequency in months, gate fraction per dealing date)
 TERMS: dict[str, tuple[int, int, int, float]] = {
-    "eq_ls": (12, 45, 3, 0.25), "macro": (0, 30, 1, 1.0), "event": (12, 60, 3, 0.25),
-    "relval": (6, 45, 3, 0.33), "cta": (0, 10, 1, 1.0), "multistrat": (12, 90, 3, 0.25),
-    "illiquid_credit": (24, 90, 3, 0.10), "real_assets": (36, 90, 12, 0.10),
+    "eq_ls": (12, 45, 3, 0.25),
+    "macro": (0, 30, 1, 1.0),
+    "event": (12, 60, 3, 0.25),
+    "relval": (6, 45, 3, 0.33),
+    "cta": (0, 10, 1, 1.0),
+    "multistrat": (12, 90, 3, 0.25),
+    "illiquid_credit": (24, 90, 3, 0.10),
+    "real_assets": (36, 90, 12, 0.10),
 }
 SCHEMAS = {
-    "mgr_returns": "curated", "mgr_returns_q": "curated", "fof_positions": "curated",
-    "fof_fund": "curated", "pm_cashflows": "curated", "pm_nav": "curated",
-    "fx_rates": "curated", "idx_public": "curated", "managers": "ref", "terms": "ref",
-    "pm_funds": "ref", "nav_recon": "ref",
+    "mgr_returns": "curated",
+    "mgr_returns_q": "curated",
+    "fof_positions": "curated",
+    "fof_fund": "curated",
+    "pm_cashflows": "curated",
+    "pm_nav": "curated",
+    "fx_rates": "curated",
+    "idx_public": "curated",
+    "managers": "ref",
+    "terms": "ref",
+    "pm_funds": "ref",
+    "nav_recon": "ref",
 }
 CATALOG = "sablecroft"
 DELTA_FILES: dict[Path, list[tuple[str, int]]] = {}
@@ -106,7 +160,9 @@ PM_FUNDS: list[tuple[str, str, str, int, str, float, str]] = [
 NAV_LAST = date(2025, 9, 30)  # the last quarter-end whose GP statements had arrived at AS_OF
 INDEX_FOR = {"USD": "SCI_US", "EUR": "SCI_EU"}
 PM_PARAMS = {  # quarterly growth, distribution rate of opening NAV, first distribution quarter
-    "buyout": (0.030, 0.10, 12), "venture": (0.028, 0.08, 16), "private_credit": (0.020, 0.07, 6),
+    "buyout": (0.030, 0.10, 12),
+    "venture": (0.028, 0.08, 16),
+    "private_credit": (0.020, 0.07, 6),
     "real_estate": (0.014, 0.04, 6),
 }
 
@@ -170,14 +226,30 @@ def write_delta_logs() -> None:
         log.mkdir(exist_ok=True)
         actions: list[dict[str, Any]] = [
             {"protocol": {"minReaderVersion": 1, "minWriterVersion": 2}},
-            {"metaData": {"id": base.name, "format": {"provider": "parquet"},
-                          "partitionColumns": [], "createdTime": 1767225600000}},
+            {
+                "metaData": {
+                    "id": base.name,
+                    "format": {"provider": "parquet"},
+                    "partitionColumns": [],
+                    "createdTime": 1767225600000,
+                }
+            },
         ]
-        actions += [{"add": {"path": path, "size": size, "partitionValues": {},
-                             "modificationTime": 1767225600000, "dataChange": True}}
-                    for path, size in sorted(files)]
+        actions += [
+            {
+                "add": {
+                    "path": path,
+                    "size": size,
+                    "partitionValues": {},
+                    "modificationTime": 1767225600000,
+                    "dataChange": True,
+                }
+            }
+            for path, size in sorted(files)
+        ]
         (log / "00000000000000000000.json").write_text(
-            "\n".join(json.dumps(a) for a in actions) + "\n")
+            "\n".join(json.dumps(a) for a in actions) + "\n"
+        )
 
 
 def generate_returns(rng: random.Random) -> dict[str, dict[date, float]]:
@@ -224,14 +296,18 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     for day in months:
         level *= 1 + rng.gauss(0.0, 0.02)
         fx[day] = round(level, 5)
-    write_parquet(out, "fx_rates", "dt=all",
-                  [{"period_end": d.isoformat(), "pair": "EURUSD", "rate": r} for d, r in fx.items()])
+    write_parquet(
+        out,
+        "fx_rates",
+        "dt=all",
+        [{"period_end": d.isoformat(), "pair": "EURUSD", "rate": r} for d, r in fx.items()],
+    )
 
     # --- estimates, finals, and what had been published by AS_OF -------------------------------
     rows_by_month: dict[date, list[dict[str, Any]]] = {}
     revisions: dict[str, list[float]] = {}
     quarterly: dict[date, list[dict[str, Any]]] = {}
-    for mid, _n, strat, ccy, lag, freq, *_rest in MANAGERS:
+    for mid, _n, _strat, _ccy, lag, freq, *_rest in MANAGERS:
         if freq == "Q":
             quarter_ends = [d for d in months if d.month % 3 == 0]
             for i, qd in enumerate(quarter_ends):
@@ -240,8 +316,12 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
                 published = qd + timedelta(days=lag)
                 if published <= AS_OF:
                     quarterly.setdefault(qd, []).append(
-                        {"manager_id": mid, "period_end": qd.isoformat(), "return_local": value,
-                         "published_date": published.isoformat()}
+                        {
+                            "manager_id": mid,
+                            "period_end": qd.isoformat(),
+                            "return_local": value,
+                            "published_date": published.isoformat(),
+                        }
                     )
                 del i
             continue
@@ -253,11 +333,25 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
             fin_pub = day + timedelta(days=lag)
             rows = rows_by_month.setdefault(day, [])
             if est_pub <= AS_OF:
-                rows.append({"manager_id": mid, "period_end": day.isoformat(), "vintage": "estimate",
-                             "return_local": estimate, "published_date": est_pub.isoformat()})
+                rows.append(
+                    {
+                        "manager_id": mid,
+                        "period_end": day.isoformat(),
+                        "vintage": "estimate",
+                        "return_local": estimate,
+                        "published_date": est_pub.isoformat(),
+                    }
+                )
             if fin_pub <= AS_OF:
-                rows.append({"manager_id": mid, "period_end": day.isoformat(), "vintage": "final",
-                             "return_local": value, "published_date": fin_pub.isoformat()})
+                rows.append(
+                    {
+                        "manager_id": mid,
+                        "period_end": day.isoformat(),
+                        "vintage": "final",
+                        "return_local": value,
+                        "published_date": fin_pub.isoformat(),
+                    }
+                )
                 if est_pub <= AS_OF:
                     revisions.setdefault(mid, []).append(revision)
     for day, rows in rows_by_month.items():
@@ -268,10 +362,15 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     def stats(values: list[float]) -> dict[str, float]:
         mean = math.fsum(values) / len(values)
         sd = math.sqrt(math.fsum((v - mean) ** 2 for v in values) / (len(values) - 1))
-        return {"n": len(values), "mean_revision": mean, "t_stat": mean / (sd / math.sqrt(len(values)))}
+        return {
+            "n": len(values),
+            "mean_revision": mean,
+            "t_stat": mean / (sd / math.sqrt(len(values))),
+        }
 
     answers["revisions"] = {
-        "convention": "revision = final - estimate, simple monthly return in the manager's currency, "
+        "convention": "revision = final - estimate, simple monthly return in the manager's"
+        "currency, "
         "over months where both vintages had been published at as_of; t = mean / (sd / sqrt(n))",
         "biased_manager": BIASED,
         "planted_mean_revision": BIAS,
@@ -284,7 +383,8 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
         return math.sqrt(math.fsum((v - mean) ** 2 for v in values) / (len(values) - 1))
 
     answers["smoothing"] = {
-        "convention": "reported = theta0*R[t] + theta1*R[t-1] + theta2*R[t-2], R iid latent monthly "
+        "convention": "reported = theta0*R[t] + theta1*R[t-1] + theta2*R[t-2], R iid latent"
+        "monthly "
         "returns; population ratio = 1/sqrt(sum theta^2); sample ratio = sd(R)/sd(reported), "
         "over the 60 months, sample sd (n-1), monthly, not annualised",
         "managers": {
@@ -307,27 +407,33 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     ccy_of = {m[0]: m[3] for m in MANAGERS}
     weights0 = {m[0]: rng.uniform(0.5, 1.5) for m in MANAGERS}
     total0 = math.fsum(weights0.values())
-    value = {m: 800e6 * w / total0 for m, w in weights0.items()}
+    held = {m: 800e6 * w / total0 for m, w in weights0.items()}
     quarterly_ret = {m[0]: m[5] == "Q" for m in MANAGERS}
     positions: dict[date, list[dict[str, Any]]] = {}
     fund_rows: list[dict[str, Any]] = []
     for day in months:
-        start = math.fsum(value.values())
-        for mid in value:
+        start = math.fsum(held.values())
+        for mid in held:
             if mid == LIQUIDATED and day > date(2024, 6, 30):
-                value[mid] = 0.0
+                held[mid] = 0.0
             elif quarterly_ret[mid]:
                 if day.month % 3 == 0:
-                    chunk = [to_usd(mid, ccy_of[mid], m, finals[mid][m]) for m in months
-                             if day - timedelta(days=89) <= m <= day]
-                    value[mid] *= math.prod(1 + v for v in chunk)
+                    chunk = [
+                        to_usd(mid, ccy_of[mid], m, finals[mid][m])
+                        for m in months
+                        if day - timedelta(days=89) <= m <= day
+                    ]
+                    held[mid] *= math.prod(1 + v for v in chunk)
             else:
-                value[mid] *= 1 + to_usd(mid, ccy_of[mid], day, finals[mid][day])
-        end = math.fsum(value.values())
-        positions[day] = [{"manager_id": m, "period_end": day.isoformat(), "value_usd": round(v, 2)}
-                          for m, v in value.items()]
-        fund_rows.append({"period_end": day.isoformat(), "nav_usd": round(end, 2),
-                          "return": end / start - 1})
+                held[mid] *= 1 + to_usd(mid, ccy_of[mid], day, finals[mid][day])
+        end = math.fsum(held.values())
+        positions[day] = [
+            {"manager_id": m, "period_end": day.isoformat(), "value_usd": round(v, 2)}
+            for m, v in held.items()
+        ]
+        fund_rows.append(
+            {"period_end": day.isoformat(), "nav_usd": round(end, 2), "return": end / start - 1}
+        )
     for day, rows in positions.items():
         write_parquet(out, "fof_positions", f"dt={day.isoformat()}", rows)
     write_parquet(out, "fof_fund", "dt=all", fund_rows)
@@ -344,17 +450,28 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
                 levels[name][day] = round(cur[name], 4)
         day += timedelta(days=1)
     for year in range(2015, 2026):
-        write_parquet(out, "idx_public", f"year={year}", [
-            {"date": d.isoformat(), "index_id": n, "level": v}
-            for n, series in levels.items() for d, v in series.items() if d.year == year])
+        write_parquet(
+            out,
+            "idx_public",
+            f"year={year}",
+            [
+                {"date": d.isoformat(), "index_id": n, "level": v}
+                for n, series in levels.items()
+                for d, v in series.items()
+                if d.year == year
+            ],
+        )
 
     # --- private markets: cash flows, NAVs, and the planted fund -------------------------------
     cashflows: dict[str, list[tuple[date, float]]] = {}
     navs: dict[str, dict[date, float]] = {}
-    for fid, _n, cls, vintage, ccy, commit, _gp in PM_FUNDS:
+    for fid, _n, cls, vintage, _ccy, commit, _gp in PM_FUNDS:
         if fid == "PM01":  # the calibration fund: IRR exactly 20%, TVPI 1.32, fully realised
-            cashflows[fid] = [(date(2021, 1, 1), -100e6), (date(2022, 1, 1), 60e6),
-                              (date(2023, 1, 1), 72e6)]
+            cashflows[fid] = [
+                (date(2021, 1, 1), -100e6),
+                (date(2022, 1, 1), 60e6),
+                (date(2023, 1, 1), 72e6),
+            ]
             navs[fid] = {NAV_LAST: 0.0}
             continue
         growth, drate, first_dist = PM_PARAMS[cls]
@@ -384,13 +501,30 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
         cashflows[fid] = sorted(flows)
         navs[fid] = nav_series
     for fid, flows in cashflows.items():
-        write_parquet(out, "pm_cashflows", f"fund_id={fid}", [
-            {"flow_date": d.isoformat(), "flow_type": "call" if a < 0 else "distribution",
-             "amount_local": abs(a)} for d, a in flows])
+        write_parquet(
+            out,
+            "pm_cashflows",
+            f"fund_id={fid}",
+            [
+                {
+                    "flow_date": d.isoformat(),
+                    "flow_type": "call" if a < 0 else "distribution",
+                    "amount_local": abs(a),
+                }
+                for d, a in flows
+            ],
+        )
     for qd in sorted({d for s in navs.values() for d in s}):
-        write_parquet(out, "pm_nav", f"dt={qd.isoformat()}", [
-            {"fund_id": f, "nav_date": qd.isoformat(), "nav_local": s[qd]}
-            for f, s in navs.items() if qd in s])
+        write_parquet(
+            out,
+            "pm_nav",
+            f"dt={qd.isoformat()}",
+            [
+                {"fund_id": f, "nav_date": qd.isoformat(), "nav_local": s[qd]}
+                for f, s in navs.items()
+                if qd in s
+            ],
+        )
 
     pm_truth: dict[str, Any] = {}
     for fid, _n, _cls, _v, ccy, *_r in PM_FUNDS:
@@ -407,15 +541,23 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
         shares = math.fsum(-a / index_on(idx, d) for d, a in flows)  # index units still held
         ln_terminal = shares * end
         pm_truth[fid] = {
-            "nav_date": nav_date.isoformat(), "paid_in": paid, "distributions": dist,
-            "nav": nav_value, "tvpi": (dist + nav_value) / paid, "dpi": dist / paid,
-            "rvpi": nav_value / paid, "irr": xirr([*flows, (nav_date, nav_value)]),
+            "nav_date": nav_date.isoformat(),
+            "paid_in": paid,
+            "distributions": dist,
+            "nav": nav_value,
+            "tvpi": (dist + nav_value) / paid,
+            "dpi": dist / paid,
+            "rvpi": nav_value / paid,
+            "irr": xirr([*flows, (nav_date, nav_value)]),
             "ks_pme": ks,
-            "ln_pme_index_irr": xirr([*flows, (nav_date, ln_terminal)]) if ln_terminal > 0 else None,
+            "ln_pme_index_irr": xirr([*flows, (nav_date, ln_terminal)])
+            if ln_terminal > 0
+            else None,
         }
     answers["private_funds"] = {
         "convention": "paid_in = sum of calls; TVPI = (distributions + NAV) / paid_in; DPI = "
-        "distributions / paid_in; RVPI = NAV / paid_in; IRR = XIRR (actual/365) on dated flows with "
+        "distributions / paid_in; RVPI = NAV / paid_in; IRR = XIRR (actual/365) on dated flows"
+        "with "
         "NAV as a terminal inflow on the NAV date; KS-PME = (sum D*I_T/I_t + NAV) / sum C*I_T/I_t; "
         "LN-PME index IRR = XIRR of the same flows with the terminal value of the index units that "
         "mirror the calls and distributions; index level on the last business day on or before "
@@ -434,26 +576,57 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
             path.mkdir(parents=True, exist_ok=True)
             with (path / "nav-statement.csv").open("w", newline="") as handle:
                 writer = csv.writer(handle)
-                writer.writerow(["manager_id", "period_end", "currency", "status", "mtd_return",
-                                 "statement_date"])
+                writer.writerow(
+                    [
+                        "manager_id",
+                        "period_end",
+                        "currency",
+                        "status",
+                        "mtd_return",
+                        "statement_date",
+                    ]
+                )
                 for m in MANAGERS:
                     if m[9] != admin or m[5] == "Q" or day not in finals[m[0]]:
                         continue
                     final = day + timedelta(days=m[4]) <= AS_OF
                     published = day + timedelta(days=m[4] if final else EST_DAYS)
-                    found = next(r for r in rows_by_month[day] if r["manager_id"] == m[0]
-                                 and r["vintage"] == ("final" if final else "estimate"))
-                    writer.writerow([m[0], day.isoformat(), m[3], "final" if final else "estimate",
-                                     repr(found["return_local"]), published.isoformat()])
+                    found = next(
+                        r
+                        for r in rows_by_month[day]
+                        if r["manager_id"] == m[0]
+                        and r["vintage"] == ("final" if final else "estimate")
+                    )
+                    writer.writerow(
+                        [
+                            m[0],
+                            day.isoformat(),
+                            m[3],
+                            "final" if final else "estimate",
+                            repr(found["return_local"]),
+                            published.isoformat(),
+                        ]
+                    )
     for fid, *_ in PM_FUNDS:
         path = raw / "gp-statements" / fid
         path.mkdir(parents=True, exist_ok=True)
-        last_flows = [(d, a) for d, a in cashflows[fid] if NAV_LAST - timedelta(days=89) <= d <= NAV_LAST]
+        last_flows = [
+            (d, a) for d, a in cashflows[fid] if NAV_LAST - timedelta(days=89) <= d <= NAV_LAST
+        ]
         with (path / "2025Q3-capital-account.csv").open("w", newline="") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["fund_id", "quarter_end", "contributions", "distributions", "ending_nav"])
-            writer.writerow([fid, NAV_LAST.isoformat(), -math.fsum(a for _, a in last_flows if a < 0),
-                             math.fsum(a for _, a in last_flows if a > 0), navs[fid][NAV_LAST]])
+            writer.writerow(
+                ["fund_id", "quarter_end", "contributions", "distributions", "ending_nav"]
+            )
+            writer.writerow(
+                [
+                    fid,
+                    NAV_LAST.isoformat(),
+                    -math.fsum(a for _, a in last_flows if a < 0),
+                    math.fsum(a for _, a in last_flows if a > 0),
+                    navs[fid][NAV_LAST],
+                ]
+            )
 
     # --- Unity Catalog `ref` schema ------------------------------------------------------------
     managers: list[dict[str, Any]] = []
@@ -461,34 +634,75 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     for m in MANAGERS:
         mid, name, strat, ccy, lag, freq, *_x, admin = m
         liquidated = mid == LIQUIDATED
-        managers.append({"manager_id": mid, "name": name, "strategy": strat, "currency": ccy,
-                         "administrator": admin, "nav_lag_days": lag, "frequency": freq,
-                         "inception_date": "2020-12-31",
-                         "status": "liquidated" if liquidated else "active",
-                         "liquidated_date": "2024-06-30" if liquidated else None})
+        managers.append(
+            {
+                "manager_id": mid,
+                "name": name,
+                "strategy": strat,
+                "currency": ccy,
+                "administrator": admin,
+                "nav_lag_days": lag,
+                "frequency": freq,
+                "inception_date": "2020-12-31",
+                "status": "liquidated" if liquidated else "active",
+                "liquidated_date": "2024-06-30" if liquidated else None,
+            }
+        )
         lock, notice, redeem, gate = TERMS[strat]
         invested = date(2020 + rng.randint(0, 3), rng.randint(1, 12), 1)
-        terms.append({"manager_id": mid, "lockup_months": lock, "notice_days": notice,
-                      "redemption_freq_months": redeem, "gate_pct": gate,
-                      "investment_date": invested.isoformat(),
-                      "side_pocket_pct": 0.05 if strat in ("illiquid_credit", "real_assets") else 0.0})
+        terms.append(
+            {
+                "manager_id": mid,
+                "lockup_months": lock,
+                "notice_days": notice,
+                "redemption_freq_months": redeem,
+                "gate_pct": gate,
+                "investment_date": invested.isoformat(),
+                "side_pocket_pct": 0.05 if strat in ("illiquid_credit", "real_assets") else 0.0,
+            }
+        )
     write_parquet(out, "managers", "", managers)
     write_parquet(out, "terms", "", terms)
-    write_parquet(out, "pm_funds", "", [
-        {"fund_id": f[0], "name": f[1], "asset_class": f[2], "vintage_year": f[3],
-         "currency": f[4], "commitment_local": f[5], "gp": f[6], "index_id": INDEX_FOR[f[4]]}
-        for f in PM_FUNDS])
-    breaks = {("EQ02", months[-2]): 2500.0, ("EV01", months[-3]): -4100.0,
-              ("MS02", months[-1]): 18000.0}
-    recon = [{"manager_id": r["manager_id"], "period_end": day.isoformat(),
-              "our_value_usd": r["value_usd"],
-              "admin_value_usd": r["value_usd"] - breaks.get((r["manager_id"], day), 0.0)}
-             for day in months[-3:] for r in positions[day]]
+    write_parquet(
+        out,
+        "pm_funds",
+        "",
+        [
+            {
+                "fund_id": f[0],
+                "name": f[1],
+                "asset_class": f[2],
+                "vintage_year": f[3],
+                "currency": f[4],
+                "commitment_local": f[5],
+                "gp": f[6],
+                "index_id": INDEX_FOR[f[4]],
+            }
+            for f in PM_FUNDS
+        ],
+    )
+    breaks = {
+        ("EQ02", months[-2]): 2500.0,
+        ("EV01", months[-3]): -4100.0,
+        ("MS02", months[-1]): 18000.0,
+    }
+    recon = [
+        {
+            "manager_id": r["manager_id"],
+            "period_end": day.isoformat(),
+            "our_value_usd": r["value_usd"],
+            "admin_value_usd": r["value_usd"] - breaks.get((r["manager_id"], day), 0.0),
+        }
+        for day in months[-3:]
+        for r in positions[day]
+    ]
     write_parquet(out, "nav_recon", "", recon)
     answers["nav_recon_breaks"] = {
         "convention": "our_value_usd - admin_value_usd, breaks above 1,000 USD in absolute value",
-        "breaks": [{"manager_id": m, "period_end": d.isoformat(), "diff_usd": x}
-                   for (m, d), x in sorted(breaks.items())],
+        "breaks": [
+            {"manager_id": m, "period_end": d.isoformat(), "diff_usd": x}
+            for (m, d), x in sorted(breaks.items())
+        ],
     }
     answers["liquidated"] = {"manager_id": LIQUIDATED, "last_return_month": "2024-06-30"}
     answers["availability_at_as_of"] = {
@@ -500,8 +714,9 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
         "last_quarterly_final": max(quarterly).isoformat(),
     }
     write_delta_logs()
-    (out / "lake_map.json").write_text(json.dumps({
-        f"abfss://raw@{HOST}": "raw", f"abfss://uc@{HOST}": "uc"}, indent=2))
+    (out / "lake_map.json").write_text(
+        json.dumps({f"abfss://raw@{HOST}": "raw", f"abfss://uc@{HOST}": "uc"}, indent=2)
+    )
     (out / "known_answers.json").write_text(json.dumps(answers, indent=2, sort_keys=True))
     return answers
 

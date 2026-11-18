@@ -4,7 +4,7 @@
 # Anything not listed is refused, and a refused dataset looks like a missing one.
 #
 # Datasets (see the README): ret_final, ret_est, ret_best, ret_usd, ret_final_q, ret_final_<strategy>,
-# ret_est_<strategy>, fx_eurusd, idx_public, fof_weights, fof_fund, mgr_terms, pm_cashflows, pm_nav,
+# ret_est_<strategy>, fx_eurusd, idx_public, fof_weights, fof_fund, mgr_terms, pm_calls, pm_distributions, pm_nav,
 # pm_terms, ops_recon_diff_usd. Strategies: eq_ls, macro, event, relval, cta, multistrat,
 # illiquid_credit, real_assets. Tool names other than the platform's own start with sab_.
 

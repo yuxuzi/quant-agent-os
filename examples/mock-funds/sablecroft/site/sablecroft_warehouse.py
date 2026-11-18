@@ -6,7 +6,8 @@ as an Entra ID service principal by OAuth M2M). That driver is not installed her
 `DatabricksWarehouse` below is what the fund would write, and is never run in tests.
 
 Tests: `LocalDeltaWarehouse` is DuckDB (dev dependency, imported inside the function: the wheel does
-not ship it) with an attached catalog `sablecroft`, its schemas `curated` and `ref` as views over the
+not ship it) with an attached catalog `sablecroft`, its schemas `curated` and `ref` as views
+over the
 Parquet files each Delta table's `_delta_log` lists (`read_parquet([...], hive_partitioning=true)`),
 and `sablecroft_views.sql` run unchanged: three-part names work as they do in Unity Catalog. It is a
 stand-in for the SQL the views use, not for Databricks.
@@ -38,7 +39,8 @@ class SqlWarehouse(Protocol):
 
 
 def abfss_to_path(uri: str, lake_map: dict[str, str], root: Path) -> Path:
-    """Return the local directory an `abfss://container@account.dfs.core.windows.net/path` URI maps to."""
+    """Return the local directory an `abfss://container@account.dfs.core.windows.net/path` URI
+    maps to."""
     for prefix, folder in lake_map.items():
         if uri == prefix or uri.startswith(prefix + "/"):
             return root / folder / uri[len(prefix) :].lstrip("/")
@@ -64,7 +66,8 @@ def delta_version(table: Path) -> int:
 
 
 class LocalDeltaWarehouse:
-    """Delta tables on a local 'lake', queried with DuckDB under Unity Catalog's three-part names."""
+    """Delta tables on a local 'lake', queried with DuckDB under Unity Catalog's three-part
+    names."""
 
     def __init__(self, root: Path) -> None:
         import duckdb

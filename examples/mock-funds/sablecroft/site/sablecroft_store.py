@@ -1,8 +1,10 @@
 """Sablecroft's warehouse as a `DatasetStore`: one query per dataset id, long rows served wide.
 
-Reads the serving views of `sablecroft_views.sql` through a `SqlWarehouse` (a Databricks SQL warehouse
+Reads the serving views of `sablecroft_views.sql` through a `SqlWarehouse` (a Databricks SQL
+warehouse
 in production, `LocalDeltaWarehouse` in tests), and never writes. Each dataset goes through the
-platform's own CSV parser, so it gets the checks of `qaos data add`, and its fingerprint is the SHA-256
+platform's own CSV parser, so it gets the checks of `qaos data add`, and its fingerprint is the
+SHA-256
 of that CSV.
 
 Conventions:
@@ -12,8 +14,9 @@ Conventions:
 - `ret_final` holds the administrator's final figures only; `ret_est` the manager's estimates;
   `ret_best` the final where published, else the estimate. `ret_final_q` is the three quarterly
   reporters, on quarter-ends. `ret_final_<strategy>` and `ret_est_<strategy>` split by strategy.
-- `pm_cashflows` is signed (calls negative, distributions positive), in each fund's currency, dated by
-  the day of the flow; `pm_nav` is quarter-end, from the GP's capital-account statement.
+- `pm_calls` and `pm_distributions` are gross positive amounts in each fund's currency, dated by the
+  day of the flow (never netted: a call and a distribution can share a day); `pm_nav` is
+  quarter-end, from the GP's capital-account statement.
 - `mgr_terms` and `pm_terms` have one row per manager or fund and only numeric columns: strategies,
   currencies, and dates are coded (see sablecroft_views.sql); the investment date is yyyymmdd.
 """
@@ -34,7 +37,14 @@ from sablecroft_warehouse import LocalDeltaWarehouse, SqlWarehouse
 from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
 
 STRATEGIES = (
-    "eq_ls", "macro", "event", "relval", "cta", "multistrat", "illiquid_credit", "real_assets",
+    "eq_ls",
+    "macro",
+    "event",
+    "relval",
+    "cta",
+    "multistrat",
+    "illiquid_credit",
+    "real_assets",
 )
 
 
@@ -83,12 +93,20 @@ ENTRIES: dict[str, Entry] = {
     "fx_eurusd": Entry(_LONG.format(date="period_end", key="pair", view="v_fx_eurusd")),
     "idx_public": Entry(_LONG.format(date="date", key="index_id", view="v_idx_public")),
     "fof_weights": Entry(_LONG.format(date="period_end", key="manager_id", view="v_fof_weights")),
+    "fof_weights_m": Entry(
+        _LONG.format(date="period_end", key="manager_id", view="v_fof_weights_m")
+    ),
     "fof_fund": Entry(f"SELECT * FROM {SERVING}.v_fof_fund", "table"),
-    "pm_cashflows": Entry(_LONG.format(date="flow_date", key="fund_id", view="v_pm_cashflows")),
+    "pm_calls": Entry(_LONG.format(date="flow_date", key="fund_id", view="v_pm_calls")),
+    "pm_distributions": Entry(
+        _LONG.format(date="flow_date", key="fund_id", view="v_pm_distributions")
+    ),
     "pm_nav": Entry(_LONG.format(date="nav_date", key="fund_id", view="v_pm_nav")),
     "pm_terms": Entry(f"SELECT * FROM {SERVING}.v_pm_terms", "table"),
     "mgr_terms": Entry(f"SELECT * FROM {SERVING}.v_mgr_terms", "table"),
-    "ops_recon_diff_usd": Entry(_LONG.format(date="period_end", key="manager_id", view="v_ops_recon")),
+    "ops_recon_diff_usd": Entry(
+        _LONG.format(date="period_end", key="manager_id", view="v_ops_recon")
+    ),
 }
 for _base, _view in (("ret_final", "v_ret_final"), ("ret_est", "v_ret_est")):
     for _strategy in STRATEGIES:
@@ -96,11 +114,13 @@ for _base, _view in (("ret_final", "v_ret_final"), ("ret_est", "v_ret_est")):
             _LONG.format(date="period_end", key="manager_id", view=_view) + " WHERE strategy = ?",
             params=(_strategy,),
         )
-# The only dataset that is not one entry: none. (A fund needing Python logic per dataset marks it here.)
+# The only dataset that is not one entry: none. (A fund needing Python logic per dataset marks
+# it here.)
 
 
 class SablecroftStore:
-    """Sablecroft's datasets over a SQL warehouse, read-only, rebuilt when the data version changes."""
+    """Sablecroft's datasets over a SQL warehouse, read-only, rebuilt when the data version
+    changes."""
 
     def __init__(self, warehouse: SqlWarehouse) -> None:
         self.warehouse = warehouse
