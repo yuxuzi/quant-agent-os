@@ -410,7 +410,8 @@ def build(out: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
             "nav_date": nav_date.isoformat(), "paid_in": paid, "distributions": dist,
             "nav": nav_value, "tvpi": (dist + nav_value) / paid, "dpi": dist / paid,
             "rvpi": nav_value / paid, "irr": xirr([*flows, (nav_date, nav_value)]),
-            "ks_pme": ks, "ln_pme_index_irr": xirr([*flows, (nav_date, ln_terminal)]),
+            "ks_pme": ks,
+            "ln_pme_index_irr": xirr([*flows, (nav_date, ln_terminal)]) if ln_terminal > 0 else None,
         }
     answers["private_funds"] = {
         "convention": "paid_in = sum of calls; TVPI = (distributions + NAV) / paid_in; DPI = "
