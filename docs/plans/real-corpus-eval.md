@@ -212,6 +212,18 @@ PDF passages rarely carry a section, so headings change nothing here; on the Mar
 terms, which lifts the paper's weaker passages past better ones elsewhere. The mention channel
 already does what RAGFlow's keyword field does, from the vocabulary.
 
+Of RAGFlow's other retrieval ideas, two were adopted without a model: the passages around a
+passage (`get_source_passage` `context`) and a source and date filter (`find_related_signals`).
+The rest were not built:
+
+- **RAPTOR summaries, community reports, model-written keywords and questions, and query
+  rewriting** all call a model at ingestion or search, which the platform does not do
+  ([decision 0016](../decisions/0016-clients-orchestrate.md)).
+- **PageRank and tag scores** have nothing to rank on a graph of 16 typed facts.
+- **A document-outline tool** (a document's sections and the entities they mention) would add a
+  tool definition to every session for little new: results already carry the section, and
+  `context` gives the surrounding text.
+
 ## Known limitations (found here, not fixed)
 
 - **Generic words in the vocabulary.** "Profitability" and "momentum" are also ordinary
