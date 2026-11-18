@@ -21,7 +21,7 @@ import numpy as np
 from quant_toolbox._hac import newey_west_lags, newey_west_t_stat
 from quant_toolbox._types import FloatArray
 from quant_toolbox.performance import bar_returns
-from quant_toolbox.research._stats import information_coefficient, ranks
+from quant_toolbox.research._stats import information_coefficient, row_ranks
 
 TRADE_LAG = 1  # bars between a signal's close and the trade (0 trades on that close)
 # Return on the bar an asset's prices stop for good (a delisting without a final price).
@@ -61,16 +61,23 @@ def ic_summary(
     lag: int = TRADE_LAG,
     delisting_return: float = DELISTING_RETURN,
 ) -> dict[str, float]:
-    """Mean IC, mean rank IC, its HAC t-statistic, and the share of bars with a positive IC."""
+    """Mean IC, mean rank IC, its HAC t-statistic and spread, and the share of positive bars.
+
+    ``rank_ic_std`` is the standard deviation of per-bar rank ICs (``ddof=1``), and
+    ``rank_ic_ir`` the mean over it: an information ratio per bar, not annualised.
+    """
     forward = forward_returns(prices, horizon, lag, delisting_return)
     pearson = information_coefficient(signal, forward)
     spearman = information_coefficient(signal, forward, rank=True)
     valid = spearman[np.isfinite(spearman)]
+    spread = float(np.std(valid, ddof=1)) if valid.size > 1 else math.nan
     return {
         "mean_ic": float(np.nanmean(pearson)) if np.isfinite(pearson).any() else math.nan,
         "mean_rank_ic": float(np.mean(valid)) if valid.size else math.nan,
         "rank_ic_t_stat": hac_t_stat(valid, horizon),
         "positive_rank_ic_share": float(np.mean(valid > 0.0)) if valid.size else math.nan,
+        "rank_ic_std": spread,
+        "rank_ic_ir": float(np.mean(valid)) / spread if spread > 0.0 else math.nan,
         "bars": float(valid.size),
     }
 
@@ -81,6 +88,39 @@ def hac_t_stat(ics: FloatArray, horizon: int) -> float:
     return newey_west_t_stat(valid, max(horizon - 1, newey_west_lags(valid.size)))
 
 
+def quantile_returns(
+    signal: FloatArray,
+    prices: FloatArray,
+    quantiles: int = 5,
+    lag: int = TRADE_LAG,
+    delisting_return: float = DELISTING_RETURN,
+) -> FloatArray:
+    """Per-bar mean return of each signal quantile, one bar after the trade (bars by quantiles).
+
+    Each bar's assets with both a signal and a forward return are split by signal rank (ties at
+    their average rank) into ``quantiles`` buckets, lowest signal first. A bar with fewer than
+    ``2 * quantiles`` such assets is NaN, and so is a bucket that ties leave empty.
+    """
+    if quantiles < 1:
+        raise ValueError(f"quantiles must be at least 1, got {quantiles}.")
+    forward = forward_returns(prices, 1, lag, delisting_return)
+    valid = np.isfinite(signal) & np.isfinite(forward)
+    count = valid.sum(axis=1)
+    result = np.full((signal.shape[0], quantiles), np.nan)
+    usable = count >= 2 * quantiles
+    if not usable.any():
+        return result
+    ranked = row_ranks(signal[usable], valid[usable])
+    taken = valid[usable]
+    bucket = np.floor((ranked - 1) * quantiles / count[usable][:, None])
+    returns = np.where(taken, forward[usable], 0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        for q in range(quantiles):
+            member = taken & (bucket == q)
+            result[usable, q] = (returns * member).sum(axis=1) / member.sum(axis=1)
+    return result
+
+
 def quantile_spread(
     signal: FloatArray,
     prices: FloatArray,
@@ -89,15 +129,8 @@ def quantile_spread(
     delisting_return: float = DELISTING_RETURN,
 ) -> FloatArray:
     """Per-bar return of the top signal quantile minus the bottom one, one bar after the trade."""
-    forward = forward_returns(prices, 1, lag, delisting_return)
-    spread = np.full(signal.shape[0], np.nan)
-    for bar in range(signal.shape[0]):
-        valid = np.isfinite(signal[bar]) & np.isfinite(forward[bar])
-        if int(valid.sum()) < 2 * quantiles:
-            continue
-        bucket = np.floor((ranks(signal[bar][valid]) - 1) * quantiles / int(valid.sum()))
-        returns = forward[bar][valid]
-        spread[bar] = float(returns[bucket == quantiles - 1].mean() - returns[bucket == 0].mean())
+    means = quantile_returns(signal, prices, quantiles, lag, delisting_return)
+    spread: FloatArray = means[:, -1] - means[:, 0]
     return spread
 
 
