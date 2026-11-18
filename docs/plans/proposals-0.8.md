@@ -125,7 +125,7 @@ Measured on macOS with a warm uv cache, from the drill's own summary (`examples/
 | 5. Ingest the 16 documents | 0.2 |
 | 6. Scan, wrap, and test the finished legacy draft | 10.3 |
 | 7. Start the gateway, the risk service (with its 1-second model load), and the server | 12.0 |
-| 8. The fund's day: 19 checks as six users, over REST and MCP | 1.0 |
+| 8. The fund's day: 19 checks as five signed-in users, a disabled one, and no one, over REST and MCP | 1.0 |
 | 9. The agreed cases | 1.7 |
 | 10. `qaos runs show` | 0.2 |
 | **Total** | **29.8** |
