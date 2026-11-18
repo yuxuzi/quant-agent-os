@@ -253,6 +253,28 @@
     "analyze_risk": {
       "input_schema": {
         "$defs": {
+          "ColumnRef": {
+            "additionalProperties": false,
+            "description": "One column of a dataset.",
+            "properties": {
+              "column": {
+                "minLength": 1,
+                "title": "Column",
+                "type": "string"
+              },
+              "dataset": {
+                "minLength": 1,
+                "title": "Dataset",
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset",
+              "column"
+            ],
+            "title": "ColumnRef",
+            "type": "object"
+          },
           "ColumnsRef": {
             "additionalProperties": false,
             "description": "Several columns of one dataset.",
@@ -294,6 +316,43 @@
             ],
             "title": "DatasetRef",
             "type": "object"
+          },
+          "FactorModelRef": {
+            "additionalProperties": false,
+            "description": "A vendor's factor model, by dataset.",
+            "properties": {
+              "factor_covariance": {
+                "description": "Dataset: factors by factors",
+                "minLength": 1,
+                "title": "Factor Covariance",
+                "type": "string"
+              },
+              "loadings": {
+                "description": "Dataset: assets by factors",
+                "minLength": 1,
+                "title": "Loadings",
+                "type": "string"
+              },
+              "periods_per_year": {
+                "default": 1,
+                "description": "Frequency of the variances; 1: annualised",
+                "maximum": 366,
+                "minimum": 1,
+                "title": "Periods Per Year",
+                "type": "integer"
+              },
+              "specific_variance": {
+                "$ref": "#/$defs/ColumnRef",
+                "description": "A column with one row per asset"
+              }
+            },
+            "required": [
+              "loadings",
+              "factor_covariance",
+              "specific_variance"
+            ],
+            "title": "FactorModelRef",
+            "type": "object"
           }
         },
         "description": "`RiskInput` with returns by value or by reference.",
@@ -314,6 +373,17 @@
               }
             ],
             "title": "Asset Returns"
+          },
+          "factor_model": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/FactorModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "factor_returns": {
             "anyOf": [
@@ -530,6 +600,80 @@
             "title": "FactorRisk",
             "type": "object"
           },
+          "ModelRisk": {
+            "description": "Volatility under a vendor's factor model, split into factors, specific risk, and assets.",
+            "properties": {
+              "contributions": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "type": "number"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Contributions"
+              },
+              "exposures": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Exposures",
+                "type": "object"
+              },
+              "factor_shares": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "type": "number"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Factor Shares"
+              },
+              "factor_volatility": {
+                "title": "Factor Volatility",
+                "type": "number"
+              },
+              "specific_share": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Specific Share"
+              },
+              "specific_volatility": {
+                "title": "Specific Volatility",
+                "type": "number"
+              },
+              "volatility": {
+                "title": "Volatility",
+                "type": "number"
+              }
+            },
+            "required": [
+              "volatility",
+              "factor_volatility",
+              "specific_volatility",
+              "exposures",
+              "factor_shares",
+              "specific_share",
+              "contributions"
+            ],
+            "title": "ModelRisk",
+            "type": "object"
+          },
           "SourceRef": {
             "description": "Where a fact came from: a stable identifier plus an optional location inside it.",
             "properties": {
@@ -623,6 +767,17 @@
             "title": "Evidence",
             "type": "array"
           },
+          "factor_model": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ModelRisk"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "factors": {
             "anyOf": [
               {
@@ -648,6 +803,35 @@
             ],
             "default": null,
             "title": "Herfindahl"
+          },
+          "historical_stress": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Today's weights over each covered scenario window",
+            "title": "Historical Stress"
+          },
+          "historical_stress_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Why scenarios are missing or not covered",
+            "title": "Historical Stress Note"
           },
           "net_exposure": {
             "title": "Net Exposure",
@@ -719,7 +903,562 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.1.0"
+      "version": "2.2.0"
+    },
+    "analyze_signal": {
+      "input_schema": {
+        "$defs": {
+          "FrameRef": {
+            "additionalProperties": false,
+            "description": "Columns of one dataset.",
+            "properties": {
+              "columns": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Columns to use; default: every column",
+                "title": "Columns"
+              },
+              "dataset": {
+                "description": "A dataset id from list_datasets",
+                "minLength": 1,
+                "title": "Dataset",
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset"
+            ],
+            "title": "FrameRef",
+            "type": "object"
+          }
+        },
+        "description": "A signal study.",
+        "properties": {
+          "delisting_return": {
+            "default": -0.3,
+            "description": "Earned once where returns stop early",
+            "maximum": 0.0,
+            "minimum": -1.0,
+            "title": "Delisting Return",
+            "type": "number"
+          },
+          "horizons": {
+            "default": [
+              1,
+              5,
+              21
+            ],
+            "description": "Forward bars; the first is summarised",
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Horizons",
+            "type": "array"
+          },
+          "lag": {
+            "default": 1,
+            "description": "Bars from signal to trade",
+            "maximum": 63,
+            "minimum": 0,
+            "title": "Lag",
+            "type": "integer"
+          },
+          "quantiles": {
+            "default": 5,
+            "maximum": 10,
+            "minimum": 2,
+            "title": "Quantiles",
+            "type": "integer"
+          },
+          "returns": {
+            "$ref": "#/$defs/FrameRef",
+            "description": "Simple returns, dates by instruments"
+          },
+          "signal": {
+            "$ref": "#/$defs/FrameRef",
+            "description": "Signal, dates by instruments"
+          }
+        },
+        "required": [
+          "signal",
+          "returns"
+        ],
+        "title": "SignalRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "Evidence": {
+            "description": "One statement in a report and the sources that support it.\n\n``retrieved`` statements quote or paraphrase a source, ``computed`` statements come from a\ndeterministic tool, and ``interpretation`` statements are model-generated and must be\nlabelled as such.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "retrieved",
+                  "computed",
+                  "interpretation"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "sources": {
+                "items": {
+                  "$ref": "#/$defs/SourceRef"
+                },
+                "title": "Sources",
+                "type": "array"
+              },
+              "statement": {
+                "minLength": 1,
+                "title": "Statement",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "statement"
+            ],
+            "title": "Evidence",
+            "type": "object"
+          },
+          "HorizonIc": {
+            "description": "Information coefficients at one forward horizon.",
+            "properties": {
+              "dates": {
+                "description": "Dates with a rank IC",
+                "title": "Dates",
+                "type": "integer"
+              },
+              "horizon": {
+                "title": "Horizon",
+                "type": "integer"
+              },
+              "mean_ic": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mean Ic"
+              },
+              "mean_rank_ic": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mean Rank Ic"
+              },
+              "positive_rank_ic_share": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Positive Rank Ic Share"
+              },
+              "rank_ic_ir": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Rank Ic Ir"
+              },
+              "rank_ic_std": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Rank Ic Std"
+              },
+              "rank_ic_t_stat": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Rank Ic T Stat"
+              }
+            },
+            "required": [
+              "horizon",
+              "mean_ic",
+              "mean_rank_ic",
+              "rank_ic_std",
+              "rank_ic_ir",
+              "rank_ic_t_stat",
+              "positive_rank_ic_share",
+              "dates"
+            ],
+            "title": "HorizonIc",
+            "type": "object"
+          },
+          "QuantileReturns": {
+            "description": "Mean one-bar return of each signal bucket and the top-minus-bottom spread.",
+            "properties": {
+              "dates": {
+                "description": "Dates with every bucket filled",
+                "title": "Dates",
+                "type": "integer"
+              },
+              "mean_returns": {
+                "description": "Per bar, lowest signal bucket first",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": "Mean Returns",
+                "type": "array"
+              },
+              "quantiles": {
+                "title": "Quantiles",
+                "type": "integer"
+              },
+              "spread": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Spread"
+              },
+              "spread_t_stat": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Spread T Stat"
+              }
+            },
+            "required": [
+              "quantiles",
+              "mean_returns",
+              "spread",
+              "spread_t_stat",
+              "dates"
+            ],
+            "title": "QuantileReturns",
+            "type": "object"
+          },
+          "SignalObservations": {
+            "description": "How much data the study used.",
+            "properties": {
+              "dates": {
+                "description": "Dates shared by the signal and the returns",
+                "title": "Dates",
+                "type": "integer"
+              },
+              "first_date": {
+                "title": "First Date",
+                "type": "string"
+              },
+              "instruments": {
+                "title": "Instruments",
+                "type": "integer"
+              },
+              "last_date": {
+                "title": "Last Date",
+                "type": "string"
+              },
+              "mean_names_per_date": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Instruments with a signal and a forward return, per scored date",
+                "title": "Mean Names Per Date"
+              },
+              "signal_dates": {
+                "description": "Dates with a signal for at least one instrument",
+                "title": "Signal Dates",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "dates",
+              "instruments",
+              "signal_dates",
+              "mean_names_per_date",
+              "first_date",
+              "last_date"
+            ],
+            "title": "SignalObservations",
+            "type": "object"
+          },
+          "SignalSummary": {
+            "description": "The numbers to quote, at the first horizon.",
+            "properties": {
+              "dates": {
+                "title": "Dates",
+                "type": "integer"
+              },
+              "horizon": {
+                "title": "Horizon",
+                "type": "integer"
+              },
+              "instruments": {
+                "title": "Instruments",
+                "type": "integer"
+              },
+              "mean_ic": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mean Ic"
+              },
+              "mean_rank_ic": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mean Rank Ic"
+              },
+              "rank_ic_ir": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Rank Ic Ir"
+              },
+              "rank_ic_t_stat": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Rank Ic T Stat"
+              },
+              "spread_t_stat": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Spread T Stat"
+              },
+              "top_minus_bottom": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Mean spread per bar",
+                "title": "Top Minus Bottom"
+              }
+            },
+            "required": [
+              "horizon",
+              "mean_rank_ic",
+              "mean_ic",
+              "rank_ic_ir",
+              "rank_ic_t_stat",
+              "top_minus_bottom",
+              "spread_t_stat",
+              "dates",
+              "instruments"
+            ],
+            "title": "SignalSummary",
+            "type": "object"
+          },
+          "SourceRef": {
+            "description": "Where a fact came from: a stable identifier plus an optional location inside it.",
+            "properties": {
+              "location": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Location"
+              },
+              "source_id": {
+                "minLength": 1,
+                "title": "Source Id",
+                "type": "string"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "source_id"
+            ],
+            "title": "SourceRef",
+            "type": "object"
+          }
+        },
+        "description": "A signal's predictive power: summary first, then ICs, decay, and quantile returns.",
+        "properties": {
+          "conventions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Conventions",
+            "type": "object"
+          },
+          "data_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Data Versions",
+            "type": "object"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "horizons": {
+            "items": {
+              "$ref": "#/$defs/HorizonIc"
+            },
+            "title": "Horizons",
+            "type": "array"
+          },
+          "lag": {
+            "title": "Lag",
+            "type": "integer"
+          },
+          "observations": {
+            "$ref": "#/$defs/SignalObservations"
+          },
+          "quantile_returns": {
+            "$ref": "#/$defs/QuantileReturns"
+          },
+          "returns": {
+            "title": "Returns",
+            "type": "string"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          },
+          "signal_autocorrelation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Autocorrelation"
+          },
+          "summary": {
+            "$ref": "#/$defs/SignalSummary"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "signal",
+          "returns",
+          "lag",
+          "horizons",
+          "quantile_returns",
+          "signal_autocorrelation",
+          "observations",
+          "conventions"
+        ],
+        "title": "SignalOutput",
+        "type": "object"
+      },
+      "permissions": [
+        "read_local_data"
+      ],
+      "version": "1.0.0"
     },
     "check_spec": {
       "input_schema": {
@@ -2432,6 +3171,658 @@
         "read_local_data"
       ],
       "version": "3.0.1"
+    },
+    "run_backtest": {
+      "input_schema": {
+        "$defs": {
+          "ColumnRef": {
+            "additionalProperties": false,
+            "description": "One column of a dataset.",
+            "properties": {
+              "column": {
+                "minLength": 1,
+                "title": "Column",
+                "type": "string"
+              },
+              "dataset": {
+                "minLength": 1,
+                "title": "Dataset",
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset",
+              "column"
+            ],
+            "title": "ColumnRef",
+            "type": "object"
+          },
+          "FrameRef": {
+            "additionalProperties": false,
+            "description": "Columns of one dataset.",
+            "properties": {
+              "columns": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Columns to use; default: every column",
+                "title": "Columns"
+              },
+              "dataset": {
+                "description": "A dataset id from list_datasets",
+                "minLength": 1,
+                "title": "Dataset",
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset"
+            ],
+            "title": "FrameRef",
+            "type": "object"
+          }
+        },
+        "description": "A signal backtest.",
+        "properties": {
+          "benchmark": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ColumnRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cost_bps": {
+            "description": "Per unit of one-way turnover",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Cost Bps",
+            "type": "number"
+          },
+          "delisting_return": {
+            "default": -0.3,
+            "description": "Earned once where returns stop early",
+            "maximum": 0.0,
+            "minimum": -1.0,
+            "title": "Delisting Return",
+            "type": "number"
+          },
+          "lag": {
+            "default": 1,
+            "description": "Bars from signal to trade",
+            "maximum": 63,
+            "minimum": 0,
+            "title": "Lag",
+            "type": "integer"
+          },
+          "periods_per_year": {
+            "anyOf": [
+              {
+                "maximum": 366,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Default: inferred from the dates. 252 daily, 52 weekly, 12 monthly",
+            "title": "Periods Per Year"
+          },
+          "quantiles": {
+            "default": 5,
+            "description": "long_only holds the top quantile",
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Quantiles",
+            "type": "integer"
+          },
+          "rebalance_every": {
+            "default": 1,
+            "maximum": 252,
+            "minimum": 1,
+            "title": "Rebalance Every",
+            "type": "integer"
+          },
+          "returns": {
+            "$ref": "#/$defs/FrameRef",
+            "description": "Simple returns, dates by instruments"
+          },
+          "risk_free": {
+            "default": 0.0,
+            "description": "Annual risk-free rate",
+            "maximum": 0.5,
+            "minimum": -0.1,
+            "title": "Risk Free",
+            "type": "number"
+          },
+          "signal": {
+            "$ref": "#/$defs/FrameRef",
+            "description": "Signal, dates by instruments"
+          },
+          "weighting": {
+            "default": "dollar_neutral",
+            "enum": [
+              "dollar_neutral",
+              "long_only"
+            ],
+            "title": "Weighting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "returns",
+          "cost_bps"
+        ],
+        "title": "BacktestRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "BacktestBook": {
+            "description": "The positions the backtest held, on average over its bars.",
+            "properties": {
+              "forced_exits": {
+                "description": "Positions written off at a delisting",
+                "title": "Forced Exits",
+                "type": "integer"
+              },
+              "lag": {
+                "title": "Lag",
+                "type": "integer"
+              },
+              "mean_gross_exposure": {
+                "title": "Mean Gross Exposure",
+                "type": "number"
+              },
+              "mean_net_exposure": {
+                "title": "Mean Net Exposure",
+                "type": "number"
+              },
+              "mean_positions": {
+                "title": "Mean Positions",
+                "type": "number"
+              },
+              "rebalance_every": {
+                "title": "Rebalance Every",
+                "type": "integer"
+              },
+              "weighting": {
+                "enum": [
+                  "dollar_neutral",
+                  "long_only"
+                ],
+                "title": "Weighting",
+                "type": "string"
+              }
+            },
+            "required": [
+              "weighting",
+              "lag",
+              "rebalance_every",
+              "mean_gross_exposure",
+              "mean_net_exposure",
+              "mean_positions",
+              "forced_exits"
+            ],
+            "title": "BacktestBook",
+            "type": "object"
+          },
+          "BacktestCosts": {
+            "description": "What trading costs took, annualised; returns here are arithmetic means.",
+            "properties": {
+              "annual_turnover": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Annual Turnover"
+              },
+              "break_even_bps": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Break Even Bps"
+              },
+              "cost_bps": {
+                "title": "Cost Bps",
+                "type": "number"
+              },
+              "cost_drag": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cost Drag"
+              },
+              "gross_return": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Gross Return"
+              },
+              "net_return": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Net Return"
+              }
+            },
+            "required": [
+              "cost_bps",
+              "gross_return",
+              "net_return",
+              "cost_drag",
+              "annual_turnover",
+              "break_even_bps"
+            ],
+            "title": "BacktestCosts",
+            "type": "object"
+          },
+          "BacktestSummary": {
+            "description": "The numbers to quote, of net returns over the backtest's period.",
+            "properties": {
+              "annual_turnover": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Annual Turnover"
+              },
+              "annualized_return": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Annualized Return"
+              },
+              "annualized_volatility": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Annualized Volatility"
+              },
+              "bars": {
+                "title": "Bars",
+                "type": "integer"
+              },
+              "cost_drag": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cost Drag"
+              },
+              "first_date": {
+                "title": "First Date",
+                "type": "string"
+              },
+              "hit_rate": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Hit Rate"
+              },
+              "last_date": {
+                "title": "Last Date",
+                "type": "string"
+              },
+              "max_drawdown": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Max Drawdown"
+              },
+              "sharpe_ratio": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sharpe Ratio"
+              }
+            },
+            "required": [
+              "annualized_return",
+              "annualized_volatility",
+              "sharpe_ratio",
+              "max_drawdown",
+              "hit_rate",
+              "annual_turnover",
+              "cost_drag",
+              "first_date",
+              "last_date",
+              "bars"
+            ],
+            "title": "BacktestSummary",
+            "type": "object"
+          },
+          "DrawdownSummary": {
+            "description": "One of the deepest drawdowns of net returns.",
+            "properties": {
+              "depth": {
+                "title": "Depth",
+                "type": "number"
+              },
+              "peak": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Peak"
+              },
+              "recovered": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Recovered"
+              },
+              "trough": {
+                "title": "Trough",
+                "type": "string"
+              }
+            },
+            "required": [
+              "depth",
+              "peak",
+              "trough",
+              "recovered"
+            ],
+            "title": "DrawdownSummary",
+            "type": "object"
+          },
+          "Evidence": {
+            "description": "One statement in a report and the sources that support it.\n\n``retrieved`` statements quote or paraphrase a source, ``computed`` statements come from a\ndeterministic tool, and ``interpretation`` statements are model-generated and must be\nlabelled as such.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "retrieved",
+                  "computed",
+                  "interpretation"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "sources": {
+                "items": {
+                  "$ref": "#/$defs/SourceRef"
+                },
+                "title": "Sources",
+                "type": "array"
+              },
+              "statement": {
+                "minLength": 1,
+                "title": "Statement",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "statement"
+            ],
+            "title": "Evidence",
+            "type": "object"
+          },
+          "SourceRef": {
+            "description": "Where a fact came from: a stable identifier plus an optional location inside it.",
+            "properties": {
+              "location": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Location"
+              },
+              "source_id": {
+                "minLength": 1,
+                "title": "Source Id",
+                "type": "string"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "source_id"
+            ],
+            "title": "SourceRef",
+            "type": "object"
+          }
+        },
+        "description": "A simulated strategy's net returns: summary first, then the analysis behind it.",
+        "properties": {
+          "benchmark": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark"
+          },
+          "book": {
+            "$ref": "#/$defs/BacktestBook"
+          },
+          "conventions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Conventions",
+            "type": "object"
+          },
+          "costs": {
+            "$ref": "#/$defs/BacktestCosts"
+          },
+          "data_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Data Versions",
+            "type": "object"
+          },
+          "distribution": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Distribution",
+            "type": "object"
+          },
+          "drawdowns": {
+            "items": {
+              "$ref": "#/$defs/DrawdownSummary"
+            },
+            "title": "Drawdowns",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "periods_per_year": {
+            "title": "Periods Per Year",
+            "type": "integer"
+          },
+          "returns": {
+            "title": "Returns",
+            "type": "string"
+          },
+          "sharpe_inference": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Sharpe Inference",
+            "type": "object"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/$defs/BacktestSummary"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "signal",
+          "returns",
+          "costs",
+          "book",
+          "metrics",
+          "benchmark",
+          "distribution",
+          "sharpe_inference",
+          "drawdowns",
+          "periods_per_year",
+          "conventions"
+        ],
+        "title": "BacktestOutput",
+        "type": "object"
+      },
+      "permissions": [
+        "read_local_data"
+      ],
+      "version": "1.0.0"
     },
     "server_info": {
       "input_schema": {

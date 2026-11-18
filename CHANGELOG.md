@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
+  by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
+  t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
+  autocorrelation, with a summary first. `run_backtest` (1.0.0) trades the same signal as dollar-neutral or
+  long-only top-quantile weights, with a trade lag (one bar by default) and costs in basis points on
+  turnover, and reports the net returns' annualised return and volatility, Sharpe, maximum drawdown, hit
+  rate, turnover, and cost drag, with a benchmark comparison. Both compute through Quant Toolbox's
+  `research`, state their timing and cost conventions, warn about look-ahead and short samples, and are
+  served only with a dataset store; a backtest is labelled a simulation, not advice.
+- **Historical stress and vendor factor models in `analyze_risk`** (2.2.0). Daily, dated asset returns add
+  today's weights over each covered `SCENARIOS` window (`historical_stress`), and otherwise a note says why
+  there is none. `factor_model` takes a vendor's loadings, factor covariance, and specific variances by
+  dataset id and reports the volatility under that model, split into factors, specific risk, and assets; a
+  model whose shapes do not line up is refused, naming what is missing. Both fields are additive.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource
