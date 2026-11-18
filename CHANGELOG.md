@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-17
+
+0.7.0 is the first tagged release since 0.5.0; it includes 0.6.0, which was never tagged. Quant Toolbox stays at
+0.6.0, released by this tag.
+
+### Added
+
+- **The analytics tools report more of Quant Toolbox 0.6.0.** `analyze_performance` (2.1.0) adds bias-adjusted
+  skewness and excess kurtosis, the best and worst period, the Sharpe ratio's standard error, the probabilistic
+  Sharpe ratio against 0, and the minimum track record, and with a benchmark, up and down capture and
+  correlation. `analyze_risk` (2.1.0) adds the portfolio's 95% Cornish-Fisher value at risk, its Gaussian
+  expected shortfall, its Herfindahl index, and its effective positions. Every new number states its
+  convention and comes with `computed` evidence; the existing fields are unchanged.
+
+### Changed
+
+- **App Factory needs pytemplate-uv 3.2** (`factory` extra, `pytemplate-uv>=3.2,<4`). It offers the new bundled
+  `library` profile, a typed package without a command line (`qaos app new library my-lib`), and the
+  `devcontainer` and `release` components; `release` adds a PyPI trusted-publishing workflow for `v*` tags. A
+  template pack's errors now count as an invalid request, so they exit with code 1 like other invalid specs.
+- **Generated applications use more of Quant Toolbox 0.6.0** (`quant-apps` 2.2.0).
+  - `strategy-backtest` reports what costs take: the annual cost drag, the cost per unit of turnover, and the
+    break-even cost in basis points. Walk-forward takes `purge`, the bars dropped from the end of each training
+    window (0 by default, so results are unchanged).
+  - `risk-monitor` has a `historical_stress` section, today's book over twelve named US equity windows from 2007
+    to 2024, from daily prices; a window the prices do not cover says so. Exposures add the Herfindahl index.
+  - `alpha-research` reports each signal quantile's annualised mean return and the rank IC information ratio,
+    and can winsorize or z-score the signal per bar (`winsorize` and `zscore` in `config.toml`, off by default).
+
 ## [0.6.0] - 2026-11-17
 
 Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in

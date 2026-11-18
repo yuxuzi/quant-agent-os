@@ -275,7 +275,7 @@ uv run --project "$REPO" qaos app create desk-risk.toml
 desk-risk (quant-apps/risk-monitor) -> .../qaos-tutorial/work/desk-risk
   23 files; components: agent-tools; checks: uv sync, ruff check, ruff format, mypy, pytest
 Create it? It writes files, runs uv, and downloads packages [y/N]: y
-Created .../qaos-tutorial/work/desk-risk with pytemplate-uv==3.1.0.
+Created .../qaos-tutorial/work/desk-risk with pytemplate-uv==3.2.0.
   ok  uv sync  (0.3 s)
   ok  uv run ruff check .  (0.3 s)
   ok  uv run ruff format --check .  (0.0 s)

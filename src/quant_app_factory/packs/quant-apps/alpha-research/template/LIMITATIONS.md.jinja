@@ -9,7 +9,10 @@ This application is a tested harness for studying signals, not a research proces
   test catches a signal using later prices. It cannot detect restated data, and it does not cover
   a signal file, whose timing is its author's responsibility.
 - **Corporate actions.** Use prices adjusted for splits and dividends.
-- **Costs.** Quantile spreads are gross and hypothetical. Backtest a signal before concluding.
+- **Costs.** Quantile spreads and quantile returns are gross and hypothetical. Backtest a signal
+  before concluding.
+- **Cleaning changes the signal.** `winsorize` and `zscore` change the scores a study measures and
+  `export` writes. They work per bar across assets, so they never look ahead.
 - **Overfitting and multiple testing.** Study figures are in-sample, and trying many signals
   inflates the best one. Record every one you try.
 - **Interpretation.** Reports print computed figures only. Write the interpretation yourself.

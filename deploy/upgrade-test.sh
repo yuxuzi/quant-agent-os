@@ -63,7 +63,8 @@ answers() {  # What the tools answer, from the corpus and from a dataset, with n
     '{"returns": {"dataset": "monthly", "column": "strategy"}, "periods_per_year": 12}' | field output
 }
 
-still_holds() {  # Every field the older answer had is unchanged. A release may add fields.
+still_holds() {  # Every field and list item the older answer had is unchanged. A release may add
+  # fields, and append items to a list, such as evidence for a new metric.
   python3 - "$1" "$2" <<'PY'
 import json
 import sys
@@ -77,7 +78,7 @@ def differences(old, new, path=""):
             else:
                 yield f"{path}.{key} is gone"
     elif isinstance(old, list) and isinstance(new, list):
-        if len(old) != len(new):
+        if len(new) < len(old):
             yield f"{path} had {len(old)} items and now has {len(new)}"
         for index, pair in enumerate(zip(old, new)):
             yield from differences(*pair, f"{path}[{index}]")

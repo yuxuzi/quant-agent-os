@@ -72,6 +72,7 @@ def test_new_with_defaults_needs_a_name(workspace: Path) -> None:
         ("quant-lab", ("quant-baseline", "quant-lab")),
         ("agent-tool", ("agent-tool", "agent-tool")),
         ("python", ("bundled", "python")),
+        ("library", ("bundled", "library")),
         ("bundled/fastapi", ("bundled", "fastapi")),
         ("./packs/mine", ("./packs/mine", None)),
         (None, (None, None)),

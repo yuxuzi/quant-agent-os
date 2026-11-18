@@ -13,18 +13,22 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `template` and `profile` | Built from | Depends on Quant-Agent-OS |
 | --- | --- | --- |
 | `agent-tool`, `agent-tool` | this package's template pack (`quant_app_factory/packs/agent-tool`): one typed tool, a registry, and `check_tool` contract tests | Yes, on purpose |
-| `bundled`, `python` | pytemplate-uv's bundled `python` profile (`container`, `mcp`) | No |
-| `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, ...) | No |
-| `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal, and a signal file | No |
-| `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with walk-forward | No |
-| `quant-apps`, `risk-monitor` | the `quant-apps` pack: positions to exposures, value at risk, stress, and limit checks | No |
+| `bundled`, `python` | pytemplate-uv's bundled `python` profile (`container`, `devcontainer`, `mcp`, `release`) | No |
+| `bundled`, `library` | pytemplate-uv's bundled `library` profile: a typed package without a command line (`devcontainer`, `mcp`, `release`) | No |
+| `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, `devcontainer`, ...) | No |
+| `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal (IC, quantile returns, optional winsorizing and z-scores), and a signal file | No |
+| `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with purged walk-forward and the cost drag and break-even cost | No |
+| `quant-apps`, `risk-monitor` | the `quant-apps` pack: positions to exposures, value at risk, stress (including twelve historical windows), and limit checks | No |
 | `quant-apps`, `performance-report` | the `quant-apps` pack: returns to horizon tables, risk basics, tear sheets, Excel, and reconciliation | No |
 | `quant-baseline`, `quant-lab` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
 | `path/to/pack`, your profile | your own pack | Up to the pack |
 
 On the command line, every template is `pack/profile`, such as `qaos app new quant-apps/risk-monitor my-risk`.
 `qaos app template list` prints those names. A built-in profile's own name also works: `alpha-research`,
-`strategy-backtest`, `risk-monitor`, `performance-report`, `agent-tool`, `quant-lab`, `python`, and `fastapi`.
+`strategy-backtest`, `risk-monitor`, `performance-report`, `agent-tool`, `quant-lab`, `python`, `library`, and `fastapi`.
+
+The `release` component adds a PyPI trusted-publishing workflow for `v*` tags. To see which files of a
+generated project changed since it was created, run `uvx pytemplate-uv status` in it; it never writes.
 
 For tools an AI client calls, choose by where they run. `agent-tool` builds tools for a Quant-Agent-OS server,
 behind its permissions, approvals, and audit. `python` with the `mcp` component builds a standalone MCP server

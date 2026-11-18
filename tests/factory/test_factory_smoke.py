@@ -29,6 +29,7 @@ pytestmark = pytest.mark.skipif(
             {"tool_name": "count_signals", "quant_agent_os_source": str(ROOT)},
         ),
         (("bundled", "python"), {}),
+        (("bundled", "library"), {"components": ["release"]}),
         (("quant-apps", "alpha-research"), {"quant_agent_os_source": str(ROOT)}),
         (("quant-apps", "strategy-backtest"), {"quant_agent_os_source": str(ROOT)}),
         (("quant-apps", "risk-monitor"), {"quant_agent_os_source": str(ROOT)}),

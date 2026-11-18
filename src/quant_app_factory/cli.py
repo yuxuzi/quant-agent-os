@@ -328,6 +328,7 @@ SHORTCUTS = {
     "risk-monitor": ("quant-apps", "risk-monitor"),
     "performance-report": ("quant-apps", "performance-report"),
     "python": ("bundled", "python"),
+    "library": ("bundled", "library"),
     "fastapi": ("bundled", "fastapi"),
 }
 

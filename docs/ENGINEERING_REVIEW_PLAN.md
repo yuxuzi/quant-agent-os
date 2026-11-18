@@ -4,7 +4,8 @@ What is still open. How the system works is in [architecture.md](architecture.md
 [decisions/](decisions/). Finished plans are in [plans/archive/](plans/archive/), including
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
 The most recent plan was [0.3.0, ready for a first pilot](plans/archive/pilot-ready-release.md),
-released as 0.3.0. [Templates as starting points](plans/templates.md) followed it.
+released as 0.3.0. [Templates as starting points](plans/templates.md) followed it. Proposed next features,
+design, and user-experience changes are in [proposals after 0.7.0](plans/proposals-0.8.md), for the owner to choose from.
 
 ## Open backlog
 

@@ -109,6 +109,10 @@ def backtest(
         f"Net Sharpe {metrics['sharpe_ratio']:.2f} (in-sample), annual turnover "
         f"{metrics['annual_turnover']:.1f}"
     )
+    typer.echo(
+        f"Costs take {metrics['cost_drag']:.2%} a year; break-even cost "
+        f"{metrics['break_even_cost_bps']:.1f} bps per unit of turnover"
+    )
 
 
 @app.command("walk-forward")

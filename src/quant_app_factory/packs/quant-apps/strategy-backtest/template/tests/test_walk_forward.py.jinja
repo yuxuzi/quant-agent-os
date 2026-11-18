@@ -86,3 +86,16 @@ def test_too_little_data_is_explained() -> None:
 
     with pytest.raises(ValueError, match="Walk-forward needs"):
         run_walk_forward(_panel(prices), PARAMETERS)
+
+
+def test_purged_bars_are_left_out_of_training() -> None:
+    prices, _ = random_walk_panel(n_bars=400, n_assets=12)
+
+    plain = run_walk_forward(_panel(prices), PARAMETERS)
+    purged = run_walk_forward(_panel(prices), PARAMETERS.updated(purge=5))
+
+    assert purged["parameters"]["purge"] == 5
+    for before, after in zip(plain["folds"], purged["folds"], strict=True):
+        assert after["test"] == before["test"]
+        assert after["train"][0] == before["train"][0]
+        assert after["train"][1] < before["train"][1]

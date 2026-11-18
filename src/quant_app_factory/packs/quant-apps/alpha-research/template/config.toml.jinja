@@ -13,3 +13,7 @@ lag = 1  # bars from the signal's close to the trade, shared with the backtest a
 quantiles = 5
 max_horizon = {{ max_horizon }}  # longest IC-decay horizon, in bars
 delisting_return = -0.30  # earned once when a held asset's prices stop (Shumway, 1997)
+
+# Signal clean-up, per bar across assets; exported scores carry it too. Off by default.
+winsorize = 0.0  # share clipped at each tail, such as 0.01
+zscore = false   # scores minus their mean, over their standard deviation
