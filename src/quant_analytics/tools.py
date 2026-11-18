@@ -1,4 +1,7 @@
-"""The analytics tools: `analyze_performance` and `analyze_risk`, typed and deterministic.
+"""The analytics tools: `analyze_performance`, `analyze_risk`, `analyze_signal`, and `run_backtest`.
+
+All four are typed and deterministic. The signal tools read frames by reference only, so they are
+served only with a dataset store.
 
 They take either values or a reference such as ``{"dataset": "returns", "column": "fund"}``, so a
 client names its data instead of copying it. References are resolved from the dataset store,
@@ -22,22 +25,38 @@ import math
 from datetime import date
 from typing import Any, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from quant_agent_os.data import Dataset, DatasetStore, infer_periods_per_year
-from quant_agent_os.tools import Permission, ToolRegistry, tool
+from quant_agent_os.evidence import Evidence, SourceRef
+from quant_agent_os.registration import FrameRef
+from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
 from quant_analytics.computed import (
     MAX_ASSETS,
     MAX_FACTORS,
+    ModelRisk,
     PerformanceInput,
     PerformanceOutput,
     RiskInput,
     RiskOutput,
+    historical_stress,
+    model_risk,
     performance,
     portfolio_risk,
 )
 from quant_analytics.references import ColumnRef
+from quant_analytics.signals import (
+    BacktestOutput,
+    Panel,
+    SignalOutput,
+    Weighting,
+    analyze_signal,
+    backtest,
+)
 from quant_toolbox.performance import backend as metrics_backend
+from quant_toolbox.research import DELISTING_RETURN, TRADE_LAG
+from quant_toolbox.risk import MEASURE_CONVENTIONS
 
 PERFORMANCE_DESCRIPTION = (
     "Performance of a returns series, from empyrical: annualised return and volatility, "
@@ -51,9 +70,28 @@ RISK_DESCRIPTION = (
     "each asset's marginal, component, and percent contribution to it (Euler), gross and "
     "net exposure, effective positions, Cornish-Fisher value at risk, and the "
     "diversification ratio. With factor returns, adds factor "
-    "exposures (OLS betas) and each factor's share of the portfolio variance. "
-    "Conventions are stated in the output."
+    "exposures (OLS betas) and each factor's share of the portfolio variance; with a vendor "
+    "factor_model, volatility and shares under it. Daily dated returns add historical stress "
+    "scenarios. Conventions are stated in the output."
 )
+SIGNAL_DESCRIPTION = (
+    "A signal's predictive power over instruments' returns: mean IC and rank IC, rank IC IR "
+    "and HAC t-statistic per horizon, quantile mean returns and top-minus-bottom spread, and "
+    "autocorrelation. Conventions are stated in the output."
+)
+BACKTEST_DESCRIPTION = (
+    "Simulated net returns of a signal traded with a lag and costs on turnover, as "
+    "dollar-neutral or long-only top-quantile weights: annualised return and volatility, "
+    "Sharpe, maximum drawdown, hit rate, turnover, cost drag, and benchmark alpha and beta. "
+    "A simulation, not advice."
+)
+STRESS_CONVENTION = MEASURE_CONVENTIONS["historical_stress"] + (
+    "; only daily, dated returns; scenario windows are conventional US equity episodes"
+)
+MODEL_CONVENTION = MEASURE_CONVENTIONS["factor_risk"] + (
+    "; covariances given per period are scaled to a year by the model's periods_per_year"
+)
+FRAMES = " Pass both frames as {dataset} from list_datasets: dates by instruments."
 BY_REFERENCE = " Pass series as {dataset, column} from list_datasets rather than as values."
 NEEDS_PERIODS = (
     "periods_per_year is needed for values given inline (252 daily, 52 weekly, 12 monthly)"
@@ -106,6 +144,7 @@ class RiskRequest(BaseModel):
     weights: dict[str, float] = Field(min_length=1, max_length=MAX_ASSETS)
     asset_returns: dict[str, list[float]] | DatasetRef
     factor_returns: dict[str, list[float]] | ColumnsRef | None = None
+    factor_model: FactorModelRef | None = None
     periods_per_year: int | None = PERIODS_FIELD
 
     @model_validator(mode="after")
@@ -115,12 +154,87 @@ class RiskRequest(BaseModel):
         return self
 
 
+SIGNAL_FRAME = Field(description="Signal, dates by instruments")
+RETURNS_FRAME = Field(description="Simple returns, dates by instruments")
+LAG_FIELD = Field(default=TRADE_LAG, ge=0, le=63, description="Bars from signal to trade")
+DELISTING_FIELD = Field(
+    default=DELISTING_RETURN,
+    ge=-1.0,
+    le=0.0,
+    description="Earned once where returns stop early",
+)
+
+
+class SignalRequest(BaseModel):
+    """A signal study."""
+
+    signal: FrameRef = SIGNAL_FRAME
+    returns: FrameRef = RETURNS_FRAME
+    horizons: list[int] = Field(
+        default=[1, 5, 21],
+        min_length=1,
+        max_length=8,
+        description="Forward bars; the first is summarised",
+    )
+    quantiles: int = Field(default=5, ge=2, le=10)
+    lag: int = LAG_FIELD
+    delisting_return: float = DELISTING_FIELD
+
+    @field_validator("horizons")
+    @classmethod
+    def _horizons(cls, values: list[int]) -> list[int]:
+        if not all(1 <= value <= 252 for value in values) or len(set(values)) != len(values):
+            raise ValueError("horizons must be distinct numbers of bars from 1 to 252")
+        return values
+
+
+class BacktestRequest(BaseModel):
+    """A signal backtest."""
+
+    signal: FrameRef = SIGNAL_FRAME
+    returns: FrameRef = RETURNS_FRAME
+    cost_bps: float = Field(ge=0.0, le=1000.0, description="Per unit of one-way turnover")
+    weighting: Weighting = "dollar_neutral"
+    quantiles: int = Field(default=5, ge=1, le=20, description="long_only holds the top quantile")
+    lag: int = LAG_FIELD
+    rebalance_every: int = Field(default=1, ge=1, le=252)
+    benchmark: ColumnRef | None = None
+    periods_per_year: int | None = PERIODS_FIELD
+    risk_free: float = Field(default=0.0, ge=-0.1, le=0.5, description="Annual risk-free rate")
+    delisting_return: float = DELISTING_FIELD
+
+
+class FactorModelRef(BaseModel):
+    """A vendor's factor model, by dataset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    loadings: str = Field(min_length=1, description="Dataset: assets by factors")
+    factor_covariance: str = Field(min_length=1, description="Dataset: factors by factors")
+    specific_variance: ColumnRef = Field(description="A column with one row per asset")
+    periods_per_year: int = Field(
+        default=1, ge=1, le=366, description="Frequency of the variances; 1: annualised"
+    )
+
+
 class Aligned(NamedTuple):
     """Series over the same rows, those rows' dates when known, and what was left out."""
 
     series: dict[str, list[float]]
     dates: list[date] | None
     notes: list[str]
+
+
+class FactorModel(NamedTuple):
+    """A factor model's loadings, factor covariance, and specific variances, annualised."""
+
+    exposures: dict[str, dict[str, float]]
+    covariance: dict[str, dict[str, float]]
+    specific: dict[str, float]
+
+
+def _names(names: list[str], limit: int = 10) -> str:
+    return ", ".join(names[:limit]) + (" and others" if len(names) > limit else "")
 
 
 class _Resolver:
@@ -171,6 +285,154 @@ class _Resolver:
             [dates[row] for row in complete] if dates else None,
             notes,
         )
+
+    def panel(self, signal: FrameRef, returns: FrameRef) -> tuple[Panel, list[str]]:
+        """Return the signal and returns on their shared dates and instruments, and notes.
+
+        Missing values stay missing, cell by cell; nothing is filled in.
+        """
+        left, right = self.dataset(signal.dataset), self.dataset(returns.dataset)
+        left_names = [_checked(left, name) for name in signal.columns or left.columns]
+        right_names = [_checked(right, name) for name in returns.columns or right.columns]
+        shared = [name for name in left_names if name in set(right_names)]
+        if not shared:
+            raise ValueError(
+                f"The signal ('{left.id}') and the returns ('{right.id}') share no instrument "
+                "columns; name each instrument's column the same in both."
+            )
+        tables = [left] if left.id == right.id else [left, right]
+        rows, dates, notes = _common_rows(tables)
+        if dates is None:
+            raise ValueError(
+                f"Dataset '{left.id}' or '{right.id}' has no dates; a signal study needs one row "
+                "per date in both (`qaos data add --index`)."
+            )
+        for table, names in ((left, left_names), (right, right_names)):
+            dropped = [name for name in names if name not in shared]
+            if dropped:
+                shown = ", ".join(dropped[:10]) + (" and others" if len(dropped) > 10 else "")
+                notes.append(
+                    f"Left out {len(dropped)} columns of '{table.id}' with no match in the other "
+                    f"frame: {shown}."
+                )
+
+        def frame(table: Dataset) -> Any:
+            picked = rows[table.id]
+            return np.column_stack(
+                [np.asarray(table.columns[name], dtype=np.float64)[picked] for name in shared]
+            )
+
+        returns_values = frame(right)
+        if (returns_values[np.isfinite(returns_values)] <= -1.0).any():
+            raise ValueError(
+                f"Returns in '{right.id}' must be above -1 (a loss of more than 100%); give them "
+                "as fractions, 0.01 for 1%."
+            )
+        sources = [
+            SourceRef(
+                source_id=table.id,
+                location=f"{len(rows[table.id])} rows, {len(shared)} columns, "
+                f"sha256 {table.fingerprint[:12]}",
+            )
+            for table in tables
+        ]
+        return Panel(dates, shared, frame(left), returns_values, sources), notes
+
+    def factor_model(
+        self, model: FactorModelRef, assets: list[str]
+    ) -> tuple[FactorModel, list[str]]:
+        """Return the model's loadings, covariance, and specific variances, annualised, and notes.
+
+        Raises ValueError, naming what is missing, when the three do not line up with each other
+        or with ``assets``.
+        """
+        loadings = self._by_name(model.loadings, "asset")
+        covariance = self._by_name(model.factor_covariance, "factor")
+        specific_table = self.dataset(model.specific_variance.dataset)
+        specific_values = specific_table.column(model.specific_variance.column)
+        if not specific_table.index or specific_table.dates is not None:
+            raise ValueError(
+                f"Dataset '{specific_table.id}' needs one row per asset, named in its first column."
+            )
+        specific = dict(zip(specific_table.index, specific_values, strict=True))
+        factors = list(covariance.columns)
+        rows = covariance.index or []
+        if sorted(rows) != sorted(factors):
+            raise ValueError(
+                f"The factor covariance '{covariance.id}' must have one row per column, named the "
+                f"same; its rows are {_names(rows)} and its columns {_names(factors)}."
+            )
+        unknown = [name for name in loadings.columns if name not in factors]
+        if unknown:
+            raise ValueError(
+                f"Loadings '{loadings.id}' name factors the covariance '{covariance.id}' has not: "
+                f"{_names(unknown)}."
+            )
+        for label, names in (
+            (f"loadings '{loadings.id}'", loadings.index or []),
+            (f"specific variance '{specific_table.id}'", list(specific)),
+        ):
+            missing = [asset for asset in assets if asset not in set(names)]
+            if missing:
+                raise ValueError(f"The {label} have no row for {_names(missing)}.")
+        scale = float(model.periods_per_year)
+        position = {name: at for at, name in enumerate(rows)}
+        table: dict[str, dict[str, float]] = {}
+        for left in factors:
+            table[left] = {}
+            for right in factors:
+                value = covariance.columns[right][position[left]]
+                if not math.isfinite(value):
+                    raise ValueError(
+                        f"The factor covariance '{covariance.id}' is missing {left}, {right}."
+                    )
+                table[left][right] = value * scale
+        bad = [
+            asset for asset in assets if not math.isfinite(specific[asset]) or specific[asset] < 0
+        ]
+        if bad:
+            raise ValueError(
+                f"Specific variances must be zero or more, and present, for {_names(bad)}."
+            )
+        at = {name: row for row, name in enumerate(loadings.index or [])}
+        exposures: dict[str, dict[str, float]] = {}
+        gaps = 0
+        for asset in assets:
+            exposures[asset] = {}
+            for factor, values in loadings.columns.items():
+                value = values[at[asset]]
+                if math.isfinite(value):
+                    exposures[asset][factor] = value
+                else:
+                    gaps += 1
+        notes = []
+        if gaps:
+            notes.append(f"{gaps} loadings of held assets are missing and count as 0.")
+        return (
+            FactorModel(exposures, table, {asset: specific[asset] * scale for asset in assets}),
+            notes,
+        )
+
+    def _by_name(self, dataset_id: str, row: str) -> Dataset:
+        table = self.dataset(dataset_id)
+        if not table.index or table.dates is not None:
+            raise ValueError(f"Dataset '{dataset_id}' needs one row per {row}, named in its index.")
+        return table
+
+    def on_dates(self, reference: ColumnRef, dates: list[date]) -> list[float]:
+        """Return the column ``reference`` names on each of ``dates``, NaN where it has none."""
+        table = self.dataset(reference.dataset)
+        values = table.column(reference.column)
+        if table.dates is None:
+            raise ValueError(f"Dataset '{table.id}' has no dates to line up with the backtest.")
+        by_date = dict(zip(table.dates, values, strict=True))
+        return [by_date.get(day, math.nan) for day in dates]
+
+
+def _checked(table: Dataset, name: str) -> str:
+    """Return ``name`` if ``table`` has that column, or raise naming its columns."""
+    table.column(name)
+    return name
 
 
 def _common_rows(
@@ -235,7 +497,10 @@ def _frequency(supplied: int | None, dates: list[date] | None) -> tuple[int, str
 
 
 def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
-    """Return a registry with `analyze_performance` and `analyze_risk`, reading from ``store``.
+    """Return a registry of the analytics tools, reading from ``store``.
+
+    Without a store, only `analyze_performance` and `analyze_risk`, on values; with one, also
+    `analyze_signal` and `run_backtest`, which take frames by reference only.
 
     The metrics backend is chosen here, so importing empyrical, with pandas and scipy, happens when
     the server starts and not inside a first call's time limit.
@@ -293,7 +558,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         description=RISK_DESCRIPTION + by_reference.replace("{dataset, column}", "{dataset}"),
         permissions=permissions,
         max_output_bytes=500_000,
-        version="2.1.0",
+        version="2.2.0",
     )
     def analyze_risk(params: RiskRequest) -> RiskOutput:
         resolver = _Resolver(store)
@@ -335,6 +600,87 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
             periods_per_year=periods,
         )
         output = portfolio_risk(resolved)
+        stress, stress_note, stress_evidence = historical_stress(
+            params.portfolio_id, params.weights, assets, dates, periods
+        )
+        model: ModelRisk | None = None
+        model_evidence: list[Evidence] = []
+        model_notes: list[str] = []
+        conventions = {**output.conventions, "periods_per_year": chosen}
+        if stress is not None:
+            conventions["historical_stress"] = STRESS_CONVENTION
+        if params.factor_model is not None:
+            loaded, model_notes = resolver.factor_model(params.factor_model, list(params.weights))
+            model, model_evidence = model_risk(params.portfolio_id, params.weights, *loaded)
+            conventions["factor_model"] = MODEL_CONVENTION
+        return output.model_copy(
+            update={
+                "historical_stress": stress,
+                "historical_stress_note": stress_note,
+                "factor_model": model,
+                "conventions": conventions,
+                "warnings": [*notes, *disagreement, *output.warnings, *model_notes],
+                "evidence": [*output.evidence, *stress_evidence, *model_evidence],
+                "data_versions": resolver.versions(),
+            }
+        )
+
+    tools: list[ToolSpec[Any, Any]] = [analyze_performance, analyze_risk]
+    if store is None:
+        return ToolRegistry(tools)
+
+    @tool(
+        name="analyze_signal",
+        description=SIGNAL_DESCRIPTION + FRAMES,
+        permissions=permissions,
+        timeout_seconds=30.0,
+        version="1.0.0",
+    )
+    def analyze_signal_tool(params: SignalRequest) -> SignalOutput:
+        resolver = _Resolver(store)
+        panel, notes = resolver.panel(params.signal, params.returns)
+        output = analyze_signal(
+            panel,
+            (params.signal.dataset, params.returns.dataset),
+            horizons=params.horizons,
+            quantiles=params.quantiles,
+            lag=params.lag,
+            delisting_return=params.delisting_return,
+        )
+        return output.model_copy(
+            update={
+                "warnings": [*notes, *output.warnings],
+                "data_versions": resolver.versions(),
+            }
+        )
+
+    @tool(
+        name="run_backtest",
+        description=BACKTEST_DESCRIPTION + FRAMES,
+        permissions=permissions,
+        timeout_seconds=30.0,
+        version="1.0.0",
+    )
+    def run_backtest(params: BacktestRequest) -> BacktestOutput:
+        resolver = _Resolver(store)
+        panel, notes = resolver.panel(params.signal, params.returns)
+        periods, chosen, disagreement = _frequency(params.periods_per_year, panel.dates)
+        benchmark = (
+            None if params.benchmark is None else resolver.on_dates(params.benchmark, panel.dates)
+        )
+        output = backtest(
+            panel,
+            (params.signal.dataset, params.returns.dataset),
+            weighting=params.weighting,
+            quantiles=params.quantiles,
+            lag=params.lag,
+            cost_bps=params.cost_bps,
+            rebalance_every=params.rebalance_every,
+            periods_per_year=periods,
+            benchmark=benchmark,
+            risk_free=params.risk_free,
+            delisting_return=params.delisting_return,
+        )
         return output.model_copy(
             update={
                 "conventions": {**output.conventions, "periods_per_year": chosen},
@@ -343,4 +689,4 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
             }
         )
 
-    return ToolRegistry([analyze_performance, analyze_risk])
+    return ToolRegistry([*tools, analyze_signal_tool, run_backtest])

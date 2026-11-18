@@ -21,17 +21,60 @@ generated report compute the same way ([decision 0026](../decisions/0026-quant-t
   - each factor's share of the portfolio variance, with the specific share as the remainder;
   - the portfolio's 95% value at risk per period, Cornish-Fisher so that skew and fat tails deepen it,
     its Gaussian expected shortfall, and its concentration as a Herfindahl index and effective positions.
-- `quant_analytics.computed`: typed results over those, with conventions, warnings, and
-  `computed` evidence. An undefined metric is `null`.
+  - with daily, dated returns, today's weights over historical stress windows (`SCENARIOS`, conventional
+    US equity episodes from 2007 to 2024), each compounded over the window and applied linearly;
+  - with a vendor's factor model (loadings, factor covariance, specific variances), the volatility
+    `B F B' + D` gives, split into factor and specific shares and asset contributions.
+- **Signals and backtests** (`quant_toolbox.research`), on numpy: information coefficients, quantile
+  returns, and backtests with a trade lag, rebalancing, drift, and costs on turnover.
+- `quant_analytics.computed` and `quant_analytics.signals`: typed results over those, with conventions,
+  warnings, and `computed` evidence. An undefined metric is `null`.
 - `quant_analytics.tools`: the tools (`analytics_tools()`). Series come as values, or as
   references to dataset columns, which need `read_local_data`.
   - `analyze_performance` returns every metric of a series.
   - `analyze_risk` returns a portfolio's volatility, its contributions, its parametric tail and
-    concentration, and, with factor returns, its exposures.
+    concentration, and, with factor returns, its exposures. Daily, dated returns add
+    `historical_stress`, the covered scenarios only; when none is covered, it is `null` and
+    `historical_stress_note` says why. With `factor_model`, it adds the volatility under a vendor's
+    model.
+  - `analyze_signal` returns a signal's mean IC and rank IC, the rank IC's IR and Newey-West t-statistic
+    per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
+    autocorrelation, with a `summary` first.
+  - `run_backtest` returns a signal's simulated net returns as dollar-neutral or long-only weights:
+    annualised return and volatility, Sharpe, maximum drawdown, hit rate, turnover, cost drag, the
+    toolbox's analysis of the net returns, and, with a benchmark, alpha and beta. It is a simulation of
+    past data, not a forecast or advice, and says so.
+  - The signal tools take frames by reference only, so they are served only with a dataset store.
   - **Frequency:** `periods_per_year` is inferred from a dataset's dates. Inline values have no
     dates, so they must pass it, and a call with neither is refused.
   - **Alignment and gaps:** series from different datasets are joined on their dates, and rows
     with a missing value are left out. Both are counted in the warnings; nothing is filled in.
+
+## The shapes the datasets take
+
+Every dataset is wide: an index column first, then one numeric column per series.
+
+| Input | Rows (index) | Columns |
+| --- | --- | --- |
+| `asset_returns`, `factor_returns`, `benchmark` | dates, oldest first | one per asset, factor, or benchmark |
+| `analyze_signal` and `run_backtest`: `signal`, `returns` | dates, oldest first | one per instrument, named the same in both frames |
+| `factor_model.loadings` | asset names, as in `weights` | one per factor |
+| `factor_model.factor_covariance` | factor names | the same factors, in any order |
+| `factor_model.specific_variance` | asset names | the column named in the reference |
+
+- **Signal and returns frames** are joined on their shared dates and their shared column names;
+  what either leaves out is counted in the warnings. Row t of the returns is the simple return over the
+  bar ending on date t. The signal on date t is known at that close and traded `lag` bars later (one
+  by default), so `analyze_signal` scores it against the return from bar t + lag and `run_backtest`
+  first holds it over bar t + 1 + lag. A missing signal leaves the instrument out on that date, and a
+  date with no signal at all keeps the previous date's in a backtest. A missing return is no move and
+  no trade. Returns that stop before the last date are a delisting and earn `delisting_return` (-30%
+  by default, Shumway 1997) once; pass 0 when they are not.
+- **A factor model** is annualised unless its `periods_per_year` says otherwise, when its covariances
+  and specific variances are scaled up by that number. A missing loading counts as 0; a weighted asset
+  with no row in the loadings or specific variances, a covariance that is not square or symmetric,
+  or a loading on a factor with no covariance is refused. A dataset needs at least two rows, so a
+  one-factor model cannot be a dataset.
 
 ```python
 from quant_agent_os.sdk import Platform

@@ -168,10 +168,14 @@ class KeyRing:
         self._lock = threading.Lock()
 
     @classmethod
-    def from_file(cls, path: Path) -> KeyRing:
-        """Return a ring that follows ``path``; raise `ApiKeyError` if it cannot be read now."""
+    def from_file(cls, path: Path, *, missing_ok: bool = False) -> KeyRing:
+        """Return a ring that follows ``path``; raise `ApiKeyError` if it cannot be read now.
+
+        With ``missing_ok``, a missing file is an empty ring that starts following the file
+        once it is created (a server with sign-in needs no key).
+        """
         stamp = _stamp_of(path)  # first, so a change made while loading is seen next time
-        ring = cls(load_keys(path))
+        ring = cls([] if missing_ok and stamp is None else load_keys(path))
         ring._path = path
         ring._stamp = stamp
         return ring

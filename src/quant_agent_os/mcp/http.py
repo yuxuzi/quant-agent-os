@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
+from quant_agent_os.api.app import Credential, TokenCheck
 from quant_agent_os.api.keys import KeyRing
 from quant_agent_os.mcp.server import (
     AccessDeniedError,
@@ -62,6 +63,32 @@ class KeyVerifier:
 GateFor = Callable[[Caller], ApprovalGate]
 
 
+def _groups(claims: dict[str, Any]) -> frozenset[str]:
+    groups = claims.get(GROUPS_CLAIM)
+    return (
+        frozenset(g for g in groups if isinstance(g, str))
+        if isinstance(groups, list)
+        else frozenset()
+    )
+
+
+def token_check(verifier: TokenVerifier) -> TokenCheck:
+    """Return a REST `TokenCheck` accepting what ``verifier`` accepts, read as MCP reads it."""
+
+    async def check(token: str) -> Credential | None:
+        access = await verifier.verify_token(token)
+        if access is None:
+            return None
+        claims = access.claims or {}
+        tenant = claims.get(TENANT_CLAIM)
+        if not isinstance(tenant, str):
+            return None
+        principal = access.subject or access.client_id
+        return Credential(principal, tenant, frozenset(access.scopes), _groups(claims))
+
+    return check
+
+
 def caller_of(request: Any, scope: str) -> Caller:
     """Return the caller of an authenticated request whose credential has ``scope``.
 
@@ -79,13 +106,10 @@ def caller_of(request: Any, scope: str) -> Caller:
     tenant = (token.claims or {}).get(TENANT_CLAIM)
     if not isinstance(tenant, str):
         raise AccessDeniedError("This credential names no tenant.")
-    groups = (token.claims or {}).get(GROUPS_CLAIM)
     return Caller(
         principal=token.subject or token.client_id,
         tenant=tenant,
-        groups=frozenset(g for g in groups if isinstance(g, str))
-        if isinstance(groups, list)
-        else frozenset(),
+        groups=_groups(token.claims or {}),
     )
 
 

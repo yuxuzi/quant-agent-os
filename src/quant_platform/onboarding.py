@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import shutil
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any
@@ -135,6 +136,33 @@ def init(
     )
 
 
+def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: bool) -> None:
+    """Add the sign-in rows: the file, and each provider's settings. It contacts no provider."""
+    from quant_platform.identity.sign_in import SignInError, load_sign_in_file, secret_sources
+
+    try:
+        sign_in = load_sign_in_file(path)
+    except SignInError as error:
+        add("sign-in", "fail", str(error))
+        return
+    count = len(sign_in.authorization_servers)
+    add("sign-in", "ok", f"on for {sign_in.resource}, {count} identity provider(s)")
+    missing = set(sign_in.missing_secrets(secret_sources()))
+    for server in sign_in.authorization_servers:
+        if server.client_secret_env in missing:
+            add(
+                f"sign-in: {server.issuer}",
+                "fail",
+                f"set {server.client_secret_env} to its introspection client secret",
+            )
+        else:
+            claims = f"tenant claim {server.tenant_claim or '(none)'}, "
+            claims += f"groups claim {server.groups_claim or '(none)'}"
+            add(f"sign-in: {server.issuer}", "ok", f"complete; tenant {server.tenant}, {claims}")
+    if not access:
+        add("sign-in access", "warn", "no access file, so every signed-in user reaches everything")
+
+
 def doctor() -> None:
     """Check the home, stores, datasets, extras, and permissions, and say how to fix what is off.
 
@@ -204,6 +232,11 @@ def doctor() -> None:
             add("access file", "ok", f"groups: {len(load_access_rules(settings.access_file))}")
         except AccessFileError as error:
             add("access file", "fail", str(error))
+
+    if settings.sign_in_file is None:
+        add("sign-in", "ok", "off; `qaos serve --http` takes API keys only")
+    else:
+        _check_sign_in(settings.sign_in_file, add, access=settings.access_file is not None)
 
     for extra, (module, without) in EXTRAS.items():
         if importlib.util.find_spec(module) is not None:
