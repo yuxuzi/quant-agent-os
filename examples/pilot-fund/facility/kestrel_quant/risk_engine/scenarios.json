@@ -1,0 +1,24 @@
+{
+  "_comment": "Factor shocks are factor returns over the scenario. Asset-class shocks add a return to every instrument of that class. Approved by the risk committee, 2025-06 (fictional).",
+  "equity_crash_2008": {
+    "description": "Global equities -25%, spreads widen, flight to quality",
+    "factors": {"equity_market": -0.25, "credit_spread": -0.08, "rates": 0.04, "usd": 0.06, "commodity": -0.20}
+  },
+  "rates_shock_up_100bp": {
+    "description": "Parallel +100bp in government curves",
+    "factors": {"rates": -0.07, "equity_market": -0.04, "credit_spread": -0.01}
+  },
+  "usd_rally": {
+    "description": "Broad dollar +8%",
+    "factors": {"usd": 0.08, "commodity": -0.05, "equity_market": -0.03}
+  },
+  "oil_supply_shock": {
+    "description": "Crude +40%, energy equities up, wider spreads",
+    "factors": {"commodity": 0.20, "equity_market": -0.05, "credit_spread": -0.02},
+    "asset_classes": {"commodity_future": 0.10}
+  },
+  "credit_event": {
+    "description": "IG spreads +80bp, equities -10%",
+    "factors": {"credit_spread": -0.06, "equity_market": -0.10, "rates": 0.02}
+  }
+}

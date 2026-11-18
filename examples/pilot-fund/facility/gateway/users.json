@@ -1,0 +1,29 @@
+{
+  "_comment": "Kestrel Point Capital (fictional) mock identity provider. Every password and secret here is a fixture, not a secret. issuer null means the provider's own base URL.",
+  "issuer": null,
+  "audience": "http://127.0.0.1:8000/mcp",
+  "tenant": "kestrel",
+  "tenant_claim": "qaos_tenant",
+  "groups_claim": "groups",
+  "scope": "tools:list tools:call",
+  "token_ttl_seconds": 3600,
+  "signing_key": "kpc-mock-idp-signing-key-fixture",
+  "clients": {
+    "qaos-server": {"secret": "kpc-introspection-fixture", "introspect": true},
+    "kpc-cli": {},
+    "kpc-batch": {
+      "secret": "kpc-batch-fixture",
+      "grants": ["client_credentials"],
+      "groups": ["operators"]
+    }
+  },
+  "users": {
+    "pm-equities": {"password": "kpc-pm-equities", "groups": ["desk-eq-ls"]},
+    "pm-macro": {"password": "kpc-pm-macro", "groups": ["desk-macro"]},
+    "pm-commodities": {"password": "kpc-pm-commodities", "groups": ["desk-commod"]},
+    "risk-manager": {"password": "kpc-risk-manager", "groups": ["risk"]},
+    "researcher": {"password": "kpc-researcher", "groups": ["research"]},
+    "operator": {"password": "kpc-operator", "groups": ["operators"]},
+    "former-analyst": {"password": "kpc-former-analyst", "groups": ["research"], "disabled": true}
+  }
+}

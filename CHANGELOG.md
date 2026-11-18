@@ -15,6 +15,13 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+- **A mock fund's facility for the 0.8.0 pilot** (`examples/pilot-fund/facility/`). Kestrel Point Capital is
+  fictional, and its facility is written as its own code, importing nothing of the platform: a deterministic
+  SQLite warehouse of three years of prices, positions, trades, signals, benchmarks, average daily value, and a
+  vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
+  report functions and a stateful risk engine; sixteen research documents, one carrying an injected
+  instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
 
 ## [0.7.0] - 2026-11-17
 
