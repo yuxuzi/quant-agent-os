@@ -13,7 +13,7 @@ generated, and it is meant to be changed. Change it in the smallest way that doe
 
 Formulas, tables, reports, charts, and run records come from Quant Toolbox
 (`quant_toolbox`, MIT), at the version `pyproject.toml` pins in `[tool.uv.sources]`
-(`quant-agent-os[toolbox,excel]`). This project holds the business logic: settings, sections,
+(`quant-toolbox[charts,excel]`). This project holds the business logic: settings, sections,
 tear sheets, reconciliation, and the command line. To take a newer toolbox, move the tag, run
 `uv sync`, and run the tests. To take a later fix to this project's own code, generate a fresh
 project from the newer template and compare; `.pytemplate.toml` records the template, its

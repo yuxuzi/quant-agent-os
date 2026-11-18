@@ -118,8 +118,8 @@ class AppSpec(BaseModel):
     quant_agent_os_source: str = Field(
         default=DEFAULT_QUANT_AGENT_OS_SOURCE,
         description=(
-            "Where a project installs quant-agent-os from (Quant Toolbox, and the platform for "
-            "agent tools): a git+https URL, with @tag to pin it, or a local path"
+            "Where a project installs Quant Toolbox from (and quant-agent-os, for agent tools): "
+            "the Quant-Agent-OS repository as a git+https URL, with @tag to pin it, or a local path"
         ),
     )
 

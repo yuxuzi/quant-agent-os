@@ -31,7 +31,7 @@ demonstration, which runs one fictional firm's portfolio research and risk analy
 [uv](https://docs.astral.sh/uv/) is the only prerequisite. From nothing to a first answer:
 
 ```bash
-uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.5.0"
+uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.6.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; `qaos doctor` explains anything missing
@@ -99,7 +99,7 @@ registry = ToolRegistry([total_return])
 src/quant_agent_os/      core: tool contract, executor, evidence, runs, MCP, REST, SDK
 src/quant_research/      Quant Research
 src/quant_analytics/     Quant Analytics
-src/quant_toolbox/       Quant Toolbox: the MIT library under analytics and generated apps
+packages/quant-toolbox/ Quant Toolbox: the MIT library under analytics and generated apps
 src/quant_app_factory/   Quant App Factory and its template packs
 src/quant_platform/      `qaos`, one server for every toolset, sign-in, and approvals
 skills/                  instruction-only skills; clients/: Cursor and VS Code bundles

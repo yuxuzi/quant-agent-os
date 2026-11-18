@@ -9,7 +9,7 @@ supported_python = ["3.11", "3.12", "3.13", "3.14", "3.15"]
 lifecycle_commands = ["uv sync", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy {package} tests", "uv run pytest"]
 default_components = ["data-csv"]
 optional_components = ["data-parquet", "data-database", "agent-tools"]
-dependencies = ["numpy>=1.26", "quant-agent-os[toolbox]"]
+dependencies = ["numpy>=1.26", "quant-toolbox[charts]"]
 questions = ["description", "author", "email", "python_version", "license", "frequency", "max_horizon", "cost_bps", "quant_agent_os_source"]
 security_posture = "Reads local price files (or one read-only database query) only; no orders, broker connectivity, or credentials in the project."
 

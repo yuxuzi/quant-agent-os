@@ -103,10 +103,10 @@ class ArchitecturePlanner:
             portable = False
             reasons.append(
                 "Its formulas, tables, reports, and run records come from Quant Toolbox "
-                "(quant-agent-os[toolbox], MIT), pinned to the release that generated it."
+                "(the quant-toolbox package, MIT), pinned to the release that generated it."
             )
             if "agent-tools" in spec.components:
-                reasons.append("agent-tools adds Quant-Agent-OS tool wrappers and that dependency.")
+                reasons.append("agent-tools adds tool wrappers and the quant-agent-os dependency.")
         elif template == "bundled":
             reasons.append(
                 "pytemplate-uv's bundled profiles do not depend on Quant-Agent-OS, so the app "

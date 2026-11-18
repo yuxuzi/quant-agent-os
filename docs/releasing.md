@@ -1,6 +1,9 @@
 # Releasing
 
-The project is one wheel, `quant-agent-os`, at one version ([decision 0018](decisions/0018-one-wheel.md)).
+The platform is one wheel, `quant-agent-os`, at one version ([decision 0018](decisions/0018-one-wheel.md)).
+Quant Toolbox is a second distribution, `quant-toolbox`, a workspace member with its own version, released
+by the same tag ([decision 0027](decisions/0027-quant-toolbox-package.md)); the platform's extras pin it
+exactly, and `tests/contract/test_release.py` holds the pin to the toolbox's version.
 `tests/contract/test_release.py` checks that the plugin and the changelog name it, and the
 server's `serverInfo.version` is this version.
 
@@ -33,15 +36,24 @@ so confirm them before the first PyPI release.
 
 No API token is stored in the repository.
 
+## The toolbox wheel
+
+uv resolves `quant-toolbox` from the same checkout when it installs the platform from a git tag, so the
+install above, and generated projects (which depend on the toolbox alone, by `subdirectory`), need nothing
+more. A wheel file installed on its own, or a PyPI release, also needs the `quant-toolbox` wheel. Until
+`release.yml` builds it (`uv build --all-packages`, expecting two wheels), a tag's release carries only the
+platform's wheel; changing the workflow needs the owner's approval.
+
 ## Cutting a release
 
 1. **Check main.** CI is green on every OS and Python version, and
    `uv run python tests/evaluation/agent_efficiency.py` shows no unintended delta.
-2. **Set the version** in `pyproject.toml` and `.claude-plugin/plugin.json`. Then run `uv lock` and
+2. **Set the version** in `pyproject.toml` and `.claude-plugin/plugin.json`, and the toolbox's in
+   `packages/quant-toolbox/pyproject.toml` with the four pins in the platform's extras. Then run `uv lock` and
    `uv run pytest tests/contract/test_release.py tests/server/test_client_bundles.py`.
 3. **Changelogs.** Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`
    (0.1.0's is already dated; correct the date if the tag is later), add a new empty
-   `## [Unreleased]` above it, and add the release's section to `docs/tools-changelog.md`.
+   `## [Unreleased]` above it, do the same in `packages/quant-toolbox/CHANGELOG.md`, and add the release's section to `docs/tools-changelog.md`.
 4. **Merge, then tag main.** `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow
    checks that the tag matches the version, runs the tests, builds the wheel and sdist, checks
    them with `twine check --strict`, creates the GitHub release, and publishes to PyPI if
