@@ -2033,11 +2033,54 @@
             "title": "Min Confidence",
             "type": "number"
           },
+          "published_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources published on or after this date",
+            "title": "Published From"
+          },
+          "published_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources published on or before this date",
+            "title": "Published To"
+          },
           "query": {
             "maxLength": 2000,
             "minLength": 1,
             "title": "Query",
             "type": "string"
+          },
+          "source_prefix": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources whose location starts with this, such as notes/",
+            "title": "Source Prefix"
           }
         },
         "required": [
@@ -2348,7 +2391,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "get_source_passage": {
       "input_schema": {
@@ -2359,6 +2402,14 @@
             "minLength": 1,
             "title": "Chunk Id",
             "type": "string"
+          },
+          "context": {
+            "default": 0,
+            "description": "Passages to add before and after it, from the same document",
+            "maximum": 2,
+            "minimum": 0,
+            "title": "Context",
+            "type": "integer"
           }
         },
         "required": [
@@ -2369,6 +2420,41 @@
       },
       "output_schema": {
         "$defs": {
+          "ContextPassage": {
+            "description": "A passage next to the requested one in its document, with its own citation.",
+            "properties": {
+              "chunk_id": {
+                "title": "Chunk Id",
+                "type": "string"
+              },
+              "section": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Section"
+              },
+              "source": {
+                "$ref": "#/$defs/SourceRef"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chunk_id",
+              "source",
+              "text",
+              "section"
+            ],
+            "title": "ContextPassage",
+            "type": "object"
+          },
           "Evidence": {
             "description": "One statement in a report and the sources that support it.\n\n``retrieved`` statements quote or paraphrase a source, ``computed`` statements come from a\ndeterministic tool, and ``interpretation`` statements are model-generated and must be\nlabelled as such.",
             "properties": {
@@ -2441,8 +2527,22 @@
             "type": "object"
           }
         },
-        "description": "The full text of one chunk with its source.",
+        "description": "The full text of one chunk with its source, and any passages around it requested.\n\n``before`` and ``after`` hold up to the requested number of neighbouring passages of the\nsame document, in reading order; each cites its own location.",
         "properties": {
+          "after": {
+            "items": {
+              "$ref": "#/$defs/ContextPassage"
+            },
+            "title": "After",
+            "type": "array"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/$defs/ContextPassage"
+            },
+            "title": "Before",
+            "type": "array"
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -2518,7 +2618,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "list_datasets": {
       "input_schema": {

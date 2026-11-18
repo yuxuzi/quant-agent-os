@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from quant_agent_os.tools import Permission, ResourceSpec, ToolSpec, tool
 from quant_research.application.retrieval import (
+    MAX_CONTEXT,
     QUERY_EMBEDDING_SECONDS,
     EvidencePacket,
     ResearchQuery,
@@ -46,6 +47,12 @@ class PassageRequest(BaseModel):
     """Which passage to return in full."""
 
     chunk_id: str = Field(min_length=1, description="A chunk id from find_related_signals")
+    context: int = Field(
+        default=0,
+        ge=0,
+        le=MAX_CONTEXT,
+        description="Passages to add before and after it, from the same document",
+    )
 
 
 def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
@@ -56,7 +63,7 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
 
     @tool(
         name="find_related_signals",
-        version="1.1.0",
+        version="1.2.0",
         description=(
             "Find signals, factors, and strategies related to a research question in the "
             "user's corpus. Returns ranked passages with source locations and knowledge-graph "
@@ -72,11 +79,15 @@ def research_tools(service: ResearchService) -> list[ToolSpec[Any, Any]]:
 
     @tool(
         name="get_source_passage",
-        description="Return the full text and source location of one passage by chunk id.",
+        version="1.1.0",
+        description=(
+            "Return the full text and source location of one passage by chunk id, with up to "
+            "two passages before and after it when the passage alone lacks context."
+        ),
         permissions=[Permission.READ_LOCAL_DATA],
     )
     def get_source_passage(params: PassageRequest) -> SourcePassage:
-        return service.get_passage(params.chunk_id)
+        return service.get_passage(params.chunk_id, params.context)
 
     strategies = StrategyService(service.store, service.matcher)
 

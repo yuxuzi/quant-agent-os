@@ -13,6 +13,16 @@ All notable changes to this project are documented here. The format follows
   Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
   tools, store, server, and acceptance cases, and records where the platform falls short in `FINDINGS.md`;
   `examples/mock-funds/README.md` ranks what they found together. DuckDB joins the dev group for their tests.
+- **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
+  it adds that many passages before and after the requested one, from the same document and in reading
+  order, each citing its own location. A short PDF passage that starts mid-argument can be read in full
+  without a second search. The idea comes from RAGFlow's parent-child chunks, without a second index.
+- **`find_related_signals` can search part of the corpus** (tool version 1.2.0). `source_prefix` keeps the
+  sources whose location starts with it, such as `notes/`, and `published_from` and `published_to` keep
+  those whose published date overlaps the range; undated sources are left out of a date search, with a
+  warning. Keyword, mention, vector, and graph search all apply the filter in the store, before the limit,
+  on SQLite and PostgreSQL alike. It narrows a search and is not access control. The idea comes from
+  RAGFlow's metadata filter.
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
