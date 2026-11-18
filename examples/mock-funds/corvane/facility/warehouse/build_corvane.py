@@ -10,9 +10,9 @@ Everything is fictional and deterministic for a seed. The output directory holds
   Hive-partitioned by date (``prices_daily``, ``fx_daily``, ``factor_scores``), as Athena or a
   Snowflake external table reads it.
 - ``s3/corvane-research/research/...``: the research documents (an S3 prefix).
-- ``snowflake/CORVANE_CURATED.db`` and ``CORVANE_REF.db``: SQLite files that stand in for the
-  Snowflake schemas ``CORVANE.CURATED`` and ``CORVANE.REF`` (holdings, trades, benchmark tables,
-  accounts). SQLite is not Snowflake: identifiers are upper case as in Snowflake, dates are ISO text.
+- ``snowflake_stage/<TABLE>/part-0000.parquet``: the files a Snowflake ``COPY INTO`` loads into
+  ``CORVANE.CURATED`` (holdings, trades, benchmark tables, security master) and ``CORVANE.REF``
+  (accounts, mandate restrictions). Offline, the site's connection loads them into DuckDB.
 - ``catalog/glue_catalog.json``: the Glue Data Catalog's table definitions for the curated tables.
 - ``s3_map.json``: which ``s3://`` bucket is which directory here.
 - ``known_answers.json``: the truths planted in the data, each computed by code here that shares
@@ -30,9 +30,7 @@ import json
 import math
 import random
 import shutil
-import sqlite3
 from collections.abc import Sequence
-from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -390,7 +388,8 @@ class World:
             s.rets.append(vendor)
             s.close.append(price / 2.0 if s.sid == plan.split and d >= split_day else price)
             traded = d not in s.closed
-            s.volume.append(int(shares_traded * math.exp(rng.gauss(0, 0.3))) if traded else None)
+            lots = shares_traded * (2 if s.sid == plan.split and d >= split_day else 1)
+            s.volume.append(int(lots * math.exp(rng.gauss(0, 0.3))) if traded else None)
 
     def has_row(self, s: Security, d: int) -> bool:
         """Return whether the vendor has a price row for ``s`` on day ``d``."""
@@ -680,13 +679,10 @@ class World:
         return sample_std(series) * math.sqrt(DAYS_PER_YEAR)
 
     def adv_usd(self, name: str, day: int) -> float:
-        """Mean USD traded value over the rows among the 20 business days ending ``day``."""
+        """Mean USD traded value over the last 20 price rows up to and including ``day``."""
         s = self.by_id[name]
-        values = [
-            (s.volume[d] or 0) * (s.close[d] or 0.0) * self.fx[s.currency][d]
-            for d in range(max(0, day - 19), day + 1)
-            if self.has_row(s, d)
-        ]
+        rows = [d for d in range(day + 1) if self.has_row(s, d)][-20:]
+        values = [(s.volume[d] or 0) * (s.close[d] or 0.0) * self.fx[s.currency][d] for d in rows]
         return math.fsum(values) / len(values)
 
     def days_to_liquidate(self, account: str, day: int, aum: float, rate: float) -> dict[str, Any]:
@@ -853,9 +849,21 @@ class World:
 # ---- writing ---------------------------------------------------------------------------------
 
 
-def _write_parquet(path: Path, columns: dict[str, list[Any]]) -> None:
+PRICE_SCHEMA = pa.schema(
+    [
+        ("security_id", pa.string()),
+        ("close_local", pa.float64()),
+        ("total_return_local", pa.float64()),
+        ("volume", pa.int64()),
+    ]
+)
+
+
+def _write_parquet(
+    path: Path, columns: dict[str, list[Any]], schema: pa.Schema | None = None
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.table(columns), path, compression="zstd")
+    pq.write_table(pa.table(columns, schema=schema), path, compression="zstd")
 
 
 def _curate_raw_to_lake(world: World, out: Path) -> None:
@@ -911,6 +919,7 @@ def _curate_raw_to_lake(world: World, out: Path) -> None:
                 "total_return_local": [s.rets[d] for s, _ in rows],
                 "volume": [s.volume[d] for s, _ in rows],
             },
+            PRICE_SCHEMA,
         )
         _write_parquet(
             curated / "fx_daily" / f"dt={day}" / "part-0000.parquet",
@@ -922,81 +931,78 @@ def _curate_raw_to_lake(world: World, out: Path) -> None:
 
 
 def _snowflake(world: World, out: Path) -> None:
-    folder = out / "snowflake"
-    folder.mkdir(parents=True, exist_ok=True)
-    for name in ("CORVANE_CURATED.db", "CORVANE_REF.db"):
-        (folder / name).unlink(missing_ok=True)
-    with closing(sqlite3.connect(folder / "CORVANE_CURATED.db")) as db, db:
-        db.executescript(
-            """
-            CREATE TABLE SECURITY_MASTER (SECURITY_ID TEXT PRIMARY KEY, NAME TEXT, SECTOR TEXT,
-              INDUSTRY TEXT, COUNTRY TEXT, CURRENCY TEXT, MCAP_USD REAL);
-            CREATE TABLE BENCH_WEIGHTS (AS_OF_DATE TEXT, BENCHMARK_ID TEXT, SECURITY_ID TEXT,
-              WEIGHT REAL);
-            CREATE TABLE BENCH_RETURNS (DATE TEXT, BENCHMARK_ID TEXT, TOTAL_RETURN_USD REAL);
-            CREATE TABLE HOLDINGS_DAILY (AS_OF_DATE TEXT, ACCOUNT_ID TEXT, SECURITY_ID TEXT,
-              SHARES REAL);
-            CREATE TABLE TRADES (TRADE_DATE TEXT, ACCOUNT_ID TEXT, SECURITY_ID TEXT, SIDE TEXT,
-              SHARES REAL, PRICE_LOCAL REAL, CURRENCY TEXT, COMMISSION_USD REAL);
-            CREATE TABLE CORP_ACTIONS (SECURITY_ID TEXT, EX_DATE TEXT, ACTION_TYPE TEXT,
-              RATIO REAL, NEW_SECURITY_ID TEXT, NOTE TEXT);
-            CREATE TABLE ACCT_RETURNS (DATE TEXT, ACCOUNT_ID TEXT, GROSS_RETURN REAL,
-              NET_RETURN REAL);
-            """
-        )
-        masters = [
-            (s.sid, s.name, s.sector, s.industry, s.country, s.currency, s.mcap)
-            for s in world.universe
-        ]
-        masters.append((CASH, "US dollar cash", "Cash", "Cash", "US", "USD", 0.0))
-        db.executemany("INSERT INTO SECURITY_MASTER VALUES (?,?,?,?,?,?,?)", masters)
-        db.executemany(
-            "INSERT INTO BENCH_WEIGHTS VALUES (?,?,?,?)",
-            [
-                (world.dates[day], bench, sid, w)
-                for bench, weights in world.bench_w.items()
-                for day in world.rebalances
-                for sid, w in sorted(weights[day].items())
-            ],
-        )
-        db.executemany(
-            "INSERT INTO BENCH_RETURNS VALUES (?,?,?)",
-            [
-                (world.dates[d], bench, r)
-                for bench, rets in world.bench_ret.items()
-                for d, r in enumerate(rets)
-            ],
-        )
-        db.executemany(
-            "INSERT INTO HOLDINGS_DAILY VALUES (?,?,?,?)",
-            [
-                (world.dates[d], account, sid, sh)
-                for account, snaps in world.holdings.items()
-                for d, snap in enumerate(snaps)
-                for sid, sh in sorted(snap.items())
-            ],
-        )
-        db.executemany("INSERT INTO TRADES VALUES (?,?,?,?,?,?,?,?)", world.trades)
-        db.executemany("INSERT INTO CORP_ACTIONS VALUES (?,?,?,?,?,?)", world.corp)
-        net: list[tuple[str, str, float | None, float | None]] = []
-        for account, gross in world.acct_ret.items():
-            for d, g in enumerate(gross):
-                net.append(
-                    (world.dates[d], account, g, None if g is None else g - MANAGEMENT_FEE / DAYS_PER_YEAR)
-                )
-        db.executemany("INSERT INTO ACCT_RETURNS VALUES (?,?,?,?)", net)
-    with closing(sqlite3.connect(folder / "CORVANE_REF.db")) as db, db:
-        db.executescript(
-            """
-            CREATE TABLE ACCOUNTS (ACCOUNT_ID TEXT PRIMARY KEY, NAME TEXT, STRATEGY TEXT,
-              BENCHMARK_ID TEXT, CLIENT TEXT, AUM_USD REAL, BASE_CCY TEXT);
-            CREATE TABLE MANDATE_RESTRICTIONS (ACCOUNT_ID TEXT, RULE_TYPE TEXT, RULE_VALUE TEXT);
-            """
-        )
-        db.executemany(
-            "INSERT INTO ACCOUNTS VALUES (?,?,?,?,?,?,'USD')", [a[:6] for a in ACCOUNTS]
-        )
-        db.executemany("INSERT INTO MANDATE_RESTRICTIONS VALUES (?,?,?)", RESTRICTIONS)
+    """Write the files a Snowflake ``COPY INTO`` would load into ``CORVANE.CURATED`` and ``.REF``.
+
+    One Parquet file per table under ``snowflake_stage/<TABLE>/``, upper-case column names, as
+    Snowflake would name them, and real DATE columns.
+    """
+    stage = out / "snowflake_stage"
+
+    def put(table: str, columns: dict[str, list[Any]]) -> None:
+        _write_parquet(stage / table / "part-0000.parquet", columns)
+
+    def day(index: int) -> date:
+        return date.fromisoformat(world.dates[index])
+
+    masters = [
+        (s.sid, s.name, s.sector, s.industry, s.country, s.currency, s.mcap) for s in world.universe
+    ]
+    masters.append((CASH, "US dollar cash", "Cash", "Cash", "US", "USD", 0.0))
+    names = ("SECURITY_ID", "NAME", "SECTOR", "INDUSTRY", "COUNTRY", "CURRENCY", "MCAP_USD")
+    put("SECURITY_MASTER", {n: [m[i] for m in masters] for i, n in enumerate(names)})
+    weights = [
+        (day(d), bench, sid, w)
+        for bench, per_day in world.bench_w.items()
+        for d in world.rebalances
+        for sid, w in sorted(per_day[d].items())
+    ]
+    put(
+        "BENCH_WEIGHTS",
+        {n: [r[i] for r in weights] for i, n in enumerate(("AS_OF_DATE", "BENCHMARK_ID", "SECURITY_ID", "WEIGHT"))},
+    )
+    returns = [
+        (day(d), bench, r) for bench, rets in world.bench_ret.items() for d, r in enumerate(rets)
+    ]
+    put(
+        "BENCH_RETURNS",
+        {n: [r[i] for r in returns] for i, n in enumerate(("DATE", "BENCHMARK_ID", "TOTAL_RETURN_USD"))},
+    )
+    held = [
+        (day(d), account, sid, sh)
+        for account, snaps in world.holdings.items()
+        for d, snap in enumerate(snaps)
+        for sid, sh in sorted(snap.items())
+    ]
+    put(
+        "HOLDINGS_DAILY",
+        {n: [r[i] for r in held] for i, n in enumerate(("AS_OF_DATE", "ACCOUNT_ID", "SECURITY_ID", "SHARES"))},
+    )
+    trades = [(date.fromisoformat(t[0]), *t[1:]) for t in world.trades]
+    trade_names = (
+        "TRADE_DATE", "ACCOUNT_ID", "SECURITY_ID", "SIDE", "SHARES", "PRICE_LOCAL", "CURRENCY",
+        "COMMISSION_USD",
+    )  # fmt: skip
+    put("TRADES", {n: [r[i] for r in trades] for i, n in enumerate(trade_names)})
+    actions = [(a[0], date.fromisoformat(a[1]), *a[2:]) for a in world.corp]
+    action_names = ("SECURITY_ID", "EX_DATE", "ACTION_TYPE", "RATIO", "NEW_SECURITY_ID", "NOTE")
+    put("CORP_ACTIONS", {n: [r[i] for r in actions] for i, n in enumerate(action_names)})
+    books = [
+        (day(d), account, g, None if g is None else g - MANAGEMENT_FEE / DAYS_PER_YEAR)
+        for account, gross in world.acct_ret.items()
+        for d, g in enumerate(gross)
+    ]
+    put(
+        "ACCT_RETURNS",
+        {n: [r[i] for r in books] for i, n in enumerate(("DATE", "ACCOUNT_ID", "GROSS_RETURN", "NET_RETURN"))},
+    )
+    accounts = [a[:6] for a in ACCOUNTS]
+    account_names = ("ACCOUNT_ID", "NAME", "STRATEGY", "BENCHMARK_ID", "CLIENT", "AUM_USD")
+    put("ACCOUNTS", {n: [r[i] for r in accounts] for i, n in enumerate(account_names)})
+    rules = RESTRICTIONS
+    put(
+        "MANDATE_RESTRICTIONS",
+        {n: [r[i] for r in rules] for i, n in enumerate(("ACCOUNT_ID", "RULE_TYPE", "RULE_VALUE"))},
+    )
 
 
 def _catalog(out: Path) -> None:
