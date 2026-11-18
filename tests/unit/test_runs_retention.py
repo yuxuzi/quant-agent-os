@@ -181,6 +181,7 @@ def test_the_runs_command_still_lists_and_shows_runs(path: Path) -> None:
     named = RUNNER.invoke(app, ["runs", "show", run_id, "--runs", str(path)])
 
     assert listed.exit_code == shown.exit_code == named.exit_code == 0
+    assert listed.output.split()[3:5] == ["rest", "alice"]  # who called, in the listing
     assert "tool.called" in shown.output
     assert RUNNER.invoke(app, ["runs", "unknown", "--runs", str(path)]).exit_code == 1
     assert "prune" in RUNNER.invoke(app, ["runs", "--help"]).output
