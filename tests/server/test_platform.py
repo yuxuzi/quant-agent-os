@@ -46,6 +46,8 @@ def test_one_catalog_serves_every_toolset(
         "get_source_passage",
         "analyze_performance",
         "analyze_risk",
+        "analyze_signal",
+        "run_backtest",
         "list_datasets",
         "research_report",
         "describe_template",
@@ -71,6 +73,8 @@ def test_one_catalog_serves_every_toolset(
         "get_source_passage": "research",
         "analyze_performance": "analytics",
         "analyze_risk": "analytics",
+        "analyze_signal": "analytics",
+        "run_backtest": "analytics",
         "list_datasets": "analytics",
         "research_report": "research",
         "describe_template": "factory",
@@ -85,6 +89,8 @@ def test_a_toolset_alone_brings_only_its_own_parts(datasets: DirectoryDatasetSto
     assert [spec.name for spec in catalog.tools] == [
         "analyze_performance",
         "analyze_risk",
+        "analyze_signal",
+        "run_backtest",
         "list_datasets",
         "server_info",
     ]

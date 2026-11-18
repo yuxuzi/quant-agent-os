@@ -1,6 +1,6 @@
 ---
 name: quant-analytics
-description: Compute performance and risk metrics (Sharpe, drawdown, volatility contributions, factor exposures) of return series through the Quant-Agent-OS MCP server, passing data by reference. Use when the user asks how a fund, strategy, or portfolio performed, or what drives its risk.
+description: Compute performance, risk, signal, and backtest metrics (Sharpe, drawdown, risk contributions, stress, IC, simulated net returns) through the Quant-Agent-OS MCP server, passing data by reference. Use when the user asks how a fund, strategy, or portfolio performed, what drives its risk, or whether a signal works.
 license: MIT
 compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the analytics toolset.
 metadata:
@@ -22,7 +22,15 @@ Pass series **by reference**, never by copying values:
   optionally a `benchmark` reference the same way. `risk_free` is an annual rate.
 - **Risk:** `analyze_risk` with `weights` naming each asset, `asset_returns` as
   `{"dataset": ID}` (one column per asset, named like the weights), and, for exposures,
-  `factor_returns` as `{"dataset": ID, "columns": [...]}`.
+  `factor_returns` as `{"dataset": ID, "columns": [...]}`. For a vendor's model, pass
+  `factor_model` with `loadings` and `factor_covariance` dataset ids and `specific_variance`
+  as a column reference; set its `periods_per_year` when the model is not annualised. Daily
+  dated returns also give `historical_stress`; when it is null, quote `historical_stress_note`.
+- **Signals:** `analyze_signal` with `signal` and `returns` as `{"dataset": ID}`, both dates
+  by instruments with the same column names. Quote its `summary` first: rank IC, IR, HAC
+  t-statistic, and the top-minus-bottom spread.
+- **Backtests:** `run_backtest` with the same frames, `cost_bps` (ask the user; never assume
+  zero), and `weighting` ("dollar_neutral" or "long_only"). Keep the default `lag`.
 
 Inline number lists are accepted only for small examples the user typed. If the data is not
 there, the user adds it: `qaos data add FILE --id ID`. Adding data is never a
@@ -43,6 +51,8 @@ dates show no frequency, ask the user (252 daily, 52 weekly, 12 monthly); do not
 - **Explain risk contributions plainly.** Percent contributions sum to one, and a negative one
   means the position hedges the rest. Factor variance shares plus the specific share sum to
   one.
+- **A backtest is a simulation, not advice.** Say so, with its period, costs, and lag; pass
+  on look-ahead warnings and never present it as a track record.
 - **Name the source.** Each figure is `computed` evidence; cite the dataset and periods it
   names.
 
