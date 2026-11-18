@@ -53,6 +53,12 @@ All notable changes to this project are documented here. The format follows
   an access policy, each case reaches what that caller would; a case with no caller is not run and fails, saying
   why. Without one, the report warns that named callers checked nothing. `qaos eval --access FILE` applies an
   access file, by default the configured one.
+- **`quant_platform.build_server_app` builds a firm's server without serving it.** It takes `serve_apps`'s
+  arguments, plus `keys`, `runs`, and `sign_in`, and yields the HTTP app `serve_apps` serves, with the same
+  catalog, keys or sign-in, access, and run store, so a firm tests its own server in process with Starlette's
+  `TestClient` and no patching. A run store given as a path is closed when the block ends; one given as a store
+  is the caller's. The [deployment guide](docs/deployment.md#8-add-your-own-tools) and the firm-tools example's
+  test use it.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource

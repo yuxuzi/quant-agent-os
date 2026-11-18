@@ -41,7 +41,8 @@ is not a chatbot.
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
   own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md)), registered as plain functions
   with `FirmApp.expose` ([decision 0024](docs/decisions/0024-registering-a-firms-functions.md));
-  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_apps`,
+  `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_apps` (and
+  tests that app in process with `build_server_app`),
   `open_platform()` opens them from a notebook, and `qaos eval` runs agreed test cases against the
   platform's own tools (a firm's own tools go through `run_acceptance` with its catalog).
 - **Skills and client packaging**: `skills/` holds the five instruction-only skills,
