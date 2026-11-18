@@ -73,7 +73,8 @@ def connect(environ: Mapping[str, str] | None = None) -> SqlConnection:
 
     ``estate://<directory>`` is the offline stand-in (the generator's output, in DuckDB).
     ``snowflake://<account>/CORVANE?role=...&warehouse=...`` is the real thing: the user comes
-    from ``CORVANE_SNOWFLAKE_USER`` and a key-pair private key from ``CORVANE_SNOWFLAKE_PRIVATE_KEY``
+    from ``CORVANE_SNOWFLAKE_USER`` and a key-pair private key from
+    ``CORVANE_SNOWFLAKE_PRIVATE_KEY``
     (a Secrets Manager value that ECS injects), neither of them in the URL or the image.
     """
     env = os.environ if environ is None else environ
@@ -155,7 +156,7 @@ class EstateConnection:
             self._db.execute(statement)
 
     def fetch(self, sql: str, params: Sequence[object] = ()) -> list[tuple[Any, ...]]:
-        """Return every row of ``sql``'s result (DuckDB takes ``?`` parameters, as Snowflake does)."""
+        """Return every row of ``sql``'s result; DuckDB and Snowflake both take ``?``."""
         with self._lock:
             return list(self._db.execute(sql, list(params)).fetchall())
 
@@ -210,7 +211,8 @@ ENTRIES: tuple[Entry, ...] = (
     ),
     Entry(
         "bench_w_",
-        "SELECT DT, SECURITY_ID, WEIGHT FROM CORVANE.SERVING.V_BENCH_W_DAILY WHERE BENCHMARK_ID = ?",
+        "SELECT DT, SECURITY_ID, WEIGHT FROM CORVANE.SERVING.V_BENCH_W_DAILY "
+        "WHERE BENCHMARK_ID = ?",
         bind="benchmark",
         fill=0.0,
     ),
@@ -222,9 +224,9 @@ ENTRIES: tuple[Entry, ...] = (
     ),
     Entry(
         "perf_",
-        'SELECT "DATE", \'gross\', GROSS_RETURN FROM CORVANE.CURATED.ACCT_RETURNS '
+        "SELECT \"DATE\", 'gross', GROSS_RETURN FROM CORVANE.CURATED.ACCT_RETURNS "
         "WHERE ACCOUNT_ID = ? AND GROSS_RETURN IS NOT NULL "
-        'UNION ALL SELECT "DATE", \'net\', NET_RETURN FROM CORVANE.CURATED.ACCT_RETURNS '
+        "UNION ALL SELECT \"DATE\", 'net', NET_RETURN FROM CORVANE.CURATED.ACCT_RETURNS "
         "WHERE ACCOUNT_ID = ? AND NET_RETURN IS NOT NULL",
         bind="account",
     ),
@@ -239,7 +241,8 @@ ENTRIES: tuple[Entry, ...] = (
     ),
     Entry(
         "scores_",
-        "SELECT DT, SECURITY_ID, SCORE FROM CORVANE.SERVING.V_SCORES_DAILY WHERE UPPER(FACTOR_ID) = ?",
+        "SELECT DT, SECURITY_ID, SCORE FROM CORVANE.SERVING.V_SCORES_DAILY "
+        "WHERE UPPER(FACTOR_ID) = ?",
         bind="factor",
     ),
     Entry(
@@ -322,13 +325,19 @@ class CorvaneDatasetStore:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
         known = self.ids()
         if dataset_id not in known:
-            raise UnknownDatasetError(f"No dataset '{dataset_id}'; the datasets are {', '.join(known)}.")
+            raise UnknownDatasetError(
+                f"No dataset '{dataset_id}'; the datasets are {', '.join(known)}."
+            )
         now = time.monotonic()
         with self._lock:
             cached = self._cache.get(dataset_id)
             if cached is not None and now - cached[0] < self.ttl_seconds:
                 return cached[1]
-        entry = next(e for e in ENTRIES if dataset_id == e.prefix or dataset_id.startswith(e.prefix) and e.bind)
+        entry = next(
+            e
+            for e in ENTRIES
+            if dataset_id == e.prefix or (dataset_id.startswith(e.prefix) and e.bind)
+        )
         params: list[object] = []
         if entry.bind:
             params = [dataset_id.removeprefix(entry.prefix).upper()] * entry.sql.count("?")

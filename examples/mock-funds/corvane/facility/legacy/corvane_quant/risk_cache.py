@@ -10,7 +10,7 @@ _HITS = 0
 def covariance(ret, date):
     """Sample covariance of the trailing 60 days. Slow: python loops, rebuilt once a day."""
     global _COV, _COV_DATE, _HITS
-    if _COV_DATE == date and _COV is not None:
+    if date == _COV_DATE and _COV is not None:
         _HITS += 1
         return _COV
     t = time.time()

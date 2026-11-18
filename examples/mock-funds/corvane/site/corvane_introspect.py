@@ -41,7 +41,9 @@ def introspect(
     if authorization is None or not authorization.startswith("Basic "):
         return 401, {"error": "invalid_client"}
     try:
-        user, _, secret = base64.b64decode(authorization.removeprefix("Basic ")).decode().partition(":")
+        user, _, secret = (
+            base64.b64decode(authorization.removeprefix("Basic ")).decode().partition(":")
+        )
     except ValueError:
         return 401, {"error": "invalid_client"}
     if (user, secret) != basic:
@@ -59,7 +61,11 @@ def introspect(
         return inactive
     if claims.get("token_use") != "access" or claims.get("client_id") not in client_ids:
         return inactive
-    scopes = [SCOPES[s.split("/", 1)[1]] for s in claims.get("scope", "").split() if "/" in s and s.split("/", 1)[1] in SCOPES]
+    scopes = [
+        SCOPES[s.split("/", 1)[1]]
+        for s in claims.get("scope", "").split()
+        if "/" in s and s.split("/", 1)[1] in SCOPES
+    ]
     body: dict[str, Any] = {
         "active": True,
         "iss": claims["iss"],

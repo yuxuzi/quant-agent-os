@@ -1,8 +1,7 @@
 import glob
 
-import pandas as pd
-
 import config
+import pandas as pd
 
 
 def load_prices():
@@ -20,15 +19,15 @@ def load_prices():
 
 def load_master(path):
     df = pd.read_parquet(path)
-    config.SECTOR_MAP = dict(zip(df.SECURITY_ID, df.SECTOR))
+    config.SECTOR_MAP = dict(zip(df.SECURITY_ID, df.SECTOR, strict=False))
     return df
 
 
 def weights_on(holdings, account, date):
     px = load_prices()
-    h = holdings[(holdings.ACCOUNT_ID == account) & (holdings.AS_OF_DATE == date)]
+    h = holdings[(account == holdings.ACCOUNT_ID) & (date == holdings.AS_OF_DATE)]
     p = px[px.date == date].set_index("security_id").close_local
-    h = h.assign(value=[s * p.get(i, 1.0) for s, i in zip(h.SHARES, h.SECURITY_ID)])
+    h = h.assign(value=[s * p.get(i, 1.0) for s, i in zip(h.SHARES, h.SECURITY_ID, strict=False)])
     h["w"] = h.value / h.value.sum()
     print(account, date, "positions:", len(h))
     return h.set_index("SECURITY_ID").w

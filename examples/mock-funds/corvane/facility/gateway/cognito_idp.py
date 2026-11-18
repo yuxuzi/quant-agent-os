@@ -161,7 +161,7 @@ class CognitoPool:
 
 
 def metadata(base: str) -> dict[str, Any]:
-    """Return OpenID metadata like Cognito's: a jwks_uri and a userinfo endpoint, no introspection."""
+    """Return OpenID metadata like Cognito's: a jwks_uri, no introspection endpoint."""
     return {
         "issuer": ISSUER,
         "jwks_uri": f"{base}/.well-known/jwks.json",
@@ -190,6 +190,7 @@ class RunningIdp:
 def start(pool: CognitoPool | None = None, port: int = 0) -> RunningIdp:
     """Serve ``pool`` on loopback in a thread; ``port`` 0 picks a free port."""
     the_pool = pool or CognitoPool()
+    bound: list[int] = []  # the port, known once the server is bound
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
@@ -203,30 +204,36 @@ def start(pool: CognitoPool | None = None, port: int = 0) -> RunningIdp:
             self.end_headers()
             self.wfile.write(data)
 
-        def do_GET(self) -> None:  # noqa: N802
-            base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        def do_GET(self) -> None:
             if self.path == "/.well-known/jwks.json":
                 self._send(HTTPStatus.OK, the_pool.jwks())
             elif self.path == "/.well-known/openid-configuration":
-                self._send(HTTPStatus.OK, metadata(base))
+                self._send(HTTPStatus.OK, metadata(f"http://127.0.0.1:{bound[0]}"))
             else:
                 self._send(HTTPStatus.NOT_FOUND, {"message": "Not Found"})
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", "0"))
             form = dict(parse_qsl(self.rfile.read(length).decode()))
             if self.path != "/oauth2/token":
                 self._send(HTTPStatus.NOT_FOUND, {"message": "Not Found"})  # incl. /introspect
             elif form.get("grant_type") == "client_credentials":
                 token = the_pool.machine_token()
-                self._send(HTTPStatus.OK, {"access_token": token, "expires_in": 3600, "token_type": "Bearer"})
+                self._send(
+                    HTTPStatus.OK,
+                    {"access_token": token, "expires_in": 3600, "token_type": "Bearer"},
+                )
             elif form.get("grant_type") == "password" and form.get("username") in USERS:
                 token = the_pool.access_token(form["username"])
-                self._send(HTTPStatus.OK, {"access_token": token, "expires_in": 3600, "token_type": "Bearer"})
+                self._send(
+                    HTTPStatus.OK,
+                    {"access_token": token, "expires_in": 3600, "token_type": "Bearer"},
+                )
             else:
                 self._send(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    bound.append(server.server_address[1])
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return RunningIdp(the_pool, server)
 

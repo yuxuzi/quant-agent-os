@@ -1,4 +1,4 @@
-"""Corvane Equity Partners' benchmark-relative tools: plain Python that knows nothing of the platform.
+"""Corvane Equity Partners' benchmark-relative tools: plain Python, no platform imports.
 
 `corvane_server.py` registers these as they are. Each takes weights, returns, and reference data
 as pandas objects (the platform passes them by dataset reference) and states its convention.
@@ -13,6 +13,7 @@ Conventions shared by every tool:
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import pandas as pd
@@ -44,7 +45,12 @@ class ToolInputError(ValueError):
 def _row(frame: pd.DataFrame, as_of: str, name: str) -> pd.Series:
     stamp = pd.Timestamp(as_of)
     if stamp not in frame.index:
-        nearest = ", ".join(d.date().isoformat() for d in frame.index[frame.index.searchsorted(stamp) - 1 : frame.index.searchsorted(stamp) + 1])
+        nearest = ", ".join(
+            d.date().isoformat()
+            for d in frame.index[
+                frame.index.searchsorted(stamp) - 1 : frame.index.searchsorted(stamp) + 1
+            ]
+        )
         raise ToolInputError(
             f"{as_of} is not a row of {name} (it runs {frame.index[0].date()} to "
             f"{frame.index[-1].date()}); the nearest dates are {nearest}."
@@ -56,7 +62,9 @@ def _row(frame: pd.DataFrame, as_of: str, name: str) -> pd.Series:
 
 def _compound(returns: pd.DataFrame, start: str, end: str) -> tuple[pd.Series, list[str]]:
     """Compound each column over the rows after ``start`` up to and including ``end``."""
-    window = returns.loc[(returns.index > pd.Timestamp(start)) & (returns.index <= pd.Timestamp(end))]
+    window = returns.loc[
+        (returns.index > pd.Timestamp(start)) & (returns.index <= pd.Timestamp(end))
+    ]
     if window.empty:
         raise ToolInputError(f"No returns after {start} up to {end}; check the dates.")
     missing = [c for c in window.columns if c != CASH and window[c].isna().all()]
@@ -396,18 +404,20 @@ def attribution_linked(
     """
     if frequency not in ("monthly", "daily"):
         raise ToolInputError("frequency must be monthly or daily.")
-    days = portfolio.index[(portfolio.index >= pd.Timestamp(start)) & (portfolio.index <= pd.Timestamp(end))]
+    days = portfolio.index[
+        (portfolio.index >= pd.Timestamp(start)) & (portfolio.index <= pd.Timestamp(end))
+    ]
     if len(days) < 2:
         raise ToolInputError(f"Fewer than two dates of the portfolio between {start} and {end}.")
     edges = [days[0]]
-    for before, day in zip(days[:-1], days[1:], strict=True):
+    for before, day in itertools.pairwise(days):
         if frequency == "daily" or day.month != before.month:
             edges.append(day)
     if edges[-1] != days[-1]:
         edges.append(days[-1])
     warnings: list[str] = []
     results: list[tuple[str, str, float, float, dict[str, dict[str, float]]]] = []
-    for a, b in zip(edges[:-1], edges[1:], strict=True):
+    for a, b in itertools.pairwise(edges):
         s, e = a.date().isoformat(), b.date().isoformat()
         wp, wb, growth, w = _prepare(portfolio, benchmark, returns, sector_code, s, e)
         warnings += w
@@ -423,7 +433,9 @@ def attribution_linked(
     periods: list[Period] = []
     for s, e, rp, rb, effects in results:
         scale = _carino(rp, rb) / big_k
-        periods.append(Period(start=s, end=e, portfolio_return=rp, benchmark_return=rb, scale=scale))
+        periods.append(
+            Period(start=s, end=e, portfolio_return=rp, benchmark_return=rb, scale=scale)
+        )
         for name, values in effects.items():
             row = linked.setdefault(name, {"allocation": 0.0, "selection": 0.0, "interaction": 0.0})
             for kind in row:
@@ -495,9 +507,7 @@ def currency_effect(
     active = wp.reindex(names).fillna(0.0) - wb.reindex(names).fillna(0.0)
     bench_ccy = {c: float(wb.reindex(names).fillna(0.0)[ccy == c].sum()) for c in CURRENCIES}
     e_b = sum(bench_ccy[c] * float(fx[c]) for c in CURRENCIES)
-    by_currency = {
-        c: float(active[ccy == c].sum()) * (float(fx[c]) - e_b) for c in CURRENCIES
-    }
+    by_currency = {c: float(active[ccy == c].sum()) * (float(fx[c]) - e_b) for c in CURRENCIES}
     total = float((active * usd).sum())
     local_active = float((active * local).sum())
     allocation = sum(by_currency.values())
@@ -616,7 +626,9 @@ def mandate_check(
         end: Last day checked.
         max_position: Largest weight a single security may hold, such as 0.05; none to skip.
     """
-    window = portfolio.loc[(portfolio.index >= pd.Timestamp(start)) & (portfolio.index <= pd.Timestamp(end))]
+    window = portfolio.loc[
+        (portfolio.index >= pd.Timestamp(start)) & (portfolio.index <= pd.Timestamp(end))
+    ]
     if window.empty:
         raise ToolInputError(f"No portfolio dates between {start} and {end}.")
     flags = excluded.reindex(window.columns).fillna(0.0)
@@ -626,9 +638,23 @@ def mandate_check(
             if weight <= 0:
                 continue
             if flags[name] > 0:
-                found.append(Breach(date=stamp.date().isoformat(), security_id=str(name), kind="excluded", weight=float(weight)))
+                found.append(
+                    Breach(
+                        date=stamp.date().isoformat(),
+                        security_id=str(name),
+                        kind="excluded",
+                        weight=float(weight),
+                    )
+                )
             if max_position is not None and name != CASH and weight > max_position:
-                found.append(Breach(date=stamp.date().isoformat(), security_id=str(name), kind="max_position", weight=float(weight)))
+                found.append(
+                    Breach(
+                        date=stamp.date().isoformat(),
+                        security_id=str(name),
+                        kind="max_position",
+                        weight=float(weight),
+                    )
+                )
     return MandateCheck(
         start=start,
         end=end,

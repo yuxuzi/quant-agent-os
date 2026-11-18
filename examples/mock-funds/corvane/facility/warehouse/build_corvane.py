@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import math
 import random
@@ -126,7 +127,21 @@ def business_days(count: int) -> list[date]:
 
 
 def _syllable_name(rng: random.Random, used: set[str]) -> str:
-    first = ("Al", "Bren", "Cor", "Dal", "El", "Fen", "Gar", "Hal", "Ir", "Jor", "Kel", "Lor", "Mar")
+    first = (
+        "Al",
+        "Bren",
+        "Cor",
+        "Dal",
+        "El",
+        "Fen",
+        "Gar",
+        "Hal",
+        "Ir",
+        "Jor",
+        "Kel",
+        "Lor",
+        "Mar",
+    )
     mid = ("a", "e", "o", "in", "ar", "en", "ur", "av")
     last = ("vane", "mont", "ford", "ston", "wick", "dale", "ridge", "ton", "mere", "gate", "haven")
     kind = ("Holdings", "Group", "Industries", "Systems", "Partners", "Corp", "Labs", "Works")
@@ -178,6 +193,7 @@ class Plan:
 
 def _assign_roles(universe: list[Security]) -> Plan:
     us = [s for s in universe if s.country == "US"]  # largest first
+
     def force(security: Security, sector: str, industry: str) -> None:
         security.sector, security.industry = sector, industry
 
@@ -263,9 +279,7 @@ class World:
         self.plan = _assign_roles(self.universe)
         self.by_id = {s.sid: s for s in self.universe}
         self.rebalances = [
-            i
-            for i, d in enumerate(self.dates)
-            if i == 0 or self.dates[i - 1][:7] != d[:7]
+            i for i, d in enumerate(self.dates) if i == 0 or self.dates[i - 1][:7] != d[:7]
         ]
         self.delivery = [min(i + 1, N_DAYS - 1) for i in self.rebalances]
         self.fx: dict[str, list[float]] = {}
@@ -292,7 +306,9 @@ class World:
         self.fx["USD"], self.fx_ret["USD"] = [1.0] * N_DAYS, [0.0] * N_DAYS
         market = [0.0] + [rng.gauss(0.0004, 0.008) for _ in range(N_DAYS - 1)]
         sector_f = {s: [rng.gauss(0, 0.005) for _ in range(N_DAYS)] for s in SECTORS}
-        region_f = {c: [rng.gauss(0, 0.004) for _ in range(N_DAYS)] for c in ("DE", "FR", "GB", "JP")}
+        region_f = {
+            c: [rng.gauss(0, 0.004) for _ in range(N_DAYS)] for c in ("DE", "FR", "GB", "JP")
+        }
         self._market, self._sector_f, self._region_f = market, sector_f, region_f
         # Scores first, because the planted quality effect uses them: built in _scores().
         self._draws = {s.sid: [rng.gauss(0, 1) for _ in range(N_DAYS)] for s in self.universe}
@@ -301,7 +317,9 @@ class World:
     def _scores(self) -> None:
         rng = self.rng
         names = [s.sid for s in self.universe if s.sid != self.plan.spinco]
-        state: dict[str, dict[str, float]] = {f: {n: rng.gauss(0, 1) for n in names} for f in FACTORS}
+        state: dict[str, dict[str, float]] = {
+            f: {n: rng.gauss(0, 1) for n in names} for f in FACTORS
+        }
         sigma_rank = _ranks([self.by_id[n].sigma for n in names])
         for _month in self.rebalances:
             month: dict[str, dict[str, float]] = {}
@@ -451,7 +469,12 @@ class World:
                 if d in self.rebalances:
                     eligible = [
                         n
-                        for n in names + ([self.plan.spinco] if bench == "BM_US300" and d > self.index[SPIN_DATE] else [])
+                        for n in names
+                        + (
+                            [self.plan.spinco]
+                            if bench == "BM_US300" and d > self.index[SPIN_DATE]
+                            else []
+                        )
                         if self.by_id[n].last is None or self.by_id[n].last > d  # type: ignore[operator]
                     ]
                     cap_sum = math.fsum(caps[d][n] for n in eligible)
@@ -479,7 +502,9 @@ class World:
         raw = {n: w * math.exp(0.6 * z[n]) for n, w in bw.items()}
         chosen = sorted(raw, key=lambda n: -raw[n])[: HOLDINGS[model]]
         plan = self.plan
-        forced = [plan.parent] + ([plan.split, plan.delist, *plan.winners] if model == "LCC" else [])
+        forced = [plan.parent] + (
+            [plan.split, plan.delist, *plan.winners] if model == "LCC" else []
+        )
         weights = {n: raw[n] for n in chosen}
         for n in forced:
             if n in bw:
@@ -489,7 +514,9 @@ class World:
                 weights[n] = max(weights.get(n, 0.0), bw[n])
         for _ in range(3):
             total = math.fsum(weights.values())
-            weights = {n: min(w / total * (1 - CASH_TARGET), CAP[model]) for n, w in weights.items()}
+            weights = {
+                n: min(w / total * (1 - CASH_TARGET), CAP[model]) for n, w in weights.items()
+            }
         total = math.fsum(weights.values())
         return {n: w / total * (1 - CASH_TARGET) for n, w in weights.items()}
 
@@ -553,7 +580,18 @@ class World:
                 sold = shares.pop(self.plan.spinco)
                 px = self.usd_price(s, d) or 0.0
                 cash += sold * px
-                self.trades.append((SPIN_SALE_DATE, account, s.sid, "SELL", sold, s.close[d] or 0.0, "USD", sold * px * 1e-4))
+                self.trades.append(
+                    (
+                        SPIN_SALE_DATE,
+                        account,
+                        s.sid,
+                        "SELL",
+                        sold,
+                        s.close[d] or 0.0,
+                        "USD",
+                        sold * px * 1e-4,
+                    )
+                )
             value = cash + math.fsum(
                 sh * (self.usd_price(self.by_id[n], d) or 0.0) for n, sh in shares.items()
             )
@@ -571,8 +609,16 @@ class World:
                         s = self.by_id[n]
                         px_usd = self.usd_price(s, d) or 0.0
                         self.trades.append(
-                            (self.dates[d], account, n, "BUY" if change > 0 else "SELL", abs(change),
-                             s.close[d] or 0.0, s.currency, abs(change) * px_usd * 1e-4)
+                            (
+                                self.dates[d],
+                                account,
+                                n,
+                                "BUY" if change > 0 else "SELL",
+                                abs(change),
+                                s.close[d] or 0.0,
+                                s.currency,
+                                abs(change) * px_usd * 1e-4,
+                            )
                         )
                 shares = {n: sh for n, sh in new.items() if sh > 0}
                 cash = value - math.fsum(
@@ -638,16 +684,20 @@ class World:
 
     def linked(self, account: str, bench: str, edges: list[int]) -> dict[str, Any]:
         """Carino-link the single-period effects over consecutive ``edges``."""
-        periods = [self.brinson(account, bench, a, b) for a, b in zip(edges, edges[1:], strict=False)]
+        periods = [self.brinson(account, bench, a, b) for a, b in itertools.pairwise(edges)]
+
         def k(rp: float, rb: float) -> float:
             if abs(rp - rb) < 1e-12:
                 return 1 / (1 + rp)
             return (math.log(1 + rp) - math.log(1 + rb)) / (rp - rb)
+
         cum_p = math.prod(1 + p["portfolio_return"] for p in periods) - 1
         cum_b = math.prod(1 + p["benchmark_return"] for p in periods) - 1
         big_k = k(cum_p, cum_b)
         sectors = sorted({s for p in periods for s in p["effects"]})
-        out: dict[str, dict[str, float]] = {s: {"allocation": 0.0, "selection": 0.0, "interaction": 0.0} for s in sectors}
+        out: dict[str, dict[str, float]] = {
+            s: {"allocation": 0.0, "selection": 0.0, "interaction": 0.0} for s in sectors
+        }
         for p in periods:
             scale = k(p["portfolio_return"], p["benchmark_return"]) / big_k
             for sector, effects in p["effects"].items():
@@ -686,11 +736,9 @@ class World:
         return math.fsum(values) / len(values)
 
     def days_to_liquidate(self, account: str, day: int, aum: float, rate: float) -> dict[str, Any]:
-        """Return days to sell each holding at ``rate`` of ADV, and the liquidated shares of value."""
+        """Return days to sell each holding at ``rate`` of ADV, and the value sold by day."""
         weights = self.weights(account, day)
-        days = {
-            n: w * aum / (rate * self.adv_usd(n, day)) for n, w in weights.items() if n != CASH
-        }
+        days = {n: w * aum / (rate * self.adv_usd(n, day)) for n, w in weights.items() if n != CASH}
         stock = math.fsum(w for n, w in weights.items() if n != CASH)
         profile = {
             str(k): math.fsum(min(w, k * w / days[n]) for n, w in weights.items() if n != CASH)
@@ -707,9 +755,7 @@ class World:
             if month is None:
                 continue
             names = [
-                n
-                for n in self.scores[month][factor]
-                if self.usd_ret[n][d + 1 + lag] is not None
+                n for n in self.scores[month][factor] if self.usd_ret[n][d + 1 + lag] is not None
             ]
             if len(names) < 10:
                 continue
@@ -729,9 +775,18 @@ class World:
         for d in range(N_DAYS):
             for n, w in self.weights(account, d).items():
                 if n in banned and w > 0:
-                    out.append({"date": self.dates[d], "security_id": n, "kind": "excluded", "weight": w})
+                    out.append(
+                        {"date": self.dates[d], "security_id": n, "kind": "excluded", "weight": w}
+                    )
                 if caps and n != CASH and w > caps[0] + 1e-12:
-                    out.append({"date": self.dates[d], "security_id": n, "kind": "max_position", "weight": w})
+                    out.append(
+                        {
+                            "date": self.dates[d],
+                            "security_id": n,
+                            "kind": "max_position",
+                            "weight": w,
+                        }
+                    )
         return out
 
     def known_answers(self) -> dict[str, Any]:
@@ -741,9 +796,7 @@ class World:
         may = self.rebalances[4], self.rebalances[5]
         lcc_may = self.brinson("LCC", "BM_US300", *may)
         lcc_linked = self.linked("LCC", "BM_US300", self.rebalances)
-        flat = {
-            (s, k): v for s, e in lcc_linked["effects"].items() for k, v in e.items()
-        }
+        flat = {(s, k): v for s, e in lcc_linked["effects"].items() for k, v in e.items()}
         biggest = max(flat, key=lambda key: abs(flat[key]))
         return {
             "seed": self.seed,
@@ -759,12 +812,29 @@ class World:
                 "tobacco": self.plan.tobacco,
             },
             "conventions": {
-                "active_share": "0.5 * sum |w_p - w_b| over the union of names, end-of-day weights, cash a name with benchmark weight 0",
-                "tracking_error_ex_post": "sample std (n-1) of daily gross return minus benchmark return, days 1..known date, times sqrt(252)",
-                "tracking_error_ex_ante": "sample std of the current active weights times the last 60 days' USD returns, times sqrt(252); cash excluded",
-                "brinson": "Brinson-Fachler by sector, buy-and-hold from the start day's end-of-day weights; cash is its own sector; a sector with no benchmark weight takes the total benchmark return as its benchmark return; one with no portfolio weight takes its benchmark return",
+                "active_share": (
+                    "0.5 * sum |w_p - w_b| over the union of names, end-of-day weights; "
+                    "cash is a name with benchmark weight 0"
+                ),
+                "tracking_error_ex_post": (
+                    "sample std (n-1) of daily gross return minus benchmark return, "
+                    "days 1..known date, times sqrt(252)"
+                ),
+                "tracking_error_ex_ante": (
+                    "sample std of the current active weights times the last 60 days' USD "
+                    "returns, times sqrt(252); cash excluded"
+                ),
+                "brinson": (
+                    "Brinson-Fachler by sector, buy-and-hold from the start day's end-of-day "
+                    "weights; cash is its own sector; a sector with no benchmark weight takes the "
+                    "total benchmark return as its benchmark return; one with no portfolio weight "
+                    "takes its benchmark return"
+                ),
                 "linking": "Carino, over the monthly periods between rebalance dates",
-                "rank_ic": "mean over days of the Spearman of the latest delivered score on day t with the USD return of day t+1 (lag 0, horizon 1)",
+                "rank_ic": (
+                    "mean over days of the Spearman of the latest delivered score on day t with "
+                    "the USD return of day t+1 (lag 0, horizon 1)"
+                ),
             },
             "active_share": {
                 "LCC": self.active_share("LCC", "BM_US300", end),
@@ -795,7 +865,9 @@ class World:
             "currency_gq_may": self.currency_effect("GQ", "BM_GLOBAL200", *may),
             "days_to_liquidate_lcc": self.days_to_liquidate("LCC", end, 1.5e9, 0.2),
             "rank_ic": {f: self.rank_ic(f) for f in FACTORS},
-            "breaches": {a: self.breaches(a) for a in ("SMA_FND_B", "SMA_SWF_C", "SMA_PEN_A", "LCC")},
+            "breaches": {
+                a: self.breaches(a) for a in ("SMA_FND_B", "SMA_SWF_C", "SMA_PEN_A", "LCC")
+            },
             "last_edges_unused": edges[-1],
         }
 
@@ -886,9 +958,10 @@ def _curate_raw_to_lake(world: World, out: Path) -> None:
         with path.open("w", newline="") as handle:
             writer = csv.writer(handle)
             writer.writerow(["as_of", "security_id", *FACTORS])
-            ids = sorted(world.scores[m]["quality"])
-            for sid in ids:
-                writer.writerow([world.dates[day], sid, *(f"{world.scores[m][f][sid]!r}" for f in FACTORS)])
+            for sid in sorted(world.scores[m]["quality"]):
+                writer.writerow(
+                    [world.dates[day], sid, *(f"{world.scores[m][f][sid]!r}" for f in FACTORS)]
+                )
     # Glue job stand-in: wide vendor scores to long curated Parquet, partitioned by delivery date.
     for path in sorted((raw / "vendor-factors").glob("scores_*.csv")):
         dt = f"{path.stem[7:11]}-{path.stem[11:13]}-{path.stem[13:15]}"
@@ -907,12 +980,10 @@ def _curate_raw_to_lake(world: World, out: Path) -> None:
             curated / "factor_scores" / f"dt={dt}" / "part-0000.parquet",
             {"security_id": ids, "factor_id": factor_ids, "score": scores, "as_of": as_of},
         )
-    for d, day in enumerate(world.dates):
-        rows = [
-            (s, d) for s in world.universe if world.has_row(s, d)
-        ]
+    for d, stamp in enumerate(world.dates):
+        rows = [(s, d) for s in world.universe if world.has_row(s, d)]
         _write_parquet(
-            curated / "prices_daily" / f"dt={day}" / "part-0000.parquet",
+            curated / "prices_daily" / f"dt={stamp}" / "part-0000.parquet",
             {
                 "security_id": [s.sid for s, _ in rows],
                 "close_local": [s.close[d] for s, _ in rows],
@@ -922,7 +993,7 @@ def _curate_raw_to_lake(world: World, out: Path) -> None:
             PRICE_SCHEMA,
         )
         _write_parquet(
-            curated / "fx_daily" / f"dt={day}" / "part-0000.parquet",
+            curated / "fx_daily" / f"dt={stamp}" / "part-0000.parquet",
             {
                 "currency": ["EUR", "GBP", "JPY"],
                 "usd_per_unit": [world.fx[c][d] for c in ("EUR", "GBP", "JPY")],
@@ -958,14 +1029,20 @@ def _snowflake(world: World, out: Path) -> None:
     ]
     put(
         "BENCH_WEIGHTS",
-        {n: [r[i] for r in weights] for i, n in enumerate(("AS_OF_DATE", "BENCHMARK_ID", "SECURITY_ID", "WEIGHT"))},
+        {
+            n: [r[i] for r in weights]
+            for i, n in enumerate(("AS_OF_DATE", "BENCHMARK_ID", "SECURITY_ID", "WEIGHT"))
+        },
     )
     returns = [
         (day(d), bench, r) for bench, rets in world.bench_ret.items() for d, r in enumerate(rets)
     ]
     put(
         "BENCH_RETURNS",
-        {n: [r[i] for r in returns] for i, n in enumerate(("DATE", "BENCHMARK_ID", "TOTAL_RETURN_USD"))},
+        {
+            n: [r[i] for r in returns]
+            for i, n in enumerate(("DATE", "BENCHMARK_ID", "TOTAL_RETURN_USD"))
+        },
     )
     held = [
         (day(d), account, sid, sh)
@@ -975,7 +1052,10 @@ def _snowflake(world: World, out: Path) -> None:
     ]
     put(
         "HOLDINGS_DAILY",
-        {n: [r[i] for r in held] for i, n in enumerate(("AS_OF_DATE", "ACCOUNT_ID", "SECURITY_ID", "SHARES"))},
+        {
+            n: [r[i] for r in held]
+            for i, n in enumerate(("AS_OF_DATE", "ACCOUNT_ID", "SECURITY_ID", "SHARES"))
+        },
     )
     trades = [(date.fromisoformat(t[0]), *t[1:]) for t in world.trades]
     trade_names = (
@@ -993,7 +1073,10 @@ def _snowflake(world: World, out: Path) -> None:
     ]
     put(
         "ACCT_RETURNS",
-        {n: [r[i] for r in books] for i, n in enumerate(("DATE", "ACCOUNT_ID", "GROSS_RETURN", "NET_RETURN"))},
+        {
+            n: [r[i] for r in books]
+            for i, n in enumerate(("DATE", "ACCOUNT_ID", "GROSS_RETURN", "NET_RETURN"))
+        },
     )
     accounts = [a[:6] for a in ACCOUNTS]
     account_names = ("ACCOUNT_ID", "NAME", "STRATEGY", "BENCHMARK_ID", "CLIENT", "AUM_USD")

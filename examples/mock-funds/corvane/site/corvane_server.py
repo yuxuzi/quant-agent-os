@@ -147,7 +147,7 @@ def serve() -> None:
 
 
 def acceptance(cases: Path) -> int:
-    """Run the agreed cases as the operator; return 0 when all pass, 1 when any fails, 2 if unread."""
+    """Run the agreed cases as the operator; return 0 if all pass, 1 if any fails, 2 if unread."""
     try:
         gold, digest = load_gold(cases)
     except GoldFileError as error:
