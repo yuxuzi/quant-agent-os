@@ -1,0 +1,51 @@
+# Sablecroft Alternatives (fictional): who reaches what, in the platform's access-file format
+# (decision 0021). Group keys are Microsoft Entra ID security-group object ids (GUIDs), because an Entra
+# access token's `groups` claim carries ids, never names. The comment on each says which group it is.
+# Anything not listed is refused, and a refused dataset looks like a missing one.
+#
+# Datasets (see the README): ret_final, ret_est, ret_best, ret_usd, ret_final_q, ret_final_<strategy>,
+# ret_est_<strategy>, fx_eurusd, idx_public, fof_weights, fof_fund, mgr_terms, pm_cashflows, pm_nav,
+# pm_terms, ops_recon_diff_usd. Strategies: eq_ls, macro, event, relval, cta, multistrat,
+# illiquid_credit, real_assets. Tool names other than the platform's own start with sab_.
+
+# CIO: everything.
+[groups."6f1c2a10-0000-4000-8000-00000000c10a"]  # sg-sablecroft-cio
+tools = ["*"]
+datasets = ["*"]
+
+# Manager-research analysts: one group per strategy team, their own strategy's managers and market data.
+[groups."6f1c2a10-0000-4000-8000-0000000e0001"]  # sg-research-eq-ls
+tools = ["server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["*_eq_ls", "fx_eurusd", "idx_public"]
+
+[groups."6f1c2a10-0000-4000-8000-0000000e0002"]  # sg-research-macro
+tools = ["server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["*_macro", "fx_eurusd", "idx_public"]
+
+[groups."6f1c2a10-0000-4000-8000-0000000e0003"]  # sg-research-event
+tools = ["server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["*_event", "fx_eurusd", "idx_public"]
+
+[groups."6f1c2a10-0000-4000-8000-0000000e0004"]  # sg-research-credit-real-assets
+tools = ["server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["*_illiquid_credit", "*_real_assets", "ret_final_q", "fx_eurusd", "idx_public"]
+
+# Private markets: commitments, cash flows, NAVs, and the indices, nothing about hedge funds.
+[groups."6f1c2a10-0000-4000-8000-0000000b0001"]  # sg-private-markets
+tools = ["server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["pm_*", "idx_public", "fx_eurusd"]
+
+# Risk: every manager and the fund's weights, not private-markets cash flows or operations data.
+[groups."6f1c2a10-0000-4000-8000-0000000a0001"]  # sg-risk
+tools = ["server_info", "list_datasets", "analyze_*", "run_backtest", "find_related_signals", "get_source_passage", "sab_*"]
+datasets = ["ret_*", "fx_eurusd", "idx_public", "fof_*", "mgr_terms", "pm_*"]
+
+# Investor relations: the fund's aggregate numbers only.
+[groups."6f1c2a10-0000-4000-8000-0000000d0001"]  # sg-investor-relations
+tools = ["server_info", "list_datasets", "analyze_performance"]
+datasets = ["fof_fund"]
+
+# Operations: NAV reconciliation, estimate and final returns, and the fund's NAV.
+[groups."6f1c2a10-0000-4000-8000-0000000f0001"]  # sg-operations
+tools = ["server_info", "list_datasets", "sab_revision_bias"]
+datasets = ["ops_*", "ret_est", "ret_final", "fof_weights"]
