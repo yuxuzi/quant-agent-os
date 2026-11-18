@@ -109,13 +109,26 @@ names the commit on `feat/pilot-drill`; anything else is written down with its n
 | P16 | Refusals | A refused desk reads `DeskRefusedError: No desk 'macro'; the desks are eq_ls.`, and a refused tool returns `denied` over REST with HTTP 200, so a client parses text and statuses to tell refusals apart | Recorded under D3 (one output schema for refusals) |
 | P17 | Legacy package | `kestrel_quant` reads `KPC_WAREHOUSE` into `CONFIG` at import, so the variable must be set before anything imports it; the in-process test sets `CONFIG` too | A legacy smell facades cannot fix; the runbook's settings set it where the server starts |
 | P18 | Type checks | The repository's strict mypy could not find the untyped `kestrel_quant` the facades import | Fixed in `1122f33` with a mypy override for the pilot's legacy package |
+| P19 | The drill | One run started in the background stalled for 15 minutes in phase 7: the server and the risk service were listening but did not answer, the wait's `curl` had no time limit, and the run resumed only after a manual probe. The cause was not pinned down | The drill now gives every `curl` a 5-second limit and a 180-second start deadline, starts its services with stdin from `/dev/null` and `uv run --no-sync`, and has passed in about 30 seconds since. Next step (W5): rerun on Linux CI before trusting it unattended |
 
 ### Results against B1 to B8
 
 Measured on macOS with a warm uv cache, from the drill's own summary (`examples/pilot-fund/drill.sh`) and
 `tests/integration/test_pilot_fund.py` (10 tests).
 
-DRILL_TIMES
+| Drill phase | Seconds |
+| --- | --- |
+| 1. Build both wheels | 0.1 |
+| 2. Install into a clean folder (the only phase allowed the network) | 2.3 |
+| 3. Build the warehouse | 1.6 |
+| 4. `qaos init` and `qaos doctor` | 0.4 |
+| 5. Ingest the 16 documents | 0.2 |
+| 6. Scan, wrap, and test the finished legacy draft | 10.3 |
+| 7. Start the gateway, the risk service (with its 1-second model load), and the server | 12.0 |
+| 8. The fund's day: 19 checks as six users, over REST and MCP | 1.0 |
+| 9. The agreed cases | 1.7 |
+| 10. `qaos runs show` | 0.2 |
+| **Total** | **29.8** |
 
 | # | Holds? | Measurement |
 | --- | --- | --- |
@@ -126,7 +139,7 @@ DRILL_TIMES
 | B5 | Yes | `analyze_signal` recovers the planted momentum rank IC, 0.0221294799, to 1e-10 at `lag: 0` (P8), and carry's -0.0117901681; `run_backtest` of momentum at 5 bps; `analyze_risk` on the macro book with the vendor model and 2 stress windows. The agent-efficiency evaluation is unchanged: the platform's tool surface did not change |
 | B6 | Yes, with edits counted | Scan: 26 callables. Inventory: 38 lines changed. Draft: 13 tools (7 facades, 6 service endpoints), 110 TODO lines; its contract test passed for 5 of 13 tools as drafted (after P2's fix). Finishing it changed 342 added and 312 removed lines of the 731-line draft, across six files; both generated tests pass, and the tools pass `check_app` on the real warehouse |
 | B7 | Mostly | Agreed cases: 6 of 6 pass (`acceptance.toml`); `qaos runs show` names each caller (after P11); the runbook covers backup and upgrade for a wheel install (P14), but the drill does not rehearse them |
-| B8 | Yes | This table: 18 friction points, 4 fixed on this branch (P2, P11, P14, P18), the rest with a next step |
+| B8 | Yes | This table: 19 friction points, 5 fixed on this branch (P2, P11, P14, P18, P19), the rest with a next step |
 
 ## 6. Backlog carried from the first draft
 

@@ -72,16 +72,17 @@ finish() {
   fi
 }
 
-wait_for() {  # url, name, log
-  local deadline=$((SECONDS + 60))
-  until curl -fsS -o /dev/null "$1" 2>/dev/null; do
-    if [ "$SECONDS" -ge "$deadline" ]; then echo "$2 did not start; see $3" >&2; return 1; fi
+wait_for() {  # url, name, log, [curl options...]
+  local url="$1" name="$2" log="$3" deadline=$((SECONDS + ${START_TIMEOUT:-180}))
+  shift 3
+  until curl -fsS -m 5 -o /dev/null "$@" "$url" 2>/dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then echo "$name did not start; see $log" >&2; return 1; fi
     sleep 0.2
   done
 }
 
 for port in 8000 8100 9400; do
-  if curl -s -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+  if curl -s -m 5 -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
     echo "port $port is in use; stop what is listening there first" >&2
     exit 1
   fi
@@ -137,16 +138,17 @@ echo "fresh draft: $TODOS open decisions (TODO lines); the finished draft differ
 (cd site/legacy_tools && uv run --project "$FUND" pytest -q -p no:cacheprovider test_tools.py 2>&1 | tail -1)
 
 phase "7. start the gateway, the risk service, and the server"
-uv run python facility/gateway/idp.py --port 9400 >"$LOGS/gateway.log" 2>&1 &
+# --no-sync: the environment was synced at install, and three processes need not race to check it.
+uv run --no-sync python facility/gateway/idp.py --port 9400 </dev/null >"$LOGS/gateway.log" 2>&1 &
 PIDS+=($!)
-(cd site/legacy_tools && PYTHONPATH="$FUND/facility" exec uv run --project "$FUND" \
-  uvicorn service.app:app --host 127.0.0.1 --port 8100 --log-level warning) >"$LOGS/risk.log" 2>&1 &
+(cd site/legacy_tools && PYTHONPATH="$FUND/facility" exec uv run --no-sync --project "$FUND" \
+  uvicorn service.app:app --host 127.0.0.1 --port 8100 --log-level warning) </dev/null >"$LOGS/risk.log" 2>&1 &
 PIDS+=($!)
-uv run python site/kestrel_server.py >"$LOGS/server.log" 2>&1 &
+uv run --no-sync python site/kestrel_server.py </dev/null >"$LOGS/server.log" 2>&1 &
 PIDS+=($!)
 wait_for "$GATEWAY/.well-known/oauth-authorization-server" gateway "$LOGS/gateway.log"
 wait_for "$SERVER/healthz" server "$LOGS/server.log"
-until curl -s -o /dev/null -X POST -H 'Content-Type: application/json' -d '{}' "$RISK/risk_desks"; do sleep 0.2; done
+wait_for "$RISK/risk_desks" "risk service" "$LOGS/risk.log" -X POST -H 'Content-Type: application/json' -d '{}'
 grep -E "^Serving" "$LOGS/server.log" || true
 
 phase "8. the fund's day, as each user"
