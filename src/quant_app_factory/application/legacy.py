@@ -54,8 +54,11 @@ def wrap(inventory_path: Path, out: Path, *, force: bool = False) -> Wrapped:
     sources, root = find_sources(inventory.source)
     found, _ = analyse(sources)
     legacy = sources[0].name.split(".")[0]
-    relative = Path(os.path.relpath(root, out.resolve()))
-    near = relative.parts[:3].count("..") < 3  # beside the draft, not across the disk
+    try:
+        relative = Path(os.path.relpath(root, out.resolve()))
+    except ValueError:  # on another Windows drive
+        relative = Path(root)
+    near = not relative.is_absolute() and relative.parts[:3].count("..") < 3  # beside the draft
     source_root = (relative if near else root).as_posix()
     result = draft(
         inventory,

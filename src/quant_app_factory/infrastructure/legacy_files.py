@@ -118,8 +118,11 @@ def _source(file: Path, root: Path) -> ModuleSource:
 
 def dump_inventory(inventory: Inventory, path: Path) -> str:
     """Return the inventory as TOML, with the source relative to ``path``'s directory."""
-    relative = Path(os.path.relpath(inventory.source, path.resolve().parent))
-    near = relative.parts[:3].count("..") < 3  # beside the inventory, not across the disk
+    try:
+        relative = Path(os.path.relpath(inventory.source, path.resolve().parent))
+    except ValueError:  # on another Windows drive
+        relative = Path(inventory.source)
+    near = not relative.is_absolute() and relative.parts[:3].count("..") < 3  # beside the inventory
     source = (relative if near else inventory.source).as_posix()
     lines = [HEADER.format(inventory=path.name)]
     lines += [f"source = {toml_text.value(source)}", f"app = {toml_text.value(inventory.app)}", ""]
