@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
+  package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
+  *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
+  settings, environment variables, databases, files, printing, network calls, state, slow set-up, and caches.
+  `--json` prints it for machines, and `--write FILE` writes an editable TOML inventory. `qaos legacy wrap
+  INVENTORY --out DIR` drafts typed facades, a server file registering every tool with `FirmApp.expose`, a
+  FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
+  any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
+  is a draft for a developer to finish, not finished code.
+- **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the
+  developer, and reports done only when the generated test passes.
+
 ## [0.7.0] - 2026-11-17
 
 0.7.0 is the first tagged release since 0.5.0; it includes 0.6.0, which was never tagged. Quant Toolbox stays at

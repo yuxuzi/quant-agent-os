@@ -18,6 +18,9 @@ is not a chatbot.
   and the generated project's checks run through the subprocess runner. Its template packs are in
   `quant_app_factory/packs/`: `agent-tool`, `quant-baseline`, and `quant-apps`, with one application per
   stage of a fund's work ([decision 0022](docs/decisions/0022-one-application-per-stage.md)).
+  `qaos legacy` (`legacy_cli.py`) scans a fund's existing Python with `ast` and drafts facades, a
+  server file, a service, and a `check_app` test, on the developer's machine
+  ([decision 0029](docs/decisions/0029-legacy-conversion-is-a-local-draft.md)).
 - **Quant Toolbox** (`packages/quant-toolbox`, import name `quant_toolbox`): the MIT library under Quant
   Analytics and every generated application ([decision 0026](docs/decisions/0026-quant-toolbox.md)), and
   its own distribution, `quant-toolbox`, with its own version and changelog

@@ -84,9 +84,11 @@ class _Imports:
             groups[self._group(module)] += sorted(plain[module])
         for module in sorted(names, key=str.lower):
             imported = sorted(names[module], key=_by_type)
-            groups[self._group(module)] += _wrapped(
-                "", f"from {module} import ", imported, brackets=False
-            )
+            merged = [name for name in imported if " as " not in name]  # isort keeps "as" apart
+            lines = [f"from {module} import {name}" for name in imported if " as " in name]
+            if merged:
+                lines += _wrapped("", f"from {module} import ", merged, brackets=False)
+            groups[self._group(module)] += sorted(lines, key=lambda line: line.split()[3:])
         return "\n\n".join("\n".join(group) for group in groups if group)
 
     def _group(self, module: str) -> int:
@@ -316,7 +318,8 @@ def _hint(
         imports.add(*_imports_for(param.annotation, found))
         return param.annotation
     if data is not None:
-        library = param.library or ("pandas" if found.has(Trait.PANDAS) else None)
+        # Untyped data is most often pandas, and a Series still iterates like a list.
+        library = param.library or "pandas"
         if library == "pandas":
             imports.add("import pandas as pd")
             hint = "pd.Series" if data == "series" else "pd.DataFrame"
@@ -515,7 +518,7 @@ def _service_module(selected: list[_Selected], legacy: str) -> str:
         "from fastapi import FastAPI",
         "from pydantic import BaseModel",
     )
-    pandas = any(_wants_pandas(s.found) and s.entry.data for s in selected)
+    pandas = any(_wants_pandas(s) for s in selected)
     holders: dict[str, Found] = {}
     for s in selected:
         holders.setdefault(_holder(s.found), s.found)
@@ -534,7 +537,7 @@ def _service_module(selected: list[_Selected], legacy: str) -> str:
     if pandas:
         imports.add("import pandas as pd", "import contextlib")
         helpers.append(PANDAS_INPUTS)
-    if any(not _wants_pandas(s.found) and s.entry.data for s in selected):
+    if any(s.entry.data and not _wants_pandas(s) for s in selected):
         helpers.append(PLAIN_INPUTS)
     locks = ", ".join(f'"{key}": threading.Lock()' for key in holders)
     doc = (
@@ -572,8 +575,11 @@ def _holder(found: Found) -> str:
     return snake(found.owner) if found.owner else found.name
 
 
-def _wants_pandas(found: Found) -> bool:
-    return found.has(Trait.PANDAS) or any(p.library == "pandas" for p in found.params)
+def _wants_pandas(selected: _Selected) -> bool:
+    """Whether data goes to the legacy code as pandas objects: unless every data parameter is
+    hinted as something else, such as ``list[float]``."""
+    data = [p for p in selected.found.params if selected.entry.data.get(p.name)]
+    return any(p.library == "pandas" or p.annotation is None for p in data)
 
 
 def _construction(found: Found) -> tuple[str, list[str]]:
@@ -596,7 +602,7 @@ def _construction(found: Found) -> tuple[str, list[str]]:
 
 def _endpoint(selected: _Selected, imports: _Imports) -> str:
     found, entry = selected.found, selected.entry
-    pandas = _wants_pandas(found)
+    pandas = _wants_pandas(selected)
     model = "".join(part.capitalize() for part in entry.name.split("_")) + "Request"
     fields, conversions = [], []
     for param in found.params:
@@ -705,7 +711,7 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
     stubs, registrations = [], []
     for s in selected:
         found, entry = s.found, s.entry
-        pandas = _wants_pandas(found)
+        pandas = _wants_pandas(s)
         todos: list[str] = []
         signature = []
         for param in found.params:

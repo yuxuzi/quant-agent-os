@@ -216,6 +216,10 @@ risk.call_service(
 - A failure such as an unreachable service or an error status reaches the caller as an internal error
   with the call id; the reason is in the run record.
 
+**Existing code.** For code that is not typed, documented, and pure yet, `qaos legacy` drafts the facades, the
+server file, a service for stateful code, and a `check_app` test from a static scan, on your machine; a developer
+finishes the draft ([legacy code as tools](products/quant-app-factory.md#legacy-code-as-tools)).
+
 Ready-made tools join an app with `include`, such as a generated application's `agent-tools`, and a tool
 written by hand with `@tool` still works through `compose(extra_tools=...)` and `serve_http`.
 

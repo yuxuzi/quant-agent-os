@@ -277,6 +277,61 @@ from git, fetched once and cached locally, so plans stay offline. It prints and 
 of the files. Give those to colleagues: with `--commit` and `--digest`, their `template add` refuses anything
 else, even if the tag is moved.
 
+## Legacy code as tools
+
+`qaos legacy` turns a fund's existing Python into a draft of tools, on the developer's machine
+([decision 0029](../decisions/0029-legacy-conversion-is-a-local-draft.md)). The draft is a first version for a
+developer to run, debug, and finish, most likely with a coding agent and the `quant-legacy` skill. It will not
+work first time on real code. It says what it could not decide, and its own test says when it works.
+
+```bash
+uv run qaos legacy scan src/firm_quant                        # a table: kind and reasons per callable
+uv run qaos legacy scan src/firm_quant --json                 # the same, for machines
+uv run qaos legacy scan src/firm_quant --write legacy.toml    # an inventory to edit
+uv run qaos legacy wrap legacy.toml --out legacy_tools        # the draft; never overwrites without --force
+uv run pytest legacy_tools/test_tools.py                      # fix, rerun, until both tests pass
+```
+
+**Scan** reads the code with `ast` and never imports it, so code that needs the fund's database still scans.
+For each public function and method it records the signature, which parameters and returns are typed, the
+docstring, and what the body does: pandas or NumPy data, module settings, environment variables, a database,
+files read or written, printing, network calls, programs run, state kept between calls, and a class's state,
+slow set-up, and caches. A private helper's behaviour counts for its callers. Each callable gets a kind:
+
+| Kind | When | The draft |
+| --- | --- | --- |
+| `expose` | Typed, documented, pure, with types `FirmApp.expose` accepts | `app.expose(function, ...)` in `server.py` |
+| `facade` | Untyped or undocumented, reads settings, prints, touches files or a database, or is a method of a class without costly state | A thin typed function in `facades.py` that calls the legacy code unchanged |
+| `service` | Keeps state between calls, starts slowly, or caches | `service/app.py`, a FastAPI app that builds the object once and answers read-only POST requests, and a typed stub per endpoint in `stubs.py`, registered with `FirmApp.call_service` |
+
+**The inventory** (`legacy.toml`) has one `[[entry]]` per callable, with the scan's reasons as comments above
+it. The developer sets `kind`, `include`, `name`, `data` (parameters that take a dataset reference, `"series"`
+or `"frame"`), `permissions`, and `convention`. `wrap` scans the code again, so the draft follows the code as
+it is now.
+
+**Wrap** writes `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and `stubs.py`
+when there are services, `conftest.py` (puts the legacy package on the path until it is installed), and
+`test_tools.py`. The test runs `check_app` on every tool with an example call over made-up sample data, and
+fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` as written.
+- **TODOs say what to decide**: `TODO(type)` for a guessed hint, `TODO(data)` for a guessed series or frame,
+  `TODO(unit)` and `TODO(convention)` for what a number means, `TODO(config)` for module settings and
+  constructor arguments, `TODO(doc)` for a missing description, and `TODO(review)` for permissions, files,
+  databases, and thread safety.
+- **Permissions follow the code.** A function that writes files is drafted with `write_local_data`, one that
+  calls out with `network`, one that runs programs with `execute_code`, and a service that changes anything
+  with `external_action`. Declared permissions are checked, not sandboxed: review them, and add any the scan
+  missed.
+- **Facades stay thin.** They add hints, a docstring, data by reference, prints sent to stderr (stdout carries
+  the MCP protocol over stdio), and JSON-ready results, with missing values as null. Business logic stays in
+  the legacy code.
+
+**What to expect.** On the converter's test fixture, a typed function, an untyped pandas signal that reads a
+module `CONFIG` and prints, a CSV writer, and a risk model with a slow start and a cache, `wrap` drafts five
+tools and the generated `check_app` test passes as written, the service called over loopback; 27 TODOs are
+left to decide. Real code will need more: the scan misses what only running would show, such as a method called
+on an object passed in, or a library it does not know. A rescan rewrites the inventory, so write it to another
+file to keep your edits.
+
 ## From Python
 
 From Python, `plan_app` is read-only: pytemplate-uv renders its file preview into a

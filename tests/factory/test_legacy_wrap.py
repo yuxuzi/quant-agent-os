@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 from quant_app_factory.application.legacy import scan, wrap
 from quant_app_factory.domain.legacy import LegacyError
-from quant_app_factory.infrastructure.legacy_files import write_inventory
+from quant_app_factory.infrastructure.legacy_files import load_inventory, write_inventory
 from quant_platform.cli import app as cli
 
 ROOT = Path(__file__).parent / "legacy"
@@ -77,16 +77,23 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     assert "# TODO(config): the legacy code reads module settings" in facades
 
 
-def test_the_draft_passes_ruff_out_of_the_box(drafted: Path) -> None:
+def _ruff_problems(directory: Path) -> list[str]:
+    problems = []
     for arguments in (["check"], ["check", "--select", RULES], ["format", "--check"]):
         result = subprocess.run(
             [sys.executable, "-m", "ruff", *arguments, "--isolated", "--line-length", "100", "."],
-            cwd=drafted,
+            cwd=directory,
             capture_output=True,
             text=True,
             check=False,
         )
-        assert result.returncode == 0, result.stdout + result.stderr
+        if result.returncode:
+            problems.append(result.stdout + result.stderr)
+    return problems
+
+
+def test_the_draft_passes_ruff_out_of_the_box(drafted: Path) -> None:
+    assert _ruff_problems(drafted) == []
 
 
 def _pytest(directory: Path) -> subprocess.CompletedProcess[str]:
@@ -136,9 +143,12 @@ def test_the_service_builds_the_object_once_and_answers(
     expected = RiskModel().portfolio_var([0.5, 0.5], confidence=0.99)
     with TestClient(service.app) as client:
         built = service.OBJECTS["risk_model"]
-        answer = client.post("/risk_model_portfolio_var", json={"weights": [0.5, 0.5]})
+        # Untyped data goes to the legacy code as pandas, sent as values by date.
+        weights = {"2024-01-02": 0.5, "2024-01-03": 0.5}
+        answer = client.post("/risk_model_portfolio_var", json={"weights": weights})
         again = client.post(
-            "/risk_model_portfolio_var", json={"weights": [0.5, None], "confidence": 0.95}
+            "/risk_model_portfolio_var",
+            json={"weights": {**weights, "2024-01-03": None}, "confidence": 0.95},
         )
         assert service.OBJECTS["risk_model"] is built  # built once, in the lifespan
 
@@ -172,3 +182,84 @@ def test_a_method_cannot_be_exposed_as_it_is(inventory: Path, tmp_path: Path) ->
 
     with pytest.raises(LegacyError, match="make it a facade or a service"):
         wrap(inventory, tmp_path / "out")
+
+
+DESK = '''\
+import time
+
+WINDOW = 20
+DEFAULTS = {"scale": 2.0}
+
+
+class Engine:
+    """A risk engine with a slow start and a memo."""
+
+    def __init__(self, scale=DEFAULTS["scale"]):
+        time.sleep(0.01)
+        self.scale = scale
+        self._memo = {}
+
+    def stress(self, returns, prices, shock=-0.1):
+        """The book's value after a shock, plus the mean return."""
+        return float((prices.iloc[-1] * (1 + shock)).sum() * self.scale + returns.mean())
+
+    def exposures(self, prices):
+        """Each asset's mean one-period return."""
+        return prices.pct_change().mean()
+
+
+class Blender:
+    """No costly state: each method becomes a facade that builds one."""
+
+    def __init__(self, weight=0.5):
+        self.weight = weight
+
+    def blend(self, signal, other):
+        """A weighted blend of two signals."""
+        return signal * self.weight + other * (1 - self.weight)
+
+
+def scaled(returns, factor=WINDOW, *extra, **options):
+    """Returns times a factor."""
+    print("scaling")
+    return returns * factor
+'''
+
+
+def test_pandas_services_method_facades_and_odd_signatures_pass_as_drafted(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "desk"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "engine.py").write_text(DESK)
+    inventory = tmp_path / "legacy.toml"
+    write_inventory(scan(package), inventory)
+    kinds = {e.name: (e.kind.value, e.data) for e in load_inventory(inventory).entries}
+    assert kinds == {
+        "blender_blend": ("facade", {"signal": "series"}),
+        "engine_exposures": ("service", {"prices": "series"}),
+        "engine_stress": ("service", {"returns": "series", "prices": "series"}),
+        "scaled": ("facade", {"returns": "series"}),
+    }
+    text = inventory.read_text().replace(
+        'data = { prices = "series" }', 'data = { prices = "frame" }'
+    )
+    text = text.replace(
+        'data = { returns = "series", prices = "series" }',
+        'data = { returns = "series", prices = "frame" }',
+    )
+    inventory.write_text(text)
+
+    out = tmp_path / "tools"
+    wrap(inventory, out)
+    result = _pytest(out)
+
+    assert "1 failed, 1 passed" in result.stdout, result.stdout + result.stderr
+    assert "FAILED test_tools.py::test_no_decision_is_left_open" in result.stdout
+    stubs = (out / "stubs.py").read_text()
+    assert "def engine_stress(returns: pd.Series, prices: pd.DataFrame" in stubs
+    facades = (out / "facades.py").read_text()
+    assert "def blender_blend(*, signal: pd.Series, other: Any, weight: float = 0.5)" in facades
+    assert "the legacy code also takes **options, *extra" in facades
+    assert _ruff_problems(out) == []
