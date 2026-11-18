@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sqlite3
 from collections.abc import Iterable, Sequence
 from contextlib import closing
@@ -180,23 +181,66 @@ def month_ends(dates: Sequence[str]) -> list[int]:
     return [i for i, day in enumerate(dates) if i + 1 == len(dates) or dates[i + 1][:7] != day[:7]]
 
 
+# The data must not depend on the platform's BLAS, SIMD, or summation order, so the generator
+# uses no linear algebra and sums with `math.fsum`, which is exactly rounded. Elementwise
+# arithmetic is IEEE and the same everywhere; rounding the stored values hides the rest.
+
+
+def _fsum_rows(values: Array) -> Array:
+    return np.array([math.fsum(row) for row in values.tolist()])
+
+
 def _cross_z(values: Array) -> Array:
-    """Standardize each row across columns."""
-    mean = values.mean(axis=1, keepdims=True)
-    std = values.std(axis=1, keepdims=True)
+    """Standardize each row across columns (population standard deviation)."""
+    n = values.shape[1]
+    mean = (_fsum_rows(values) / n)[:, None]
+    std = np.sqrt(_fsum_rows((values - mean) ** 2) / n)[:, None]
     result: Array = (values - mean) / np.where(std > 0, std, 1.0)
     return result
 
 
 def _ranks(values: Array) -> Array:
-    ranks: Array = values.argsort(axis=1).argsort(axis=1).astype(np.float64)
-    return ranks
+    """Rank each row, ties sharing their average rank, so column order cannot matter."""
+    out = np.empty(values.shape)
+    for r, row in enumerate(values):
+        order = np.argsort(row, kind="stable")
+        ranks = np.empty(len(row))
+        ranks[order] = np.arange(len(row), dtype=np.float64)
+        _, inverse, counts = np.unique(row, return_inverse=True, return_counts=True)
+        if (counts > 1).any():
+            sums = np.zeros(len(counts))
+            np.add.at(sums, inverse, ranks)
+            ranks = (sums / counts)[inverse]
+        out[r] = ranks
+    return out
+
+
+def _cholesky(matrix: Array) -> Array:
+    """The lower Cholesky factor, in plain Python, so no LAPACK is involved."""
+    n = len(matrix)
+    low = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1):
+            partial = math.fsum(low[i][k] * low[j][k] for k in range(j))
+            if i == j:
+                low[i][j] = math.sqrt(float(matrix[i, i]) - partial)
+            else:
+                low[i][j] = (float(matrix[i, j]) - partial) / low[j][j]
+    return np.array(low)
+
+
+def _times(a: Array, b: Array) -> Array:
+    """``a @ b.T`` for a short inner dimension, summed in a fixed order without BLAS."""
+    out = np.zeros((a.shape[0], b.shape[0]))
+    for k in range(a.shape[1]):
+        out = out + a[:, k : k + 1] * b[:, k]
+    return out
 
 
 def rank_ic(signal: Array, forward: Array) -> Array:
     """Return the cross-sectional Spearman correlation of each row pair."""
     a, b = _cross_z(_ranks(signal)), _cross_z(_ranks(forward))
-    result: Array = (a * b).mean(axis=1)
+    result: Array = _fsum_rows(a * b) / a.shape[1]
     return result
 
 
@@ -228,19 +272,25 @@ def _simulate_market(rng: np.random.Generator) -> _Market:
     n_days, n_inst = len(dates), len(INSTRUMENTS)
     daily_vol = FACTOR_VOL / np.sqrt(DAYS_PER_YEAR)
     cov = FACTOR_CORR * np.outer(daily_vol, daily_vol)
-    factor_returns = rng.multivariate_normal(np.zeros(len(FACTORS)), cov, size=n_days)
+    factor_returns = _times(rng.standard_normal((n_days, len(FACTORS))), _cholesky(cov))
     loadings = np.array([[inst.loadings.get(f, 0.0) for f in FACTORS] for inst in INSTRUMENTS])
     specific = np.array([inst.specific_vol for inst in INSTRUMENTS]) / np.sqrt(DAYS_PER_YEAR)
-    total_vol = np.sqrt(np.einsum("if,fg,ig->i", loadings, cov, loadings) + specific**2)
+    factor_var = [
+        math.fsum(
+            row[f] * cov[f, g] * row[g] for f in range(len(FACTORS)) for g in range(len(FACTORS))
+        )
+        for row in loadings
+    ]
+    total_vol = np.sqrt(np.array(factor_var) + specific**2)
 
     momentum = _cross_z(_ar1(rng, n_days, n_inst, SIGNAL_PERSISTENCE))
     equities = [i for i, inst in enumerate(INSTRUMENTS) if inst.asset_class == "equity"]
     value_latent = _cross_z(_ar1(rng, n_days, len(equities), 0.995))
     carry_mean = np.array([inst.carry_mean for inst in INSTRUMENTS])
-    carry_scale = np.maximum(np.abs(carry_mean) * 0.3, 0.002)
-    carry = carry_mean + carry_scale * _ar1(rng, n_days, n_inst, 0.995)
+    carry_scale = np.maximum(np.abs(carry_mean), 0.01)
+    carry = carry_mean + carry_scale * _ar1(rng, n_days, n_inst, 0.98)
 
-    returns = factor_returns @ loadings.T + rng.standard_normal((n_days, n_inst)) * specific
+    returns = _times(factor_returns, loadings) + rng.standard_normal((n_days, n_inst)) * specific
     returns[1:] += MOMENTUM_KAPPA * momentum[:-1] * total_vol
     returns[1:, equities] += VALUE_KAPPA * value_latent[:-1] * total_vol[equities]
     returns[0] = 0.0
@@ -275,12 +325,12 @@ def _desk_targets(market: _Market, desk: str, members: list[int], day: int) -> A
     if desk == "eq_ls":
         val = _cross_z(market.value[day : day + 1])[0]
         score = 0.7 * mom + 0.3 * val
-        score = score - score.mean()
-        weights: Array = 1.0 * score / np.abs(score).sum()
+        score = score - math.fsum(score) / len(score)
+        weights: Array = score / math.fsum(np.abs(score))
         return weights
     if desk == "macro":
         carry = market.carry[day, members]
-        carry_z = (carry - carry.mean()) / (carry.std() or 1.0)
+        carry_z = _cross_z(carry[None, :])[0]
         score = 0.6 * mom + 0.4 * carry_z
         weights = np.clip(score * 0.03 / vol_annual, -1.5, 1.5)
         return weights
@@ -298,7 +348,7 @@ def _run_book(market: _Market, desk: str, members: list[int]) -> _Book:
     for day in range(n_days):
         price = market.close[day, members]
         if day > 0:
-            nav[day] = nav[day - 1] + float(held @ (price - market.close[day - 1, members]))
+            nav[day] = nav[day - 1] + math.fsum(held * (price - market.close[day - 1, members]))
         if day % REBALANCE_EVERY == 0:
             target = np.round(_desk_targets(market, desk, members, day) * nav[day] / price)
             for k, change in enumerate(target - held):
@@ -323,7 +373,16 @@ def build(path: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     ids = [inst.instrument_id for inst in INSTRUMENTS]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.unlink(missing_ok=True)
-    answers: dict[str, Any] = {"seed": seed, "start": dates[0], "end": dates[-1]}
+    answers: dict[str, Any] = {
+        "seed": seed,
+        "determinism": (
+            "the same seed gives the same tables; the generator avoids linear algebra and "
+            "platform-dependent sums, so values should agree across platforms, and tests check "
+            "only bounds on the planted truths and that these answers match the tables"
+        ),
+        "start": dates[0],
+        "end": dates[-1],
+    }
 
     with closing(sqlite3.connect(path)) as db, db:
         db.executescript(SCHEMA)
@@ -472,7 +531,7 @@ def build(path: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
                 vol = INSTRUMENTS[i].specific_vol * (1.0 + rng.normal(0.0, 0.05))
                 specific_rows.append((as_of, ids[i], round(vol * vol, 8)))
             window = market.factor_returns[max(1, t - 119) : t + 1]
-            cov = np.cov(window, rowvar=False) * DAYS_PER_YEAR if len(window) >= 40 else true_cov
+            cov = _covariance(window) * DAYS_PER_YEAR if len(window) >= 40 else true_cov
             for a, fa in enumerate(FACTORS):
                 for b, fb in enumerate(FACTORS):
                     cov_rows.append((as_of, fa, fb, round(float(cov[a, b]), 8)))
@@ -515,12 +574,22 @@ def build(path: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     return answers
 
 
+def _covariance(window: Array) -> Array:
+    """The sample covariance of the columns, with exactly rounded sums."""
+    n, k = window.shape
+    centered = window - (_fsum_rows(window.T) / n)
+    return np.array(
+        [[math.fsum(centered[:, a] * centered[:, b]) / (n - 1) for b in range(k)] for a in range(k)]
+    )
+
+
 def _ic_summary(ic: Array, universe: str, truth: str) -> dict[str, Any]:
-    mean, std = float(ic.mean()), float(ic.std(ddof=1))
+    mean = math.fsum(ic) / len(ic)
+    std = math.sqrt(math.fsum((ic - mean) ** 2) / (len(ic) - 1))
     return {
         "universe": universe,
         "truth": truth,
-        "mean_ic": round(mean, 6),
+        "mean_ic": round(mean, 10),
         "ic_ir": round(mean / std, 6),
         "t_stat": round(mean / (std / np.sqrt(len(ic))), 4),
     }

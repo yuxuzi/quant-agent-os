@@ -44,11 +44,17 @@ when the dollar rises), `commodity`, and `credit_spread` (positive when spreads 
 rebalanced every five business days at the close; between rebalances quantities are fixed, so a desk's
 daily return is the sum of the previous day's weight times each instrument's `total_return`.
 
-**Planted truths**, in `known_answers.json`: the momentum signal has a mean daily rank IC near 0.025
-(t-statistic above 4), carry has none (|t| under 2), and value a small positive one among equities. The
-convention is in the file: Spearman correlation across instruments between a signal on day t and
-`total_return` on day t+1, averaged over days. The file also has each desk's gross P&L and commissions,
-the row counts, and the factor volatilities.
+**Planted truths**, in `known_answers.json`: the momentum signal has a mean daily rank IC near 0.022
+(t-statistic near 4), carry has none (|t| under 2), and value a small positive one among equities. They
+hold for every seed we tried, not only the default. The convention is in the file: Spearman correlation
+across instruments, ties sharing their average rank, between a signal on day t and `total_return` on day
+t+1, averaged over days. The answers are computed from the same rounded values the tables hold. The file
+also has each desk's gross P&L and commissions, the row counts, and the factor volatilities.
+
+The generator uses no linear algebra (its Cholesky factor and products are written out) and sums with
+`math.fsum`, so its output should not depend on the platform's BLAS or summation order. The tests still
+assert only bounds on the planted truths and that the answers match the tables, never one platform's
+numbers.
 
 ## The legacy package
 

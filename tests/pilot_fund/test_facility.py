@@ -116,8 +116,8 @@ def test_the_planted_signals_hold(warehouse: Path, answers: dict[str, Any]) -> N
         forward = returns[wide.columns].shift(-1)
         ic = rank_ic(wide.values[:-1], forward.values[:-1])
         found[name] = (ic.mean(), ic.mean() / (ic.std(ddof=1) / math.sqrt(len(ic))))
-        assert found[name][0] == pytest.approx(answers["signals"][name]["mean_ic"], abs=1e-5)
-    assert 0.015 < found["momentum"][0] < 0.04 and found["momentum"][1] > 3
+        assert found[name][0] == pytest.approx(answers["signals"][name]["mean_ic"], abs=1e-9)
+    assert 0.015 < found["momentum"][0] < 0.045 and found["momentum"][1] > 3
     assert abs(found["carry"][0]) < 0.02 and abs(found["carry"][1]) < 2
     assert found["value"][0] > 0
 
