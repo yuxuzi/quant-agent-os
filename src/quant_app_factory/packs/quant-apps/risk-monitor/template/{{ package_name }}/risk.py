@@ -13,6 +13,9 @@ Conventions:
   returns, so contributions sum to 1 (`quant_toolbox.risk.risk_shares`). Assets with no prices
   are left out.
 - A stress is a return per asset applied to today's weights, linearly: no second-order effects.
+- A historical scenario applies each asset's compounded return over a named window
+  (`quant_toolbox.risk.SCENARIOS`) to today's weights. It needs daily prices across the window;
+  otherwise it is not covered (None), never a shorter window under the scenario's name.
 """
 
 from __future__ import annotations
@@ -30,7 +33,13 @@ from quant_toolbox.performance import (
     expected_shortfall,
     value_at_risk,
 )
-from quant_toolbox.risk import exposures, group_exposures, simulated_returns, stress_return
+from quant_toolbox.risk import (
+    exposures,
+    group_exposures,
+    historical_stress,
+    simulated_returns,
+    stress_return,
+)
 
 from .settings import LIMITS, Scenario, Settings
 
@@ -75,6 +84,9 @@ class RiskView:
     market_returns: FloatArray | None = None
     coverage: float = 0.0
     notes: list[str] = field(default_factory=list)
+    # Every past bar's asset returns, not only the lookback, with the date each bar ends.
+    return_dates: list[dt.date] = field(default_factory=list)
+    all_returns: FloatArray | None = None
 
     @property
     def book_returns(self) -> FloatArray | None:
@@ -98,6 +110,12 @@ class RiskView:
             figures["beta"] = beta(book, self.market_returns)
         return figures
 
+    def historical_scenarios(self) -> dict[str, float | None]:
+        """Today's book over each named historical window; empty without prices."""
+        if self.all_returns is None or not self.return_dates:
+            return {}
+        return historical_stress(self.weights, self.return_dates, self.all_returns)
+
 
 def build_view(
     positions: Table,
@@ -113,6 +131,8 @@ def build_view(
     weights = np.nan_to_num(history.values[-1])
     notes: list[str] = []
     asset_returns: FloatArray | None = None
+    all_returns: FloatArray | None = None
+    return_dates: list[dt.date] = []
     market_returns: FloatArray | None = None
     coverage = 0.0
     gross = float(np.abs(weights).sum())
@@ -133,11 +153,13 @@ def build_view(
             notes.append(
                 f"No prices for {len(missing)} held assets ({shown}): not in return-based risk."
             )
-        returns = _returns(known)[-settings.lookback :]
-        by_asset = np.zeros((returns.shape[0], len(history.columns)))
+        every = _returns(known)
+        by_asset = np.zeros((every.shape[0], len(history.columns)))
         for asset in priced:
-            by_asset[:, history.columns.index(asset)] = returns[:, known.columns.index(asset)]
-        asset_returns = by_asset
+            by_asset[:, history.columns.index(asset)] = every[:, known.columns.index(asset)]
+        all_returns, return_dates = by_asset, list(known.dates[1:])
+        returns = every[-settings.lookback :]
+        asset_returns = by_asset[-settings.lookback :]
         if returns.shape[0] < settings.lookback:
             notes.append(
                 f"Only {returns.shape[0]} bars of returns, of {settings.lookback} asked for."
@@ -165,6 +187,8 @@ def build_view(
         market_returns=market_returns,
         coverage=coverage,
         notes=notes,
+        return_dates=return_dates,
+        all_returns=all_returns,
     )
 
 

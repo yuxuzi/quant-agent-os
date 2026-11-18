@@ -65,6 +65,7 @@ def exposures(view: RiskView) -> list[Block]:
                 Column("Largest"),
                 Column("Top five"),
                 Column("Effective positions", "ratio"),
+                Column("Herfindahl", "ratio"),
             ],
             rows=[
                 [
@@ -76,9 +77,11 @@ def exposures(view: RiskView) -> list[Block]:
                     book.largest,
                     book.top_five,
                     book.effective_positions,
+                    book.herfindahl,
                 ]
             ],
-            note="As a share of NAV.",
+            note="As a share of NAV. Herfindahl is the sum of squared shares of gross; "
+            "effective positions is its reciprocal.",
         )
     ]
 
@@ -211,6 +214,27 @@ def stress(view: RiskView) -> list[Block]:
     ]
 
 
+def historical_stress(view: RiskView) -> list[Block]:
+    """Today's book over named historical market windows, from your daily prices."""
+    outcomes = view.historical_scenarios()
+    if not outcomes:
+        return [TextBlock("Historical scenarios", ["No prices file is set."])]
+    covered = sum(value is not None for value in outcomes.values())
+    rows: list[list[float | str | None]] = [
+        [name, value, "" if value is not None else "not covered by the prices"]
+        for name, value in outcomes.items()
+    ]
+    return [
+        TableBlock(
+            title="Historical scenarios",
+            columns=[Column("Scenario", "text"), Column("Book return"), Column("Note", "text")],
+            rows=rows,
+            note=f"{covered} of {len(outcomes)} windows covered. Each asset's compounded return "
+            "over the window, times today's weight. A window needs daily prices across it.",
+        )
+    ]
+
+
 def exposure_history(view: RiskView) -> list[Block]:
     """Gross and net exposure over the position history."""
     values = np.nan_to_num(view.history.values)
@@ -240,6 +264,7 @@ BUILT_IN: dict[str, Section] = {
     "risk": risk,
     "contributors": contributors,
     "stress": stress,
+    "historical_stress": historical_stress,
     "exposure_history": exposure_history,
     "notes": notes,
 }

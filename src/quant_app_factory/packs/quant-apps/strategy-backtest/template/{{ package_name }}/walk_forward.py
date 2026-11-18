@@ -67,7 +67,9 @@ def run_walk_forward(panel: Panel, parameters: Parameters | None = None) -> dict
     candidates = candidate_lookbacks(chosen)
     warmup = max(candidates) + chosen.lag + 1
     n_bars = panel.prices.shape[0]
-    splits = walk_forward_splits(n_bars, chosen.train_bars, chosen.test_bars, start=warmup)
+    splits = walk_forward_splits(
+        n_bars, chosen.train_bars, chosen.test_bars, start=warmup, purge=chosen.purge
+    )
     if not splits:
         raise ValueError(
             f"Walk-forward needs {warmup} warm-up bars, {chosen.train_bars} training bars, and "
@@ -106,6 +108,7 @@ def run_walk_forward(panel: Panel, parameters: Parameters | None = None) -> dict
             "objective": chosen.objective,
             "train_bars": chosen.train_bars,
             "test_bars": chosen.test_bars,
+            "purge": chosen.purge,
             "cost_bps": chosen.cost_bps,
             "lag": chosen.lag,
             "rebalance_every": chosen.rebalance_every,
@@ -127,7 +130,10 @@ def run_walk_forward(panel: Panel, parameters: Parameters | None = None) -> dict
         "conventions": {
             "periods_per_year": periods,
             "choice": f"best training {chosen.objective} over the lookback grid, per fold",
-            "windows": f"{chosen.train_bars} training bars, then {chosen.test_bars} test bars",
+            "windows": (
+                f"{chosen.train_bars} training bars, the last {chosen.purge} purged, then "
+                f"{chosen.test_bars} test bars"
+            ),
             "reported": "test windows only (out of sample), net of costs",
             "timing": f"signal at close t, traded at close t + {chosen.lag}",
         },

@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Generated applications use more of Quant Toolbox 0.6.0** (`quant-apps` 2.2.0).
+  - `strategy-backtest` reports what costs take: the annual cost drag, the cost per unit of turnover, and the
+    break-even cost in basis points. Walk-forward takes `purge`, the bars dropped from the end of each training
+    window (0 by default, so results are unchanged).
+  - `risk-monitor` has a `historical_stress` section, today's book over twelve named US equity windows from 2007
+    to 2024, from daily prices; a window the prices do not cover says so. Exposures add the Herfindahl index.
+  - `alpha-research` reports each signal quantile's annualised mean return and the rank IC information ratio,
+    and can winsorize or z-score the signal per bar (`winsorize` and `zscore` in `config.toml`, off by default).
+
 ## [0.6.0] - 2026-11-17
 
 Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in

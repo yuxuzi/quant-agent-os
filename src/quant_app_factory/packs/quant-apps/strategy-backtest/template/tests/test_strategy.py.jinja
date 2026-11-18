@@ -117,3 +117,23 @@ def test_a_long_only_book_is_measured_against_the_market() -> None:
     assert {"active_return", "tracking_error", "information_ratio"} <= set(results["metrics"])
     assert (tables["weights.csv"].values >= 0).all()
     assert "long-only" in results["title"]
+
+
+def test_cost_drag_is_what_costs_take_and_break_even_takes_it_all() -> None:
+    # A planted edge, so the gross return is positive and some cost rate breaks even.
+    prices, signal = random_walk_panel(n_bars=400, n_assets=20, signal_strength=0.2, delay=1)
+    _plant(signal)
+    chosen = Parameters(signal="planted", rebalance_every=1)
+
+    free, _ = run_with_tables(_panel(prices), chosen.updated(cost_bps=0.0))
+    costly, _ = run_with_tables(_panel(prices), chosen.updated(cost_bps=25.0))
+    break_even = free["metrics"]["break_even_cost_bps"]
+    at_break_even, _ = run_with_tables(_panel(prices), chosen.updated(cost_bps=break_even))
+
+    assert free["metrics"]["cost_drag"] == 0.0
+    assert costly["metrics"]["cost_drag"] > 0.0
+    assert costly["metrics"]["cost_per_turnover_bps"] == pytest.approx(25.0)
+    assert costly["metrics"]["break_even_cost_bps"] == pytest.approx(break_even)
+    assert break_even > 0
+    net = np.array(at_break_even["series"]["net_returns"])
+    assert abs(net.mean()) < 1e-12

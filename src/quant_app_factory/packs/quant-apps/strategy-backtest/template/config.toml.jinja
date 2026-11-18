@@ -23,4 +23,5 @@ delisting_return = -0.30  # earned once when a held asset's prices stop (Shumway
 objective = "sharpe"  # or "ic"
 train_bars = {{ {"daily": 252, "weekly": 52, "monthly": 12}[frequency] }}
 test_bars = {{ {"daily": 63, "weekly": 12, "monthly": 3}[frequency] }}
+purge = 0  # bars dropped from the end of each training window, so labels never reach the test
 # lookbacks = [5, 10, 21]  # default: 0.5, 0.75, and 1 times the signal's lookback

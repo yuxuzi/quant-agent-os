@@ -18,6 +18,7 @@ from quant_toolbox.performance import active_metrics, beta, summarize
 from quant_toolbox.research import (
     BacktestResult,
     beta_neutral_weights,
+    cost_drag,
     dollar_neutral_weights,
     long_only_weights,
     market_returns,
@@ -121,6 +122,7 @@ def run_with_tables(
     exposure_metrics = {"beta": beta(result.net[1:], market[1:])}
     if chosen.exposure == "long-only":
         exposure_metrics |= active_metrics(result.net[1:], market[1:], periods)
+    drag = cost_drag(result, periods)
     book = "long-only" if chosen.exposure == "long-only" else f"{chosen.exposure} long-short"
     details = f" ({signals.describe(signal_parameters)})" if signal_parameters else ""
     results = {
@@ -145,6 +147,9 @@ def run_with_tables(
             "average_turnover": float(result.turnover[1:].mean()),
             "annual_turnover": float(result.turnover[1:].mean()) * periods,
             "forced_exits": float(result.forced_exits.sum()),
+            "cost_drag": drag.cost_drag,
+            "cost_per_turnover_bps": drag.cost_per_turnover_bps,
+            "break_even_cost_bps": drag.break_even_bps,
         },
         "series": {
             "dates": [day.isoformat() for day in panel.dates],
@@ -155,6 +160,10 @@ def run_with_tables(
             "timing": f"signal at close t, traded at close t + {chosen.lag}, as in a study",
             "rebalance": f"every {chosen.rebalance_every} bars; holdings drift in between",
             "costs": f"{chosen.cost_bps} bps per unit of one-way turnover, on actual trades",
+            "cost_drag": (
+                "gross minus net mean return per bar, times periods per year (arithmetic); "
+                "break_even_cost_bps is the one rate that takes the mean net return to zero"
+            ),
             "delistings": f"a delisted holding earns {chosen.delisting_return:+.0%} once",
             "weights": described,
             "market": "equal-weight mean of assets priced at the previous close",
