@@ -200,7 +200,7 @@ def _assign_roles(universe: list[Security]) -> Plan:
         force(security, "Consumer Staples", "Tobacco")
     spinco = Security(
         sid="US0301",
-        name="Halvern Leaf Corp",
+        name=f"{parent.name.split()[0]} Leaf Corp",
         sector="Consumer Staples",
         industry="Tobacco",
         country="US",

@@ -1,0 +1,25 @@
+# Corvane's server image: the platform's image plus the fund's code. Not built by any test.
+# Build from the repository root after building the platform image (deploy/Dockerfile):
+#   docker build -f deploy/Dockerfile -t quant-agent-os .
+#   docker build -f examples/mock-funds/corvane/site/deploy/Dockerfile.corvane -t corvane-qaos .
+#
+# The platform's image sets ENTRYPOINT ["qaos"], so this one replaces it: the fund's own server
+# file is the entry point (decision 0020), not `qaos serve`.
+FROM quant-agent-os
+USER root
+COPY examples/mock-funds/corvane/site /opt/corvane/site
+COPY examples/mock-funds/corvane/facility/access.toml /opt/corvane/access.toml
+COPY examples/mock-funds/corvane/site/deploy/sign-in.toml /opt/corvane/sign-in.toml
+# The fund's drivers go in beside the platform's: its wheel ships neither Snowflake's connector
+# nor pandas (the fund tools' data frames). The platform's image has no pip and no uv at run time,
+# so this assumes a build stage like the platform's own; see FINDINGS.
+RUN uv pip install --python /opt/venv/bin/python snowflake-connector-python pandas pyarrow
+USER app
+ENV QUANT_AGENT_OS_ACCESS_FILE=/opt/corvane/access.toml \
+    QUANT_AGENT_OS_SIGN_IN_FILE=/opt/corvane/sign-in.toml \
+    QUANT_AGENT_OS_RUNS_FILE=/data/runs/runs.db \
+    CORVANE_HOST=0.0.0.0
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+ENTRYPOINT ["python", "/opt/corvane/site/corvane_server.py"]

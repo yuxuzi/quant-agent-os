@@ -1,0 +1,12 @@
+# Corvane Equity Partners (fictional): the cases the fund agreed before using the platform. Run as
+# the operator: CORVANE_SQL_URL=estate://<dir> python site/corvane_server.py acceptance <this file>
+# The numbers come from the default estate (seed 20261118); another seed changes them, which is
+# the point: a changed number fails the case.
+
+[[numeric]]
+name = "LCC active share on 2026-05-15"
+tool = "corvane_active_share"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, as_of = "2026-05-15" }
+value = "active_share"
+expected = 0.0
+tolerance = 1e-9
