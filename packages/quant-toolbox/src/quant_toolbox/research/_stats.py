@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from quant_toolbox._types import FloatArray
+from quant_toolbox._types import BoolArray, FloatArray
 
 MIN_PAIRS = 3
 
@@ -35,17 +35,59 @@ def information_coefficient(
 ) -> FloatArray:
     """Per-bar correlation between a signal and forward returns (both bars by assets).
 
-    ``rank=True`` gives the rank (Spearman) coefficient; otherwise Pearson.
+    ``rank=True`` gives the rank (Spearman) coefficient, ranking each bar's valid pairs with
+    tied values at their average rank; otherwise Pearson. A bar whose signal or returns are all
+    equal has no coefficient (NaN).
     """
-    coefficients = np.full(signal.shape[0], np.nan)
-    for bar in range(signal.shape[0]):
-        valid = np.isfinite(signal[bar]) & np.isfinite(forward_returns[bar])
-        if int(valid.sum()) < MIN_PAIRS:
-            continue
-        left, right = signal[bar][valid], forward_returns[bar][valid]
-        if rank:
-            left, right = ranks(left), ranks(right)
-        if np.std(left) == 0.0 or np.std(right) == 0.0:
-            continue
-        coefficients[bar] = float(np.corrcoef(left, right)[0, 1])
-    return coefficients
+    left = np.asarray(signal, dtype=np.float64)
+    right = np.asarray(forward_returns, dtype=np.float64)
+    valid = np.isfinite(left) & np.isfinite(right)
+    enough = valid.sum(axis=1) >= MIN_PAIRS
+    if rank:
+        left, right = row_ranks(left, valid), row_ranks(right, valid)
+    return np.where(
+        enough & _varies(left, valid) & _varies(right, valid), _pearson(left, right, valid), np.nan
+    )
+
+
+def row_ranks(values: FloatArray, valid: BoolArray) -> FloatArray:
+    """Rank each row's ``valid`` values from 1, ties at their average rank; NaN elsewhere."""
+    data = np.where(valid, values, np.inf)
+    rows, columns = data.shape
+    if rows == 0 or columns == 0:
+        return np.full(data.shape, np.nan)
+    order = np.argsort(data, axis=1, kind="mergesort")
+    ordered = np.take_along_axis(data, order, axis=1)
+    starts = np.ones(ordered.shape, dtype=bool)
+    starts[:, 1:] = ordered[:, 1:] != ordered[:, :-1]
+    flat = starts.ravel()
+    group = np.cumsum(flat) - 1  # one id per run of equal values, unique across rows
+    first = np.tile(np.arange(columns), rows)[flat]
+    last = first + np.diff(np.append(np.flatnonzero(flat), flat.size)) - 1
+    average = 0.5 * (first + last + 2).astype(np.float64)
+    ranked = np.empty(data.shape)
+    np.put_along_axis(ranked, order, average[group].reshape(data.shape), axis=1)
+    result: FloatArray = np.where(valid, ranked, np.nan)
+    return result
+
+
+def _varies(values: FloatArray, valid: BoolArray) -> BoolArray:
+    """Rows whose valid values are not all equal."""
+    high = np.where(valid, values, -np.inf).max(axis=1, initial=-np.inf)
+    low = np.where(valid, values, np.inf).min(axis=1, initial=np.inf)
+    result: BoolArray = high > low
+    return result
+
+
+def _pearson(left: FloatArray, right: FloatArray, valid: BoolArray) -> FloatArray:
+    """Each row's Pearson correlation over its valid pairs (NaN where undefined)."""
+    count = valid.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        x = np.where(valid, left, 0.0)
+        y = np.where(valid, right, 0.0)
+        dx = np.where(valid, x - (x.sum(axis=1) / count)[:, None], 0.0)
+        dy = np.where(valid, y - (y.sum(axis=1) / count)[:, None], 0.0)
+        result: FloatArray = np.einsum("ij,ij->i", dx, dy) / np.sqrt(
+            np.einsum("ij,ij->i", dx, dx) * np.einsum("ij,ij->i", dy, dy)
+        )
+    return np.clip(result, -1.0, 1.0)
