@@ -1,0 +1,34 @@
+# Larchmere Loan Partners (fictional): the cases the fund agreed before using the platform. Run as
+# the operator, with the datasets and corpus of the default estate (seed 20261118):
+#   run_acceptance(catalog, gold, digest), as tests/mock_funds/test_larchmere.py does
+# The numbers come from the generator's independent calculation (known_answers.json).
+
+[[numeric]]
+name = "2018-2 Class E OC at the 31 March 2025 determination date"
+tool = "clo_compliance_tests"
+arguments = { par = { dataset = "par_larch_2018_2" }, price = { dataset = "price_larch_2018_2" }, rating_factor = { dataset = "rf_all" }, static = { dataset = "loan_static" }, structure = { dataset = "structure_larch_2018_2" }, sofr = { dataset = "sofr" }, as_of = "2025-03-31" }
+value = "values.oc_e"
+expected = 1.121369189512204
+tolerance = 1e-9
+caller = { principal = "tomas.okafor", groups = ["4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0002"] }
+
+[[numeric]]
+name = "2021-1 WARF at the last trustee date"
+tool = "clo_compliance_tests"
+arguments = { par = { dataset = "par_larch_2021_1" }, price = { dataset = "price_larch_2021_1" }, rating_factor = { dataset = "rf_all" }, static = { dataset = "loan_static" }, structure = { dataset = "structure_larch_2021_1" }, sofr = { dataset = "sofr" }, as_of = "2026-10-30" }
+value = "values.warf"
+expected = 2630.8645471482178
+tolerance = 1e-6
+caller = { principal = "ines.vargas", groups = ["4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0001"] }
+
+[[retrieval]]
+name = "the April 2025 minutes record the 2018-2 Class E failure"
+question = "Class E overcollateralization test failed diverted interest"
+source = "minutes-clo-committee-2025-04.md"
+caller = { principal = "priya.lindqvist", groups = ["4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0003"] }
+
+[[retrieval]]
+name = "the corpus says nothing on CLO equity hedging"
+question = "What is the cross-currency swap on our euro tranche?"
+abstain = true
+caller = { principal = "priya.lindqvist", groups = ["4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0003"] }
