@@ -10,8 +10,9 @@ This application is a tested simulation, not a finished research process or a tr
   test covers named firm signals using later prices. It does not cover a signal or weights file,
   whose timing is its author's responsibility.
 - **Corporate actions.** Use prices adjusted for splits and dividends.
-- **Execution.** Costs are linear in turnover. There is no market impact, borrow cost, short-sale
-  constraint, or capacity limit.
+- **Execution.** Costs are linear in turnover, at one rate for every asset. There is no market
+  impact, borrow cost, short-sale constraint, or capacity limit. The break-even cost is the one
+  rate that takes the mean net return to zero, not a capacity estimate.
 - **Exposures.** Beta neutrality uses one factor, the equal-weight market. There are no sector,
   size, or style neutralisations; add yours as a firm rule.
 - **Overfitting and multiple testing.** `backtest` is in-sample; only `walk-forward` is out of

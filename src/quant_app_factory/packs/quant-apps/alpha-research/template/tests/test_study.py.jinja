@@ -15,7 +15,7 @@ from {{ package_name }}.config import TRADE_LAG
 from {{ package_name }}.firm.signals import SIGNALS
 from {{ package_name }}.parameters import Parameters
 from {{ package_name }}.signals import compute
-from {{ package_name }}.study import run_study
+from {{ package_name }}.study import cleaned, run_study
 
 
 def _planted(delay: int, strength: float = 0.3) -> Panel:
@@ -81,3 +81,36 @@ def test_the_results_say_how_they_were_computed() -> None:
     assert results["parameters"]["lag"] == TRADE_LAG
     assert {"timing", "ic", "t_stat", "spread", "delistings"} <= set(results["conventions"])
     assert results["limitations"]
+
+
+def test_a_planted_signal_ranks_its_quantiles_in_order() -> None:
+    results = run_study(_planted(delay=TRADE_LAG), Parameters(signal="planted", quantiles=5))
+
+    metrics = results["metrics"]
+    means = [metrics[f"quantile_{number}_return"] for number in range(1, 6)]
+    assert means == sorted(means)
+    assert means[-1] > 0 > means[0]
+    assert metrics["rank_ic_ir"] > 0
+    assert metrics["rank_ic_ir"] == pytest.approx(metrics["mean_rank_ic"] / metrics["rank_ic_std"])
+
+
+def test_signal_cleaning_is_off_by_default_and_works_per_bar_when_asked() -> None:
+    generator = np.random.default_rng(1)
+    signal = generator.standard_normal((50, 40))
+    signal[:, 0] = 100.0  # an outlier in every bar
+
+    assert np.array_equal(cleaned(signal, Parameters()), signal)
+    clipped = cleaned(signal, Parameters(winsorize=0.05))
+    assert (clipped[:, 0] < 100.0).all()
+    standard = cleaned(signal, Parameters(zscore=True))
+    assert np.allclose(standard.mean(axis=1), 0.0)
+    assert np.allclose(standard.std(axis=1), 1.0)
+
+
+def test_cleaning_is_recorded_and_bad_shares_are_refused() -> None:
+    results = run_study(_planted(delay=TRADE_LAG), Parameters(signal="planted", zscore=True))
+
+    assert results["parameters"]["zscore"] is True
+    assert results["conventions"]["cleaning"] == "z-scored per bar"
+    with pytest.raises(ValueError, match="winsorize"):
+        Parameters(winsorize=0.5)

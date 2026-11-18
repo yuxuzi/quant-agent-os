@@ -44,6 +44,7 @@ class Parameters:
     objective: str = "sharpe"  # sharpe (net, training window) or ic (mean rank IC)
     train_bars: int = config.PERIODS_PER_YEAR
     test_bars: int = 3 * config.BARS_PER_MONTH
+    purge: int = 0  # bars dropped from the end of each training window, before its test
     lookbacks: tuple[int, ...] | None = None  # None: 0.5, 0.75, and 1 times the standard
 
     def __post_init__(self) -> None:
@@ -65,6 +66,8 @@ class Parameters:
                 (self.objective not in {"sharpe", "ic"}, "objective must be sharpe or ic"),
                 (self.train_bars < 2, "train_bars must be at least 2"),
                 (self.test_bars < 1, "test_bars must be at least 1"),
+                (self.purge < 0, "purge must be zero or more bars"),
+                (self.purge >= self.train_bars, "purge must be fewer bars than train_bars"),
                 (
                     self.lookbacks is not None and (not self.lookbacks or min(self.lookbacks) < 1),
                     "lookbacks must list whole numbers of at least 1",

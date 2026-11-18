@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 import pytest
 from quant_toolbox.data import Table, TableError, demo_book
+from quant_toolbox.report import TableBlock
+from quant_toolbox.risk import SCENARIOS
 from quant_toolbox.testing import assert_future_does_not_change_the_past
 from typer.testing import CliRunner
 
@@ -15,7 +17,7 @@ from {{ package_name }}.cli import app
 from {{ package_name }}.firm.checks import CHECKS
 from {{ package_name }}.monitor import build_document, load_groups
 from {{ package_name }}.risk import Check, build_view, check_limits, scenario_return
-from {{ package_name }}.sections import BUILT_IN, all_checks
+from {{ package_name }}.sections import BUILT_IN, all_checks, historical_stress
 from {{ package_name }}.settings import Scenario, Settings, SettingsError, load_settings
 
 runner = CliRunner()
@@ -210,3 +212,48 @@ def test_check_without_limits_says_so_and_fails() -> None:
     done = runner.invoke(app, ["check"])
 
     assert done.exit_code == 1
+
+
+def _weekdays(start: dt.date, end: dt.date) -> list[dt.date]:
+    days = [start + dt.timedelta(days=n) for n in range((end - start).days + 1)]
+    return [day for day in days if day.weekday() < 5]
+
+
+def test_a_historical_window_compounds_each_assets_return_over_it() -> None:
+    name, (start, end) = next(iter(SCENARIOS.items()))
+    days = _weekdays(start - dt.timedelta(days=30), end + dt.timedelta(days=30))
+    generator = np.random.default_rng(3)
+    values = 100.0 * np.cumprod(1.0 + generator.normal(0, 0.01, (len(days), 2)), axis=0)
+    prices = Table(days, ["A", "B"], values)
+    positions = Table(days, ["A", "B"], np.tile([0.6, -0.4], (len(days), 1)))
+
+    outcomes = build_view(positions, Settings(), prices=prices).historical_scenarios()
+
+    before = max(at for at, day in enumerate(days) if day <= start)
+    after = min(at for at, day in enumerate(days) if day >= end)
+    expected = float(np.array([0.6, -0.4]) @ (values[after] / values[before] - 1.0))
+    assert outcomes[name] == pytest.approx(expected)
+    assert all(value is None for key, value in outcomes.items() if key != name)
+
+
+def test_weekly_prices_cover_no_historical_window() -> None:
+    name, (start, end) = next(iter(SCENARIOS.items()))
+    days = [start - dt.timedelta(days=28) + dt.timedelta(weeks=n) for n in range(20)]
+    prices = Table(days, ["A"], np.linspace(100.0, 120.0, len(days))[:, None])
+    positions = Table(days, ["A"], np.ones((len(days), 1)))
+
+    view = build_view(positions, Settings(), prices=prices)
+
+    assert view.historical_scenarios()[name] is None
+    assert "not covered" in str(historical_stress(view)[0])
+
+
+def test_exposures_show_the_herfindahl_index() -> None:
+    view = build_view(_positions([0.5, -0.5, 0.0]), Settings())
+
+    table = BUILT_IN["exposures"](view)[0]
+
+    assert isinstance(table, TableBlock)
+    row = dict(zip([column.name for column in table.columns], table.rows[0], strict=True))
+    assert row["Herfindahl"] == pytest.approx(0.5)  # 0.5 ** 2 + 0.5 ** 2, as shares of gross
+    assert row["Effective positions"] == pytest.approx(2.0)

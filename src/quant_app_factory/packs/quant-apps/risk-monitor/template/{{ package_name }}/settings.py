@@ -35,6 +35,7 @@ DEFAULT_SECTIONS = [
     "risk",
     "contributors",
     "stress",
+    "historical_stress",
     "exposure_history",
 ]
 

@@ -33,6 +33,9 @@ class Parameters:
     quantiles: int = 5
     max_horizon: int = config.MAX_HORIZON
     delisting_return: float = config.DELISTING_RETURN
+    # Signal clean-up, per bar and across assets, so it never looks ahead. Off by default.
+    winsorize: float = 0.0  # share clipped at each tail, such as 0.01; 0 clips nothing
+    zscore: bool = False  # each bar's scores minus their mean, over their standard deviation
 
     def __post_init__(self) -> None:
         problems = [
@@ -44,6 +47,10 @@ class Parameters:
                 (self.quantiles < 2, "quantiles must be at least 2"),
                 (self.max_horizon < 1, "max_horizon must be at least 1 bar"),
                 (self.delisting_return < -1, "delisting_return cannot lose more than -1 (100%)"),
+                (
+                    not 0.0 <= self.winsorize < 0.5,
+                    "winsorize must be at least 0 and below 0.5 (a share of each tail)",
+                ),
             )
             if failed
         ]

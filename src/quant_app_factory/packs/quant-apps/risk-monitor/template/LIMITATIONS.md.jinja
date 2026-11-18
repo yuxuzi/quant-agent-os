@@ -13,6 +13,11 @@ This application is a tested starting point, not a risk system of record.
   file. There is no style or statistical factor decomposition.
 - **Stress scenarios are assumptions.** They show what your book does under the shock you name,
   and say nothing about how likely it is.
+- **Historical scenarios are US equity windows.** The twelve named windows, from 2007 to 2024, need
+  daily prices across each window; a window your prices do not cover is shown as not covered.
+  They replay what your assets did then, which may not be what they would do now.
+- **No liquidity measure.** There is no average daily volume in the inputs, so days to liquidate
+  are not computed. Quant Toolbox's `quant_toolbox.risk.liquidity` does it, given volumes.
 - **Assets without prices.** They count in exposures, not in return-based risk. The report shows
   how much gross exposure has prices, and names what is missing.
 - **Missing returns count as 0** in the simulation, which understates risk for illiquid assets.
