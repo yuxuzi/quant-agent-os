@@ -5,12 +5,13 @@ Everything the platform keeps is in one home: `QUANT_AGENT_OS_HOME`, by default
 
 | File | Holds |
 | --- | --- |
-| `config.toml` | Optional settings: `log_level`, `store`, `datasets_dir`, `runs_file`, `api_keys_file`, and `access_file`. |
+| `config.toml` | Optional settings: `log_level`, `store`, `datasets_dir`, `runs_file`, `api_keys_file`, `access_file`, and `sign_in_file`. |
 | `.env` | Optional environment variables, such as provider keys. Never commit it. |
 | `knowledge.db` | The research knowledge store. |
 | `datasets/` | Datasets that tools read by id. |
 | `runs.db` | The audit: every recorded run, from the server and from `qaos app`. |
 | `api-keys.toml` | Hashes of API keys for `qaos serve --http`. |
+| `sign-in.toml` | Optional, wherever `QUANT_AGENT_OS_SIGN_IN_FILE` points: the identity providers whose tokens `qaos serve --http` accepts. |
 | `factory.toml`, `packs/` | App Factory settings and fetched template packs. |
 
 A setting comes from a `QUANT_AGENT_OS_*` environment variable, then the home's `.env`, then
@@ -28,7 +29,24 @@ permissions come only from the environment or the home's `.env`.
 | `QUANT_AGENT_OS_RUNS_FILE` | `runs.db` in the home | Run store. |
 | `QUANT_AGENT_OS_API_KEYS_FILE` | `api-keys.toml` in the home | API keys file. |
 | `QUANT_AGENT_OS_ACCESS_FILE` | none | Over HTTP: which groups reach which tools and datasets. See [deployment](deployment.md#9-decide-who-reaches-what). |
+| `QUANT_AGENT_OS_SIGN_IN_FILE` | none | Over HTTP: turns on sign-in through the firm's identity provider. Without it, API keys only. See [deployment](deployment.md#10-sign-in-through-your-identity-provider). |
 | `QUANT_AGENT_OS_SCHEMA` | `quant_research` | PostgreSQL schema that `qaos ingest` and `qaos search` use. |
+
+The sign-in file is TOML; every field but those marked optional is required, and an unknown one is refused:
+
+```toml
+resource = "https://qaos.example.com/mcp"        # this server's URL: every token's audience
+
+[[authorization_servers]]                         # one per identity provider
+issuer = "https://login.example.com"
+introspection_url = "https://login.example.com/oauth2/introspect"   # https, except on loopback
+client_id = "qaos"
+client_secret_env = "QAOS_INTROSPECTION_SECRET"  # a variable's name; set it in the environment or .env
+tenant = "local"                 # optional: the tenant its users act in; a firm's server serves "local"
+tenant_claim = "qaos_tenant"     # optional: the claim that must name that tenant; "" if the provider sends none
+tenant_claim_value = "acme"      # optional: what that claim holds instead, if the provider names the firm otherwise
+groups_claim = "groups"          # optional: the claim listing the user's groups; "" if it sends none
+```
 
 `qaos doctor` checks the setup and shows what is off, with no secret values.
 

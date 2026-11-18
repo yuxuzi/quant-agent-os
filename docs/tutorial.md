@@ -1003,7 +1003,7 @@ loopback behind your proxy. Put these questions to your team before real data go
 
 | Area | Your responsibility |
 | --- | --- |
-| **Identity** | Decide who holds a key, hand keys over safely, and remove leavers. `qaos serve` has no single sign-on yet: OAuth token checks exist for a firm's own server, but tokens carry no groups |
+| **Identity** | Decide who holds a key, hand keys over safely, and remove leavers. Single sign-on through your identity provider is opt-in ([deployment](deployment.md#10-sign-in-through-your-identity-provider)); then your provider decides who gets a token, and its groups claim feeds your access file |
 | **Network** | Terminate TLS and limit request rates in a reverse proxy. The server has neither |
 | **Your tools** | Review them as server code. Nothing sandboxes a tool: one that declares only reading can still open a file or a socket ([finding F-6](security-review.md#findings)) |
 | **Your data and the model** | Choose a client and model provider your data may go to. Results the client reads, such as metrics, passages, and report text, go to its model, and the platform can't limit that |

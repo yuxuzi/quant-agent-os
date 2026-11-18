@@ -31,8 +31,9 @@ is not a chatbot.
   Toolbox ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `computed.py` adds typed
   results, warnings, and evidence; `tools.py` registers `analyze_performance` and friends.
 - **Sign-in and approvals** (`quant_platform.identity`): OAuth token checks and the browser approval page,
-  for a firm's own server; no command serves them yet. Each customer hosts its own installation, and
-  there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
+  for a firm's own server. `qaos serve --http` and `serve_apps` accept tokens only when a sign-in file
+  is configured ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). Each customer
+  hosts its own installation, and there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
   own tools ([decision 0020](docs/decisions/0020-a-firms-own-server.md)), registered as plain functions

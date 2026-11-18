@@ -135,7 +135,7 @@ def test_serve_apps_takes_its_policy_and_access_file_from_the_settings(
     monkeypatch.setenv("QUANT_AGENT_OS_GRANTED_PERMISSIONS", '["read_local_data", "network"]')
     served: dict[str, Any] = {}
 
-    def fake_serve(catalog: Catalog, *, host: str, port: int) -> None:
+    def fake_serve(catalog: Catalog, *, host: str, port: int, allowed_hosts: Any) -> None:
         served.update(catalog=catalog, host=host, port=port)
 
     monkeypatch.setattr("quant_platform.serve.serve_http", fake_serve)
