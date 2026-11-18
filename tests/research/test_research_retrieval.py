@@ -77,6 +77,32 @@ def test_passages_can_be_fetched_in_full(research: ResearchApp) -> None:
         research.research.get_passage("nope")
 
 
+def test_passages_come_with_the_passages_around_them_when_asked(research: ResearchApp) -> None:
+    hit = research.research.find_related(ResearchQuery(query="short-term reversal")).passages[0]
+    found = research.store.get_chunk(hit.chunk_id)
+    assert found is not None
+    chunks = research.store.document_chunks(found.document_id, 0, 10_000)
+    assert len(chunks) >= 3
+    first, middle, last = chunks[0], chunks[1], chunks[-1]
+
+    alone = research.research.get_passage(middle.id)
+    around = research.research.get_passage(middle.id, 1)
+    at_start = research.research.get_passage(first.id, 2)
+    at_end = research.research.get_passage(last.id, 2)
+
+    assert alone.before == alone.after == [] and len(alone.evidence) == 1
+    assert [p.chunk_id for p in around.before] == [first.id]
+    assert [p.chunk_id for p in around.after] == [chunks[2].id]
+    assert around.after[0].source.location == chunks[2].location
+    assert [e.statement for e in around.evidence] == [c.text for c in chunks[:3]]
+    assert at_start.before == [] and [p.chunk_id for p in at_start.after] == [
+        c.id for c in chunks[1:3]
+    ]
+    assert at_end.after == [] and len(at_end.before) == min(2, len(chunks) - 1)
+    with pytest.raises(ValueError, match="between 0 and 2"):
+        research.research.get_passage(middle.id, 3)
+
+
 def test_rank_fusion_rewards_agreement_and_breaks_ties_by_id() -> None:
     fused = _fuse({"keyword": ["a", "b"], "graph": ["b", "c"]})
 

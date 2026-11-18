@@ -136,6 +136,10 @@ def test_every_retrieval_answer_equals_the_reference(
         assert store.mentioned_entities(chunks) == expected.mentioned_entities(chunks)
         assert store.chunks_mentioning(entities, 25) == expected.chunks_mentioning(entities, 25)
         assert store.get_entities(entities) == expected.get_entities(entities)
+        for chunk_id in chunks[:3]:
+            assert app.research.get_passage(chunk_id, 2) == reference.research.get_passage(
+                chunk_id, 2
+            )
 
 
 def test_strategy_specs_equal_the_reference(

@@ -193,6 +193,10 @@ class KnowledgeStore(Protocol):
         """Return a chunk by id."""
         ...
 
+    def document_chunks(self, document_id: str, first: int, last: int) -> list[Chunk]:
+        """Return the document's chunks with ordinals ``first``..``last`` (inclusive), in order."""
+        ...
+
     def get_entities(self, entity_ids: Iterable[str]) -> dict[str, Entity]:
         """Return the known entities among ``entity_ids``."""
         ...

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
+  it adds that many passages before and after the requested one, from the same document and in reading
+  order, each citing its own location. A short PDF passage that starts mid-argument can be read in full
+  without a second search. The idea comes from RAGFlow's parent-child chunks, without a second index.
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module

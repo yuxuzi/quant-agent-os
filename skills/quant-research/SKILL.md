@@ -22,7 +22,8 @@ claim, and say plainly when it holds nothing on the question.
      keep only strong edges.
 2. **Read before quoting.** Fetch every passage you rely on with `get_source_passage`
    (`chunk_id` from the results), or read the resource `qaos://passage/{chunk_id}`. Raw ids such
-   as `doc:ab12#3` work as they are.
+   as `doc:ab12#3` work as they are. When a passage starts or ends mid-argument, pass `context`
+   1 or 2 for the passages around it; each one cites its own location.
 3. **Cite.** Name each claim's source and location, for example
    "reversal-and-microstructure.md, lines 17-19, § Mechanism". Mention the corpus snapshot id
    when the user may compare answers later.

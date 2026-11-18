@@ -45,6 +45,10 @@ To draft a strategy specification whose every item cites its passages, run
 `uv run qaos strategy "trend following"`. Add `--json` to save the spec. What the
 corpus leaves undecided is listed as open questions, not filled with defaults.
 
+`get_source_passage` returns one passage in full. With `context` 1 or 2 it adds the passages
+before and after it in the same document, each with its own citation, for a passage that starts
+mid-argument.
+
 To register the read-only tools (`find_related_signals`, `get_source_passage`,
 `generate_strategy`) in a Quant-Agent-OS registry:
 

@@ -38,6 +38,8 @@ SIGNAL_TYPES: tuple[EntityType, ...] = ("signal", "factor", "strategy")
 MAX_RELATED = 10
 MAX_LINKS_PER_ENTITY = 3
 MAX_FALLBACK_SEEDS = 3
+# Passages a client may read on each side of one passage, in the same document.
+MAX_CONTEXT = 2
 # A query that names no vocabulary entity counts a keyword passage as evidence only when the
 # passage holds at least this share of the query's term weight (IDF-weighted, so rare words
 # count most). It is what lets "protein folding prediction accuracy" return nothing from a
@@ -142,13 +144,28 @@ class EvidencePacket(BaseModel):
         return self.model_copy(update={"passages": passages, "related": related})
 
 
-class SourcePassage(BaseModel):
-    """The full text of one chunk with its source."""
+class ContextPassage(BaseModel):
+    """A passage next to the requested one in its document, with its own citation."""
 
     chunk_id: str
     source: SourceRef
     text: str
     section: str | None
+
+
+class SourcePassage(BaseModel):
+    """The full text of one chunk with its source, and any passages around it requested.
+
+    ``before`` and ``after`` hold up to the requested number of neighbouring passages of the
+    same document, in reading order; each cites its own location.
+    """
+
+    chunk_id: str
+    source: SourceRef
+    text: str
+    section: str | None
+    before: list[ContextPassage] = Field(default_factory=list)
+    after: list[ContextPassage] = Field(default_factory=list)
     corpus_snapshot: str | None
     warnings: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
@@ -355,25 +372,47 @@ class ResearchService:
         hits = self.vectors.vector_search(model_id, vector, limit)
         return [hit.chunk_id for hit in hits if hit.score >= self.embedder.min_score]
 
-    def get_passage(self, chunk_id: str) -> SourcePassage:
-        """Return the full text of one chunk; raise `UnknownPassageError` if it is unknown."""
-        with self.store.reading():
-            return self._get_passage(chunk_id)
+    def get_passage(self, chunk_id: str, context: int = 0) -> SourcePassage:
+        """Return the full text of one chunk and ``context`` passages on each side of it.
 
-    def _get_passage(self, chunk_id: str) -> SourcePassage:
+        Raise `UnknownPassageError` if the chunk is unknown, and `ValueError` if ``context`` is
+        outside 0..`MAX_CONTEXT`.
+        """
+        if not 0 <= context <= MAX_CONTEXT:
+            raise ValueError(f"context must be between 0 and {MAX_CONTEXT}, not {context}.")
+        with self.store.reading():
+            return self._get_passage(chunk_id, context)
+
+    def _get_passage(self, chunk_id: str, context: int) -> SourcePassage:
         chunk = self.store.get_chunk(chunk_id)
         if chunk is None:
             raise UnknownPassageError(f"No passage with id '{chunk_id}'.")
-        source = self._source(chunk)
+        passage = self._context(chunk)
+        around = (
+            self.store.document_chunks(
+                chunk.document_id, max(chunk.ordinal - context, 0), chunk.ordinal + context
+            )
+            if context
+            else []
+        )
+        before = [self._context(item) for item in around if item.ordinal < chunk.ordinal]
+        after = [self._context(item) for item in around if item.ordinal > chunk.ordinal]
         snapshot = self.store.current_snapshot()
         return SourcePassage(
-            chunk_id=chunk.id,
-            source=source,
-            text=chunk.text,
-            section=chunk.section,
+            **passage.model_dump(),
+            before=before,
+            after=after,
             corpus_snapshot=snapshot.id if snapshot else None,
-            evidence=[Evidence(kind="retrieved", statement=chunk.text, sources=[source])],
+            evidence=[
+                Evidence(kind="retrieved", statement=item.text, sources=[item.source])
+                for item in [*before, passage, *after]
+            ],
             data_versions={"corpus_snapshot": snapshot.id} if snapshot else {},
+        )
+
+    def _context(self, chunk: Chunk) -> ContextPassage:
+        return ContextPassage(
+            chunk_id=chunk.id, source=self._source(chunk), text=chunk.text, section=chunk.section
         )
 
     def _passage(

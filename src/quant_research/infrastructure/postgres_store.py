@@ -41,6 +41,7 @@ from quant_research.infrastructure.store_common import (
     ALL_ENTITIES,
     ALL_RELATIONS,
     CHUNKS_WITHOUT_EMBEDDINGS,
+    DOCUMENT_CHUNKS,
     DOCUMENT_HASHES,
     GET_CHUNK,
     GET_DOCUMENT,
@@ -506,6 +507,12 @@ class PostgresKnowledgeStore(StoreLifecycle):
         """Return a chunk by id."""
         row = self._db.execute(GET_CHUNK, (chunk_id,)).fetchone()
         return None if row is None else Chunk.model_validate(row)
+
+    @locked
+    def document_chunks(self, document_id: str, first: int, last: int) -> list[Chunk]:
+        """Return the document's chunks with ordinals ``first``..``last`` (inclusive), in order."""
+        rows = self._db.execute(DOCUMENT_CHUNKS, (document_id, first, last))
+        return [Chunk.model_validate(row) for row in rows]
 
     @locked
     def get_entities(self, entity_ids: Iterable[str]) -> dict[str, Entity]:

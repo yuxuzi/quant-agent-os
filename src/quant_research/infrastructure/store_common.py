@@ -29,6 +29,9 @@ ALL_RELATIONS = "SELECT * FROM relations ORDER BY id"
 DOCUMENT_HASHES = "SELECT sha256 FROM documents ORDER BY sha256"
 GET_DOCUMENT = "SELECT * FROM documents WHERE id = %s"
 GET_CHUNK = "SELECT * FROM chunks WHERE id = %s"
+DOCUMENT_CHUNKS = (
+    "SELECT * FROM chunks WHERE document_id = %s AND ordinal BETWEEN %s AND %s ORDER BY ordinal"
+)
 HAS_EMBEDDINGS = "SELECT 1 FROM embeddings WHERE model = %s LIMIT 1"
 CHUNKS_WITHOUT_EMBEDDINGS = (
     "SELECT c.id, c.text FROM chunks AS c LEFT JOIN embeddings AS e "
