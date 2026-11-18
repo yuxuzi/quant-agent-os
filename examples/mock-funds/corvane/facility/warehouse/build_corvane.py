@@ -43,7 +43,7 @@ import pyarrow.parquet as pq
 
 DEFAULT_SEED = 20261118
 START = date(2026, 1, 2)
-N_DAYS = 120
+N_DAYS = 110
 KNOWN_DATE = "2026-05-15"
 CASH = "CASH_USD"
 DAYS_PER_YEAR = 252
@@ -86,7 +86,7 @@ RESTRICTIONS = (
 MANAGEMENT_FEE = 0.004  # a year, accrued daily in the net return
 CASH_TARGET = 0.015
 HOLDINGS = {"LCC": 70, "GQ": 45}
-CAP = {"LCC": 0.06, "GQ": 0.05}
+CAP = {"LCC": 0.06, "GQ": 0.045}
 SPLIT_DATE, SPIN_DATE, SPIN_SALE_DATE = "2026-02-18", "2026-03-12", "2026-03-18"
 DELIST_ANNOUNCE, DELIST_DATE = "2026-04-06", "2026-04-22"
 JP_HOLIDAYS = ("2026-02-11", "2026-03-20", "2026-04-29", "2026-05-04", "2026-05-05", "2026-05-06")
@@ -113,6 +113,7 @@ class Security:
     rets: list[float | None] = field(default_factory=list)  # vendor return, by day
     close: list[float | None] = field(default_factory=list)  # raw close, None with no row
     volume: list[int | None] = field(default_factory=list)
+    closed: set[int] = field(default_factory=set)  # days its market was shut
 
 
 def business_days(count: int) -> list[date]:
@@ -195,7 +196,7 @@ def _assign_roles(universe: list[Security]) -> Plan:
     winners = [us[i] for i in (17, 22, 31, 44)]
     for winner in winners:
         force(winner, "Industrials", "Machinery")
-        winner.alpha = 0.0012
+        winner.alpha = 0.0035
     tobacco = [us[i] for i in (14, 38, 57, 90, 140, 210)]
     for security in tobacco:
         force(security, "Consumer Staples", "Tobacco")
@@ -366,9 +367,10 @@ class World:
     ) -> None:
         plan = self.plan
         s.rets, s.close, s.volume = [], [], []
+        s.closed = {d for d in holidays if s.country == "JP" and d > s.first}
         price = s.price0
-        pending = 1.0  # compounded growth of closed-market days
-        shares_traded = s.mcap / s.price0 * 0.004
+        pending = 1.0  # compounded growth of the days the market was closed
+        shares_traded = s.mcap / s.price0 * 0.0012
         for d in range(N_DAYS):
             alive = d >= s.first and (s.last is None or d <= s.last)
             if not alive:
@@ -376,40 +378,24 @@ class World:
                 s.close.append(None)
                 s.volume.append(None)
                 continue
-            if d == s.first:
-                vendor: float | None = None
-            elif s.country == "JP" and d in holidays:
+            vendor: float | None = None
+            if d in s.closed:
                 pending *= 1 + true[d]
-                vendor = None
-            else:
+            elif d > s.first:
                 vendor = pending * (1 + true[d]) - 1
                 pending = 1.0
-            if d > s.first and not (s.country == "JP" and d in holidays):
-                assert vendor is not None
                 price *= 1 + vendor
             if s.sid == plan.parent and d == spin_day:
                 price -= (1 / SPIN_RATIO) * self.by_id[plan.spinco].price0
-            raw = price / 2.0 if s.sid == plan.split and d >= split_day else price
-            if s.country == "JP" and d in holidays and vendor is None and d > s.first:
-                s.close.append(s.close[-1])
-                s.rets.append(None)
-                s.volume.append(None)  # no row on a holiday; filled below
-                continue
             s.rets.append(vendor)
-            s.close.append(raw)
-            s.volume.append(int(shares_traded * math.exp(rng.gauss(0, 0.3))))
-        # A holiday has no row: close is carried for valuation only, in ``_value_close``.
-        s.rets = [r for r in s.rets]
-        self._held_rows(s, holidays)
-
-    def _held_rows(self, s: Security, holidays: set[int]) -> None:
-        """Mark holiday days as having no row: volume None and a separate flag on close."""
-        s.closed = {d for d in holidays if s.country == "JP" and s.first < d}  # type: ignore[attr-defined]
+            s.close.append(price / 2.0 if s.sid == plan.split and d >= split_day else price)
+            traded = d not in s.closed
+            s.volume.append(int(shares_traded * math.exp(rng.gauss(0, 0.3))) if traded else None)
 
     def has_row(self, s: Security, d: int) -> bool:
         """Return whether the vendor has a price row for ``s`` on day ``d``."""
         alive = d >= s.first and (s.last is None or d <= s.last)
-        return alive and d not in getattr(s, "closed", set())
+        return alive and d not in s.closed
 
     def usd_price(self, s: Security, d: int) -> float | None:
         """Return the raw USD price used to value a holding, carried on closed days."""
@@ -807,6 +793,9 @@ class World:
                 "kind": biggest[1],
                 "value": flat[biggest],
             },
+            "largest_selection_sector": max(
+                lcc_linked["effects"], key=lambda s: lcc_linked["effects"][s]["selection"]
+            ),
             "currency_gq_may": self.currency_effect("GQ", "BM_GLOBAL200", *may),
             "days_to_liquidate_lcc": self.days_to_liquidate("LCC", end, 1.5e9, 0.2),
             "rank_ic": {f: self.rank_ic(f) for f in FACTORS},
