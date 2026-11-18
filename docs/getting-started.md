@@ -1,6 +1,6 @@
 # Getting started
 
-Quant-Agent-OS reaches your AI client as one MCP server plus four skills that teach the client
+Quant-Agent-OS reaches your AI client as one MCP server plus five skills that teach the client
 how to use it. You need [uv](https://docs.astral.sh/uv/). From nothing to a first answer:
 
 ```bash
@@ -39,12 +39,14 @@ The plugin brings:
 - **The MCP server.** `qaos serve` serves research and analytics tools, with
   resources and prompts. It runs locally through `uv` on Python 3.13, and on first
   start uv installs its locked dependencies.
-- **Four skills,** loaded when a task needs them:
+- **Five skills,** loaded when a task needs them:
   - `quant-research` for cited answers from your corpus;
   - `quant-analytics` for metrics by dataset reference;
   - `quant-strategy` for cited strategy specs and reports;
   - `quant-app-factory` for project specs you create locally, when the server is started with
-    `--toolsets research,analytics,factory`.
+    `--toolsets research,analytics,factory`;
+  - `quant-legacy` for turning your existing Python into tools with `qaos legacy`, on your
+    machine.
 
 The server is read-only by default and records every call in the home's `runs.db` (`qaos runs`).
 

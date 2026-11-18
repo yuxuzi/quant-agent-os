@@ -304,6 +304,11 @@ qaos app create spec.toml ─▶ approval ─▶ ArchitecturePlanner ─▶ Scaf
   its preview is refused.
 - **Quant templates** ([decision 0009](decisions/0009-quant-baseline-templates.md)) carry known-answer metric
   tests, bias tests, and a `LIMITATIONS.md`. There is no trading code.
+- **Legacy code as tools.** `qaos legacy scan` reads a package with `ast`, never importing it, and classifies
+  each public callable as expose, facade, or service; `qaos legacy wrap` drafts facades, a server file, a
+  FastAPI service with `call_service` stubs, and a `check_app` test, marking each open decision with a TODO
+  ([decision 0029](decisions/0029-legacy-conversion-is-a-local-draft.md)). The modules follow the product's
+  layers: `domain/legacy*.py`, `application/legacy.py`, `infrastructure/legacy_files.py`, and `legacy_cli.py`.
 - **Your own templates.** `qaos app template fork` copies a profile into a pack, `template check` validates it,
   and `template add` registers a git pack fetched once at a tag, held to its commit and a digest of its files, and
   cached, so plans need no network ([decision 0025](decisions/0025-templates-are-starting-points.md)).

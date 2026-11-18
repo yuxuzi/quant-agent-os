@@ -8,7 +8,7 @@
     {
       "name": "quant-agent-os",
       "source": "./",
-      "description": "The Quant-Agent-OS MCP server and its four skills (research, analytics, strategy, App Factory)."
+      "description": "The Quant-Agent-OS MCP server and its five skills (research, analytics, strategy, App Factory, legacy code)."
     }
   ]
 }

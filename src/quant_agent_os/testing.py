@@ -49,7 +49,9 @@ def check_tool(
     executor = ToolExecutor(ToolRegistry([spec]), policy)
     record = executor.execute(ToolCall(tool=spec.name, arguments=arguments))
     if record.status != expect:
-        problems.append(f"status is {record.status!r}, expected {expect!r}: {record.error}")
+        # A test may show what the run record keeps for an internal error: the exception.
+        detail = f" [{record.error_detail}]" if record.error_detail else ""
+        problems.append(f"status is {record.status!r}, expected {expect!r}: {record.error}{detail}")
     via_mcp = call_tool(executor, spec.name, arguments)
     if via_mcp["isError"] != (record.status != "ok"):
         problems.append("MCP and direct calls disagree on success")
