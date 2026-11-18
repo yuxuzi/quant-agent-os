@@ -42,6 +42,12 @@ All notable changes to this project are documented here. The format follows
   there is none. `factor_model` takes a vendor's loadings, factor covariance, and specific variances by
   dataset id and reports the volatility under that model, split into factors, specific risk, and assets; a
   model whose shapes do not line up is refused, naming what is missing. Both fields are additive.
+- **`analyze_risk` takes the weights by reference** (2.3.0). `weights_ref` names a dataset instead of inline
+  `weights`: `{dataset}` for a frame of dates by assets, whose latest row is the book unless `as_of` names a
+  date, or `{dataset, column}` for one row per asset. Missing cells are assets not held and are left out, with a
+  note; `conventions.weights` says which row was read. Exactly one of the two is accepted, each refusal names
+  what to fix, and the read goes through the access guard, so a refused dataset looks missing. The tool lock
+  now counts an input that may also take another type, such as `T` to `T | None`, as a minor change.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource

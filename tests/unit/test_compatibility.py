@@ -81,6 +81,33 @@ def test_a_new_output_enum_value_is_minor() -> None:
     assert classify(BASE, entry_for(Query, WiderHits)) == "minor"
 
 
+def test_an_input_that_now_also_takes_another_type_is_minor() -> None:
+    class EitherText(BaseModel):
+        text: str | list[str]
+        limit: int = 5
+
+    class OptionalText(BaseModel):
+        text: str | None = None
+        limit: int = 5
+
+    class OtherText(BaseModel):
+        text: int | list[str]
+        limit: int = 5
+
+    class MaybeKind(BaseModel):
+        title: str
+        kind: Literal["note", "paper"] | None
+
+    class MaybeHits(BaseModel):
+        hits: list[MaybeKind]
+
+    assert classify(BASE, entry_for(EitherText, Hits)) == "minor"
+    assert classify(BASE, entry_for(OptionalText, Hits)) == "minor"
+    assert classify(BASE, entry_for(OtherText, Hits)) == "major"
+    # An output that may now be null is a value a client did not expect.
+    assert classify(BASE, entry_for(Query, MaybeHits)) == "major"
+
+
 def test_breaking_changes_are_major() -> None:
     class NewRequired(BaseModel):
         text: str
