@@ -410,10 +410,9 @@ class BacktestOutput(BaseModel):
 def _carried(signal: FloatArray) -> tuple[FloatArray, int]:
     """The signal with each empty date taking the previous date's, and how many were empty."""
     result = signal.copy()
-    empty = ~np.isfinite(signal).any(axis=1)
     carried = 0
     for row in range(1, signal.shape[0]):
-        if empty[row] and np.isfinite(result[row - 1]).any():
+        if not np.isfinite(signal[row]).any() and np.isfinite(result[row - 1]).any():
             result[row] = result[row - 1]
             carried += 1
     return result, carried
