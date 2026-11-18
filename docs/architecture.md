@@ -289,7 +289,7 @@ qaos app create spec.toml ─▶ approval ─▶ ArchitecturePlanner ─▶ Scaf
 ```
 
 - **`AppSpec`** names a `template` and a `profile`: `agent-tool`, `quant-baseline` with `quant-lab`, `bundled`
-  with `python` or `fastapi`, or your own pack. The spec file is the draft, and there is no draft state.
+  with `python`, `library`, or `fastapi`, or your own pack. The spec file is the draft, and there is no draft state.
 - **`ArchitecturePlanner`** is deterministic and maps a spec to a scaffold request.
 - **Template answers and runtime settings stay apart.** Answers come from the pack's questions and are used
   when rendering. Settings are read by the generated app, and secret ones accept only `env:NAME`.

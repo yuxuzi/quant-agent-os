@@ -123,7 +123,7 @@ cost_bps = "3"                   # also max_horizon (IC decay)
 ```
 
 A spec always names `template` and `profile`. On the command line, `qaos app new` also takes the
-shortcuts `agent-tool`, `quant-lab`, `python`, and `fastapi`, and writes both fields for you.
+shortcuts `agent-tool`, `quant-lab`, `python`, `library`, and `fastapi`, and writes both fields for you.
 
 The research parameters themselves (signal, lookback, trade lag, quantiles, costs, rebalance
 schedule, and delisting return) live in the generated project's `config.toml`, not in the spec:

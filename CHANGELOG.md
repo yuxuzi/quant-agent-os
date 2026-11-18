@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **App Factory needs pytemplate-uv 3.2** (`factory` extra, `pytemplate-uv>=3.2,<4`). It offers the new bundled
+  `library` profile, a typed package without a command line (`qaos app new library my-lib`), and the
+  `devcontainer` and `release` components; `release` adds a PyPI trusted-publishing workflow for `v*` tags. A
+  template pack's errors now count as an invalid request, so they exit with code 1 like other invalid specs.
+
 ## [0.6.0] - 2026-11-17
 
 Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in

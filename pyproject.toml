@@ -64,7 +64,7 @@ empyrical = ["quant-toolbox[empyrical]==0.6.0"]
 # The analytics tools: the toolbox, computing through empyrical.
 analytics = ["quant-agent-os[toolbox,empyrical]"]
 # The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.
-factory = ["pytemplate-uv>=3.1,<4"]
+factory = ["pytemplate-uv>=3.2,<4"]
 all = ["quant-agent-os[analytics,excel,factory,interactive,parquet,pdf,postgres,server]"]
 
 [dependency-groups]

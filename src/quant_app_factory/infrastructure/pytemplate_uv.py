@@ -1,6 +1,6 @@
 """`PytemplateUvScaffolder`: the `ScaffoldProvider` backed by the pytemplate-uv library.
 
-pytemplate-uv is a third-party dependency (``pytemplate-uv>=3.1,<4``). This module is the only
+pytemplate-uv is a third-party dependency (``pytemplate-uv>=3.2,<4``). This module is the only
 place that imports it, and it uses only its supported interface, ``pytemplate.api``. Rendering
 runs in-process with Copier's ``unsafe=False`` and needs no network for the bundled profiles or
 this package's local template pack.
@@ -27,15 +27,9 @@ from quant_app_factory.domain.ports import (
     TemplateDescription,
 )
 
-# Errors meaning the request is invalid and nothing was written (pytemplate-uv exit code 1).
-_INVALID_REQUEST = (
-    api.RequestError,
-    api.ConfigurationError,
-    api.ManifestError,
-    api.ProfileNotFoundError,
-    api.ComponentNotFoundError,
-    api.ComponentCompatibilityError,
-)
+# The request is invalid and nothing was written (pytemplate-uv exit code 1). Since 3.2 this one
+# type covers the configuration, manifest, pack, profile, and component errors.
+_INVALID_REQUEST = api.RequestError
 
 
 def _render_request(request: ScaffoldRequest) -> api.RenderRequest:
