@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mock fund's facility for the 0.8.0 pilot** (`examples/pilot-fund/facility/`). Kestrel Point Capital is
+  fictional, and its facility is written as its own code, importing nothing of the platform: a deterministic
+  SQLite warehouse of three years of prices, positions, trades, signals, benchmarks, average daily value, and a
+  vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
+  report functions and a stateful risk engine; sixteen research documents, one carrying an injected
+  instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
 - **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
   by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
   t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
