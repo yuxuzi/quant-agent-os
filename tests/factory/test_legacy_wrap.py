@@ -5,6 +5,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -73,7 +74,7 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     assert "permissions=[Permission.WRITE_LOCAL_DATA]" in server
     assert "daily_prices" not in server  # excluded in the inventory
     facades = (drafted / "facades.py").read_text()
-    assert "with _quiet():" in facades
+    assert "with _legacy():" in facades
     assert "# TODO(config): the legacy code reads module settings" in facades
     # A memo cache makes a facade with a note, not a service.
     assert "facades.index_level" in server
@@ -159,6 +160,44 @@ def test_the_service_builds_the_object_once_and_answers(
 
     assert answer.status_code == 200 and answer.json() == expected
     assert again.status_code == 200  # a missing value arrives as NaN; the code decides
+
+
+def test_concurrent_facades_leave_stdout_as_it_was(
+    drafted: Path, legacy_importable: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    facades = _load(drafted / "facades.py", "legacy_draft_facades")
+    first_inside, second_inside, first_done = (threading.Event() for _ in range(3))
+
+    def legacy(prices: Any, lookback: Any) -> None:
+        print("legacy output", lookback)
+        if lookback == "first":
+            first_inside.set()
+            second_inside.wait(0.5)  # with no lock, the second call is inside by now
+        else:
+            second_inside.set()
+            first_done.wait(0.5)  # with no lock, it leaves last and restores stderr
+
+    facades.legacy_carry_signal = legacy
+    stdout = sys.stdout
+
+    def call(lookback: str) -> None:
+        facades.carry_signal(prices=None, lookback=lookback)
+        if lookback == "first":
+            first_done.set()
+
+    first = threading.Thread(target=call, args=("first",))
+    first.start()
+    assert first_inside.wait(5)
+    second = threading.Thread(target=call, args=("second",))
+    second.start()
+    first.join(5)
+    second.join(5)
+
+    # redirect_stdout is process-wide: two calls at once used to leave stdout on stderr.
+    assert sys.stdout is stdout
+    captured = capsys.readouterr()
+    assert "legacy output" not in captured.out
+    assert captured.err.count("legacy output") == 2
 
 
 def test_wrap_never_overwrites_without_force(inventory: Path, tmp_path: Path) -> None:

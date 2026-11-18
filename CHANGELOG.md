@@ -20,6 +20,8 @@ All notable changes to this project are documented here. The format follows
 - **`qaos legacy scan` tells a module cache from state.** A module-level memo dict, or a connection opened
   once, makes a facade with a `TODO(review)` on freshness, not a service; on the pilot's `kestrel_quant`,
   services fell from 20 of 26 callables to 8.
+- **Drafted facades are safe on several threads.** They run legacy code under one lock, so concurrent calls
+  that print no longer leave `sys.stdout` pointing at stderr.
 - **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
   firm's own test says why a tool failed without opening the run record.
 - **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the

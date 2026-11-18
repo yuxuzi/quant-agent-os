@@ -223,14 +223,20 @@ def _facades_module(selected: list[_Selected], legacy: str) -> str:
     bodies = [_facade(s, imports) for s in selected]
     helpers = [JSON_READY]
     imports.add("import dataclasses", "import math")
-    if any(s.found.has(Trait.PRINTS) for s in selected):
-        helpers.append(QUIET)
-        imports.add("import contextlib", "import sys", "from collections.abc import Iterator")
+    if any(_one_at_a_time(s.found) for s in selected):
+        helpers.append(LEGACY)
+        imports.add(
+            "import contextlib",
+            "import sys",
+            "import threading",
+            "from collections.abc import Iterator",
+        )
     doc = (
         f'"""Typed facades over {legacy}, drafted by `qaos legacy wrap`; edit them freely.\n\n'
         "Each facade calls the legacy code unchanged and adds only what a tool needs: type\n"
-        "hints, a docstring, data by reference, quiet printing, and JSON-ready results. Keep\n"
-        'them thin: business logic stays in the legacy code.\n"""'
+        "hints, a docstring, data by reference, quiet printing one call at a time, and\n"
+        "JSON-ready results. Keep them thin: business logic stays in the legacy code.\n"
+        '"""'
     )
     return "\n\n\n".join([doc + "\n\n" + imports.render(), *bodies, *helpers]).rstrip() + "\n"
 
@@ -292,8 +298,8 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
         function = f"instance.{found.name}"
     else:
         function = callee
-    if found.has(Trait.PRINTS):
-        lines.append("    with _quiet():")
+    if _one_at_a_time(found):
+        lines.append("    with _legacy():")
         lines += _wrapped("        ", f"result = {function}", call_args)
     else:
         lines += _wrapped("    ", f"result = {function}", call_args)
@@ -305,6 +311,12 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
     else:
         lines.append(f"    return {'_json_ready(result)' if use_json else 'result'}")
     return "\n".join(lines)
+
+
+def _one_at_a_time(found: Found) -> bool:
+    """Whether the facade runs the legacy code under `_legacy()`: it prints, or shares module
+    state that another thread may be using."""
+    return found.has(Trait.PRINTS, Trait.MODULE_CACHE, Trait.MUTABLE_STATE)
 
 
 def _argument(param: Param) -> str:
@@ -591,11 +603,18 @@ def _key(key: Any) -> str:
         return str(key.isoformat()).removesuffix("T00:00:00")
     return str(key)'''
 
-QUIET = '''\
+LEGACY = '''\
+# One lock for the legacy calls: redirect_stdout swaps sys.stdout for the whole process, and
+# tools run on several threads, so two calls at once could leave stdout pointing at stderr.
+# The lock also keeps the legacy code's module state to one call at a time.
+_LEGACY_LOCK = threading.RLock()
+
+
 @contextlib.contextmanager
-def _quiet() -> Iterator[None]:
-    """Send the legacy code's prints to stderr: over stdio, stdout carries the protocol."""
-    with contextlib.redirect_stdout(sys.stderr):
+def _legacy() -> Iterator[None]:
+    """Run legacy code one call at a time, its prints sent to stderr: over stdio, stdout
+    carries the protocol."""
+    with _LEGACY_LOCK, contextlib.redirect_stdout(sys.stderr):
         yield'''
 
 
