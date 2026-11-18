@@ -2,7 +2,7 @@
 
 Configuration for clients other than Claude Code. Claude Code installs the plugin instead (see
 [docs/getting-started.md](../docs/getting-started.md)). Each bundle has the MCP server command, the
-same as `qaos connect`, plus the four skills' instructions as a rules file, because these clients
+same as `qaos connect`, plus the five skills' instructions as a rules file, because these clients
 do not load skills.
 
 | Client | Copy into your project | Then |

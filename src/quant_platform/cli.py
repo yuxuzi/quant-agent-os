@@ -21,6 +21,7 @@ from quant_agent_os.observability import configure_logging
 from quant_agent_os.runs import RunStoreError
 from quant_agent_os.tools import AccessFileError, FileAccessPolicy
 from quant_app_factory.cli import app as factory_app
+from quant_app_factory.legacy_cli import app as legacy_app
 from quant_platform.acceptance import GoldFileError, load_gold, run_acceptance
 from quant_platform.cli_common import (
     DatasetsOption,
@@ -45,6 +46,9 @@ app.add_typer(research_app)
 app.add_typer(data_app, name="data")
 app.add_typer(keys_app, name="keys")
 app.add_typer(factory_app, name="app", help="App Factory: generate tested Python applications.")
+app.add_typer(
+    legacy_app, name="legacy", help="Draft tools from existing Python: scan, edit, then wrap."
+)
 app.add_typer(runs_app, name="runs")
 app.command()(connect)
 app.command()(doctor)

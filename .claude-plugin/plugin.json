@@ -1,7 +1,7 @@
 {
   "name": "quant-agent-os",
   "version": "0.7.0",
-  "description": "Quantitative research tools with cited, computed evidence: search your own research corpus, compute performance and risk metrics by dataset reference, and draft cited strategy specs and reports. One MCP server plus four skills.",
+  "description": "Quantitative research tools with cited, computed evidence: search your own research corpus, compute performance and risk metrics by dataset reference, and draft cited strategy specs and reports. One MCP server plus five skills.",
   "author": {
     "name": "Leo Liu"
   },
