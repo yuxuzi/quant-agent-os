@@ -194,6 +194,24 @@ What this does not show:
 
 It stays off by default, as ingestion is about 15 times slower and the extra adds 28 packages.
 
+## C7. Title and heading boosts, from RAGFlow (2026-11-18)
+
+RAGFlow weights a chunk's document title and keywords above its body in keyword search. We
+tried the cheap form, indexing each chunk's section heading and document title with its text,
+on SQLite, and kept neither:
+
+| Indexed with the text | Topic hits in top 5 | Topic MRR | Paraphrases | Abstention |
+| --- | --- | --- | --- | --- |
+| Nothing (current) | 19 of 19 | 0.899 | 5 of 6 | 28 of 28 |
+| Section heading | 19 of 19 | 0.899 | 5 of 6 | 28 of 28 |
+| Document title | 18 of 19 | 0.838 | 5 of 6 | 28 of 28 |
+| Both | 18 of 19 | 0.838 | 5 of 6 | 28 of 28 |
+
+PDF passages rarely carry a section, so headings change nothing here; on the Markdown corpus of
+`research_eval.py` passage precision stayed 0.771. A title gives every chunk of a paper the same
+terms, which lifts the paper's weaker passages past better ones elsewhere. The mention channel
+already does what RAGFlow's keyword field does, from the vocabulary.
+
 ## Known limitations (found here, not fixed)
 
 - **Generic words in the vocabulary.** "Profitability" and "momentum" are also ordinary
