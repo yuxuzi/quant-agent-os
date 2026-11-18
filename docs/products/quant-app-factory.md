@@ -16,9 +16,9 @@ AppSpec (TOML) ─▶ ArchitecturePlanner ─▶ ScaffoldProvider.plan ─▶ op
 | `bundled`, `python` | pytemplate-uv's bundled `python` profile (`container`, `devcontainer`, `mcp`, `release`) | No |
 | `bundled`, `library` | pytemplate-uv's bundled `library` profile: a typed package without a command line (`devcontainer`, `mcp`, `release`) | No |
 | `bundled`, `fastapi` | pytemplate-uv's bundled `fastapi` profile (`database`, `worker`, `auth`, `devcontainer`, ...) | No |
-| `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal, and a signal file | No |
-| `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with walk-forward | No |
-| `quant-apps`, `risk-monitor` | the `quant-apps` pack: positions to exposures, value at risk, stress, and limit checks | No |
+| `quant-apps`, `alpha-research` | the `quant-apps` pack: signal evidence around the firm's signal (IC, quantile returns, optional winsorizing and z-scores), and a signal file | No |
+| `quant-apps`, `strategy-backtest` | the `quant-apps` pack: signals or target weights to net returns, with purged walk-forward and the cost drag and break-even cost | No |
+| `quant-apps`, `risk-monitor` | the `quant-apps` pack: positions to exposures, value at risk, stress (including twelve historical windows), and limit checks | No |
 | `quant-apps`, `performance-report` | the `quant-apps` pack: returns to horizon tables, risk basics, tear sheets, Excel, and reconciliation | No |
 | `quant-baseline`, `quant-lab` | the `quant-baseline` pack: one project with `study` (IC, rank IC, spreads, decay), `backtest` (lagged trades, drift, rebalancing, costs, delistings), and `report` commands, sharing one `config.toml` | No (optional `agent-tools`) |
 | `path/to/pack`, your profile | your own pack | Up to the pack |

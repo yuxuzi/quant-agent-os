@@ -28,6 +28,13 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 No changes yet.
 
+## 0.7.0
+
+| Tool | Version | Change |
+| --- | --- | --- |
+| `analyze_performance` | 2.1.0 | Adds skewness, excess kurtosis, the best and worst period, the Sharpe ratio's standard error, the probabilistic Sharpe ratio, and the minimum track record; with a benchmark, up and down capture and correlation. |
+| `analyze_risk` | 2.1.0 | Adds the 95% Cornish-Fisher value at risk and Gaussian expected shortfall per period, the Herfindahl index, and effective positions. |
+
 ## 0.5.0
 
 No tool changed version. `analyze_performance` and `analyze_risk` compute through Quant Toolbox, with the

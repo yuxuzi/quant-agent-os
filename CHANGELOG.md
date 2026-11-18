@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-17
+
+0.7.0 is the first tagged release since 0.5.0; it includes 0.6.0, which was never tagged. Quant Toolbox stays at
+0.6.0, released by this tag.
+
 ### Added
 
 - **The analytics tools report more of Quant Toolbox 0.6.0.** `analyze_performance` (2.1.0) adds bias-adjusted
