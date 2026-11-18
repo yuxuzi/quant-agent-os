@@ -29,13 +29,21 @@ from quant_app_factory.domain.legacy import (
 )
 from quant_app_factory.domain.legacy_analysis import SLOW_CALL
 
-DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py")
+DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py", "test_tools.py")
 STDLIB = frozenset(sys.stdlib_module_names)
 # Ruff's default line length: the draft passes ruff with no configuration.
 WIDTH = 88
 PATH_NAME = re.compile(r"(^|_)(path|file|filename|dest|destination|out|output|target)$")
 WINDOW_NAME = re.compile(r"(window|lookback|period|periods|days|horizon|halflife|span|lag|n)$")
 PRICE_NAME = re.compile(r"price|px|close|level|nav")
+# Untyped parameters named like these take a string: a name, a label, or a date.
+STRING_NAME = re.compile(
+    r"(^|_)(names?|desk|class|sector|region|country|currency|ccy|ticker|symbol|scenario|method|"
+    r"kind|mode|book|fund|strategy|portfolio|account|id|key|label|code|model|source|by|group|"
+    r"benchmark|freq|frequency|type|style|side|venue|exchange)$"
+)
+DATE_NAME = re.compile(r"(^|_)(date|as_of|asof|start|end|since|until|day)$")
+SAMPLE_DATE = "2024-06-28"  # a business day inside the generated test's sample data
 SIMPLE_HINT = re.compile(r"^(int|float|str|bool|None|list|dict|tuple|\[|\]|,| |\||\.\.\.)+$")
 SERVICE_PORT = 8100
 
@@ -283,7 +291,7 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
             late.append(param.name)
             signature.append(f"{param.name}: {hint} | None = None")
         elif param.default is not None:
-            signature.append(f"{param.name}: {hint} = {default}")
+            signature.append(f"{param.name}: {_optional(hint, default)} = {default}")
         else:
             signature.append(f"{param.name}: {hint}")
     if kept_init:
@@ -391,6 +399,10 @@ def _hint(
     if guess:
         todos.append(f"TODO(type): {param.name}'s hint, {guess}, is guessed from its default.")
         return guess
+    guess = _type_of_name(param.name)
+    if guess:
+        todos.append(f"TODO(type): {param.name}'s hint, {guess}, is guessed from its name.")
+        return guess
     todos.append(f"TODO(type): {param.name} has no hint in the legacy code; name its type.")
     return "Any"
 
@@ -463,6 +475,23 @@ def _type_of_default(default: str | None) -> str | None:
         if type(value) is kind:
             return kind.__name__
     return None
+
+
+def _type_of_name(name: str) -> str | None:
+    """A hint for an untyped parameter from its name: ``desk`` or ``as_of`` is a string, and
+    ``window`` an int, so a client sending the wrong type is refused."""
+    if STRING_NAME.search(name) or DATE_NAME.search(name):
+        return "str"
+    if WINDOW_NAME.search(name):
+        return "int"
+    return None
+
+
+def _optional(hint: str, default: str | None) -> str:
+    """``hint`` allowing None when the default is None."""
+    if default == "None" and hint != "Any" and "None" not in hint.replace(" ", "").split("|"):
+        return f"{hint} | None"
+    return hint
 
 
 def _default(param: Param) -> str | None:
@@ -773,7 +802,7 @@ def _endpoint(selected: _Selected, imports: _Imports) -> str:
                 f"    {param.name}: {hint} | None = None  # legacy default: {param.default}"
             )
         elif optional:
-            fields.append(f"    {param.name}: {hint} = {default}")
+            fields.append(f"    {param.name}: {_optional(hint, default)} = {default}")
         else:
             fields.append(f"    {param.name}: {hint}")
         if data is not None:
@@ -821,7 +850,7 @@ def _wire_hint(param: Param, data: DataKind | None, pandas: bool) -> str:
         return "dict[str, Any]" if pandas else "dict[str, list[float | None]]"
     if param.annotation and SIMPLE_HINT.match(param.annotation):
         return param.annotation
-    return _type_of_default(param.default) or "Any"
+    return _type_of_default(param.default) or _type_of_name(param.name) or "Any"
 
 
 PANDAS_INPUTS = '''\
@@ -882,14 +911,16 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
             elif param.annotation and SIMPLE_HINT.match(param.annotation):
                 hint = param.annotation
             else:
-                hint = _type_of_default(param.default) or "Any"
-                what = f"guessed from its default, is {hint}" if hint != "Any" else "is Any"
+                by_default = _type_of_default(param.default)
+                hint = by_default or _type_of_name(param.name) or "Any"
+                source = "its default" if by_default else "its name"
+                what = f"guessed from {source}, is {hint}" if hint != "Any" else "is Any"
                 todos.append(f"TODO(type): {param.name}'s hint {what}; name its type.")
             default = _default(param)
             if param.default is not None and default is None:
                 signature.append(f"{param.name}: {hint} | None = None")
             elif param.default is not None:
-                signature.append(f"{param.name}: {hint} = {default}")
+                signature.append(f"{param.name}: {_optional(hint, default)} = {default}")
             else:
                 signature.append(f"{param.name}: {hint}")
         returns = found.returns if found.returns and SIMPLE_HINT.match(found.returns) else None
@@ -1080,13 +1111,17 @@ def _example(selected: _Selected, samples: _Samples) -> _Example:
     params = [*found.params, *found.init_params] if entry.kind is Kind.FACADE else found.params
     seen: set[str] = set()
     for param in params:
-        if param.kind in ("var_positional", "var_keyword") or param.default is not None:
+        data = entry.data.get(param.name)
+        # An optional data parameter gets an example too: without one, the legacy code falls
+        # back to reading the firm's data itself.
+        if param.kind in ("var_positional", "var_keyword") or (
+            param.default is not None and data is None
+        ):
             continue
         if param.name in seen:
             continue
         seen.add(param.name)
         kind = "price" if PRICE_NAME.search(param.name) else "return"
-        data = entry.data.get(param.name)
         if data == "series":
             samples.series.setdefault(param.name, kind)
             arguments.append(
@@ -1103,7 +1138,9 @@ def _example(selected: _Selected, samples: _Samples) -> _Example:
 
 
 def _value_for(param: Param) -> str:
-    hint = (param.annotation or "").replace(" ", "")
+    """A placeholder of the parameter's type, or of the type its name suggests: never a number
+    for what may be a name, so a wrong guess fails instead of passing."""
+    hint = (param.annotation or "").replace(" ", "") or _type_of_name(param.name) or ""
     if hint.startswith(("list[float]", "Sequence[float]", "tuple[float")):
         return "[0.01, -0.02, 0.015]"
     if hint.startswith(("dict", "Mapping")):
@@ -1111,7 +1148,7 @@ def _value_for(param: Param) -> str:
     if hint == "bool":
         return "False"
     if hint == "str":
-        return '"example"'
+        return f'"{SAMPLE_DATE}"' if DATE_NAME.search(param.name) else '"example"'
     if hint == "int" or (not hint and WINDOW_NAME.search(param.name)):
         return "20" if WINDOW_NAME.search(param.name) else "1"
     if "conf" in param.name:
@@ -1140,7 +1177,7 @@ def _test_module(examples: list[_Example], samples: _Samples, services: bool) ->
             continue
         entries.append(f'    "{example.tool}": {{')
         for name, value, guessed in example.arguments:
-            note = "  # TODO: a realistic value" if guessed else ""
+            note = "  # TODO(data): a realistic value; this one is a guess" if guessed else ""
             entries.append(f'        "{name}": {value},{note}')
         entries.append("    },")
     datasets = []

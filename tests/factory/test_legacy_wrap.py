@@ -14,6 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
+from quant_agent_os.testing import check_tool
+from quant_agent_os.tools.contracts import ToolContractError
 from quant_app_factory.application.legacy import scan, wrap
 from quant_app_factory.domain.legacy import LegacyError
 from quant_app_factory.infrastructure.legacy_files import load_inventory, write_inventory
@@ -125,7 +127,7 @@ def test_the_generated_contract_test_passes_and_lists_the_open_decisions(drafted
     assert "FAILED test_tools.py::test_no_decision_is_left_open" in first.stdout
     assert "open decisions" in first.stdout
 
-    for name in ("facades.py", "server.py", "stubs.py", "service/app.py"):
+    for name in ("facades.py", "server.py", "stubs.py", "service/app.py", "test_tools.py"):
         path = drafted / name
         path.write_text(path.read_text().replace("TODO", "DONE"))  # the developer decides
     second = _pytest(drafted)
@@ -199,6 +201,38 @@ def test_concurrent_facades_leave_stdout_as_it_was(
     captured = capsys.readouterr()
     assert "legacy output" not in captured.out
     assert captured.err.count("legacy output") == 2
+
+
+@pytest.fixture
+def draft_package(drafted: Path, legacy_importable: None) -> Iterator[Any]:
+    """The drafted package, imported as a firm's server would import it."""
+    sys.path.insert(0, str(drafted.parent))
+    yield importlib.import_module("legacy_tools.test_tools")
+    sys.path.remove(str(drafted.parent))
+    for name in [name for name in sys.modules if name.startswith("legacy_tools")]:
+        del sys.modules[name]
+
+
+def test_examples_cover_optional_data_and_placeholders_match_the_type(
+    drafted: Path, draft_package: Any
+) -> None:
+    examples = draft_package.EXAMPLES
+    test_text = (drafted / "test_tools.py").read_text()
+    facades = (drafted / "facades.py").read_text()
+
+    # An optional data parameter gets a reference; with none, momentum read the warehouse.
+    assert examples["momentum"] == {"panel": {"dataset": "sample_panel"}}
+    assert "panel: pd.DataFrame | None = None" in facades
+    # An untyped name is a string, guessed from the name, and the guess is an open decision.
+    assert examples["index_level"] == {"name": "example"}
+    assert "def index_level(name: str)" in facades
+    assert '"name": "example",  # TODO(data)' in test_text
+    # A number where a name belongs is refused, where 1.0 used to pass.
+    app = draft_package.server.build_app(draft_package.server.SERVICE_URL)
+    (spec,) = [spec for spec in app.tools(draft_package.STORE) if spec.name == "index_level"]
+    check_tool(spec, {"name": "example"})
+    with pytest.raises(ToolContractError, match="expected 'ok'"):
+        check_tool(spec, {"name": 1.0})
 
 
 def test_a_firms_server_imports_the_draft_as_a_package(drafted: Path) -> None:

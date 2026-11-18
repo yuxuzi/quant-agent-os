@@ -48,6 +48,7 @@ def test_each_callable_is_classified_with_its_reasons() -> None:
         "export_positions": Kind.FACADE,
         "daily_prices": Kind.FACADE,
         "index_level": Kind.FACADE,
+        "momentum": Kind.FACADE,
         "risk_model_portfolio_var": Kind.SERVICE,
     }
     assert entries["annualised_volatility"][1] == ["typed, documented, and pure"]
@@ -89,6 +90,9 @@ def test_permissions_and_data_are_drafted_from_what_was_seen() -> None:
     assert entries["export_positions"].data == {"positions": "frame"}
     assert entries["cross_section"].data == {"prices": "frame"}
     assert entries["annualised_volatility"].data == {"returns": "series"}
+    assert entries["momentum"].data == {"panel": "frame"}
+    # read_sql_query may read any database, so the draft declares network until reviewed.
+    assert entries["momentum"].permissions == [Permission.NETWORK]
 
 
 def _module(tmp_path: Path, name: str, text: str) -> Path:
@@ -253,7 +257,7 @@ def test_the_command_prints_a_table_json_and_writes_an_inventory(tmp_path: Path)
     )
 
     assert table.exit_code == 0, table.output
-    assert "2 expose, 4 facade, 1 service" in table.output
+    assert "2 expose, 5 facade, 1 service" in table.output
     document = json.loads(as_json.output)
     carry = next(e for e in document["entries"] if e["name"] == "carry_signal")
     assert carry["kind"] == "facade" and carry["documented"] is False
