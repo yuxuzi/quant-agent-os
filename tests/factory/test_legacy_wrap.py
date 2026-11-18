@@ -55,7 +55,7 @@ def legacy_importable(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
-    files = sorted(str(p.relative_to(drafted)) for p in drafted.rglob("*.py"))
+    files = sorted(p.relative_to(drafted).as_posix() for p in drafted.rglob("*.py"))
 
     assert files == [
         "conftest.py",

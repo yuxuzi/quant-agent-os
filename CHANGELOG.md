@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
+  package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
+  *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
+  settings, environment variables, databases, files, printing, network calls, state, slow set-up, and caches.
+  `--json` prints it for machines, and `--write FILE` writes an editable TOML inventory. `qaos legacy wrap
+  INVENTORY --out DIR` drafts typed facades, a server file registering every tool with `FirmApp.expose`, a
+  FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
+  any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
+  is a draft for a developer to finish, not finished code.
+- **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
+  firm's own test says why a tool failed without opening the run record.
+- **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the
+  developer, and reports done only when the generated test passes.
+- **A mock fund's facility for the 0.8.0 pilot** (`examples/pilot-fund/facility/`). Kestrel Point Capital is
+  fictional, and its facility is written as its own code, importing nothing of the platform: a deterministic
+  SQLite warehouse of three years of prices, positions, trades, signals, benchmarks, average daily value, and a
+  vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
+  report functions and a stateful risk engine; sixteen research documents, one carrying an injected
+  instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
 - **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
   by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
   t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
@@ -29,26 +49,6 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
-- **A mock fund's facility for the 0.8.0 pilot** (`examples/pilot-fund/facility/`). Kestrel Point Capital is
-  fictional, and its facility is written as its own code, importing nothing of the platform: a deterministic
-  SQLite warehouse of three years of prices, positions, trades, signals, benchmarks, average daily value, and a
-  vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
-  report functions and a stateful risk engine; sixteen research documents, one carrying an injected
-  instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
-  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
-- **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
-  package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
-  *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
-  settings, environment variables, databases, files, printing, network calls, state, slow set-up, and caches.
-  `--json` prints it for machines, and `--write FILE` writes an editable TOML inventory. `qaos legacy wrap
-  INVENTORY --out DIR` drafts typed facades, a server file registering every tool with `FirmApp.expose`, a
-  FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
-  any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
-  is a draft for a developer to finish, not finished code.
-- **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
-  firm's own test says why a tool failed without opening the run record.
-- **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the
-  developer, and reports done only when the generated test passes.
 - **The pilot at the mock fund** (`examples/pilot-fund/site/`, `drill.sh`, and the
   [pilot runbook](docs/pilot-runbook.md)). The fund's own server serves the platform's toolsets with its
   warehouse through one `DatasetStore` adapter, its documents, and its legacy code as finished facades and a
