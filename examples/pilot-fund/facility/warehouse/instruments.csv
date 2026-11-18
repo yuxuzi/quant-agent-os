@@ -1,0 +1,41 @@
+instrument_id,ticker,name,asset_class,sector,region,currency,desk,base_price,specific_vol,carry_mean,loadings
+EQ_ALDR,ALDR,Alder Systems,equity,Technology,US,USD,eq_ls,176.0,0.3,0.016,equity_market=1.25 credit_spread=0.2
+EQ_BRVN,BRVN,Bravon Health,equity,Health Care,US,USD,eq_ls,159.8,0.24,0.016,equity_market=0.8 credit_spread=0.2
+EQ_CPLX,CPLX,Copperline Logistics,equity,Industrials,US,USD,eq_ls,217.8,0.26,0.01,equity_market=1.05 credit_spread=0.2
+EQ_DRFT,DRFT,Driftwood Energy,equity,Energy,US,USD,eq_ls,186.2,0.32,0.022,equity_market=0.95 credit_spread=0.2 commodity=0.45
+EQ_ELMS,ELMS,Elmstead Financial,equity,Financials,US,USD,eq_ls,207.4,0.25,0.026,equity_market=1.15 credit_spread=0.2
+EQ_FNWK,FNWK,Fenwick Retail,equity,Consumer,US,USD,eq_ls,174.0,0.27,0.018,equity_market=1.0 credit_spread=0.2
+EQ_GRNT,GRNT,Granite Peak Materials,equity,Materials,US,USD,eq_ls,233.6,0.29,0.014,equity_market=1.1 credit_spread=0.2 commodity=0.35
+EQ_HLCN,HLCN,Halcyon Software,equity,Technology,US,USD,eq_ls,198.8,0.33,0.022,equity_market=1.3 credit_spread=0.2
+EQ_IRNW,IRNW,Ironwood Utilities,equity,Utilities,US,USD,eq_ls,187.6,0.18,0.026,equity_market=0.6 credit_spread=0.2
+EQ_JSPR,JSPR,Jasper Biotech,equity,Health Care,US,USD,eq_ls,170.4,0.38,0.018,equity_market=0.9 credit_spread=0.2
+EQ_KSTN,KSTN,Keystone Media,equity,Communication,US,USD,eq_ls,175.8,0.28,0.018,equity_market=1.05 credit_spread=0.2
+EQ_LRKS,LRKS,Larkspur Insurance,equity,Financials,US,USD,eq_ls,196.6,0.21,0.026,equity_market=0.85 credit_spread=0.2
+EQ_AURL,AURL,Aurelia Motoren,equity,Consumer,Europe,EUR,eq_ls,188.2,0.29,0.02,equity_market=1.2 credit_spread=0.2
+EQ_BRSK,BRSK,Brisk Telecom,equity,Communication,Europe,EUR,eq_ls,156.2,0.2,0.016,equity_market=0.7 credit_spread=0.2
+EQ_CDRA,CDRA,Cedra Chemie,equity,Materials,Europe,EUR,eq_ls,161.8,0.25,0.014,equity_market=1.05 credit_spread=0.2 commodity=0.35
+EQ_DLFT,DLFT,Delftwerk Engineering,equity,Industrials,Europe,EUR,eq_ls,226.6,0.24,0.012,equity_market=1.1 credit_spread=0.2
+EQ_ESKR,ESKR,Eskerholm Bank,equity,Financials,Europe,EUR,eq_ls,181.2,0.27,0.018,equity_market=1.2 credit_spread=0.2
+EQ_FJRD,FJRD,Fjordline Shipping,equity,Industrials,Europe,NOK,eq_ls,202.0,0.34,0.026,equity_market=1.0 credit_spread=0.2
+EQ_GLNB,GLNB,Glenbrook Pharma,equity,Health Care,Europe,GBP,eq_ls,179.0,0.22,0.022,equity_market=0.75 credit_spread=0.2
+EQ_HVRN,HVRN,Havrenne Luxe,equity,Consumer,Europe,EUR,eq_ls,172.4,0.26,0.016,equity_market=1.15 credit_spread=0.2
+FUT_UST2Y,TU,US Treasury 2Y future (generic),govt_bond_future,Rates,US,USD,macro,102.0,0.008,0.004,rates=0.35 equity_market=-0.03
+FUT_UST10Y,TY,US Treasury 10Y future (generic),govt_bond_future,Rates,US,USD,macro,110.0,0.015,0.008,rates=1.0 equity_market=-0.08
+FUT_BUND,RX,Euro-Bund future (generic),govt_bond_future,Rates,Europe,EUR,macro,131.0,0.018,0.006,rates=0.9 equity_market=-0.06
+FUT_GILT,G,Long Gilt future (generic),govt_bond_future,Rates,Europe,GBP,macro,97.0,0.022,0.007,rates=0.95 equity_market=-0.05
+FX_EURUSD,EURUSD,Euro / US dollar,fx,G10 FX,Europe,USD,macro,1.08,0.04,-0.015,usd=-1.0
+FX_GBPUSD,GBPUSD,Sterling / US dollar,fx,G10 FX,Europe,USD,macro,1.25,0.045,0.002,usd=-0.95
+FX_USDJPY,USDJPY,US dollar / yen,fx,G10 FX,Asia,JPY,macro,140.0,0.05,0.045,usd=0.9 equity_market=0.1
+FX_AUDUSD,AUDUSD,Australian dollar / US dollar,fx,G10 FX,Asia,USD,macro,0.67,0.05,-0.012,usd=-1.0 commodity=0.2 equity_market=0.15
+FX_NZDUSD,NZDUSD,New Zealand dollar / US dollar,fx,G10 FX,Asia,USD,macro,0.61,0.055,0.004,usd=-1.0 commodity=0.15 equity_market=0.15
+FX_USDCAD,USDCAD,US dollar / Canadian dollar,fx,G10 FX,Americas,CAD,macro,1.35,0.035,0.006,usd=0.7 commodity=-0.2
+FX_USDCHF,USDCHF,US dollar / Swiss franc,fx,G10 FX,Europe,CHF,macro,0.9,0.045,0.035,usd=0.95
+FX_USDNOK,USDNOK,US dollar / Norwegian krone,fx,G10 FX,Europe,NOK,macro,10.6,0.06,0.008,usd=0.9 commodity=-0.25
+CR_CDXIG,CDXIG,North American IG credit index proxy,credit_index,Credit,US,USD,macro,100.0,0.012,0.006,credit_spread=1.0 rates=0.25 equity_market=0.1
+CR_ITRXMAIN,ITRXMAIN,European main credit index proxy,credit_index,Credit,Europe,EUR,macro,100.0,0.014,0.005,credit_spread=1.05 rates=0.2 equity_market=0.1
+FUT_WTI,CL,WTI crude oil future (generic),commodity_future,Energy,US,USD,commod,75.0,0.25,0.03,commodity=1.3 equity_market=0.2
+FUT_BRENT,CO,Brent crude oil future (generic),commodity_future,Energy,Europe,USD,commod,80.0,0.22,0.02,commodity=1.25 equity_market=0.2
+FUT_NATGAS,NG,Natural gas future (generic),commodity_future,Energy,US,USD,commod,3.2,0.5,-0.12,commodity=0.8
+FUT_GOLD,GC,Gold future (generic),commodity_future,Metals,Global,USD,commod,1900.0,0.12,-0.04,commodity=0.35 usd=-0.5
+FUT_COPPER,HG,Copper future (generic),commodity_future,Metals,Global,USD,commod,3.9,0.18,-0.01,commodity=0.8 equity_market=0.3
+FUT_SILVER,SI,Silver future (generic),commodity_future,Metals,Global,USD,commod,23.0,0.22,-0.03,commodity=0.6 usd=-0.4
