@@ -40,7 +40,7 @@ is not a chatbot.
   `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_apps`,
   `open_platform()` opens them from a notebook, and `qaos eval` runs agreed test cases against the
   platform's own tools (a firm's own tools go through `run_acceptance` with its catalog).
-- **Skills and client packaging**: `skills/` holds the four instruction-only skills,
+- **Skills and client packaging**: `skills/` holds the five instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles
   ([plan](docs/plans/archive/agent-surface.md), P3).

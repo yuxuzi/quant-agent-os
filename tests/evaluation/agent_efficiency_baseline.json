@@ -22,6 +22,10 @@
       "description_bytes": 282,
       "skill_bytes": 2458
     },
+    "quant-legacy": {
+      "description_bytes": 310,
+      "skill_bytes": 3964
+    },
     "quant-research": {
       "description_bytes": 274,
       "skill_bytes": 2774
@@ -109,8 +113,8 @@
     "definition_bytes": 6559,
     "instruction_bytes": 817,
     "result_bytes": 36369,
-    "skill_bytes": 10309,
-    "skill_description_bytes": 1114,
+    "skill_bytes": 14273,
+    "skill_description_bytes": 1424,
     "success_rate": 1.0,
     "tools": 7
   }

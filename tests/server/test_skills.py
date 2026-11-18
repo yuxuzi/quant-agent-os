@@ -109,6 +109,7 @@ def test_there_is_one_skill_per_workflow() -> None:
     assert [skill.directory for skill in load_skills()] == [
         "quant-analytics",
         "quant-app-factory",
+        "quant-legacy",
         "quant-research",
         "quant-strategy",
     ]

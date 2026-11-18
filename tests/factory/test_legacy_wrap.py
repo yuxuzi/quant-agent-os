@@ -162,7 +162,7 @@ def test_wrap_refuses_an_entry_the_code_no_longer_has(inventory: Path, tmp_path:
     text = inventory.read_text().replace("firm_legacy.signals.carry_signal", "firm_legacy.gone.f")
     inventory.write_text(text)
 
-    with pytest.raises(LegacyError, match="not in .*rescan, or set include = false"):
+    with pytest.raises(LegacyError, match=r"not in .*rescan, or set include = false"):
         wrap(inventory, tmp_path / "out")
 
 
