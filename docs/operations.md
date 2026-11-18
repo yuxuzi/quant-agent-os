@@ -184,6 +184,28 @@ when any fails, and 2 when the cases cannot be read, so scripts can use it. With
 `qaos eval --gold cases.toml`. It runs the platform's own tools: to include your tools, call `run_acceptance` with your
 catalog from your own server code.
 
+**Run cases as your users.** With an access file ([decision 0021](decisions/0021-per-caller-access.md)), give each case
+the caller it runs as, so it reaches exactly what that user would: `[caller]` for the whole file, or `caller` on one
+case, which wins.
+
+```toml
+[caller]
+principal = "acceptance-growth"
+groups = ["growth-desk"]
+
+[[numeric]]
+name = "value book volatility"
+caller = { principal = "acceptance-value", groups = ["value-desk"] }
+# tool, arguments, value, expected, and tolerance as above
+```
+
+`qaos eval` applies `--access FILE`, or the configured `QUANT_AGENT_OS_ACCESS_FILE`, as the server does. With one, a
+case that names no caller is not run and fails, saying why, since access fails closed; a case that reaches past its
+caller's groups fails as a client's call would, with the refused dataset looking missing. Without one, callers change
+nothing, and the report warns that no entitlement was checked. In your own server code, pass the catalog composed with
+its access policy, and name the run's caller in the file or as `run_acceptance(..., caller=Caller(...))`, not both.
+The compose file's `eval` service mounts no access file; mount yours and add `--access` to check entitlements there.
+
 ## Retention and export
 
 **Runs are kept until you remove them.** Nothing removes them on its own, and they can hold retrieved passages and

@@ -353,6 +353,48 @@
             ],
             "title": "FactorModelRef",
             "type": "object"
+          },
+          "WeightsRef": {
+            "additionalProperties": false,
+            "description": "Weights: a dated row of dates by assets, or a column of assets as rows.",
+            "properties": {
+              "as_of": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Only for dates by assets. Default: last",
+                "title": "As Of"
+              },
+              "column": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Only for assets as rows",
+                "title": "Column"
+              },
+              "dataset": {
+                "minLength": 1,
+                "title": "Dataset",
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset"
+            ],
+            "title": "WeightsRef",
+            "type": "object"
           }
         },
         "description": "`RiskInput` with returns by value or by reference.",
@@ -427,18 +469,36 @@
             "type": "string"
           },
           "weights": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "maxProperties": 500,
-            "minProperties": 1,
-            "title": "Weights",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "maxProperties": 500,
+                "minProperties": 1,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Weights"
+          },
+          "weights_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WeightsRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
           "portfolio_id",
-          "weights",
           "asset_returns"
         ],
         "title": "RiskRequest",
@@ -903,7 +963,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     "analyze_signal": {
       "input_schema": {

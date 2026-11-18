@@ -26,7 +26,8 @@ curl -s -H "Authorization: Bearer $KEY" -H 'content-type: application/json' -X P
 The result carries the figure, the convention, the fingerprint of the data it read, and `computed`
 evidence. The function's file has no platform code: registering it took two statements.
 
-`check_app` is the test to put in your own CI; see
+`check_app` is the test to put in your own CI, and `build_server_app` gives the HTTP app `serve_apps`
+would serve, with its keys, access, and run store, to drive with Starlette's `TestClient`; see
 `tests/integration/test_firm_tools_example.py`. The guide is in
 [deployment](../../docs/deployment.md#8-add-your-own-tools), and why it works this way is in
 decisions [0020](../../docs/decisions/0020-a-firms-own-server.md) and

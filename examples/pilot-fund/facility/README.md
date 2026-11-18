@@ -48,8 +48,15 @@ daily return is the sum of the previous day's weight times each instrument's `to
 (t-statistic near 4), carry has none (|t| under 2), and value a small positive one among equities. They
 hold for every seed we tried, not only the default. The convention is in the file: Spearman correlation
 across instruments, ties sharing their average rank, between a signal on day t and `total_return` on day
-t+1, averaged over days. The answers are computed from the same rounded values the tables hold. The file
-also has each desk's gross P&L and commissions, the row counts, and the factor volatilities.
+t+1, averaged over days, with a naive t-statistic. The answers are computed from the same rounded values the
+tables hold.
+
+That pairing is `lag: 0` to the analysis platform, whose default is `lag: 1`: a signal on day t traded on
+day t+1 and scored against day t+2's return. So `signals.at_platform_default` states each signal's mean
+rank IC, IR, and Newey-West t-statistic (the platform's lag count) at that default, labelled with its
+convention; momentum's is near 0.026. A client that keeps `analyze_signal`'s defaults should find exactly
+these, and `tests/pilot_fund/test_facility.py` checks that it does. The file also has each desk's gross
+P&L and commissions, the row counts, and the factor volatilities.
 
 The generator uses no linear algebra (its Cholesky factor and products are written out) and sums with
 `math.fsum`, so its output should not depend on the platform's BLAS or summation order. The tests still

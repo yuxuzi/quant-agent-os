@@ -27,7 +27,9 @@ All notable changes to this project are documented here. The format follows
   vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
   report functions and a stateful risk engine; sixteen research documents, one carrying an injected
   instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
-  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`. Its known answers
+  state each signal's mean rank IC, IR, and Newey-West t-statistic both as planted (a signal on day t against
+  day t+1's return, `lag: 0`) and at the platform's default `lag: 1`, which `analyze_signal` reproduces.
 - **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
   by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
   t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
@@ -42,6 +44,23 @@ All notable changes to this project are documented here. The format follows
   there is none. `factor_model` takes a vendor's loadings, factor covariance, and specific variances by
   dataset id and reports the volatility under that model, split into factors, specific risk, and assets; a
   model whose shapes do not line up is refused, naming what is missing. Both fields are additive.
+- **`analyze_risk` takes the weights by reference** (2.3.0). `weights_ref` names a dataset instead of inline
+  `weights`: `{dataset}` for a frame of dates by assets, whose latest row is the book unless `as_of` names a
+  date, or `{dataset, column}` for one row per asset. Missing cells are assets not held and are left out, with a
+  note; `conventions.weights` says which row was read. Exactly one of the two is accepted, each refusal names
+  what to fix, and the read goes through the access guard, so a refused dataset looks missing. The tool lock
+  now counts an input that may also take another type, such as `T` to `T | None`, as a minor change.
+- **Agreed cases run as named callers.** A cases file's `[caller]` table, or a case's own `caller`, gives the
+  principal and groups a case runs as, and `run_acceptance(..., caller=...)` takes the run's caller in code. With
+  an access policy, each case reaches what that caller would; a case with no caller is not run and fails, saying
+  why. Without one, the report warns that named callers checked nothing. `qaos eval --access FILE` applies an
+  access file, by default the configured one.
+- **`quant_platform.build_server_app` builds a firm's server without serving it.** It takes `serve_apps`'s
+  arguments, plus `keys`, `runs`, and `sign_in`, and yields the HTTP app `serve_apps` serves, with the same
+  catalog, keys or sign-in, access, and run store, so a firm tests its own server in process with Starlette's
+  `TestClient` and no patching. A run store given as a path is closed when the block ends; one given as a store
+  is the caller's. The [deployment guide](docs/deployment.md#8-add-your-own-tools) and the firm-tools example's
+  test use it.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource
@@ -49,6 +68,12 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+
+### Changed
+
+- **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
+  policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
+  before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.
 
 ## [0.7.0] - 2026-11-17
 

@@ -30,6 +30,7 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 | --- | --- | --- |
 | `analyze_signal` | 1.0.0 | New: a signal's IC, rank IC, IR, HAC t-statistic per horizon, quantile returns and spread, and autocorrelation, from a signal frame and a returns frame by reference. |
 | `run_backtest` | 1.0.0 | New: simulated net returns of a signal as dollar-neutral or long-only weights, with a trade lag and costs, and their metrics. |
+| `analyze_risk` | 2.3.0 | Adds an optional `weights_ref`, the weights by reference instead of inline: a column of a dataset with one row per asset, or one date's row of a frame of dates by assets, the latest by default (`as_of` names another). Exactly one of `weights` and `weights_ref`; the source is in `conventions.weights`. |
 | `analyze_risk` | 2.2.0 | Adds `historical_stress` and `historical_stress_note` for daily, dated returns, and an optional `factor_model` input (loadings, factor covariance, and specific variances by dataset id) with its `factor_model` output. |
 
 ## 0.7.0
