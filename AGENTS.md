@@ -117,9 +117,6 @@ Toolbox's are in `packages/quant-toolbox/tests`, and run every test under both m
   ([decision 0016](docs/decisions/0016-clients-orchestrate.md)). No multi-agent features.
 - **Business logic stays out of MCP.** MCP code only adapts the registry
   ([decision 0002](docs/decisions/0002-mcp-boundary.md)).
-- **Per-caller access fails closed.** With an access policy, no bound caller, a failed check, or an invalid
-  file is a refusal, and a refused dataset looks like a missing one
-  ([decision 0021](docs/decisions/0021-per-caller-access.md)).
 - **Read-only by default.** Never widen `READ_ONLY` or default permissions. New capabilities must
   declare `Permission`s. Consequential permissions need per-call approval
   ([decision 0005](docs/decisions/0005-approval-gates.md)). Never create approvals from tool
@@ -131,8 +128,9 @@ Toolbox's are in `packages/quant-toolbox/tests`, and run every test under both m
   is labelled `interpretation`.
 - **Ingestion is an operator command.** Writes to the knowledge store are not agent tools. Nor are `qaos eval`, `qaos runs
   prune`, and `qaos runs export`.
-- **Per-caller access fails closed.** Once a policy applies, anything uncertain is a refusal, and a refused dataset looks like a
-  missing one ([decision 0021](docs/decisions/0021-per-caller-access.md)). A configuration an interface would ignore is
+- **Per-caller access fails closed.** Once a policy applies, anything uncertain is a refusal: no bound caller, a
+  failed check, or an invalid file. A refused dataset looks like a missing one
+  ([decision 0021](docs/decisions/0021-per-caller-access.md)). A configuration an interface would ignore is
   refused or warned about, never silently dropped.
 - **Declared permissions are checked, not sandboxed.** Never describe a tool's permissions as a limit on what its code can do
   ([finding F-6](docs/security-review.md#findings)).
