@@ -13,7 +13,7 @@
 # The comments above each entry are what the scan found; a rescan rewrites them.
 
 source = "../facility/kestrel_quant"
-app = "legacy"
+app = "kestrel"
 
 # log(*args)
 #   no docstring
@@ -24,7 +24,7 @@ app = "legacy"
 [[entry]]
 target = "kestrel_quant.config.log"
 kind = "facade"
-include = true
+include = false
 name = "log"
 data = {}
 permissions = []
@@ -40,7 +40,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.get_conn"
 kind = "service"
-include = true
+include = false
 name = "get_conn"
 data = {}
 permissions = []
@@ -54,7 +54,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.close"
 kind = "service"
-include = true
+include = false
 name = "close"
 data = {}
 permissions = []
@@ -68,7 +68,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.clear_cache"
 kind = "service"
-include = true
+include = false
 name = "clear_cache"
 data = {}
 permissions = []
@@ -86,7 +86,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.query"
 kind = "service"
-include = true
+include = false
 name = "query"
 data = {}
 permissions = []
@@ -102,7 +102,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.load_returns"
 kind = "service"
-include = true
+include = false
 name = "load_returns"
 data = {}
 permissions = []
@@ -119,7 +119,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.load_prices"
 kind = "service"
-include = true
+include = false
 name = "load_prices"
 data = {}
 permissions = []
@@ -136,7 +136,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.load_signal"
 kind = "service"
-include = true
+include = false
 name = "load_signal"
 data = {}
 permissions = []
@@ -153,7 +153,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.db.instruments"
 kind = "service"
-include = true
+include = false
 name = "instruments"
 data = {}
 permissions = []
@@ -168,7 +168,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.portfolio.vol_target_weights"
 kind = "facade"
-include = true
+include = false
 name = "vol_target_weights"
 data = { returns = "frame", signal = "series" }
 permissions = []
@@ -181,8 +181,8 @@ convention = ""
 target = "kestrel_quant.portfolio.backtest"
 kind = "facade"
 include = true
-name = "backtest"
-data = { weights = "series", returns = "series" }
+name = "kpc_backtest"
+data = {weights = "frame", returns = "frame"}
 permissions = []
 convention = ""
 
@@ -193,8 +193,8 @@ convention = ""
 target = "kestrel_quant.reports.drawdown_table"
 kind = "facade"
 include = true
-name = "drawdown_table"
-data = { returns = "series" }
+name = "kpc_drawdown_table"
+data = {returns = "series"}
 permissions = []
 convention = ""
 
@@ -208,11 +208,11 @@ convention = ""
 #   keeps state between calls: _CACHE, _conn, global _conn
 [[entry]]
 target = "kestrel_quant.reports.desk_pnl_report"
-kind = "service"
+kind = "facade"
 include = true
-name = "desk_pnl_report"
+name = "kpc_desk_pnl"
 data = {}
-permissions = ["external_action"]
+permissions = []
 convention = ""
 
 # summary(returns)
@@ -222,10 +222,10 @@ convention = ""
 target = "kestrel_quant.reports.summary"
 kind = "facade"
 include = true
-name = "summary"
-data = { returns = "series" }
+name = "kpc_summary"
+data = {returns = "series"}
 permissions = []
-convention = ""
+convention = "Arithmetic mean times 252; sample volatility times sqrt(252); no risk-free rate"
 
 # RiskEngine.load()
 #   no type hint: return
@@ -242,7 +242,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.risk_engine.engine.RiskEngine.load"
 kind = "service"
-include = true
+include = false
 name = "risk_engine_load"
 data = {}
 permissions = []
@@ -263,7 +263,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.risk_engine.engine.RiskEngine.refresh"
 kind = "service"
-include = true
+include = false
 name = "risk_engine_refresh"
 data = {}
 permissions = []
@@ -278,7 +278,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.desks"
 kind = "service"
 include = true
-name = "risk_engine_desks"
+name = "risk_desks"
 data = {}
 permissions = []
 convention = ""
@@ -292,7 +292,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.exposure"
 kind = "service"
 include = true
-name = "risk_engine_exposure"
+name = "risk_exposure"
 data = {}
 permissions = []
 convention = ""
@@ -306,7 +306,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.desk_var"
 kind = "service"
 include = true
-name = "risk_engine_desk_var"
+name = "risk_desk_var"
 data = {}
 permissions = []
 convention = ""
@@ -325,7 +325,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.stress"
 kind = "service"
 include = true
-name = "risk_engine_stress"
+name = "risk_stress"
 data = {}
 permissions = []
 convention = ""
@@ -344,7 +344,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.stress_all"
 kind = "service"
 include = true
-name = "risk_engine_stress_all"
+name = "risk_stress_all"
 data = {}
 permissions = []
 convention = ""
@@ -357,7 +357,7 @@ convention = ""
 target = "kestrel_quant.risk_engine.engine.RiskEngine.factor_decomposition"
 kind = "service"
 include = true
-name = "risk_engine_factor_decomposition"
+name = "risk_factor_decomposition"
 data = {}
 permissions = []
 convention = ""
@@ -372,10 +372,10 @@ convention = ""
 #   keeps state between calls: _CACHE, _conn, global _conn
 [[entry]]
 target = "kestrel_quant.signals.momentum_signal"
-kind = "service"
+kind = "facade"
 include = true
-name = "momentum_signal"
-data = { prices = "series" }
+name = "kpc_momentum_signal"
+data = {prices = "frame"}
 permissions = []
 convention = ""
 
@@ -390,9 +390,9 @@ convention = ""
 #   keeps state between calls: _CACHE, _conn, global _conn
 [[entry]]
 target = "kestrel_quant.signals.carry_signal"
-kind = "service"
+kind = "facade"
 include = true
-name = "carry_signal"
+name = "kpc_carry_signal"
 data = {}
 permissions = []
 convention = ""
@@ -407,10 +407,10 @@ convention = ""
 #   keeps state between calls: _CACHE, _conn, global _conn
 [[entry]]
 target = "kestrel_quant.signals.value_zscore"
-kind = "service"
+kind = "facade"
 include = true
-name = "value_zscore"
-data = { values = "frame" }
+name = "kpc_value_zscore"
+data = {values = "frame"}
 permissions = []
 convention = ""
 
@@ -421,7 +421,7 @@ convention = ""
 [[entry]]
 target = "kestrel_quant.signals.combine"
 kind = "facade"
-include = true
+include = false
 name = "combine"
 data = { weights = "series" }
 permissions = []
