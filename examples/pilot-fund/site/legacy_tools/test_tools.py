@@ -4,108 +4,50 @@ Run it, fix what fails, and run it again:
 
     uv run pytest test_tools.py
 
-The sample data is made up; replace it with a small sample of the firm's own.
+conftest.py builds a throwaway copy of the fund's warehouse and points KPC_WAREHOUSE at
+it, and the tools read it through the fund's own DatasetStore, as the server does.
 """
 
 from __future__ import annotations
 
-import datetime
-import math
-import tempfile
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+import server
 import uvicorn
-from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
+from warehouse_store import WarehouseDatasetStore
+
 from quant_agent_os.testing import check_app
 
-import server
-
 HERE = Path(__file__).parent
-SCRATCH = Path(tempfile.mkdtemp(prefix="legacy-tools-"))  # where writing tools write
 DRAFTED = ["facades.py", "server.py", "stubs.py", "service/app.py"]
-ROWS = 260
-
-
-def _dates(count: int) -> list[str]:
-    day, dates = datetime.date(2024, 1, 2), []
-    while len(dates) < count:
-        if day.weekday() < 5:
-            dates.append(day.isoformat())
-        day += datetime.timedelta(days=1)
-    return dates
-
-
-def _sample(dataset_id: str, columns: dict[str, str]) -> Dataset:
-    """Made-up business-day data: "price" columns wander near 100, "return" columns near 0."""
-    lines = ["date," + ",".join(columns)]
-    for row, date in enumerate(_dates(ROWS)):
-        cells = []
-        for number, kind in enumerate(columns.values(), start=1):
-            wave = math.sin(row * 0.37 * number) + math.cos(row * 0.11 + number)
-            value = 100 + 5 * wave + 0.05 * row if kind == "price" else 0.01 * wave
-            cells.append(f"{value:.6f}")
-        lines.append(f"{date}," + ",".join(cells))
-    return parse_dataset(dataset_id, "\n".join(lines).encode())
-
-
-class SampleStore:
-    """Datasets held in memory, as a firm's own DatasetStore would serve them."""
-
-    def __init__(self, *datasets: Dataset) -> None:
-        self.datasets = {dataset.id: dataset for dataset in datasets}
-
-    def get(self, dataset_id: str) -> Dataset:
-        if dataset_id not in self.datasets:
-            raise UnknownDatasetError(f"No dataset '{dataset_id}'.")
-        return self.datasets[dataset_id]
-
-    def ids(self) -> list[str]:
-        return sorted(self.datasets)
-
-
-STORE = SampleStore(
-    _sample("sample", {"returns": "return"}),
-    _sample("sample_weights", {"asset_a": "return", "asset_b": "return", "asset_c": "return"}),
-    _sample("sample_returns", {"asset_a": "return", "asset_b": "return", "asset_c": "return"}),
-)
+STORE = WarehouseDatasetStore(Path(os.environ["KPC_WAREHOUSE"]))
 EXAMPLES: dict[str, dict[str, Any]] = {
     "kpc_backtest": {
-        "weights": {"dataset": "sample_weights"},
-        "returns": {"dataset": "sample_returns"},
+        "weights": {"dataset": "weights_macro"},
+        "returns": {"dataset": "px_returns"},
+        "cost_bps": 2.0,
     },
     "kpc_drawdown_table": {
-        "returns": {"dataset": "sample", "column": "returns"},
+        "returns": {"dataset": "desk_returns_macro", "column": "gross_return"},
     },
-    "kpc_desk_pnl": {
-        "desk": 1.0,  # TODO: a realistic value
-    },
+    "kpc_desk_pnl": {"desk": "macro", "start": "2025-01-02"},
     "kpc_summary": {
-        "returns": {"dataset": "sample", "column": "returns"},
+        "returns": {"dataset": "desk_returns_eq_ls", "column": "gross_return"},
     },
     "risk_desks": {},
-    "risk_exposure": {
-        "desk": 1.0,  # TODO: a realistic value
-    },
-    "risk_desk_var": {
-        "desk": 1.0,  # TODO: a realistic value
-    },
-    "risk_stress": {
-        "desk": 1.0,  # TODO: a realistic value
-        "scenario": 1.0,  # TODO: a realistic value
-    },
-    "risk_stress_all": {
-        "desk": 1.0,  # TODO: a realistic value
-    },
-    "risk_factor_decomposition": {
-        "desk": 1.0,  # TODO: a realistic value
-    },
-    "kpc_momentum_signal": {},
-    "kpc_carry_signal": {},
-    "kpc_value_zscore": {},
+    "risk_exposure": {"desk": "macro"},
+    "risk_desk_var": {"desk": "macro", "method": "factor"},
+    "risk_stress": {"desk": "eq_ls", "scenario": "equity_crash_2008"},
+    "risk_stress_all": {"desk": "commod"},
+    "risk_factor_decomposition": {"desk": "macro"},
+    "kpc_momentum_signal": {"prices": {"dataset": "px_close"}},
+    "kpc_carry_signal": {"asset_class": "fx", "as_of": "2025-06-30"},
+    "kpc_value_zscore": {"values": {"dataset": "signals_value"}},
 }
 
 
@@ -131,7 +73,9 @@ def service_url() -> Any:
 
 def test_every_tool_meets_the_contract(service_url: str) -> None:
     """check_app calls each tool with its example, directly and over MCP, and checks the output."""
-    check_app(server.build_app(service_url), EXAMPLES, datasets=STORE)
+    for app in server.build_apps(service_url):
+        examples = {name: EXAMPLES[name] for name in app.names}
+        check_app(app, examples, datasets=STORE)
 
 
 def test_no_decision_is_left_open() -> None:

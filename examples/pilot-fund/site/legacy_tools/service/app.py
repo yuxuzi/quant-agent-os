@@ -20,27 +20,23 @@ from kestrel_quant.risk_engine.engine import RiskEngine as LegacyRiskEngine
 from pydantic import BaseModel
 
 OBJECTS: dict[str, Any] = {}
-# One lock per legacy object: requests run on several threads, and legacy code is
-# rarely thread-safe.
-# TODO(review): drop a lock only for code known to be thread-safe.
+# One lock per legacy object: requests run on several threads, and the engine's cache and
+# kestrel_quant's connection are not thread-safe.
 LOCKS = {"risk_engine": threading.Lock()}
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Build each legacy object once: the slow set-up happens here, not per call."""
-    # TODO(config): RiskEngine is built with its defaults for as_of, lookback,
-    #   scenarios; set the firm's values.
+    # The firm's defaults: the latest warehouse day, CONFIG's 500-day lookback, and the
+    # risk committee's scenarios.json. KPC_WAREHOUSE names the warehouse.
     OBJECTS["risk_engine"] = LegacyRiskEngine()
-    # TODO(config): RiskEngine.load() looks like set-up, and it is not served, so the
-    #   draft calls it once here; delete the call if the object needs none, or add the
-    #   firm's arguments.
-    OBJECTS["risk_engine"].load()
+    OBJECTS["risk_engine"].load()  # slow: reads the warehouse and the vendor model
     yield
     OBJECTS.clear()
 
 
-app = FastAPI(title="kestrel_quant service (draft)", lifespan=lifespan)
+app = FastAPI(title="kestrel_quant risk service", lifespan=lifespan)
 
 
 class RiskDesksRequest(BaseModel):
@@ -51,7 +47,7 @@ class RiskDesksRequest(BaseModel):
 
 @app.post("/risk_desks")
 def risk_desks(request: RiskDesksRequest) -> Any:
-    """TODO(doc): what risk_desks returns."""
+    """The desks the engine holds a book for."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
     with LOCKS["risk_engine"]:
         result = OBJECTS["risk_engine"].desks(**arguments)
@@ -61,12 +57,12 @@ def risk_desks(request: RiskDesksRequest) -> Any:
 class RiskExposureRequest(BaseModel):
     """The arguments of risk_exposure."""
 
-    desk: Any
+    desk: str
 
 
 @app.post("/risk_exposure")
 def risk_exposure(request: RiskExposureRequest) -> Any:
-    """TODO(doc): what risk_exposure returns."""
+    """A desk's gross and net market value in USD, and its positions."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
     with LOCKS["risk_engine"]:
         result = OBJECTS["risk_engine"].exposure(**arguments)
@@ -76,8 +72,8 @@ def risk_exposure(request: RiskExposureRequest) -> Any:
 class RiskDeskVarRequest(BaseModel):
     """The arguments of risk_desk_var."""
 
-    desk: Any
-    confidence: Any = None
+    desk: str
+    confidence: float | None = None
     horizon: int = 1
     method: str = "historical"
 
@@ -94,13 +90,13 @@ def risk_desk_var(request: RiskDeskVarRequest) -> Any:
 class RiskStressRequest(BaseModel):
     """The arguments of risk_stress."""
 
-    desk: Any
-    scenario: Any
+    desk: str
+    scenario: str
 
 
 @app.post("/risk_stress")
 def risk_stress(request: RiskStressRequest) -> Any:
-    """TODO(doc): what risk_stress returns."""
+    """A desk's P&L in USD under one scenario."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
     with LOCKS["risk_engine"]:
         result = OBJECTS["risk_engine"].stress(**arguments)
@@ -110,12 +106,12 @@ def risk_stress(request: RiskStressRequest) -> Any:
 class RiskStressAllRequest(BaseModel):
     """The arguments of risk_stress_all."""
 
-    desk: Any
+    desk: str
 
 
 @app.post("/risk_stress_all")
 def risk_stress_all(request: RiskStressAllRequest) -> Any:
-    """TODO(doc): what risk_stress_all returns."""
+    """A desk's P&L in USD under every scenario."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
     with LOCKS["risk_engine"]:
         result = OBJECTS["risk_engine"].stress_all(**arguments)
@@ -125,7 +121,7 @@ def risk_stress_all(request: RiskStressAllRequest) -> Any:
 class RiskFactorDecompositionRequest(BaseModel):
     """The arguments of risk_factor_decomposition."""
 
-    desk: Any
+    desk: str
 
 
 @app.post("/risk_factor_decomposition")
