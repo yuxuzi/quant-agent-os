@@ -7,7 +7,9 @@
 #   signals:   signals_momentum, signals_carry, signals_value
 #   per desk:  positions_<desk>, weights_<desk>, desk_returns_<desk>  (desk: eq_ls, macro, commod)
 #
-# Tool names other than the platform's own are placeholders for the fund's site/ code.
+# Tools beyond the platform's own are registered by the fund's site/kestrel_server.py: kpc_* run the
+# legacy functions through facades (kpc_desk_pnl shows only desks whose positions a caller may
+# read), and risk_* ask the risk-engine service.
 
 # Each PM: market data, signals, and their own desk.
 [groups.desk-eq-ls]
@@ -43,7 +45,9 @@ datasets = ["*"]
 [groups.research]
 tools = [
   "server_info", "list_datasets", "analyze_*", "run_backtest",
-  "find_related_signals", "get_source_passage", "research_report", "kpc_*",
+  "find_related_signals", "get_source_passage", "research_report",
+  "kpc_momentum_signal", "kpc_carry_signal", "kpc_value_zscore", "kpc_backtest",
+  "kpc_summary", "kpc_drawdown_table",
 ]
 datasets = ["px_*", "bench_*", "adv_*", "fm_*", "signals_*"]
 

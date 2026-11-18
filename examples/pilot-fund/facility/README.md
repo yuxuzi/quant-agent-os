@@ -125,5 +125,7 @@ A token is inactive once it expires, is revoked, or its user is disabled (`provi
 | `desk_returns_<desk>` | `pos_eod` and `mkt_px_daily` | date x one column |
 
 Each desk's PM sees market data, signals, and its own desk; `risk` sees every dataset; `research` sees
-market data and signals, no positions; `operators` see no data. Tool names beyond the platform's own
-(`kpc_*`, `risk_*`, `run_backtest`) are placeholders for the fund's `site/` code.
+market data and signals, no positions; `operators` see no data. Tools beyond the platform's own are
+the fund's [`site/`](../site/kestrel_server.py) code: `kpc_*` facades over `kestrel_quant` (research
+gets the signal and report ones, not `kpc_desk_pnl`), and `risk_*` from the risk-engine service,
+for the risk team only.
