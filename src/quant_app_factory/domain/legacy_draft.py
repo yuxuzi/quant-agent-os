@@ -540,6 +540,12 @@ def _behaviour_todos(found: Found) -> list[str]:
             f"TODO(review): runs programs ({found.seen(Trait.SUBPROCESS)}); execute_code is "
             "declared. Prefer calling the code directly."
         )
+    if found.has(Trait.MODULE_CACHE):
+        notes.append(
+            f"TODO(review): reads through a module cache ({found.seen(Trait.MODULE_CACHE)}) "
+            "that lives as long as the server, so a result stays as first read until the cache "
+            "is cleared or the server restarts; say how fresh the data must be."
+        )
     if found.has(Trait.MUTABLE_STATE):
         notes.append(
             f"TODO(review): keeps state between calls ({found.seen(Trait.MUTABLE_STATE)}); tools "

@@ -8,6 +8,10 @@ and methods. Each is classified as one of three kinds:
 - ``service``: it keeps state, loads slowly, or caches; serve it behind HTTP from one process,
   and register each endpoint with `FirmApp.call_service`.
 
+A module-level memo cache (a dict filled on read, whose results could be computed again) or a
+connection opened once is not state of that kind: a function that only reads through one is a
+facade, with a note on the cache.
+
 The classification is a first guess with reasons. The developer edits the inventory, and the
 drafted code marks every decision it could not make with a TODO.
 """
@@ -58,6 +62,7 @@ class Trait(StrEnum):
     NETWORK = "network"
     SUBPROCESS = "subprocess"
     MUTABLE_STATE = "mutable_state"
+    MODULE_CACHE = "module_cache"
     NONDETERMINISTIC = "nondeterministic"
     STATEFUL_CLASS = "stateful_class"
     SLOW_INIT = "slow_init"
@@ -77,6 +82,7 @@ BEHAVIOUR = frozenset(
         Trait.NETWORK,
         Trait.SUBPROCESS,
         Trait.MUTABLE_STATE,
+        Trait.MODULE_CACHE,
         Trait.NONDETERMINISTIC,
         Trait.BLOCKS,
     }
@@ -98,6 +104,7 @@ NEEDS_FACADE = frozenset(
         Trait.PRINTS,
         Trait.NETWORK,
         Trait.SUBPROCESS,
+        Trait.MODULE_CACHE,
     }
 )
 LOCAL_DATABASES = ("sqlite3.", "duckdb.")
@@ -216,6 +223,7 @@ def describe(found: Found) -> list[str]:
         Trait.NETWORK: "calls out over the network: {}",
         Trait.SUBPROCESS: "runs programs: {}",
         Trait.MUTABLE_STATE: "keeps state between calls: {}",
+        Trait.MODULE_CACHE: "reads through a module cache: {}",
         Trait.NONDETERMINISTIC: "not deterministic: {}",
         Trait.STATEFUL_CLASS: "a method of {}, whose constructor sets state",
         Trait.SLOW_INIT: "slow set-up: {}",

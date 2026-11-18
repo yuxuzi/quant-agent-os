@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows
   FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
   any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
   is a draft for a developer to finish, not finished code.
+- **`qaos legacy scan` tells a module cache from state.** A module-level memo dict, or a connection opened
+  once, makes a facade with a `TODO(review)` on freshness, not a service; on the pilot's `kestrel_quant`,
+  services fell from 20 of 26 callables to 8.
 - **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
   firm's own test says why a tool failed without opening the run record.
 - **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the

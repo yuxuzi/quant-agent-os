@@ -75,6 +75,10 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     facades = (drafted / "facades.py").read_text()
     assert "with _quiet():" in facades
     assert "# TODO(config): the legacy code reads module settings" in facades
+    # A memo cache makes a facade with a note, not a service.
+    assert "facades.index_level" in server
+    assert "index_level" not in (drafted / "stubs.py").read_text()
+    assert "# TODO(review): reads through a module cache (_CACHE)" in facades
 
 
 def _ruff_problems(directory: Path) -> list[str]:
