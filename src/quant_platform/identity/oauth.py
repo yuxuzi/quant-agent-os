@@ -4,7 +4,10 @@ The server never issues tokens; each tenant's identity provider does. `Introspec
 checks a bearer token by RFC 7662 introspection at a configured authorization server, then
 requires that the token is active and unexpired, that its audience is this server (RFC 8707),
 that its issuer is one the server trusts, and that its tenant claim names a tenant pinned to
-that issuer. The token is never sent anywhere else:
+that issuer (a server configured with no tenant claim pins exactly one tenant, and its tokens act
+in it). A server's groups claim, when named, becomes the caller's groups for per-caller access
+(decision 0021); a groups claim that is not a list of strings refuses the token. The token is
+never sent anywhere else:
 - a JWT-shaped token's unverified ``iss`` only chooses which configured server to ask;
 - an opaque token is accepted only when exactly one server is configured.
 
@@ -31,7 +34,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from quant_agent_os.api.keys import KEY_PREFIX, SCOPES
-from quant_agent_os.mcp.http import TENANT_CLAIM
+from quant_agent_os.mcp.http import GROUPS_CLAIM, TENANT_CLAIM
 from quant_platform.identity.rate import TokenBucket
 
 if TYPE_CHECKING:
@@ -51,7 +54,13 @@ DEFAULT_TENANT_CLAIM = "qaos_tenant"
 
 
 class AuthorizationServer(BaseModel):
-    """An identity provider the server trusts, and how to ask it about a token."""
+    """An identity provider the server trusts, and how to ask it about a token.
+
+    ``tenant_claim`` names the claim that must name the token's tenant; empty means the provider
+    sends none. With ``tenant_claim_value``, that claim must equal it instead, and the token acts
+    in the issuer's one pinned tenant: the provider's name for the firm need not be the server's.
+    ``groups_claim``, when set, names the claim that lists the caller's groups.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +68,9 @@ class AuthorizationServer(BaseModel):
     introspection_url: str
     client_id: str
     client_secret: SecretStr
+    tenant_claim: str = DEFAULT_TENANT_CLAIM
+    tenant_claim_value: str | None = None
+    groups_claim: str | None = None
 
 
 class IntrospectionVerifier:
@@ -70,7 +82,6 @@ class IntrospectionVerifier:
         *,
         resource: str,
         tenants_by_issuer: dict[str, set[str]],
-        tenant_claim: str = DEFAULT_TENANT_CLAIM,
         http: httpx.AsyncClient | None = None,
         introspections_per_minute: int = INTROSPECTIONS_PER_MINUTE,
         max_concurrent: int = MAX_CONCURRENT_INTROSPECTIONS,
@@ -80,7 +91,6 @@ class IntrospectionVerifier:
         self.servers = {server.issuer: server for server in servers}
         self.resource = resource
         self.tenants_by_issuer = tenants_by_issuer
-        self.tenant_claim = tenant_claim
         self.http = http
         self._cache: dict[str, tuple[float, AccessToken]] = {}
         self._refused: dict[str, float] = {}
@@ -181,17 +191,37 @@ class IntrospectionVerifier:
         audience = claims.get("aud")
         audiences = audience if isinstance(audience, list) else [audience]
         expires = claims.get("exp")
-        tenant = claims.get(self.tenant_claim)
-        if (
-            claims.get("active") is not True
-            or not isinstance(expires, int | float)
-            or expires <= now
-            or self.resource not in audiences
-            or claims.get("iss", server.issuer) != server.issuer
-            or not isinstance(tenant, str)
-            or tenant not in self.tenants_by_issuer.get(server.issuer, set())
-        ):
+        pinned = self.tenants_by_issuer.get(server.issuer, set())
+        sole = next(iter(pinned)) if len(pinned) == 1 else None
+        if server.tenant_claim and server.tenant_claim_value is not None:
+            claimed = claims.get(server.tenant_claim) == server.tenant_claim_value
+            tenant = sole if claimed else None
+        elif server.tenant_claim:
+            tenant = claims.get(server.tenant_claim)
+        else:  # the provider names no tenant: its one pinned tenant, or none
+            tenant = next(iter(pinned)) if len(pinned) == 1 else None
+        groups = claims.get(server.groups_claim) if server.groups_claim else None
+        reason = (
+            "inactive"
+            if claims.get("active") is not True
+            else "expired"
+            if not isinstance(expires, int | float) or expires <= now
+            else "for another audience"
+            if self.resource not in audiences
+            else "from another issuer"
+            if claims.get("iss", server.issuer) != server.issuer
+            else "for a tenant not served here"
+            if not isinstance(tenant, str) or tenant not in pinned
+            else "with a groups claim that is not a list of strings"
+            if groups is not None
+            and not (isinstance(groups, list) and all(isinstance(g, str) for g in groups))
+            else None
+        )
+        if reason is not None:
+            # Says why, never the token, so an operator can fix the provider's configuration.
+            logger.info("Refused a token from %s: %s.", server.issuer, reason)
             return None
+        assert isinstance(tenant, str) and isinstance(expires, int | float)  # checked above
         scope = claims.get("scope")
         granted = scope.split() if isinstance(scope, str) else []
         subject = claims.get("sub")
@@ -203,7 +233,11 @@ class IntrospectionVerifier:
             expires_at=int(expires),
             resource=self.resource,
             subject=subject if isinstance(subject, str) else None,
-            claims={TENANT_CLAIM: tenant, "iss": server.issuer},
+            claims={
+                TENANT_CLAIM: tenant,
+                GROUPS_CLAIM: sorted(set(groups or [])),
+                "iss": server.issuer,
+            },
         )
 
 

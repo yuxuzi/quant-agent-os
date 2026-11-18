@@ -7,7 +7,7 @@ every product.
 | Toolset | Tools | Resources | Prompts |
 | --- | --- | --- | --- |
 | `research` | `find_related_signals`, `get_source_passage`, `generate_strategy`, and `research_report` | `qaos://passage/{chunk_id}`, `qaos://strategy/{focus}` | `research_signal`, `report_on_signal` |
-| `analytics` | `analyze_performance`, `analyze_risk` (series by `{dataset, column}`), `list_datasets` | `qaos://dataset/{dataset_id}` | `analyze_returns` |
+| `analytics` | `analyze_performance`, `analyze_risk` (series by `{dataset, column}`), `analyze_signal`, `run_backtest` (frames by `{dataset}`), `list_datasets` | `qaos://dataset/{dataset_id}` | `analyze_returns` |
 | `factory` | `describe_template`, `check_spec`, `plan_app` | `qaos://template/{template}`, `qaos://template/{template}/{profile}` | `draft_app_spec` |
 
 `research_report` runs a fixed plan with no model (`generate_strategy`, then

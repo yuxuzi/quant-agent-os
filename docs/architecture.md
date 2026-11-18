@@ -48,10 +48,12 @@ or team that hosts it themselves. One wheel holds five import names
 
 Arrows into Core mean registration: products hand Core `ToolSpec`s, and Core never imports a product.
 
-Identity is an API key with scopes on the HTTP server. Scopes are `tools:list`, `tools:call`, and
+Identity is an API key with scopes on the HTTP server, or, with an opt-in sign-in file, a token from the
+firm's identity provider whose groups claim feeds per-caller access
+([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)). Scopes are `tools:list`, `tools:call`, and
 `runs:approve`; there are no PM, trader, or researcher roles. Each firm runs its own installation, and
 there is no multi-tenant service ([decision 0023](decisions/0023-no-hosted-service.md)). OAuth and the approval page are in
-`quant_platform.identity`, for a firm's own server. Core keeps a `tenant` column (default `local`) and
+`quant_platform.identity`; `serve_http` loads sign-in from it only when a sign-in file is configured. Core keeps a `tenant` column (default `local`) and
 small hooks such as `UsageGate`.
 
 ## Core
@@ -265,8 +267,11 @@ from Quant Toolbox: through empyrical-reloaded when it is installed, and the too
 equal to it, otherwise; volatility contributions and factor exposures are numpy in both. Each output's
 conventions name the backend. Before a metric runs, the tools infer the frequency from the
 dates, join series on them, and leave out and count missing rows. They refuse when frequency or alignment
-cannot be established, and warn when returns look like percentages. Known-answer tests pin the conventions
-([Quant Analytics](products/quant-analytics.md)).
+cannot be established, and warn when returns look like percentages. `analyze_risk` adds historical stress
+for daily, dated returns, and risk under a vendor's factor model read by dataset id. `analyze_signal` and
+`run_backtest` take a signal frame and a returns frame by reference, dates by instruments, and compute through
+the toolbox's `research`, with its one timing convention: a signal is traded `TRADE_LAG` bars after its close.
+Known-answer tests pin the conventions ([Quant Analytics](products/quant-analytics.md)).
 
 ## Quant App Factory
 
@@ -345,7 +350,7 @@ runs as the local user with the operator's granted permissions, and HTTP needs a
 | `find_related_signals` | research | `read_local_data`, plus `network` with a hosted embedder |
 | `get_source_passage` | research | `read_local_data` |
 | `research_report` | research and analytics | `read_local_data` |
-| `analyze_performance`, `analyze_risk`, `list_datasets` | analytics | `read_local_data` |
+| `analyze_performance`, `analyze_risk`, `analyze_signal`, `run_backtest`, `list_datasets` | analytics | `read_local_data` |
 | `describe_template`, `check_spec` | factory, off by default | none |
 | `server_info` | always | none |
 

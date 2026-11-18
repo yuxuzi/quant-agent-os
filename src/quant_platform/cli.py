@@ -134,7 +134,10 @@ def _serve_http(
     embedder: EmbedderOption,
     embedding_model: str | None,
     access_file: Path | None,
+    sign_in: Path | None,
 ) -> None:
+    from quant_platform.identity.sign_in import SignInError
+
     access_file = access_file or get_settings().access_file
     try:
         access = FileAccessPolicy(access_file) if access_file is not None else None
@@ -151,8 +154,22 @@ def _serve_http(
         access=access,
     )
     try:
-        serve_http(catalog, keys=keys, runs=runs, host=host, port=port, allowed_hosts=allowed_host)
-    except (ApiKeyError, ApiUnavailableError, MCPUnavailableError, RunStoreError) as error:
+        serve_http(
+            catalog,
+            keys=keys,
+            runs=runs,
+            host=host,
+            port=port,
+            allowed_hosts=allowed_host,
+            sign_in=sign_in,
+        )
+    except (
+        ApiKeyError,
+        ApiUnavailableError,
+        MCPUnavailableError,
+        RunStoreError,
+        SignInError,
+    ) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
     finally:
@@ -200,7 +217,9 @@ def evaluate(
 def serve(
     http: Annotated[
         bool,
-        typer.Option("--http", help="Serve over HTTP, for callers with an API key, not stdio."),
+        typer.Option(
+            "--http", help="Serve over HTTP, for callers with an API key or token, not stdio."
+        ),
     ] = False,
     toolsets: ToolsetsOption = None,
     store: StoreOption = None,
@@ -235,15 +254,25 @@ def serve(
             "(default: QUANT_AGENT_OS_ACCESS_FILE). Without one, any key reaches everything served."
         ),
     ] = None,
+    sign_in: Annotated[
+        Path | None,
+        typer.Option(
+            "--sign-in",
+            help="With --http: a sign-in file naming the identity providers whose tokens are "
+            "accepted beside keys (default: QUANT_AGENT_OS_SIGN_IN_FILE; none: keys only).",
+        ),
+    ] = None,
 ) -> None:
     """Serve the toolsets' tools, resources, and prompts to an AI client.
 
     Over stdio by default, for a client that launches the server; messages go to stderr because
     stdout carries the protocol. With --http, it serves MCP at /mcp and REST at /v1 to callers
-    with a key from `qaos keys new`. Every call is recorded with the key's principal, and the
-    server does not start without a key or a run store. Put TLS and rate limiting in a reverse
-    proxy before binding anything but loopback (decision 0012). The research store opens
-    read-only. Permissions come from QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by default).
+    with a key from `qaos keys new`, and with a sign-in file to users signed in by the firm's
+    identity provider (decision 0028). Every call is recorded with its principal, and the server
+    does not start without a key or sign-in, or without a run store. Put TLS and rate limiting
+    in a reverse proxy before binding anything but loopback (decision 0012). The research store
+    opens read-only. Permissions come from QUANT_AGENT_OS_GRANTED_PERMISSIONS (read-only by
+    default).
     """
     if http:
         if not record:
@@ -261,11 +290,20 @@ def serve(
             embedder,
             embedding_model,
             access,
+            sign_in,
         )
         return
-    if keys is not None or host != DEFAULT_HOST or port != DEFAULT_PORT or allowed_host or access:
+    if (
+        keys is not None
+        or host != DEFAULT_HOST
+        or port != DEFAULT_PORT
+        or allowed_host
+        or access
+        or sign_in
+    ):
         errors.print(
-            "[red]error:[/red] --keys, --host, --port, --allowed-host, and --access need --http."
+            "[red]error:[/red] --keys, --host, --port, --allowed-host, --access, and --sign-in "
+            "need --http."
         )
         raise typer.Exit(2)
     _serve_stdio(toolsets, store, datasets, runs, record, embedder, embedding_model)

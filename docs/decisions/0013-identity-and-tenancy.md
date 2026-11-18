@@ -1,7 +1,8 @@
 # 0013: Tenants, and OAuth 2.1 for remote MCP clients
 
 - Status: accepted (approved by the user 2026-11-02, with Q-7 to Q-9 as proposed); amended by
-  [0023](0023-no-hosted-service.md), which removes the multi-tenant server
+  [0023](0023-no-hosted-service.md), which removes the multi-tenant server; extended by
+  [0028](0028-oauth-sign-in-on-a-firms-server.md), which serves sign-in, opt-in, on a firm's own server
 - Date: 2026-11-02
 - Plan: [agent-surface P5](../plans/archive/agent-surface.md), backlog B-34. Builds on
   [0011](0011-rest-api-and-api-keys.md) (keys) and [0012](0012-remote-mcp-over-http.md)

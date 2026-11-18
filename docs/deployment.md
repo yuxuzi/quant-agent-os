@@ -2,7 +2,8 @@
 
 This guide runs the Quant-Agent-OS platform as a small team server. Each teammate adds it to
 Claude, Cursor, or Copilot as a remote MCP server; applications call the same tools over REST.
-Both need an API key. Every call is recorded with the caller's name, and nobody but the
+Both need an API key, or, once you [turn on sign-in](#10-sign-in-through-your-identity-provider), a token
+from your identity provider. Every call is recorded with the caller's name, and nobody but the
 operator can change the corpus or the datasets.
 
 What runs:
@@ -137,6 +138,7 @@ Keep the published port on loopback, and put a reverse proxy in front. The proxy
 
 MCP refuses a `Host` or `Origin` it does not know (DNS-rebinding protection). Add the public
 name clients use to the server's command, in a compose override: `--allowed-host research.example.com`.
+With [sign-in](#10-sign-in-through-your-identity-provider) on, the resource URL's host is admitted already.
 
 The server sends no CORS headers, so browsers on other origins cannot call it directly.
 
@@ -276,6 +278,64 @@ because a tool holding the unguarded store can read anything in it.
   so `serve_stdio` refuses a catalog with an access policy.
 
 See [decision 0021](decisions/0021-per-caller-access.md).
+
+## 10. Sign in through your identity provider
+
+Off by default. With it on, people add the server as a connector and sign in through your identity provider
+(Entra ID, Okta, Keycloak, and so on) instead of pasting a key, and their directory groups decide what they reach.
+Keys keep working beside it. The server only checks tokens, by RFC 7662 introspection; your provider issues them
+([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)).
+
+**In your provider:**
+- Register a confidential client the server uses to introspect tokens, and note its id and secret.
+- Make access tokens carry an audience equal to the server's public MCP URL, such as
+  `https://qaos.example.com/mcp`, the scopes `tools:list` and `tools:call` (add `runs:read` for auditors), and a
+  claim listing the user's groups.
+- Optionally add a `qaos_tenant` claim naming your firm. If its value is not `local`, set
+  `tenant_claim_value` to it below; without the claim, set `tenant_claim = ""`, and the issuer and the audience
+  then bind the token to this server.
+
+**On the server,** write a sign-in file, and keep the secret in the environment or the home's `.env`:
+
+```toml
+# sign-in.toml
+resource = "https://qaos.example.com/mcp"
+
+[[authorization_servers]]
+issuer = "https://login.example.com"
+introspection_url = "https://login.example.com/oauth2/introspect"
+client_id = "qaos"
+client_secret_env = "QAOS_INTROSPECTION_SECRET"
+tenant_claim = ""          # the provider sends no tenant claim
+groups_claim = "groups"    # the claim that lists the user's groups
+```
+
+```bash
+export QAOS_INTROSPECTION_SECRET=...        # or put it in the home's .env
+qaos doctor                                  # checks the file and the secret, contacts nothing
+qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_AGENT_OS_SIGN_IN_FILE
+```
+
+A firm's own server with `serve_apps` reads the same settings. In Docker, mount the file read-only in a compose
+override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment.
+
+- **Tokens are refused unless certain.** A token must be active, unexpired, for this server's URL, from a listed
+  issuer, and name the configured tenant, or come from a provider set to send none. A groups claim that is not a
+  list of strings refuses the token. The server logs why it refused, never the token.
+- **Groups decide access.** The groups claim is what `access.toml` reads, as a key's groups are. Without an access
+  file every signed-in user reaches everything, and the server warns at start-up.
+- **The principal is the token's subject** (`sub`), recorded on every run as a key's principal is. Some providers'
+  subjects are opaque ids; `qaos runs` shows them as they are.
+- **Scopes map one to one.** A token never carries `runs:approve`: approving needs an approver key.
+- **Clients find the provider** from the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`, which
+  every 401 names.
+- **No keys are needed.** With sign-in on, the server starts with an empty or missing keys file.
+- **Misconfiguration stops the server.** A missing or invalid file, an unknown setting, an unset secret, plain
+  http to a host other than loopback, or a tenant other than `local` each refuse to start, with the fix.
+- **The resource URL's host is admitted** by the DNS-rebinding protection without `--allowed-host`.
+- **Revocation takes up to a minute.** Results are cached for 60 seconds, so a revoked token can still be accepted
+  for that long. Each provider is asked at most 600 times a minute and 8 at once; keep the proxy's limit on
+  unauthenticated requests, which is the first defence.
 
 ## Telemetry and service levels (decision 0015)
 

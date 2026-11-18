@@ -22,7 +22,8 @@ released as 0.3.0. [Templates as starting points](plans/templates.md) followed i
 
 Not started, and each needs a user asking for it: market-data connectors, an LLM extractor, `.ipynb` or
 `.docx` loaders, and any model provider. `run_backtest` as a platform tool and OAuth sign-in on `qaos serve` left
-this list by the owner's choice; both are in the [0.8.0 plan](plans/proposals-0.8.md). Decision 0016 closes server-side synthesis, spec drafting, and code generation (B-12, B-15, B-16,
+this list by the owner's choice; both are in the [0.8.0 plan](plans/proposals-0.8.md), and sign-in is built, opt-in
+([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)). Decision 0016 closes server-side synthesis, spec drafting, and code generation (B-12, B-15, B-16,
 and B-20) until then.
 
 ## Open questions

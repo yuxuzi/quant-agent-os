@@ -90,8 +90,8 @@ The platform is software you run. It has no service of ours behind it, so nothin
   an operator gave that permission a standing approval with `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`, which is empty by
   default and recorded on each use.
 - **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
-- **No sign-in through an identity provider yet.** OAuth token checks exist in `quant_platform.identity`, but no
-  command serves them, and tokens carry no groups.
+- **Sign-in is off until configured.** With a sign-in file, the server also accepts tokens from the firm's identity
+  provider ([below](#oauth)); anyone the provider issues a token for this server can then call it, within the access file.
 - **Nothing limits unauthenticated requests.** That is the proxy's job.
 
 ## Defaults
@@ -165,7 +165,8 @@ in memory unless it is given a run store. What each part of a record holds:
 
 [Decision 0011](decisions/0011-rest-api-and-api-keys.md). `qaos serve --http --toolsets research` serves the
 same tools as `qaos serve` over HTTP, which other machines may reach, so:
-- **Every route but `/healthz` needs an API key.** Send it as `Authorization: Bearer <key>`.
+- **Every route but `/healthz` needs an API key**, or with [sign-in](#oauth) on, a token. Send it
+  as `Authorization: Bearer <key>`.
   `qaos keys new` prints a key once. The keys file
   (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256
   hashes and is created with mode 0600. To revoke a key, delete its entry or set
@@ -192,9 +193,9 @@ same tools as `qaos serve` over HTTP, which other machines may reach, so:
 
 [Decision 0012](decisions/0012-remote-mcp-over-http.md). `qaos serve --http` serves MCP
 at `/mcp` beside the REST routes, with the same keys, policy, and run store:
-- **Every MCP request needs an API key.** A missing or unknown key gets 401 with
-  `WWW-Authenticate`. The key is checked through the SDK's token-verifier interface, which
-  is also how OAuth tokens would be checked.
+- **Every MCP request needs an API key**, or with sign-in on, a token. A missing or unknown
+  credential gets 401 with `WWW-Authenticate`. Both are checked through the SDK's
+  token-verifier interface.
 - **Each method checks the key's scope.** Listing tools, resource templates, and prompts, and
   getting a prompt, need `tools:list`; calling a tool and reading a resource (which calls a
   tool) need `tools:call`. There are no new scopes, and no MCP method can approve a call.
@@ -227,9 +228,18 @@ configured, and then it denies what is not listed. How to use it, and what it do
 ## OAuth
 
 `quant_platform.identity.oauth` checks tokens from a firm's identity provider by introspection
-([decision 0013](decisions/0013-identity-and-tenancy.md)). No command serves it yet; a firm's own server can,
-through `build_http_app` ([decision 0023](decisions/0023-no-hosted-service.md)). Each firm runs its own installation, so there are no tenants to
-separate.
+([decision 0013](decisions/0013-identity-and-tenancy.md)). `qaos serve --http` and `serve_apps` use it when a sign-in
+file is configured, and only then ([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)); how to set it
+up is in [deployment](deployment.md#10-sign-in-through-your-identity-provider). Each firm runs its own installation,
+so there are no tenants to separate.
+- **Off by default.** Without a sign-in file the server takes API keys only and never contacts a provider.
+- **Fails closed.** A missing or invalid file, an unknown setting, an unset secret, plain http off loopback, or a
+  tenant the server does not serve stops it from starting. The client secret is a `SecretStr`, read from the
+  environment or the home's `.env`, and never displayed; `qaos doctor` reports only whether it is set.
+- **Groups come from the token.** Its groups claim is what the access file reads. A groups claim that is not a list
+  of strings refuses the token, rather than being read as no groups. Sign-in with no access file draws a warning.
+- **Both interfaces.** `/mcp` and REST `/v1` take keys and tokens alike, record the token's subject as the
+  principal, and name the RFC 9728 metadata in every 401.
 - **Tokens are checked by introspection** at a configured authorization server. A token is accepted only if it
   is active and unexpired, its audience is this server, and its issuer is pinned. A token is never sent to a
   server that could not have issued it: a JWT's unverified `iss` only chooses which configured server to ask,
