@@ -75,7 +75,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | --- | --- |
 | Install | `uv sync` |
 | Test (unit, contract, integration) | `uv run pytest` |
-| Test Quant Toolbox alone | `uv run --package quant-toolbox pytest packages/quant-toolbox/tests --no-cov` |
+| Test Quant Toolbox alone, with only numpy | `cd packages/quant-toolbox && uv run --isolated --no-project --with . --with pytest python -m pytest` |
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
 | Type-check (strict, `src` and `examples`) | `uv run mypy` |

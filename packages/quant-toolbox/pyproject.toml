@@ -47,3 +47,9 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "quant_toolbox"
+
+# The package's tests run on their own, from this folder, with only numpy installed: a test that
+# needs an optional library skips without it. The repository root runs them too, with coverage.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::ResourceWarning"]

@@ -22,6 +22,15 @@ PERCENT = frozenset(
         "average_turnover",
         "annual_turnover",
         "positive_rank_ic_share",
+        "best",
+        "worst",
+        "average_gain",
+        "average_loss",
+        "positive_share",
+        "parametric_var",
+        "parametric_expected_shortfall",
+        "probabilistic_sharpe_ratio",
+        "deflated_sharpe_ratio",
     }
 )
 COUNT = frozenset({"bars", "forced_exits", "delistings", "folds", "out_of_sample_bars"})

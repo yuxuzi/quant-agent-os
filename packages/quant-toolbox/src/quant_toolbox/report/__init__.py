@@ -4,6 +4,8 @@ A section of a report returns blocks and knows nothing about formats. `render_ht
 as static SVG with pygal by default, or interactively with plotly (``charts="interactive"``, the
 ``interactive`` extra). Optional leaves: `quant_toolbox.report.svg` (pygal),
 `quant_toolbox.report.interactive` (plotly), and `quant_toolbox.report.excel` (openpyxl).
+
+`tear_sheet` builds the investor one-pager of a return series from `performance.analyze`.
 """
 
 from quant_toolbox.report._charts import (
@@ -36,10 +38,12 @@ from quant_toolbox.report._runs import (
     run_calendar_years,
     run_markdown,
 )
+from quant_toolbox.report._tear_sheet import HEADLINE, monthly_table, tear_sheet
 
 __all__ = [
     "CHART_MODES",
     "COLOURS",
+    "HEADLINE",
     "INTERPRETATION",
     "METRIC_KINDS",
     "Block",
@@ -58,11 +62,13 @@ __all__ = [
     "label",
     "line_chart",
     "metric_kind",
+    "monthly_table",
     "render_html",
     "render_markdown",
     "rolling_sharpe_chart",
     "run_calendar_years",
     "run_markdown",
+    "tear_sheet",
     "to_dict",
     "underwater_chart",
 ]
