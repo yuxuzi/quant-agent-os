@@ -118,6 +118,16 @@ NONDETERMINISTIC_CALLS = (
     "uuid.uuid4",
     "secrets.",
 )
+BLOCKING_CALLS = (
+    "serve_forever",
+    "run_forever",
+    "uvicorn.run",
+    "serve_apps",
+    "serve_http",
+    "serve_stdio",
+    "app.run",
+    "mainloop",
+)
 CACHE_DECORATORS = ("functools.lru_cache", "functools.cache", "functools.cached_property")
 MUTATORS = frozenset(
     {"append", "extend", "insert", "update", "setdefault", "pop", "popitem", "clear", "add"}
@@ -187,6 +197,7 @@ SUPPORTED = frozenset(
         "collections.abc.Mapping",
         "datetime.date",
         "datetime.datetime",
+        "pathlib.Path",
         "pandas.Series",
         "pandas.DataFrame",
         "numpy.ndarray",
@@ -561,6 +572,8 @@ def _call(module: _Module, item: ast.Call, facts: _Facts, local: set[str]) -> No
         facts.add(Trait.WRITES_FILES, f".{method}()")
     if called.startswith(NONDETERMINISTIC_CALLS) and "seed" not in called:
         facts.add(Trait.NONDETERMINISTIC, called)
+    if (dotted == "input" and "input" not in local) or called.endswith(BLOCKING_CALLS):
+        facts.add(Trait.BLOCKS, called or dotted)
     if called == "time.sleep":
         facts.add(Trait.SLOW_INIT, "time.sleep")
     if method in MUTATORS and isinstance(func, ast.Attribute):

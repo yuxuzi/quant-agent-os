@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format follows
   FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
   any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
   is a draft for a developer to finish, not finished code.
+- **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
+  firm's own test says why a tool failed without opening the run record.
 - **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the
   developer, and reports done only when the generated test passes.
 

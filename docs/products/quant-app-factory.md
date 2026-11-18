@@ -307,7 +307,8 @@ module counts when a public module imports it. Each callable gets a kind:
 
 **The inventory** (`legacy.toml`) has one `[[entry]]` per callable, with the scan's reasons as comments above
 it. The developer sets `kind`, `include`, `name`, `data` (parameters that take a dataset reference, `"series"`
-or `"frame"`), `permissions`, and `convention`. `wrap` scans the code again, so the draft follows the code as
+or `"frame"`), `permissions`, and `convention`. Entry points (`main`, or code that starts a server or waits
+for input) start with `include = false`. `wrap` scans the code again, so the draft follows the code as
 it is now.
 
 **Wrap** writes `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and `stubs.py`

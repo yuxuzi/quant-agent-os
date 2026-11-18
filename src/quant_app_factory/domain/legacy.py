@@ -62,6 +62,7 @@ class Trait(StrEnum):
     STATEFUL_CLASS = "stateful_class"
     SLOW_INIT = "slow_init"
     CACHE = "cache"
+    BLOCKS = "blocks"
 
 
 # Traits of what a body does, which pass from a helper to its callers.
@@ -77,6 +78,7 @@ BEHAVIOUR = frozenset(
         Trait.SUBPROCESS,
         Trait.MUTABLE_STATE,
         Trait.NONDETERMINISTIC,
+        Trait.BLOCKS,
     }
 )
 # Any of these keeps a callable from being exposed as it is.
@@ -99,6 +101,8 @@ NEEDS_FACADE = frozenset(
     }
 )
 LOCAL_DATABASES = ("sqlite3.", "duckdb.")
+# Entry points, which run a program rather than compute a result: left out of a draft by default.
+ENTRY_POINTS = frozenset({"main", "cli", "run", "serve", "start"})
 
 
 @dataclass(frozen=True)
@@ -216,6 +220,7 @@ def describe(found: Found) -> list[str]:
         Trait.STATEFUL_CLASS: "a method of {}, whose constructor sets state",
         Trait.SLOW_INIT: "slow set-up: {}",
         Trait.CACHE: "caches: {}",
+        Trait.BLOCKS: "may never return (an entry point or server): {}; left out",
     }
     reasons = []
     for trait, phrase in phrases.items():
@@ -223,6 +228,8 @@ def describe(found: Found) -> list[str]:
             reasons.append(phrase.format(found.seen(trait)) if "{}" in phrase else phrase)
     if found.owner is not None and Trait.STATEFUL_CLASS not in found.traits:
         reasons.append(f"a method: the facade builds a {found.owner} for each call")
+    if found.owner is None and found.name in ENTRY_POINTS and Trait.BLOCKS not in found.traits:
+        reasons.append("named like an entry point; left out")
     return reasons
 
 
@@ -284,11 +291,13 @@ def suggest(found: list[Found]) -> list[Entry]:
         while name in used:
             name, number = f"{tool_name(item)[:60]}_{number}", number + 1
         used.add(name)
+        entry_point = item.has(Trait.BLOCKS) or (item.owner is None and item.name in ENTRY_POINTS)
         entries.append(
             Entry(
                 target=item.target,
                 kind=kind,
                 name=name,
+                include=not entry_point,
                 data={param.name: param.data for param in item.params if param.data},
                 permissions=permissions_for(item, kind),
             )

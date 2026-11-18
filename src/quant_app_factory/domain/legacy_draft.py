@@ -327,6 +327,12 @@ def _hint(
     param: Param, data: DataKind | None, found: Found, imports: _Imports, todos: list[str]
 ) -> str:
     """The facade's hint for a parameter, reusing the legacy hint where there is one."""
+    if param.annotation is not None and param.name in _unsupported(found):
+        todos.append(
+            f"TODO(type): {param.name}'s legacy hint, {param.annotation}, is not a value a client "
+            "can send; build it inside the facade, or leave this entry out. Any stands in."
+        )
+        return "Any"
     if param.annotation is not None and _reusable(param.annotation, found, imports):
         imports.add(*_imports_for(param.annotation, found))
         return param.annotation
@@ -359,6 +365,11 @@ def _hint(
         return guess
     todos.append(f"TODO(type): {param.name} has no hint in the legacy code; name its type.")
     return "Any"
+
+
+def _unsupported(found: Found) -> set[str]:
+    """The parameters, and ``return``, whose hints the scan found no schema for."""
+    return {seen.split(":")[0] for seen in found.traits.get(Trait.UNSUPPORTED_TYPE, ())}
 
 
 BUILTIN_HINTS = frozenset(
@@ -441,6 +452,12 @@ def _returns(found: Found, imports: _Imports, todos: list[str]) -> tuple[str, bo
     """The facade's return hint, and whether the result goes through ``_json_ready``."""
     if found.has(Trait.RETURNS_NOTHING):
         return "str", False
+    if found.returns is not None and "return" in _unsupported(found):
+        todos.append(
+            f"TODO(type): the legacy return hint, {found.returns}, may have no JSON schema; "
+            "return plain values, a dataclass, or a Pydantic model. Any stands in."
+        )
+        return "Any", True
     if found.returns is not None and not _reusable(found.returns, found, imports):
         todos.append(
             f"TODO(type): the legacy return hint, {found.returns}, names something this file "
@@ -550,7 +567,16 @@ def _json_ready(value: Any) -> Any:
         return {_key(key): _json_ready(item) for key, item in value.items()}
     if hasattr(value, "tolist"):  # a NumPy array or scalar
         return _json_ready(value.tolist())
-    return value
+    if hasattr(value, "model_dump") and not isinstance(value, type):  # a Pydantic model
+        return _json_ready(value.model_dump())
+    if hasattr(value, "isoformat"):  # a date or time
+        return _key(value)
+    if value is None or isinstance(value, str | int):
+        return value
+    raise TypeError(
+        f"The legacy result holds a {type(value).__name__}, which JSON cannot carry; "
+        "convert it to plain values in the facade."
+    )
 
 
 def _key(key: Any) -> str:

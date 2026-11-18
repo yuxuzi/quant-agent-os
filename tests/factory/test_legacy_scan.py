@@ -259,3 +259,23 @@ def test_names_a_package_reexports_from_private_modules_are_public(tmp_path: Pat
         "Returns": "from pkg._impl import Returns",
         "Decimal": "from decimal import Decimal",
     }
+
+
+def test_entry_points_and_servers_are_left_out(tmp_path: Path) -> None:
+    path = _module(
+        tmp_path,
+        "app",
+        "import uvicorn\n\n"
+        "def main() -> None:\n    print('hi')\n\n"
+        "def launch(port: int) -> None:\n"
+        '    """Serve the desk app."""\n'
+        "    uvicorn.run('desk:app', port=port)\n\n"
+        "def double(x: float) -> float:\n"
+        '    """Twice x."""\n    return 2 * x\n',
+    )
+    inventory = scan(path)
+    included = {entry.name: entry.include for entry in inventory.entries}
+    reasons = classify(inventory.found["app.launch"])[1]
+
+    assert included == {"main": False, "launch": False, "double": True}
+    assert "may never return (an entry point or server): uvicorn.run; left out" in reasons

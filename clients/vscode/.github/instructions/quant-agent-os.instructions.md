@@ -128,8 +128,10 @@ pass first time on real code, and you never report it done until the test passes
 4. **Run the test.** `uv run pytest legacy_tools/test_tools.py`. It runs check_app() on every
    tool with an example call, through the executor and MCP, and lists every open TODO.
 5. **Read each failure and fix it**, smallest change first: a hint, a data marker, an example
-   value in `test_tools.py`, a missing value the legacy code returns as NaN. Then run the
-   test again. Repeat until both tests pass.
+   value in `test_tools.py`, a missing value the legacy code returns as NaN. An internal
+   error shows the exception in brackets. Code that is not a tool (entry points, servers,
+   set-up helpers) gets `include = false`, then a rewrap into a fresh directory. Run the test
+   again; repeat until both tests pass.
 
 ### Rules
 
