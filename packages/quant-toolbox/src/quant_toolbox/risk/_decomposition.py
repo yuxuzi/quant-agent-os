@@ -82,9 +82,24 @@ def volatility_contributions(
     Volatility that is only rounding left over from an exact hedge counts as zero (`FLAT`).
     """
     names = list(weights)
-    w = np.array([weights[name] for name in names], dtype=np.float64)
     returns = _matrix([asset_returns[name] for name in names])
     covariance = np.atleast_2d(np.cov(returns, rowvar=False, ddof=1)) * periods_per_year
+    return euler_contributions(names, [weights[name] for name in names], covariance)
+
+
+def euler_contributions(
+    names: Sequence[str], weights: Sequence[float] | FloatArray, covariance: FloatArray
+) -> VolatilityBreakdown:
+    """Euler contributions to volatility from an annualised covariance matrix, in ``names`` order.
+
+    The covariance may come from anywhere: the sample one `volatility_contributions` uses, an
+    EWMA one (`ewma_covariance`), or a vendor's model. None where volatility is zero.
+    """
+    names = list(names)
+    w = np.asarray(weights, dtype=np.float64).ravel()
+    covariance = np.atleast_2d(np.asarray(covariance, dtype=np.float64))
+    if covariance.shape != (w.size, w.size) or len(names) != w.size:
+        raise ValueError("Need one name and one weight per row and column of the covariance.")
     volatilities = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
     volatility = math.sqrt(max(float(w @ covariance @ w), 0.0))
     if volatility <= FLAT * float(np.abs(w) @ volatilities):

@@ -2,7 +2,8 @@
 
 Conventions:
 - Positions are weights: market value over NAV, with shorts negative. Gross is the sum of absolute
-  weights, and net is their sum. NaN counts as no position.
+  weights, and net is their sum. NaN counts as no position. The Herfindahl index is the sum of
+  squared shares of gross, and the effective number of positions its reciprocal.
 - Return-based risk is historical simulation: today's weights applied to each past bar's asset
   returns. It describes today's book, not what the fund earned. A missing asset return counts
   as 0 in that bar.
@@ -36,6 +37,7 @@ class Exposures:
     largest: float  # the largest absolute weight
     top_five: float  # the sum of the five largest absolute weights
     effective_positions: float  # 1 / sum of squared shares of gross
+    herfindahl: float = 0.0  # sum of squared shares of gross; 1 / effective_positions
 
 
 def exposures(weights: FloatArray) -> Exposures:
@@ -43,7 +45,8 @@ def exposures(weights: FloatArray) -> Exposures:
     values = np.nan_to_num(np.asarray(weights, dtype=np.float64))
     sizes = np.sort(np.abs(values))[::-1]
     gross = float(sizes.sum())
-    effective = 1.0 / float(np.sum((sizes / gross) ** 2)) if gross > 0.0 else 0.0
+    herfindahl = float(np.sum((sizes / gross) ** 2)) if gross > 0.0 else 0.0
+    effective = 1.0 / herfindahl if gross > 0.0 else 0.0
     return Exposures(
         gross=gross,
         net=float(values.sum()),
@@ -53,6 +56,7 @@ def exposures(weights: FloatArray) -> Exposures:
         largest=float(sizes[0]) if sizes.size else 0.0,
         top_five=float(sizes[:5].sum()),
         effective_positions=effective,
+        herfindahl=herfindahl,
     )
 
 
