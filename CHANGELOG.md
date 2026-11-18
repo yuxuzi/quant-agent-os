@@ -48,6 +48,11 @@ All notable changes to this project are documented here. The format follows
   note; `conventions.weights` says which row was read. Exactly one of the two is accepted, each refusal names
   what to fix, and the read goes through the access guard, so a refused dataset looks missing. The tool lock
   now counts an input that may also take another type, such as `T` to `T | None`, as a minor change.
+- **Agreed cases run as named callers.** A cases file's `[caller]` table, or a case's own `caller`, gives the
+  principal and groups a case runs as, and `run_acceptance(..., caller=...)` takes the run's caller in code. With
+  an access policy, each case reaches what that caller would; a case with no caller is not run and fails, saying
+  why. Without one, the report warns that named callers checked nothing. `qaos eval --access FILE` applies an
+  access file, by default the configured one.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource
@@ -55,6 +60,12 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+
+### Changed
+
+- **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
+  policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
+  before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.
 
 ## [0.7.0] - 2026-11-17
 
