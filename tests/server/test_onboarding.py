@@ -124,6 +124,22 @@ def test_doctor_flags_permissions_wider_than_read_only(monkeypatch: pytest.Monke
     assert "wider than read-only: network" in result.output
 
 
+def test_doctor_shows_standing_approvals_server_wide_and_per_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS", '["network"]')
+    monkeypatch.setenv(
+        "QUANT_AGENT_OS_PREAPPROVED_TOOLS", '{"network": ["risk_stress", "risk_var"]}'
+    )
+
+    code, output = _doctor_output()
+
+    assert code == 0, output
+    assert "every tool runs without an approval for: network" in output
+    assert "QUANT_AGENT_OS_PREAPPROVED_TOOLS" in output
+    assert "run without an approval: network: risk_stress, risk_var" in output
+
+
 def _doctor_output() -> tuple[int, str]:
     get_settings.cache_clear()
     result = RUNNER.invoke(app, ["doctor"], env={"COLUMNS": "1000"})

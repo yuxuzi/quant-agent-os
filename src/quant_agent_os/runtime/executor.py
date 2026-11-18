@@ -21,11 +21,7 @@ from quant_agent_os.runtime.quotas import UsageGate
 from quant_agent_os.runtime.telemetry import call_span
 from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools.access import AccessPolicy, collecting_refusals, note_refusal, permits
-from quant_agent_os.tools.permissions import (
-    CONSEQUENTIAL,
-    PermissionDeniedError,
-    PermissionPolicy,
-)
+from quant_agent_os.tools.permissions import PermissionDeniedError, PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry, UnknownToolError
 
 CallStatus = Literal[
@@ -92,8 +88,9 @@ class ToolCallRecord(BaseModel):
     ``input_sha256`` hashes the validated input (or the raw arguments when validation failed),
     so identical calls can be recognised across runs. ``approval`` names what allowed a
     consequential call: an approval id, or ``standing:<permission>,...`` for permissions the
-    operator pre-approved. ``error_detail`` keeps the exception text of an internal failure for
-    the operator; interfaces never return it to a caller (security review F-5). ``refused`` lists
+    operator pre-approved, for this tool or for every tool. ``error_detail`` keeps the exception
+    text of an internal failure for the operator; interfaces never return it to a caller
+    (security review F-5). ``refused`` lists
     what an access policy refused during the call (decision 0021), for the audit trail only: it
     is never returned to a caller, because a refused dataset must look like a missing one.
     """
@@ -154,7 +151,8 @@ class ToolExecutor:
     any other exception returns a generic message with the call id, and its text is kept in
     ``error_detail``. A tool with a consequential permission (decision 0005) runs only with a
     matching, unused approval from ``approvals`` for this run, tool, and input hash, or when the
-    policy pre-approves those permissions; otherwise the call records ``approval_required``.
+    policy pre-approves those permissions for this tool or for every tool; otherwise the call
+    records ``approval_required``.
 
     With ``usage`` (a firm's own limits, `quotas.UsageGate`), a call whose permissions and input
     are valid must be admitted before any approval is used or the tool starts; a refusal
@@ -265,7 +263,7 @@ class ToolExecutor:
                     error=refusal.message,
                     retry_after_seconds=refusal.retry_after_seconds,
                 )
-            pending = self.policy.needs_approval(spec.permissions)
+            pending = self.policy.needs_approval(spec.permissions, spec.name)
             if pending:
                 try:
                     granted = (
@@ -299,7 +297,7 @@ class ToolExecutor:
                         ),
                     )
                 approval = granted.approval_id
-            standing = (spec.permissions & CONSEQUENTIAL) & self.policy.preapproved
+            standing = spec.permissions & self.policy.standing(spec.name)
             if approval is None and standing:
                 approval = "standing:" + ",".join(
                     sorted(permission.value for permission in standing)
