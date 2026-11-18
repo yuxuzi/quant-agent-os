@@ -1,0 +1,21 @@
+{
+  "_comment": "Wrenfield Credit Opportunities (fictional) mock Cognito user pool. Every password and secret here is a fixture, not a secret.",
+  "region": "us-east-1",
+  "pool_id": "us-east-1_WrnFld001",
+  "resource_server": "qaos",
+  "app_clients": {
+    "wf-cli": {"secret": null},
+    "wf-batch": {"secret": "wf-batch-fixture", "groups": ["operators"]}
+  },
+  "users": {
+    "pm-hy": {"password": "wf-pm-hy", "groups": ["pm-hy-ls"]},
+    "pm-ig": {"password": "wf-pm-ig", "groups": ["pm-ig-rv"]},
+    "pm-distressed": {"password": "wf-pm-distressed", "groups": ["pm-distressed"]},
+    "pm-overlay": {"password": "wf-pm-overlay", "groups": ["pm-overlay"]},
+    "analyst-tech": {"password": "wf-analyst-tech", "groups": ["analyst-credit"]},
+    "risk-head": {"password": "wf-risk-head", "groups": ["risk"]},
+    "treasury-1": {"password": "wf-treasury-1", "groups": ["treasury"]},
+    "compliance-1": {"password": "wf-compliance-1", "groups": ["compliance"]},
+    "no-groups": {"password": "wf-no-groups", "groups": []}
+  }
+}
