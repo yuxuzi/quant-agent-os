@@ -42,13 +42,15 @@ from quant_toolbox.performance import backend as metrics_backend
 PERFORMANCE_DESCRIPTION = (
     "Performance of a returns series, from empyrical: annualised return and volatility, "
     "Sharpe, Sortino, Calmar, Omega, maximum drawdown, tail ratio, stability, value at risk, "
-    "hit rate, and, with a benchmark, alpha, beta, active return, tracking error, and "
-    "information ratio. Conventions are stated in the output."
+    "hit rate, skewness, excess kurtosis, Sharpe standard error and probability, and, with a "
+    "benchmark, alpha, beta, capture ratios, and information ratio. Conventions are stated "
+    "in the output."
 )
 RISK_DESCRIPTION = (
     "Risk of a portfolio from its weights and its assets' returns: annualised volatility, "
     "each asset's marginal, component, and percent contribution to it (Euler), gross and "
-    "net exposure, and the diversification ratio. With factor returns, adds factor "
+    "net exposure, effective positions, Cornish-Fisher value at risk, and the "
+    "diversification ratio. With factor returns, adds factor "
     "exposures (OLS betas) and each factor's share of the portfolio variance. "
     "Conventions are stated in the output."
 )
@@ -246,7 +248,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         name="analyze_performance",
         description=PERFORMANCE_DESCRIPTION + by_reference,
         permissions=permissions,
-        version="2.0.1",
+        version="2.1.0",
     )
     def analyze_performance(params: PerformanceRequest) -> PerformanceOutput:
         resolver = _Resolver(store)
@@ -291,7 +293,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         description=RISK_DESCRIPTION + by_reference.replace("{dataset, column}", "{dataset}"),
         permissions=permissions,
         max_output_bytes=500_000,
-        version="2.0.1",
+        version="2.1.0",
     )
     def analyze_risk(params: RiskRequest) -> RiskOutput:
         resolver = _Resolver(store)

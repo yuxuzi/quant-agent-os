@@ -248,7 +248,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.0.1"
+      "version": "2.1.0"
     },
     "analyze_risk": {
       "input_schema": {
@@ -604,6 +604,18 @@
             ],
             "title": "Diversification Ratio"
           },
+          "effective_positions": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective Positions"
+          },
           "evidence": {
             "items": {
               "$ref": "#/$defs/Evidence"
@@ -625,9 +637,45 @@
             "title": "Gross Exposure",
             "type": "number"
           },
+          "herfindahl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Herfindahl"
+          },
           "net_exposure": {
             "title": "Net Exposure",
             "type": "number"
+          },
+          "parametric_expected_shortfall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parametric Expected Shortfall"
+          },
+          "parametric_var": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parametric Var"
           },
           "periods": {
             "title": "Periods",
@@ -671,7 +719,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.0.1"
+      "version": "2.1.0"
     },
     "check_spec": {
       "input_schema": {

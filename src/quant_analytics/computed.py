@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from quant_agent_os.evidence import Evidence, SourceRef
@@ -23,6 +24,29 @@ MAX_FACTORS = 50
 PERCENT_LIKE = data.PERCENT_LIKE
 RISK_CONVENTIONS = risk.CONVENTIONS
 FACTOR_CONVENTIONS = risk.FACTOR_CONVENTIONS
+TAIL_CUTOFF = 0.05  # parametric value at risk and expected shortfall at 95%
+# Conventions this package states itself, for measures the toolbox names differently.
+EXTRA_CONVENTIONS = {
+    "best_period": "the highest single-period return",
+    "worst_period": "the lowest single-period return",
+    "minimum_track_record": "periods of history needed for the probabilistic Sharpe ratio "
+    "against 0 to reach 95%; none when the Sharpe ratio is not positive",
+    "probabilistic_sharpe_ratio": "probability the true Sharpe ratio exceeds 0 "
+    "(Bailey and Lopez de Prado, 2012)",
+}
+RISK_TAIL_CONVENTIONS = {
+    "parametric_var": "95%, per period, negative for a loss, on the portfolio's returns "
+    "(weights constant): mean plus the Cornish-Fisher quantile, adjusted for skew and excess "
+    "kurtosis, times the sample deviation",
+    "parametric_expected_shortfall": "95%, per period, Gaussian: mean minus deviation times "
+    "phi(z) / 0.05, on the portfolio's returns",
+    "herfindahl": risk.MEASURE_CONVENTIONS["herfindahl"],
+}
+METRIC_KINDS = {
+    "best_period": "percent",
+    "worst_period": "percent",
+    "minimum_track_record": "count",
+}
 
 
 def __getattr__(name: str) -> object:
@@ -167,6 +191,10 @@ class RiskOutput(BaseModel):
     gross_exposure: float
     net_exposure: float
     diversification_ratio: float | None
+    parametric_var: float | None = None
+    parametric_expected_shortfall: float | None = None
+    herfindahl: float | None = None
+    effective_positions: float | None = None
     contributions: dict[str, AssetRisk]
     factors: FactorRisk | None
     conventions: dict[str, str]
@@ -216,10 +244,13 @@ def performance(params: PerformanceInput) -> PerformanceOutput:
     warnings = _sample_warnings(params) + _unit_warnings(params.series_id, returns)
     if params.benchmark is not None:
         computed |= metrics.benchmark_metrics(returns, params.benchmark, periods, params.risk_free)
+        captured = metrics.capture_ratios(returns, params.benchmark)
+        computed |= {name: captured[name] for name in ("up_capture", "down_capture", "correlation")}
+    computed |= _shape(returns, periods)
     values = {name: _defined(value) for name, value in computed.items()}
     if values["sharpe_ratio"] is None:
         warnings.append(f"{params.series_id} does not vary, so its Sharpe ratio is undefined.")
-    conventions = metrics.conventions()
+    conventions = metrics.conventions() | EXTRA_CONVENTIONS
     shown = {name: conventions[name] for name in ("source", "returns", *values)}
     shown["periods_per_year"] = str(periods)
     evidence = [
@@ -236,6 +267,20 @@ def performance(params: PerformanceInput) -> PerformanceOutput:
         warnings=warnings,
         evidence=evidence,
     )
+
+
+def _shape(returns: list[float], periods: int) -> dict[str, float]:
+    """The distribution of ``returns`` and how far to trust their Sharpe ratio."""
+    shape = metrics.return_distribution(returns)
+    return {
+        "skewness": shape.skewness,
+        "excess_kurtosis": shape.excess_kurtosis,
+        "best_period": shape.best,
+        "worst_period": shape.worst,
+        "sharpe_standard_error": metrics.sharpe_standard_error(returns, periods),
+        "probabilistic_sharpe_ratio": metrics.probabilistic_sharpe_ratio(returns, periods),
+        "minimum_track_record": metrics.minimum_track_record(returns, periods),
+    }
 
 
 def portfolio_risk(params: RiskInput) -> RiskOutput:
@@ -258,7 +303,24 @@ def portfolio_risk(params: RiskInput) -> RiskOutput:
             f"{name} does not vary, or varies only by rounding (an exact hedge), so its "
             "volatility contributions are undefined."
         )
+    book = [
+        sum(params.weights[asset] * values[row] for asset, values in params.asset_returns.items())
+        for row in range(periods)
+    ]
+    tail_var = _defined(metrics.parametric_var(book, TAIL_CUTOFF, method="cornish_fisher"))
+    tail_es = _defined(metrics.parametric_expected_shortfall(book, TAIL_CUTOFF))
+    size = risk.exposures(np.array(list(params.weights.values()), dtype=np.float64))
+    concentrated = size.gross > 0.0
     statements = [f"Annualised volatility of {name} is {breakdown.volatility:.2%}."]
+    if tail_var is not None:
+        statements.append(f"95% Cornish-Fisher value at risk of {name} is {tail_var:.2%} a period.")
+    if tail_es is not None:
+        statements.append(f"95% Gaussian expected shortfall of {name} is {tail_es:.2%} a period.")
+    if concentrated:
+        statements.append(
+            f"{name} has {size.effective_positions:.1f} effective positions "
+            f"(Herfindahl {size.herfindahl:.3f})."
+        )
     statements += [
         f"{asset} contributes {item.percent:.1%} of the volatility of {name}."
         for asset, item in breakdown.contributions.items()
@@ -297,6 +359,10 @@ def portfolio_risk(params: RiskInput) -> RiskOutput:
         gross_exposure=breakdown.gross_exposure,
         net_exposure=breakdown.net_exposure,
         diversification_ratio=breakdown.diversification_ratio,
+        parametric_var=tail_var,
+        parametric_expected_shortfall=tail_es,
+        herfindahl=size.herfindahl if concentrated else None,
+        effective_positions=size.effective_positions if concentrated else None,
         contributions={
             asset: AssetRisk(
                 weight=item.weight,
@@ -313,6 +379,7 @@ def portfolio_risk(params: RiskInput) -> RiskOutput:
             for key, text in RISK_CONVENTIONS.items()
             if factors or key not in FACTOR_CONVENTIONS
         }
+        | RISK_TAIL_CONVENTIONS
         | {"periods_per_year": str(params.periods_per_year)},
         warnings=warnings,
         evidence=[
@@ -327,4 +394,4 @@ def _label(name: str) -> str:
 
 
 def _format(name: str, value: float) -> str:
-    return report.format_metric(name, value, ratio_digits=2)
+    return report.format_metric(name, value, ratio_digits=2, kinds=METRIC_KINDS)
