@@ -48,10 +48,12 @@ or team that hosts it themselves. One wheel holds five import names
 
 Arrows into Core mean registration: products hand Core `ToolSpec`s, and Core never imports a product.
 
-Identity is an API key with scopes on the HTTP server. Scopes are `tools:list`, `tools:call`, and
+Identity is an API key with scopes on the HTTP server, or, with an opt-in sign-in file, a token from the
+firm's identity provider whose groups claim feeds per-caller access
+([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)). Scopes are `tools:list`, `tools:call`, and
 `runs:approve`; there are no PM, trader, or researcher roles. Each firm runs its own installation, and
 there is no multi-tenant service ([decision 0023](decisions/0023-no-hosted-service.md)). OAuth and the approval page are in
-`quant_platform.identity`, for a firm's own server. Core keeps a `tenant` column (default `local`) and
+`quant_platform.identity`; `serve_http` loads sign-in from it only when a sign-in file is configured. Core keeps a `tenant` column (default `local`) and
 small hooks such as `UsageGate`.
 
 ## Core

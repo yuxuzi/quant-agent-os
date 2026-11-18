@@ -12,21 +12,24 @@
 - **Since then:** [decision 0023](decisions/0023-no-hosted-service.md) removed the multi-tenant server, plans, and
   usage export. Rows below about tenants, plans, and `qaos hosted serve` describe code that no longer ships; OAuth
   and the approval page moved unchanged to `quant_platform/identity/`.
+- **2026-11-17:** [decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md) serves OAuth sign-in, opt-in,
+  on `qaos serve --http` and `serve_apps`, on REST as well as MCP, with groups from the token. Not yet re-reviewed;
+  `tests/server/test_sign_in.py` covers its refusals. The rows below are updated where it changes them.
 
 The general model is in [security.md](security.md). This page checks it against the code and
 lists what is still open.
 
 ## The surface
 
-`qaos serve --http` serves everything below except the approval page and OAuth metadata, which only a firm's own server can add, from `quant_platform.identity`. Local stdio (`qaos serve`) is
+`qaos serve --http` serves everything below except the approval page, which only a firm's own server can add, from `quant_platform.identity`; it serves the OAuth metadata and takes tokens only with a sign-in file. Local stdio (`qaos serve`) is
 out of scope: it trusts the user who started it.
 
 | Route | Who may call it | Guarded by |
 | --- | --- | --- |
 | `POST /mcp` (Streamable HTTP, stateless) | API key or OAuth token, scope per method | `mcp/http.py`: bearer middleware, `caller_of`, `tenant_route` |
-| `/v1/tools`, `/v1/tools/{name}/call`, `/v1/runs` | API key with the route's scope | `api/app.py`: `requires(scope)`, `surface_of` |
+| `/v1/tools`, `/v1/tools/{name}/call`, `/v1/runs` | API key, or OAuth token with sign-in on, with the route's scope | `api/app.py`: `requires(scope)`, `surface_of` |
 | `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `quant_platform/identity/approval_page.py`, `approval_desk.py` |
-| `/.well-known/oauth-protected-resource/mcp` | Anyone (public metadata) | MCP SDK |
+| `/.well-known/oauth-protected-resource/mcp` | Anyone (public metadata), with sign-in on | MCP SDK |
 | `/healthz` | Anyone; returns `{"status": "ok"}` only | — |
 
 Every tool call, from any route, then passes the executor's checks in order: registered tool,
@@ -42,7 +45,7 @@ permission policy, input validation, plan limits, approval, timeout, and output 
 | **API4 Unrestricted resource consumption** | Bodies are capped at 5 MiB (approval forms at 8 KiB), each tool has a timeout and an output cap, an executor runs at most 16 calls at once (`busy` beyond that), and a program a tool runs is killed at its timeout. Unauthenticated requests are not limited, and a timed-out tool thread keeps running. | `tests/contract/test_rest_api.py`, `tests/unit/test_executor.py` | Partial: F-1, F-2 |
 | **API5 Broken function-level authorization** | Scopes are checked per MCP method and per REST route. No route can approve: approving needs `runs:approve`, which no key holding `tools:call` and no OAuth token can carry. Operator actions (ingestion, keys, tenants, usage export) are CLI commands, not routes. | `tests/server/test_approval_page.py` | Pass |
 | **API6 Unrestricted access to sensitive business flows** | A consequential call needs a per-call approval bound to the run, tool, and input hash, decided once by a different person (four eyes except `local`). Five failed attempts deny a request; each address may submit 30 forms a minute. Remote servers never write users' files (`create_app` is not served over HTTP). | `tests/server/test_approval_page.py` | Pass, with F-3 |
-| **API7 Server-side request forgery** | No tool takes a URL. Outbound calls go only to operator-configured hosts: the introspection URLs in the tenants file and the hosted embedder. | Code reading: `quant_platform/hosted/oauth.py`, `quant_research/infrastructure/remote_embedding.py` | Pass |
+| **API7 Server-side request forgery** | No tool takes a URL. Outbound calls go only to operator-configured hosts: the introspection URLs in the sign-in file (https, except on loopback) and the hosted embedder. | Code reading: `quant_platform/identity/oauth.py`, `quant_research/infrastructure/remote_embedding.py` | Pass |
 | **API8 Security misconfiguration** | Binds loopback by default and warns otherwise; no CORS, docs pages, server header, or date header; DNS-rebinding protection on `/mcp`; the approval page sends a strict CSP, `no-store`, `no-referrer`, and `DENY` framing. A failed tool's exception text is returned to the caller. | `tests/contract/test_mcp_http.py`, `tests/contract/test_rest_api.py` | Pass, with F-5 |
 | **API9 Improper inventory management** | Tools are registered explicitly, never discovered. Each has a semver version checked against `scripts/tool-versions.lock`; `server_info` and `qaos://server/info` list them; deprecations name a replacement and a removal date. | `tests/server/test_tool_lock.py` | Pass |
 | **API10 Unsafe consumption of APIs** | Introspection responses are type-checked claim by claim, and failures refuse the token. Retrieved passages are marked `"trust": "untrusted"`, and no tool output reaches the platform's own planner. | `tests/server/test_oauth.py`, research contract tests | Pass |
@@ -51,7 +54,7 @@ permission policy, input validation, plan limits, approval, timeout, and output 
 
 | Practice | Status |
 | --- | --- |
-| **No token passthrough.** The server accepts only tokens issued for it (audience equals `--resource-url`) and never forwards a client's token to another service. Tools never see credentials. | Met |
+| **No token passthrough.** The server accepts only tokens issued for it (audience equals the sign-in file's `resource`) and never forwards a client's token to another service. Tools never see credentials. | Met |
 | **Confused deputy.** The server is a resource server only. It does not proxy OAuth to a third party or hold a static client id for users, so there is no consent to bypass. | Not applicable |
 | **Session hijacking.** The transport is stateless: there are no session ids to steal or inject, and every request is authenticated on its own. | Met |
 | **Scope minimization.** Four scopes; OAuth tokens get only those they name, never `runs:approve`. The policy is read-only by default per tenant. | Met |
@@ -95,7 +98,7 @@ and F-2 matter much less. Severity from F-6 on is for one firm's server.
 | **F-7** | Low | **The audit trail is not tamper-evident.** Database triggers reject changes to audit events, but whoever can write the file can remove them. | Export the trail to a system the host's operators do not control. |
 | **F-8** | Low | **`runs:read` reads every caller's runs,** with what they retrieved and computed, which access rules do not filter. By design, and documented. | Give it only to auditors. |
 | **F-9** | Low | **The corpus is all or nothing per caller,** so access rules cannot separate research. By design ([decision 0013](decisions/0013-identity-and-tenancy.md)), and documented. | Run one server per corpus. |
-| **F-10** | Medium | **Fixed.** `qaos hosted serve` ignored a configured access file and started, so every key reached every tool while the operator believed otherwise. | It now refuses to start. Per-caller access under `qaos hosted serve`, with groups on OAuth tokens, is not built. |
+| **F-10** | Medium | **Fixed.** `qaos hosted serve` ignored a configured access file and started, so every key reached every tool while the operator believed otherwise. | It now refuses to start. Groups on OAuth tokens are built for a firm's own server (decision 0028). |
 | **F-11** | Low | **Partly fixed.** Keys with groups on a server with no access file reach everything. That stays, since no file means no policy, but it was silent. | `serve_http` and `qaos doctor` now warn. |
 | **F-12** | Low | **Fixed.** An invalid API keys file put key hashes in its error, which reached logs and `doctor`. | It names the field and the problem only. |
 | **F-13** | Low | **A prune records no person.** Its audit event has actor `cli`, because operator commands trust the host, so who ran it is not on record. | Run operator commands through your own change process, and keep the host's own logs. |

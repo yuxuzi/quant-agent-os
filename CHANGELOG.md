@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
+  ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
+  `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource
+  URL. With one, `/mcp` and REST `/v1` accept tokens checked by introspection beside API keys, the token's
+  subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
+  published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
+  provider's settings. Off by default: without a sign-in file nothing changes.
+
 ## [0.7.0] - 2026-11-17
 
 0.7.0 is the first tagged release since 0.5.0; it includes 0.6.0, which was never tagged. Quant Toolbox stays at
