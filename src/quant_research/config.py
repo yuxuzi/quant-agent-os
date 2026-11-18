@@ -1,4 +1,5 @@
-"""Embedding configuration: choose an embedder and read provider keys from the environment.
+"""Embedding and parsing configuration: choose an embedder or a PDF parser, with keys from the
+environment.
 
 Keys use each provider's conventional variable (``VOYAGE_API_KEY``, ``OPENAI_API_KEY``), may come
 from the ``.env`` file in the platform's home, are held as `SecretStr`, and are never displayed.
@@ -12,8 +13,9 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from quant_agent_os.config import home_dir, home_env_file
-from quant_research.domain.ports import Embedder
+from quant_research.domain.ports import Embedder, SourceReadError
 from quant_research.infrastructure.local_embedding import DEFAULT_MODEL, LocalEmbedder
+from quant_research.infrastructure.ragflow import RagflowPdfLoader
 from quant_research.infrastructure.remote_embedding import (
     EmbeddingServiceError,
     OpenAIEmbedder,
@@ -62,4 +64,28 @@ def make_embedder(
         model=model or "text-embedding-3-small",
         dimensions=dimensions,
         timeout=settings.timeout_seconds,
+    )
+
+
+class RagflowSettings(BaseSettings):
+    """Where a firm's RAGFlow server is, for parsing PDFs at ingestion (``--pdf-parser``)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    url: str | None = Field(default=None, validation_alias="RAGFLOW_URL")
+    api_key: SecretStr | None = Field(default=None, validation_alias="RAGFLOW_API_KEY")
+    parse_timeout_seconds: float = Field(
+        default=600.0, gt=0, le=3600, validation_alias="RAGFLOW_PARSE_TIMEOUT"
+    )
+
+
+def make_ragflow_loader(settings: RagflowSettings | None = None) -> RagflowPdfLoader:
+    """Build the RAGFlow PDF loader; fails fast with an actionable message when unconfigured."""
+    settings = settings or RagflowSettings(_env_file=home_env_file())
+    if not settings.url or settings.api_key is None:
+        raise SourceReadError(
+            "The RAGFlow PDF parser needs RAGFLOW_URL and RAGFLOW_API_KEY to be set."
+        )
+    return RagflowPdfLoader(
+        settings.url, settings.api_key, parse_timeout=settings.parse_timeout_seconds
     )

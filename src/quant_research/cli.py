@@ -20,7 +20,8 @@ from quant_research.application.strategy import (
     UnknownFocusError,
 )
 from quant_research.bootstrap import ResearchApp, open_research
-from quant_research.config import make_embedder
+from quant_research.config import make_embedder, make_ragflow_loader
+from quant_research.domain.ports import SourceReadError
 from quant_research.domain.vocabulary import VocabularyError
 from quant_research.infrastructure.postgres_store import (
     DEFAULT_SCHEMA,
@@ -88,6 +89,13 @@ ModelOption = Annotated[
 ]
 
 
+class PdfParser(StrEnum):
+    """PDF parsers ingestion can use."""
+
+    PYPDF = "pypdf"
+    RAGFLOW = "ragflow"
+
+
 def _open(
     store: str | None,
     embedder: EmbedderChoice | None,
@@ -96,18 +104,21 @@ def _open(
     read_only: bool = False,
     schema: str = DEFAULT_SCHEMA,
     vocabulary: Path | None = None,
+    pdf_parser: PdfParser = PdfParser.PYPDF,
 ) -> ResearchApp:
     """Open the store (read-only for search and serving) or exit with an actionable message."""
     try:
         chosen = make_embedder(embedder.value, model=model) if embedder else None
+        pdf = make_ragflow_loader() if pdf_parser is PdfParser.RAGFLOW else None
         return open_research(
             store or get_settings().store,
             vocabulary,
             embedder=chosen,
             read_only=read_only,
             schema=schema,
+            pdf=pdf,
         )
-    except (EmbeddingServiceError, StoreError, VocabularyError) as error:
+    except (EmbeddingServiceError, SourceReadError, StoreError, VocabularyError) as error:
         raise _fail(error) from error
 
 
@@ -134,12 +145,28 @@ def ingest(
             "with the store, so later ingestion and serving use it without this option.",
         ),
     ] = None,
+    pdf_parser: Annotated[
+        PdfParser,
+        typer.Option(
+            "--pdf-parser",
+            help="pypdf (the pdf extra; text-layer PDFs) or ragflow (your RAGFlow server's "
+            "DeepDoc parser, with OCR and tables; set RAGFLOW_URL and RAGFLOW_API_KEY).",
+        ),
+    ] = PdfParser.PYPDF,
 ) -> None:
     """Ingest Markdown, text, and PDF files; unchanged files are skipped by content hash.
 
-    With a hosted --embedder, chunk text is sent to that provider to be embedded.
+    With a hosted --embedder, chunk text is sent to that provider to be embedded. With
+    --pdf-parser ragflow, each PDF is sent to your RAGFlow server to be parsed.
     """
-    research = _open(store, embedder, embedding_model, schema=schema, vocabulary=vocabulary)
+    research = _open(
+        store,
+        embedder,
+        embedding_model,
+        schema=schema,
+        vocabulary=vocabulary,
+        pdf_parser=pdf_parser,
+    )
     try:
         result = research.ingest.ingest(corpus)
     except (FileNotFoundError, EmbeddingServiceError) as error:

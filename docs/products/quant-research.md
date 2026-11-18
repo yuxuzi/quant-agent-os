@@ -39,7 +39,30 @@ run costs a few cents.
 
 It supports Markdown and text with front matter. PDF needs the extra
 `quant-agent-os[pdf]`, and its locations cite the page and line range. Scanned PDFs
-are reported, because OCR is not supported.
+are reported, because pypdf has no OCR.
+
+### Parsing PDFs with RAGFlow
+
+If your firm runs [RAGFlow](https://github.com/infiniflow/ragflow) (1.0 or later), ingestion can
+use its DeepDoc parser instead of pypdf. DeepDoc reads layout and tables and runs OCR on scanned
+pages:
+
+```bash
+export RAGFLOW_URL=https://ragflow.internal     # plain http only for localhost
+export RAGFLOW_API_KEY=...                      # or put both in the home's .env
+uv run qaos ingest ~/research --pdf-parser ragflow
+```
+
+- Each PDF is uploaded to a temporary dataset, parsed, read back, and deleted. RAGFlow embeds
+  the chunks while it parses, so its tenant needs an embedding model configured.
+- Quant Research still chunks, links, and cites the text. A citation names the page and a line
+  range within the page text RAGFlow returned, which can differ from pypdf's lines. Changing the
+  parser re-processes the PDFs on the next ingestion.
+- A chunk RAGFlow returns without a page position makes that file fail with a warning, rather
+  than get a guessed citation.
+- Only ingestion talks to RAGFlow; serving and search never do. `RAGFLOW_PARSE_TIMEOUT` (seconds,
+  default 600) bounds each file's parse.
+- Its quality on the real-paper evaluation has not been measured yet.
 
 To draft a strategy specification whose every item cites its passages, run
 `uv run qaos strategy "trend following"`. Add `--json` to save the spec. What the
@@ -89,7 +112,7 @@ paths, which these figures do not score. The gold set is small and has no multi-
 - **Paraphrases.** Without an embedder, a question that shares no words with the answer can miss.
 - **Hosted embedders have no measured score floor,** so off-topic questions can return passages with
   them. The local model's floor of 0.8 was measured on one corpus and may not transfer.
-- **PDFs.** Text-layer PDFs only, with no OCR. Some kerning artefacts ("ot her") remain, and tables are
+- **PDFs.** With the default parser, text-layer PDFs only, with no OCR (see RAGFlow above). Some kerning artefacts ("ot her") remain, and tables are
   indexed for search but never read as relations.
 - **Answers.** The client writes the answer from the evidence, so check its citations against the
   passages it quotes.

@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`qaos ingest --pdf-parser ragflow` parses PDFs with a firm's own RAGFlow server.** Its DeepDoc parser
+  reads layout and tables and runs OCR, so scanned PDFs get indexed. Each PDF goes to a temporary dataset on
+  `RAGFLOW_URL` (https, or plain http only on this machine) with `RAGFLOW_API_KEY`, and the dataset is deleted
+  afterwards. Quant Research still does the chunking, linking, and citing: a citation names the page and a line
+  range within the page text RAGFlow returned. A chunk that comes back without a page is refused rather than
+  guessed. Serving never contacts RAGFlow, and the default parser is still pypdf. It needs no new dependency.
+  Tested offline against a fake server; its quality on real papers has not been measured yet.
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
