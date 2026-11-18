@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from quant_agent_os.api import KeyRing, build_app
-from quant_agent_os.mcp.http import GateFor, KeyVerifier, add_mcp_route
+from quant_agent_os.mcp.http import GateFor, KeyVerifier, add_mcp_route, token_check
 from quant_agent_os.runs import RunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.serving import SingleTenant, Surface, Tenancy
@@ -43,13 +43,21 @@ def build_http_app(
 ) -> FastAPI:
     """Return one app serving each caller its tenant over REST (0011) and MCP (0012, 0013).
 
-    REST takes API keys; MCP takes ``verifier``'s credentials (API keys by default, or OAuth
-    tokens too), and ``metadata_routes`` publish the OAuth Protected Resource Metadata that
+    Both take API keys. With ``verifier`` (OAuth tokens, decision 0028), both also take the
+    tokens it accepts, and ``metadata_routes`` publish the OAuth Protected Resource Metadata that
     ``resource_metadata_url`` points to. ``gate_for`` and ``extra_routes`` are for
     `quant_platform.identity`: its approval gate, and the page that decides. Raises `ValueError`
-    without an enabled key.
+    with neither an enabled key nor a ``verifier``.
     """
-    app = build_app(None, keys, None, title="quant-agent-os", tenancy=tenancy)
+    app = build_app(
+        None,
+        keys,
+        None,
+        title="quant-agent-os",
+        tenancy=tenancy,
+        tokens=token_check(verifier) if verifier is not None else None,
+        resource_metadata_url=resource_metadata_url,
+    )
     app.router.routes.extend(metadata_routes or [])
     app.router.routes.extend(extra_routes or [])
     add_mcp_route(
