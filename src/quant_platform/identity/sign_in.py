@@ -13,6 +13,7 @@ which every token's audience must be, and the identity providers it trusts::
     client_secret_env = "QAOS_INTROSPECTION_SECRET"  # the secret stays in the environment
     tenant = "local"              # optional: the tenant its users act in
     tenant_claim = "qaos_tenant"  # optional: "" when the provider sends no tenant claim
+    tenant_claim_value = "acme"   # optional: what that claim holds, if not the tenant itself
     groups_claim = "groups"       # optional: "" when it sends no groups
 
 URLs must be https, except on loopback. The secret is read from the environment, then from the
@@ -29,7 +30,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from quant_agent_os.api.server import is_loopback
 from quant_agent_os.config import home_env_file
@@ -74,12 +83,19 @@ class ServerEntry(BaseModel):
     client_secret_env: str = Field(pattern=r"^[A-Z_][A-Z0-9_]*$")
     tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     tenant_claim: str = Field(default=DEFAULT_TENANT_CLAIM, pattern=CLAIM_NAME)
+    tenant_claim_value: str | None = Field(default=None, min_length=1, max_length=256)
     groups_claim: str = Field(default=DEFAULT_GROUPS_CLAIM, pattern=CLAIM_NAME)
 
     @field_validator("issuer", "introspection_url")
     @classmethod
     def _secure_urls(cls, value: str) -> str:
         return check_url(value)
+
+    @model_validator(mode="after")
+    def _value_needs_a_claim(self) -> ServerEntry:
+        if self.tenant_claim_value is not None and not self.tenant_claim:
+            raise ValueError("tenant_claim_value needs a tenant_claim to read it from")
+        return self
 
     def secret(self, environ: Mapping[str, str | None]) -> SecretStr | None:
         """Return the client secret from ``environ``, or None when it is unset or empty."""
@@ -133,6 +149,7 @@ class SignInFile(BaseModel):
                     client_id=entry.client_id,
                     client_secret=secret,
                     tenant_claim=entry.tenant_claim,
+                    tenant_claim_value=entry.tenant_claim_value,
                     groups_claim=entry.groups_claim or None,
                 )
             )

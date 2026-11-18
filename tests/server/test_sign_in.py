@@ -346,6 +346,38 @@ def test_a_provider_with_no_tenant_claim_pins_its_users_to_the_tenant(
     assert _call(started.app, token, "equity-book").json()["status"] == "ok"
 
 
+def test_the_pilot_gateway_configuration_is_accepted(
+    catalog: Catalog,
+    sign_in_file: Path,
+    provider: Provider,
+    start: Callable[..., Started],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """W1's mock provider: loopback http, its own tenant name, and groups in `groups`."""
+    gateway = "http://127.0.0.1:9400"
+    sign_in_file.write_text(
+        f'resource = "http://127.0.0.1:8000/mcp"\n\n[[authorization_servers]]\n'
+        f'issuer = "{gateway}"\nintrospection_url = "{gateway}/introspect"\n'
+        f'client_id = "qaos-server"\nclient_secret_env = "{SECRET_ENV}"\n'
+        'tenant_claim_value = "kestrel"\n',
+        "utf-8",
+    )
+    started = start(catalog, sign_in=sign_in_file)
+    local = {"iss": gateway, "aud": "http://127.0.0.1:8000/mcp"}
+    pm = provider.issue("tok-kestrel", qaos_tenant="kestrel", **local)
+    stranger = provider.issue("tok-other-fund", qaos_tenant="local", **local)
+
+    assert _call(started.app, pm, "equity-book").json()["status"] == "ok"
+    assert _rest(started.app, stranger, "GET", "/v1/tools").status_code == 401
+
+
+def test_a_tenant_claim_value_without_a_claim_is_refused(sign_in_file: Path) -> None:
+    sign_in_file.write_text(SIGN_IN + 'tenant_claim = ""\ntenant_claim_value = "kestrel"\n')
+
+    with pytest.raises(SignInError, match="needs a tenant_claim"):
+        load_sign_in(sign_in_file)
+
+
 def test_the_protected_resource_metadata_is_published(
     catalog: Catalog, sign_in_file: Path, provider: Provider, start: Callable[..., Started]
 ) -> None:

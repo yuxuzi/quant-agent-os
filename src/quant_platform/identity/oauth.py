@@ -57,7 +57,9 @@ class AuthorizationServer(BaseModel):
     """An identity provider the server trusts, and how to ask it about a token.
 
     ``tenant_claim`` names the claim that must name the token's tenant; empty means the provider
-    sends none. ``groups_claim``, when set, names the claim that lists the caller's groups.
+    sends none. With ``tenant_claim_value``, that claim must equal it instead, and the token acts
+    in the issuer's one pinned tenant: the provider's name for the firm need not be the server's.
+    ``groups_claim``, when set, names the claim that lists the caller's groups.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -67,6 +69,7 @@ class AuthorizationServer(BaseModel):
     client_id: str
     client_secret: SecretStr
     tenant_claim: str = DEFAULT_TENANT_CLAIM
+    tenant_claim_value: str | None = None
     groups_claim: str | None = None
 
 
@@ -189,7 +192,11 @@ class IntrospectionVerifier:
         audiences = audience if isinstance(audience, list) else [audience]
         expires = claims.get("exp")
         pinned = self.tenants_by_issuer.get(server.issuer, set())
-        if server.tenant_claim:
+        sole = next(iter(pinned)) if len(pinned) == 1 else None
+        if server.tenant_claim and server.tenant_claim_value is not None:
+            claimed = claims.get(server.tenant_claim) == server.tenant_claim_value
+            tenant = sole if claimed else None
+        elif server.tenant_claim:
             tenant = claims.get(server.tenant_claim)
         else:  # the provider names no tenant: its one pinned tenant, or none
             tenant = next(iter(pinned)) if len(pinned) == 1 else None
