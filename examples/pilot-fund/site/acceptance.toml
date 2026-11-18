@@ -1,0 +1,43 @@
+# Kestrel Point Capital (fictional): the cases the fund agreed before using the platform. Run them as
+# the operator with `python site/kestrel_server.py acceptance site/acceptance.toml` (docs/pilot-runbook.md).
+# The numbers come from the default warehouse (seed 20251231); a rebuilt warehouse with another seed
+# changes them, which is the point: a changed number fails the case.
+
+[[numeric]]
+name = "momentum rank IC matches the planted value"
+tool = "analyze_signal"
+arguments = { signal = { dataset = "signals_momentum" }, returns = { dataset = "px_returns" }, lag = 0 }
+value = "summary.mean_rank_ic"
+expected = 0.0221294799
+tolerance = 1e-9
+
+[[numeric]]
+name = "carry has no planted edge"
+tool = "analyze_signal"
+arguments = { signal = { dataset = "signals_carry" }, returns = { dataset = "px_returns" }, lag = 0 }
+value = "summary.mean_rank_ic"
+expected = -0.0117901681
+tolerance = 1e-9
+
+[[numeric]]
+name = "equity desk gross P&L from the legacy report"
+tool = "kpc_desk_pnl"
+arguments = { desk = "eq_ls" }
+value = "gross_pnl"
+expected = 303740818.44
+tolerance = 1.0
+
+[[retrieval]]
+name = "the momentum IC review is in the corpus"
+question = "momentum signal information coefficient review"
+source = "note-momentum-ic-review.md"
+
+[[retrieval]]
+name = "the transaction cost model is in the corpus"
+question = "transaction cost model in basis points"
+source = "note-transaction-costs.md"
+
+[[retrieval]]
+name = "the corpus says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true

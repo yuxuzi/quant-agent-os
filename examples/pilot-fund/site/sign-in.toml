@@ -1,0 +1,13 @@
+# Kestrel Point Capital (fictional): sign-in through the fund's identity provider (decision 0028).
+# The provider is facility/gateway/idp.py on port 9400; this server is the resource at port 8000.
+# The secret stays in the environment: KESTREL_INTROSPECTION_SECRET (see kestrel.env).
+resource = "http://127.0.0.1:8000/mcp"
+
+[[authorization_servers]]
+issuer = "http://127.0.0.1:9400"                        # exactly the gateway's `iss`
+introspection_url = "http://127.0.0.1:9400/introspect"
+client_id = "qaos-server"
+client_secret_env = "KESTREL_INTROSPECTION_SECRET"
+tenant_claim = "qaos_tenant"
+tenant_claim_value = "kestrel"                           # the gateway names the firm, not `local`
+groups_claim = "groups"
