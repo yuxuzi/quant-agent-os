@@ -35,6 +35,7 @@ CONFIG_FILE_KEYS = (
     "runs_file",
     "api_keys_file",
     "access_file",
+    "sign_in_file",
 )
 
 
@@ -84,13 +85,14 @@ class Settings(BaseSettings):
     runs_file: Path = Field(default_factory=lambda: home_dir() / "runs.db")
     api_keys_file: Path = Field(default_factory=lambda: home_dir() / "api-keys.toml")
     access_file: Path | None = None
+    sign_in_file: Path | None = None  # opt-in OAuth sign-in for `serve_http` (decision 0028)
 
     @field_validator("datasets_dir", "runs_file", "api_keys_file")
     @classmethod
     def _expand_user(cls, value: Path) -> Path:
         return value.expanduser()
 
-    @field_validator("access_file")
+    @field_validator("access_file", "sign_in_file")
     @classmethod
     def _expand_optional_user(cls, value: Path | None) -> Path | None:
         return value.expanduser() if value is not None else None

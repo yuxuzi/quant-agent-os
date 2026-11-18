@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
@@ -16,6 +16,7 @@ from quant_agent_os.mcp import run_stdio
 from quant_agent_os.registration import FirmApp
 from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools import (
     AccessPolicy,
     FileAccessPolicy,
@@ -27,10 +28,13 @@ from quant_platform.composition import Catalog, compose
 from quant_platform.http import build_http_app, single_tenant
 from quant_research.application.retrieval import ResearchService
 
+if TYPE_CHECKING:
+    from quant_platform.identity.sign_in import SignIn
+
 errors = Console(stderr=True, soft_wrap=True)
 
 
-def warn_about_open_access(catalog: Catalog, ring: KeyRing) -> None:
+def warn_about_open_access(catalog: Catalog, ring: KeyRing, sign_in: SignIn | None = None) -> None:
     """Warn when an operator seems to expect per-caller access that this server will not apply.
 
     Reads the keys ``ring`` already holds, so a keys file that changes meanwhile cannot stop
@@ -38,6 +42,12 @@ def warn_about_open_access(catalog: Catalog, ring: KeyRing) -> None:
     """
     configured = get_settings().access_file
     if catalog.access is None:
+        if sign_in is not None and configured is None:
+            errors.print(
+                "[yellow]warning:[/yellow] sign-in is on, but there is no access file, so every "
+                "user the identity provider signs in for this server reaches every tool and "
+                "dataset, and the groups claim does nothing. Use --access."
+            )
         if configured is not None:
             errors.print(
                 "[yellow]warning:[/yellow] an access file is configured, but this catalog has no "
@@ -91,6 +101,11 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
     """
     if catalog.access is not None:
         raise ValueError("An access policy needs serve_http: stdio has no authenticated caller.")
+    if get_settings().sign_in_file is not None:
+        errors.print(
+            "[yellow]warning:[/yellow] a sign-in file is configured, but stdio serves only the "
+            "client that launched it, so sign-in does not apply; it applies to `qaos serve --http`."
+        )
     run_store: SqliteRunStore | None = None
     try:
         if record:
@@ -116,6 +131,23 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
             run_store.close()
 
 
+def open_sign_in(path: Path, tenant: str = DEFAULT_TENANT) -> SignIn:
+    """Read the sign-in file for a server of ``tenant``; raise `SignInError` naming the problem.
+
+    Every provider's users must act in ``tenant``: a token for any other would reach nothing.
+    """
+    from quant_platform.identity.sign_in import SignInError, load_sign_in
+
+    sign_in = load_sign_in(path)
+    for issuer, tenants in sign_in.tenants_by_issuer.items():
+        if tenants != {tenant}:
+            raise SignInError(
+                f"{path}: this server serves tenant '{tenant}' only, but {issuer}'s users would "
+                f'act in {", ".join(sorted(tenants))}. Set tenant = "{tenant}" or remove it.'
+            )
+    return sign_in
+
+
 def serve_http(
     catalog: Catalog,
     *,
@@ -124,39 +156,64 @@ def serve_http(
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     allowed_hosts: Sequence[str] = (),
+    sign_in: Path | None = None,
 ) -> None:
     """Serve ``catalog`` as MCP at /mcp and REST at /v1 until interrupted (decision 0012).
 
-    Every call needs an API key and is recorded with its principal. ``keys`` and ``runs`` default
-    to the configured files, and ``allowed_hosts`` are public names clients use. Binds loopback
-    by default; put TLS and rate limiting in a reverse proxy before binding anything else.
-    Raises `ApiKeyError` without an enabled key, `RunStoreError` without a run store, and
-    `ApiUnavailableError` or `MCPUnavailableError` without the ``server`` extra.
+    Every call needs an API key, or with sign-in (decision 0028) a token from a trusted identity
+    provider, and is recorded with its principal. ``keys``, ``runs``, and ``sign_in`` default to
+    the configured files, and ``allowed_hosts`` are public names clients use; with sign-in, the
+    resource URL's host is one. Binds loopback by default; put TLS and rate limiting in a reverse
+    proxy before binding anything else. Raises `ApiKeyError` without an enabled key (unless
+    sign-in is on), `SignInError` for a sign-in file that is invalid or names an unset secret,
+    `RunStoreError` without a run store, and `ApiUnavailableError` or `MCPUnavailableError`
+    without the ``server`` extra.
     """
     settings = get_settings()
     keys_file = keys or settings.api_keys_file
-    ring = KeyRing.from_file(keys_file)
-    if not len(ring):
+    sign_in_file = sign_in or settings.sign_in_file
+    signing_in = open_sign_in(sign_in_file) if sign_in_file is not None else None
+    ring = KeyRing.from_file(keys_file, missing_ok=signing_in is not None)
+    if not len(ring) and signing_in is None:
         raise ApiKeyError("the keys file has no enabled key; add one with `qaos keys new`.")
+    hosts = list(allowed_hosts)
+    if signing_in is not None and not is_loopback(signing_in.host):
+        hosts.append(signing_in.host)
     run_store = SqliteRunStore(runs or settings.runs_file)
     try:
         warn_about_permissions(catalog.tools, catalog.policy)
-        warn_about_open_access(catalog, ring)
+        warn_about_open_access(catalog, ring, signing_in)
         if not is_loopback(host):
             errors.print(
                 f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
                 "serve it behind a reverse proxy that terminates TLS and limits request rates."
             )
-        http_app = build_http_app(
-            single_tenant(catalog, run_store, catalog.policy),
-            ring,
-            instructions=catalog.instructions,
-            extra_hosts=list(allowed_hosts),
-        )
+        tenancy = single_tenant(catalog, run_store, catalog.policy)
+        if signing_in is None:
+            http_app = build_http_app(
+                tenancy, ring, instructions=catalog.instructions, extra_hosts=hosts
+            )
+        else:
+            from quant_agent_os.mcp.http import KeyVerifier
+            from quant_platform.identity.oauth import FirstOf
+
+            routes, metadata_url = signing_in.metadata_routes()
+            http_app = build_http_app(
+                tenancy,
+                ring,
+                instructions=catalog.instructions,
+                verifier=FirstOf(KeyVerifier(ring), signing_in.verifier()),
+                extra_hosts=hosts,
+                resource_metadata_url=metadata_url,
+                metadata_routes=routes,
+            )
         plural = "" if len(ring) == 1 else "s"
+        signed_in = (
+            f" and to users signed in by {', '.join(signing_in.issuers)}" if signing_in else ""
+        )
         errors.print(
             f"Serving {len(catalog.tools)} tools at http://{host}:{port}/mcp (MCP) and /v1 (REST) "
-            f"to {len(ring)} key{plural}."
+            f"to {len(ring)} key{plural}{signed_in}."
         )
         run_http(http_app, host=host, port=port)
     finally:
@@ -172,13 +229,15 @@ def serve_apps(
     access: AccessPolicy | None = None,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
+    allowed_hosts: Sequence[str] = (),
 ) -> None:
     """Serve a firm's ``apps`` beside the platform's toolsets until interrupted (decision 0024).
 
     ``datasets`` is the firm's data, read by its apps and by the platform's analytics. The
     permission policy and the access file come from the usual settings unless given, as for
-    `qaos serve`, and keys and the run store are `serve_http`'s. Raises as `serve_http` does,
-    and `ToolContractError` when an app reads data and no ``datasets`` is given.
+    `qaos serve`, and keys, sign-in, and the run store are `serve_http`'s. Raises as
+    `serve_http` does, and `ToolContractError` when an app reads data and no ``datasets`` is
+    given.
     """
     settings = get_settings()
     if access is None and settings.access_file is not None:
@@ -190,4 +249,4 @@ def serve_apps(
         access=access,
         apps=apps,
     )
-    serve_http(catalog, host=host, port=port)
+    serve_http(catalog, host=host, port=port, allowed_hosts=allowed_hosts)
