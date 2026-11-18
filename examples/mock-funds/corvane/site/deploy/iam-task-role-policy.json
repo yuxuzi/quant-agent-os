@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadResearchPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::corvane-research", "arn:aws:s3:::corvane-research/research/*"]
+    },
+    {
+      "Sid": "RunStoreOnEfs",
+      "Effect": "Allow",
+      "Action": ["elasticfilesystem:ClientMount", "elasticfilesystem:ClientWrite"],
+      "Resource": "arn:aws:elasticfilesystem:us-east-1:111122223333:file-system/fs-0abc1234def567890"
+    }
+  ],
+  "_note": "The task role does not read the curated lake: Snowflake's external tables read it through their own storage integration. Secrets are read by the execution role, which injects them as environment variables."
+}
