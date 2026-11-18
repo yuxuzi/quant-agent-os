@@ -2033,11 +2033,54 @@
             "title": "Min Confidence",
             "type": "number"
           },
+          "published_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources published on or after this date",
+            "title": "Published From"
+          },
+          "published_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources published on or before this date",
+            "title": "Published To"
+          },
           "query": {
             "maxLength": 2000,
             "minLength": 1,
             "title": "Query",
             "type": "string"
+          },
+          "source_prefix": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only sources whose location starts with this, such as notes/",
+            "title": "Source Prefix"
           }
         },
         "required": [
@@ -2348,7 +2391,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "get_source_passage": {
       "input_schema": {

@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import math
 import threading
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, TypeGuard
 from urllib.parse import urlsplit, urlunsplit
@@ -38,6 +38,7 @@ from quant_research.domain.models import (
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 from quant_research.infrastructure.sqlite_store import EDGES_PER_TRIPLE
 from quant_research.infrastructure.store_common import (
+    ALL_DOCUMENTS,
     ALL_ENTITIES,
     ALL_RELATIONS,
     CHUNKS_WITHOUT_EMBEDDINGS,
@@ -128,13 +129,21 @@ CREATE TABLE IF NOT EXISTS embeddings (
 );
 """
 
+# A search read's optional document scope: NULL means every document.
+_IN_SCOPE = "(%(scope)s::text[] IS NULL OR {} = ANY(%(scope)s::text[]))"
+_RELATION_IN_SCOPE = (
+    "(%(scope)s::text[] IS NULL OR r.chunk_id IN (SELECT id FROM chunks "
+    "WHERE document_id = ANY(%(scope)s::text[])))"
+)
 # The same two-step walk as the SQLite store. PostgreSQL allows one recursive reference, so
 # both directions of each relation come from one non-recursive edge list.
-_DISTANCES = """
+_DISTANCES = f"""
 WITH RECURSIVE edges(a, b) AS (
-    SELECT subject_id, object_id FROM relations WHERE confidence >= %(min_confidence)s
+    SELECT subject_id, object_id FROM relations AS r
+    WHERE confidence >= %(min_confidence)s AND {_RELATION_IN_SCOPE}
     UNION ALL
-    SELECT object_id, subject_id FROM relations WHERE confidence >= %(min_confidence)s
+    SELECT object_id, subject_id FROM relations AS r
+    WHERE confidence >= %(min_confidence)s AND {_RELATION_IN_SCOPE}
 ),
 reach(entity_id, hops) AS (
     SELECT seed COLLATE "C", 0 FROM unnest(%(seeds)s::text[]) AS seed
@@ -144,7 +153,7 @@ reach(entity_id, hops) AS (
 )
 SELECT entity_id, MIN(hops) AS hops FROM reach GROUP BY entity_id
 """
-_EDGES = """
+_EDGES = f"""
 WITH distance(entity_id, hops) AS (
     SELECT id COLLATE "C", hops FROM unnest(%(ids)s::text[], %(distances)s::int[]) AS d(id, hops)
 ),
@@ -156,6 +165,7 @@ edges AS (
     JOIN relations AS r ON r.subject_id = s.entity_id
     JOIN distance AS o ON o.entity_id = r.object_id
     WHERE r.confidence >= %(min_confidence)s AND LEAST(s.hops, o.hops) < %(hops)s
+      AND {_RELATION_IN_SCOPE}
     WINDOW triple AS (PARTITION BY r.subject_id, r.predicate, r.object_id)
 )
 SELECT * FROM edges WHERE strength <= %(per_triple)s
@@ -177,6 +187,7 @@ SELECT t.chunk_id,
        c.text
 FROM chunk_terms AS t JOIN idf ON idf.term = t.term JOIN chunks AS c ON c.id = t.chunk_id,
      stats
+WHERE {_IN_SCOPE.format("c.document_id")}
 GROUP BY t.chunk_id, c.text
 ORDER BY score DESC, t.chunk_id
 LIMIT %(limit)s
@@ -503,6 +514,11 @@ class PostgresKnowledgeStore(StoreLifecycle):
         return None if row is None else Document.model_validate(row)
 
     @locked
+    def list_documents(self) -> list[Document]:
+        """Return every stored document, by id."""
+        return [Document.model_validate(row) for row in self._db.execute(ALL_DOCUMENTS)]
+
+    @locked
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         """Return a chunk by id."""
         row = self._db.execute(GET_CHUNK, (chunk_id,)).fetchone()
@@ -537,22 +553,28 @@ class PostgresKnowledgeStore(StoreLifecycle):
         return found
 
     @locked
-    def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
+    def chunks_mentioning(
+        self, entity_ids: Iterable[str], limit: int, *, documents: Collection[str] | None = None
+    ) -> list[str]:
         """Return chunk ids ranked by distinct entities mentioned, then by mention count."""
         rows = self._db.execute(
-            "SELECT chunk_id FROM mentions WHERE entity_id = ANY(%s) GROUP BY chunk_id "
-            "ORDER BY COUNT(DISTINCT entity_id) DESC, COUNT(*) DESC, chunk_id LIMIT %s",
-            (sorted(set(entity_ids)), limit),
+            "SELECT m.chunk_id FROM mentions AS m JOIN chunks AS c ON c.id = m.chunk_id "
+            f"WHERE m.entity_id = ANY(%(entities)s) AND {_IN_SCOPE.format('c.document_id')} "
+            "GROUP BY m.chunk_id "
+            "ORDER BY COUNT(DISTINCT m.entity_id) DESC, COUNT(*) DESC, m.chunk_id LIMIT %(limit)s",
+            {"entities": sorted(set(entity_ids)), "limit": limit} | _scope(documents),
         )
         return [row["chunk_id"] for row in rows]
 
     @locked
-    def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
+    def keyword_search(
+        self, query: str, limit: int, *, documents: Collection[str] | None = None
+    ) -> list[KeywordHit]:
         """Return chunks ranked by FTS5's BM25 over the indexed terms."""
         tokens = query_tokens(query)
         if not tokens:
             return []
-        rows = self._db.execute(_BM25, {"terms": tokens, "limit": limit})
+        rows = self._db.execute(_BM25, {"terms": tokens, "limit": limit} | _scope(documents))
         return [
             KeywordHit(
                 chunk_id=row["chunk_id"], score=row["score"], matched=matched(tokens, row["text"])
@@ -615,33 +637,47 @@ class PostgresKnowledgeStore(StoreLifecycle):
         return [(row["id"], row["text"]) for row in rows]
 
     @locked
-    def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
+    def vector_search(
+        self,
+        model_id: str,
+        vector: list[float],
+        limit: int,
+        *,
+        documents: Collection[str] | None = None,
+    ) -> list[VectorHit]:
         """Return chunks by cosine similarity to ``vector`` (exact), best first."""
         if not self.has_vector or not math.sqrt(sum(value * value for value in vector)):
             return []
         rows = self._db.execute(
-            "SELECT chunk_id, 1 - (embedding <=> %(query)s::vector) AS score FROM embeddings "
-            "WHERE model = %(model)s AND dimensions = %(dimensions)s "
-            "AND vector_norm(embedding) > 0 "
-            "ORDER BY embedding <=> %(query)s::vector, chunk_id LIMIT %(limit)s",
+            "SELECT e.chunk_id, 1 - (e.embedding <=> %(query)s::vector) AS score "
+            "FROM embeddings AS e JOIN chunks AS c ON c.id = e.chunk_id "
+            "WHERE e.model = %(model)s AND e.dimensions = %(dimensions)s "
+            f"AND vector_norm(e.embedding) > 0 AND {_IN_SCOPE.format('c.document_id')} "
+            "ORDER BY e.embedding <=> %(query)s::vector, e.chunk_id LIMIT %(limit)s",
             {
                 "query": _vector(vector),
                 "model": model_id,
                 "dimensions": len(vector),
                 "limit": limit,
-            },
+            }
+            | _scope(documents),
         )
         return [VectorHit(chunk_id=row["chunk_id"], score=row["score"]) for row in rows]
 
     @locked
     def expand(
-        self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
+        self,
+        entity_ids: Iterable[str],
+        *,
+        hops: int,
+        min_confidence: float,
+        documents: Collection[str] | None = None,
     ) -> list[GraphEdge]:
         """Return relations reachable from ``entity_ids`` within ``hops`` steps, either way."""
         seeds = sorted(set(entity_ids))
         if not seeds or hops < 1:
             return []
-        limits = {"hops": hops, "min_confidence": min_confidence}
+        limits = {"hops": hops, "min_confidence": min_confidence} | _scope(documents)
         distances = {
             row["entity_id"]: row["hops"]
             for row in self._db.execute(_DISTANCES, {"seeds": seeds, **limits})
@@ -663,6 +699,11 @@ class PostgresKnowledgeStore(StoreLifecycle):
             )
             for row in rows
         ]
+
+
+def _scope(documents: Collection[str] | None) -> dict[str, list[str] | None]:
+    """Return the ``scope`` parameter: the document ids, or NULL for every document."""
+    return {"scope": None if documents is None else sorted(set(documents))}
 
 
 def _vector(values: Sequence[float]) -> str:

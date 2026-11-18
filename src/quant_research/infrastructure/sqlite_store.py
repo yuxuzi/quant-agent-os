@@ -18,7 +18,7 @@ import math
 import sqlite3
 import threading
 from array import array
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -32,6 +32,7 @@ from quant_research.domain.models import (
 )
 from quant_research.domain.ports import GraphEdge, KeywordHit, VectorHit
 from quant_research.infrastructure.store_common import (
+    ALL_DOCUMENTS,
     ALL_ENTITIES,
     ALL_RELATIONS,
     CHUNKS_WITHOUT_EMBEDDINGS,
@@ -97,26 +98,32 @@ CREATE TABLE IF NOT EXISTS corpus_snapshots (
 );
 """
 
+# A search read's optional document scope: NULL means every document.
+_IN_SCOPE = "(:scope IS NULL OR {} IN (SELECT value FROM json_each(:scope)))"
+_RELATION_IN_SCOPE = (
+    "(:scope IS NULL OR r.chunk_id IN (SELECT id FROM chunks "
+    "WHERE document_id IN (SELECT value FROM json_each(:scope))))"
+)
 # Expansion runs as two queries so the recursive walk is evaluated once (an inlined CTE would
 # be re-run for every relation it is joined with). First: distances of reachable entities,
 # walking entities rather than relations, so a fact stated in many chunks is one step.
-_DISTANCES = """
+_DISTANCES = f"""
 WITH RECURSIVE reach(entity_id, hops) AS (
     SELECT value, 0 FROM json_each(:seeds)
     UNION
     SELECT r.object_id, w.hops + 1 FROM reach AS w
     JOIN relations AS r ON r.subject_id = w.entity_id
-    WHERE w.hops < :hops AND r.confidence >= :min_confidence
+    WHERE w.hops < :hops AND r.confidence >= :min_confidence AND {_RELATION_IN_SCOPE}
     UNION
     SELECT r.subject_id, w.hops + 1 FROM reach AS w
     JOIN relations AS r ON r.object_id = w.entity_id
-    WHERE w.hops < :hops AND r.confidence >= :min_confidence
+    WHERE w.hops < :hops AND r.confidence >= :min_confidence AND {_RELATION_IN_SCOPE}
 )
 SELECT entity_id, MIN(hops) AS hops FROM reach GROUP BY entity_id
 """
 # Second: edges between reached entities that lie within the hop limit, keeping at most
 # :per_triple citing edges per (subject, predicate, object) together with its support count.
-_EDGES = """
+_EDGES = f"""
 WITH distance(entity_id, hops) AS (
     SELECT key, value FROM json_each(:distances)
 ),
@@ -128,6 +135,7 @@ edges AS (
     JOIN relations AS r ON r.subject_id = s.entity_id
     JOIN distance AS o ON o.entity_id = r.object_id
     WHERE r.confidence >= :min_confidence AND MIN(s.hops, o.hops) < :hops
+      AND {_RELATION_IN_SCOPE}
     WINDOW triple AS (PARTITION BY r.subject_id, r.predicate, r.object_id)
 )
 SELECT * FROM edges WHERE strength <= :per_triple
@@ -365,6 +373,15 @@ class SqliteKnowledgeStore(StoreLifecycle):
         return Document.model_validate(dict(row) | {"authors": json.loads(row["authors"])})
 
     @locked
+    def list_documents(self) -> list[Document]:
+        """Return every stored document, by id."""
+        rows = self._db.execute(qmark(ALL_DOCUMENTS))
+        return [
+            Document.model_validate(dict(row) | {"authors": json.loads(row["authors"])})
+            for row in rows
+        ]
+
+    @locked
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         """Return a chunk by id."""
         row = self._db.execute(qmark(GET_CHUNK), (chunk_id,)).fetchone()
@@ -403,18 +420,23 @@ class SqliteKnowledgeStore(StoreLifecycle):
         return found
 
     @locked
-    def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
+    def chunks_mentioning(
+        self, entity_ids: Iterable[str], limit: int, *, documents: Collection[str] | None = None
+    ) -> list[str]:
         """Return chunk ids ranked by distinct entities mentioned, then by mention count."""
         rows = self._db.execute(
-            "SELECT chunk_id FROM mentions WHERE entity_id IN (SELECT value FROM json_each(?)) "
-            "GROUP BY chunk_id ORDER BY COUNT(DISTINCT entity_id) DESC, COUNT(*) DESC, chunk_id "
-            "LIMIT ?",
-            (json.dumps(sorted(set(entity_ids))), limit),
+            "SELECT m.chunk_id FROM mentions AS m JOIN chunks AS c ON c.id = m.chunk_id "
+            "WHERE m.entity_id IN (SELECT value FROM json_each(:entities)) "
+            f"AND {_IN_SCOPE.format('c.document_id')} GROUP BY m.chunk_id "
+            "ORDER BY COUNT(DISTINCT m.entity_id) DESC, COUNT(*) DESC, m.chunk_id LIMIT :limit",
+            {"entities": json.dumps(sorted(set(entity_ids))), "limit": limit} | _scope(documents),
         )
         return [row["chunk_id"] for row in rows]
 
     @locked
-    def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
+    def keyword_search(
+        self, query: str, limit: int, *, documents: Collection[str] | None = None
+    ) -> list[KeywordHit]:
         """Return chunks ranked by BM25 (FTS5)."""
         tokens = query_tokens(query)
         if not tokens:
@@ -423,8 +445,9 @@ class SqliteKnowledgeStore(StoreLifecycle):
         rows = self._db.execute(
             "SELECT f.chunk_id, -bm25(chunks_fts) AS score, c.text FROM chunks_fts f "
             "JOIN chunks c ON c.id = f.chunk_id "
-            "WHERE chunks_fts MATCH ? ORDER BY score DESC, f.chunk_id LIMIT ?",
-            (match, limit),
+            f"WHERE chunks_fts MATCH :match AND {_IN_SCOPE.format('c.document_id')} "
+            "ORDER BY score DESC, f.chunk_id LIMIT :limit",
+            {"match": match, "limit": limit} | _scope(documents),
         )
         return [
             KeywordHit(
@@ -483,15 +506,25 @@ class SqliteKnowledgeStore(StoreLifecycle):
         return [(row["id"], row["text"]) for row in rows]
 
     @locked
-    def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
+    def vector_search(
+        self,
+        model_id: str,
+        vector: list[float],
+        limit: int,
+        *,
+        documents: Collection[str] | None = None,
+    ) -> list[VectorHit]:
         """Return chunks by cosine similarity to ``vector`` (exact, brute force), best first."""
         norm = math.sqrt(sum(value * value for value in vector))
         if not norm:
             return []
         hits: list[VectorHit] = []
         rows = self._db.execute(
-            "SELECT chunk_id, vector FROM embeddings WHERE model = ? AND dimensions = ?",
-            (model_id, len(vector)),
+            "SELECT e.chunk_id, e.vector FROM embeddings AS e "
+            "JOIN chunks AS c ON c.id = e.chunk_id "
+            "WHERE e.model = :model AND e.dimensions = :dimensions "
+            f"AND {_IN_SCOPE.format('c.document_id')}",
+            {"model": model_id, "dimensions": len(vector)} | _scope(documents),
         )
         for row in rows:
             stored = _unpack(row["vector"])
@@ -504,13 +537,18 @@ class SqliteKnowledgeStore(StoreLifecycle):
 
     @locked
     def expand(
-        self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
+        self,
+        entity_ids: Iterable[str],
+        *,
+        hops: int,
+        min_confidence: float,
+        documents: Collection[str] | None = None,
     ) -> list[GraphEdge]:
         """Return relations reachable from ``entity_ids`` within ``hops`` steps, either way."""
         seeds = sorted(set(entity_ids))
         if not seeds or hops < 1:
             return []
-        limits = {"hops": hops, "min_confidence": min_confidence}
+        limits = {"hops": hops, "min_confidence": min_confidence} | _scope(documents)
         distances = {
             row["entity_id"]: row["hops"]
             for row in self._db.execute(_DISTANCES, {"seeds": json.dumps(seeds), **limits})
@@ -527,6 +565,11 @@ class SqliteKnowledgeStore(StoreLifecycle):
             )
             for row in rows
         ]
+
+
+def _scope(documents: Collection[str] | None) -> dict[str, str | None]:
+    """Return the ``:scope`` parameter: the document ids as JSON, or NULL for every document."""
+    return {"scope": None if documents is None else json.dumps(sorted(set(documents)))}
 
 
 def _migrate(db: sqlite3.Connection) -> None:

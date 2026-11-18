@@ -45,6 +45,14 @@ To draft a strategy specification whose every item cites its passages, run
 `uv run qaos strategy "trend following"`. Add `--json` to save the spec. What the
 corpus leaves undecided is listed as open questions, not filled with defaults.
 
+`find_related_signals` can search part of the corpus: `source_prefix` keeps sources whose
+location starts with it, such as `notes/`, and `published_from` and `published_to` keep sources
+whose `published` front matter (a year, month, or day) overlaps the range. A source with no
+readable date is left out of a date search, with a warning. The filter applies inside every
+search channel and the graph walk, before the result limit, so passages and edges all come from
+the chosen sources. It narrows a search and is not access control: anyone who can call the tool
+can search the whole corpus ([decision 0021](../decisions/0021-per-caller-access.md)).
+
 `get_source_passage` returns one passage in full. With `context` 1 or 2 it adds the passages
 before and after it in the same document, each with its own citation, for a passage that starts
 mid-argument.

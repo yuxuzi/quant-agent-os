@@ -7,16 +7,19 @@ nothing here calls a model.
 
 from __future__ import annotations
 
+import calendar
 import math
+import re
 import threading
 import time
 from collections import OrderedDict, defaultdict
-from typing import Literal
+from datetime import date
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from quant_agent_os.evidence import Evidence, SourceRef
-from quant_research.domain.models import Chunk, Entity, EntityType, Relation
+from quant_research.domain.models import Chunk, Document, Entity, EntityType, Relation
 from quant_research.domain.ports import (
     Embedder,
     EmbeddingError,
@@ -48,6 +51,8 @@ MIN_QUERY_COVERAGE = 0.5
 # Query embedding must finish well inside the search tool's timeout (tools.SEARCH_TIMEOUT).
 QUERY_EMBEDDING_SECONDS = 8.0
 QUERY_CACHE_SIZE = 256
+# A document's published date as ingested: a year, a month, or a day, at the start of the text.
+PUBLISHED = re.compile(r"(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?")
 
 Channel = Literal["keyword", "mention", "graph", "vector"]
 ALL_CHANNELS: frozenset[Channel] = frozenset({"keyword", "mention", "graph", "vector"})
@@ -61,6 +66,24 @@ class ResearchQuery(BaseModel):
     k: int = Field(default=6, ge=1, le=25, description="Maximum passages to return")
     hops: int = Field(default=1, ge=1, le=2, description="Graph expansion depth")
     min_confidence: float = Field(default=0.5, ge=0, le=1)
+    source_prefix: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="Only sources whose location starts with this, such as notes/",
+    )
+    published_from: date | None = Field(
+        default=None, description="Only sources published on or after this date"
+    )
+    published_to: date | None = Field(
+        default=None, description="Only sources published on or before this date"
+    )
+
+    @model_validator(mode="after")
+    def _ordered_dates(self) -> Self:
+        if self.published_from and self.published_to and self.published_from > self.published_to:
+            raise ValueError("published_from must not be after published_to.")
+        return self
 
 
 class GraphLink(BaseModel):
@@ -224,8 +247,25 @@ class ResearchService:
         snapshot = self.store.current_snapshot()
         if snapshot is None or snapshot.document_count == 0:
             warnings.append("The knowledge store is empty; ingest a corpus first.")
+        scope = self._scope(request, warnings)
+        if scope is not None and not scope:
+            warnings.append("No document matches the source filter.")
+            return EvidencePacket(
+                query=request.query,
+                seed_entities=[],
+                related=[],
+                passages=[],
+                abstained=True,
+                corpus_snapshot=snapshot.id if snapshot else None,
+                warnings=warnings,
+                data_versions={"corpus_snapshot": snapshot.id} if snapshot else {},
+            )
         terms = content_terms(request.query)
-        keyword_hits = self.store.keyword_search(" ".join(terms), request.k * 3) if terms else []
+        keyword_hits = (
+            self.store.keyword_search(" ".join(terms), request.k * 3, documents=scope)
+            if terms
+            else []
+        )
         seeds = list(dict.fromkeys(match.entity_id for match in self.matcher.find(request.query)))
         if not seeds and keyword_hits:
             covering = _covering(keyword_hits, terms, *self.store.term_frequencies(terms))
@@ -244,7 +284,9 @@ class ResearchService:
                 warnings.append(
                     "No vocabulary entity in the query; seeded from the best keyword passage."
                 )
-        edges = self.store.expand(seeds, hops=request.hops, min_confidence=request.min_confidence)
+        edges = self.store.expand(
+            seeds, hops=request.hops, min_confidence=request.min_confidence, documents=scope
+        )
         entities = self.store.get_entities(
             {*seeds}
             | {edge.relation.subject_id for edge in edges}
@@ -271,13 +313,15 @@ class ResearchService:
 
         rankings: dict[Channel, list[str]] = {
             "keyword": [hit.chunk_id for hit in keyword_hits],
-            "mention": self.store.chunks_mentioning(seeds, request.k * 3) if seeds else [],
+            "mention": (
+                self.store.chunks_mentioning(seeds, request.k * 3, documents=scope) if seeds else []
+            ),
             "graph": list(
                 dict.fromkeys(
                     link.chunk_id for entity in related for link in [*entity.path, *entity.links]
                 )
             ),
-            "vector": self._vector_ranking(query_vector, request.k * 3, warnings),
+            "vector": self._vector_ranking(query_vector, request.k * 3, scope, warnings),
         }
         fused = _fuse({name: ids for name, ids in rankings.items() if name in self.channels})
         fused = fused[: request.k]
@@ -357,8 +401,37 @@ class ResearchService:
                 self._query_vectors.popitem(last=False)
         return vector
 
+    def _scope(self, request: ResearchQuery, warnings: list[str]) -> list[str] | None:
+        """Return the ids of the documents the request's source filter admits, or None.
+
+        A date bound admits a document whose published year, month, or day overlaps the range;
+        one without a readable published date is left out, with a warning.
+        """
+        dated = request.published_from is not None or request.published_to is not None
+        if request.source_prefix is None and not dated:
+            return None
+        start, end = request.published_from or date.min, request.published_to or date.max
+        scope, undated = [], 0
+        for document in self.store.list_documents():
+            if request.source_prefix and not document.uri.startswith(request.source_prefix):
+                continue
+            if dated:
+                period = published_period(document)
+                if period is None:
+                    undated += 1
+                    continue
+                if period[1] < start or period[0] > end:
+                    continue
+            scope.append(document.id)
+        if undated:
+            warnings.append(
+                f"Left out {undated} documents with no published date as YYYY, YYYY-MM, or "
+                "YYYY-MM-DD."
+            )
+        return scope
+
     def _vector_ranking(
-        self, vector: list[float] | None, limit: int, warnings: list[str]
+        self, vector: list[float] | None, limit: int, scope: list[str] | None, warnings: list[str]
     ) -> list[str]:
         if self.embedder is None or self.vectors is None or vector is None:
             return []
@@ -369,7 +442,7 @@ class ResearchService:
                 "use the vector channel."
             )
             return []
-        hits = self.vectors.vector_search(model_id, vector, limit)
+        hits = self.vectors.vector_search(model_id, vector, limit, documents=scope)
         return [hit.chunk_id for hit in hits if hit.score >= self.embedder.min_score]
 
     def get_passage(self, chunk_id: str, context: int = 0) -> SourcePassage:
@@ -451,6 +524,26 @@ def source_of(store: KnowledgeStore, chunk: Chunk) -> SourceRef:
         location=chunk.location,
         title=document.title if document else None,
     )
+
+
+def published_period(document: Document) -> tuple[date, date] | None:
+    """Return the first and last day of the document's published year, month, or day.
+
+    Return None when it has no published date, or one that does not start as an ISO date.
+    """
+    found = PUBLISHED.match((document.published or "").strip())
+    if found is None:
+        return None
+    year, month, day = (int(part) if part else None for part in found.groups())
+    assert year is not None
+    try:
+        if month is None:
+            return date(year, 1, 1), date(year, 12, 31)
+        if day is None:
+            return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+        return date(year, month, day), date(year, month, day)
+    except ValueError:
+        return None
 
 
 def _rank_related(

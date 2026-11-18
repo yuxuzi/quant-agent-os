@@ -20,6 +20,8 @@ claim, and say plainly when it holds nothing on the question.
      enough to choose passages.
    - Narrow with `entity_types`, widen with `hops` 2 or a larger `k`. Raise `min_confidence` to
      keep only strong edges.
+   - When the user names a folder or a period, pass `source_prefix` (such as `notes/`) or
+     `published_from` and `published_to`. Every passage and edge then comes from those sources.
 2. **Read before quoting.** Fetch every passage you rely on with `get_source_passage`
    (`chunk_id` from the results), or read the resource `qaos://passage/{chunk_id}`. Raw ids such
    as `doc:ab12#3` work as they are. When a passage starts or ends mid-argument, pass `context`
