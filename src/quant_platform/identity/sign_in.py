@@ -58,7 +58,7 @@ from pydantic import (
 from quant_agent_os.api.keys import SCOPES
 from quant_agent_os.config import home_env_file
 from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
-from quant_platform.identity.jwks import Algorithm, JwksServer, default_algorithms, JwksVerifier
+from quant_platform.identity.jwks import Algorithm, JwksServer, JwksVerifier, default_algorithms
 from quant_platform.identity.oauth import (
     DEFAULT_TENANT_CLAIM,
     AuthorizationServer,
@@ -176,7 +176,7 @@ class ServerEntry(BaseModel):
             raise ValueError(f'{", ".join(misplaced)} apply only with verify = "introspection"')
         if not self.audiences and not self.client_ids:
             raise ValueError(
-                'verify = "jwks" needs audiences, or client_ids when tokens have no aud'
+                'verify = "jwks" needs audiences, or client_ids for tokens without aud'
             )
         if "groups_claims" in given and "groups_claim" in given:
             raise ValueError('set groups_claims, not groups_claim, with verify = "jwks"')
