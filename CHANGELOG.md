@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in
 [packages/quant-toolbox/CHANGELOG.md](packages/quant-toolbox/CHANGELOG.md).
 

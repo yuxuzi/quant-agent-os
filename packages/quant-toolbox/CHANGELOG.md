@@ -6,6 +6,8 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 The first release as a package of its own. It adds what a fund's PM, risk manager, researcher, and investor
 relations team ask of a performance and risk library, chosen from a review of the open-source libraries and
 of what funds report, and keeps only numpy required.
