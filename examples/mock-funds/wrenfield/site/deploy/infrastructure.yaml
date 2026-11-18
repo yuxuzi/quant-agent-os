@@ -1,0 +1,52 @@
+# Wrenfield Credit Opportunities (fictional): the AWS pieces around the server, as
+# CloudFormation. Not deployed or validated by any test. Account ids and names are placeholders.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Wrenfield QAOS - logs, RDS PostgreSQL for the OMS, Cognito pool, ALB target
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/wrenfield-qaos
+      RetentionInDays: 400   # the fund keeps tool-call logs a year plus; run records are in EFS
+  OmsDatabase:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: "16.4"
+      DatabaseName: oms
+      MasterUsername: oms_admin
+      ManageMasterUserPassword: true          # Secrets Manager, rotated every 30 days
+      EnableIAMDatabaseAuthentication: true   # tokens from `aws rds generate-db-auth-token`
+      StorageEncrypted: true
+  KnowledgeDatabase:
+    Type: AWS::RDS::DBCluster                 # the platform's knowledge store needs pgvector
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: "16.4"
+      DatabaseName: kb
+      MasterUsername: kb_admin
+      ManageMasterUserPassword: true
+      StorageEncrypted: true
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: wrenfield
+      Schema: [{Name: email, Required: true}]
+  ResourceServer:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Properties:
+      UserPoolId: !Ref UserPool
+      Identifier: qaos
+      Name: qaos
+      Scopes: [{ScopeName: tools.call, ScopeDescription: Call tools}]
+  Groups:
+    Type: AWS::Cognito::UserPoolGroup   # one per access.toml group; shown once
+    Properties: {UserPoolId: !Ref UserPool, GroupName: pm-hy-ls}
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      TargetType: ip
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckPath: /healthz        # liveness only: it does not show the lake or database are reachable
+      VpcId: vpc-0123abcd

@@ -1,0 +1,15 @@
+# Wrenfield Credit Opportunities (fictional): sign-in through Amazon Cognito (decision 0028).
+# Cognito has no introspection endpoint, so the platform asks the fund's introspection shim
+# (site/wrenfield_introspection_shim.py, a sidecar in the same ECS task) about each token.
+# The issuer is exactly the token's `iss`. The shim's client secret stays in the environment
+# (WRENFIELD_INTROSPECTION_SECRET, injected from Secrets Manager).
+resource = "https://qaos.wrenfield.example.com/mcp"
+
+[[authorization_servers]]
+issuer = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_WrnFld001"
+introspection_url = "http://127.0.0.1:9600/introspect"
+client_id = "qaos-server"
+client_secret_env = "WRENFIELD_INTROSPECTION_SECRET"
+tenant_claim = "qaos_tenant"
+tenant_claim_value = "wrenfield"
+groups_claim = "cognito:groups"

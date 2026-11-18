@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Build Wrenfield Credit Opportunities' cloud estate as local stand-ins: all data is fictional.
 
     python build_wrenfield.py [ROOT] [--seed N] [--format parquet|csv]
@@ -34,15 +35,36 @@ from typing import Any
 import numpy as np
 
 DEFAULT_SEED = 20261118
-START, END = date(2025, 8, 1), date(2025, 12, 31)
+START, END = date(2025, 8, 11), date(2025, 12, 31)
 LAKE, RESEARCH = "wrenfield-data-lake", "wrenfield-research"
 OMS_URI = "rds://wrenfield-oms.cluster-c1x2y3.us-east-1.rds.amazonaws.com:5432/oms"
 CAPITAL = {"hy_ls": 400e6, "ig_rv": 600e6, "distressed": 200e6}
 FUND_CAPITAL = sum(CAPITAL.values())
 BOOKS = ("hy_ls", "ig_rv", "distressed", "overlay")
-SCALE = (
-    "AAA AA+ AA AA- A+ A A- BBB+ BBB BBB- BB+ BB BB- B+ B B- CCC+ CCC CCC- CC C D".split()
-)  # score = position + 1; IG is 1..10
+SCALE = [
+    "AAA",
+    "AA+",
+    "AA",
+    "AA-",
+    "A+",
+    "A",
+    "A-",
+    "BBB+",
+    "BBB",
+    "BBB-",
+    "BB+",
+    "BB",
+    "BB-",
+    "B+",
+    "B",
+    "B-",
+    "CCC+",
+    "CCC",
+    "CCC-",
+    "CC",
+    "C",
+    "D",
+]  # score = position + 1; IG is 1..10
 SECTORS = {
     "Energy": 1, "Consumer": 2, "Healthcare": 3, "Technology": 4, "Industrials": 5,
     "Financials": 6, "Media": 7, "Utilities": 8, "Materials": 9, "RealEstate": 10,
@@ -58,14 +80,88 @@ BASE_CURVE = {
     "USD": (4.00, 3.95, 4.05, 4.30, 4.80),
     "EUR": (2.20, 2.30, 2.50, 2.75, 3.10),
 }  # percent
-FIRST = (
-    "Alder Brack Calder Dunmore Elm Fenwick Garrow Harlow Ivor Jessup Kellan Larch Norwood "
-    "Oakham Pryor Quill Rowan Sable Thorne Umber Vale Whit Yarrow Zephyr Ashby Bram Cove "
-    "Dell Haldane Merrow Penrose Tarn Wexley Lorne Greer Foxton Ingram Selby Tolland Wyck "
-    "Barrow Corbin Denholm Eskdale Finlay Gresham Hawke Irwell Kestle Lyle Mortlake Nairn "
-    "Orton Presley Radley Stanton Truro Upton Verne Wilmot Yately Ainslie Beck Crewe Dacre "
-    "Eden Fairlie Galway Hythe Islay Jura Kinver Leith Maple Newry Oban Perth Rye Skye Tay"
-).split()
+FIRST = [
+    "Alder",
+    "Brack",
+    "Calder",
+    "Dunmore",
+    "Elm",
+    "Fenwick",
+    "Garrow",
+    "Harlow",
+    "Ivor",
+    "Jessup",
+    "Kellan",
+    "Larch",
+    "Norwood",
+    "Oakham",
+    "Pryor",
+    "Quill",
+    "Rowan",
+    "Sable",
+    "Thorne",
+    "Umber",
+    "Vale",
+    "Whit",
+    "Yarrow",
+    "Zephyr",
+    "Ashby",
+    "Bram",
+    "Cove",
+    "Dell",
+    "Haldane",
+    "Merrow",
+    "Penrose",
+    "Tarn",
+    "Wexley",
+    "Lorne",
+    "Greer",
+    "Foxton",
+    "Ingram",
+    "Selby",
+    "Tolland",
+    "Wyck",
+    "Barrow",
+    "Corbin",
+    "Denholm",
+    "Eskdale",
+    "Finlay",
+    "Gresham",
+    "Hawke",
+    "Irwell",
+    "Kestle",
+    "Lyle",
+    "Mortlake",
+    "Nairn",
+    "Orton",
+    "Presley",
+    "Radley",
+    "Stanton",
+    "Truro",
+    "Upton",
+    "Verne",
+    "Wilmot",
+    "Yately",
+    "Ainslie",
+    "Beck",
+    "Crewe",
+    "Dacre",
+    "Eden",
+    "Fairlie",
+    "Galway",
+    "Hythe",
+    "Islay",
+    "Jura",
+    "Kinver",
+    "Leith",
+    "Maple",
+    "Newry",
+    "Oban",
+    "Perth",
+    "Rye",
+    "Skye",
+    "Tay",
+]
 SUFFIX = {
     "Energy": ("Offshore", "Petroleum", "Drilling"),
     "Consumer": ("Retail", "Foods", "Brands"),
@@ -284,7 +380,7 @@ def _rating_history(
             scores.append(current)
         panel[issuer.ticker] = scores
         last = None
-        for month, score in enumerate(scores):
+        for month, score in enumerate(scores[:31]):  # the window's changes are the events
             if score != last:
                 effective = months[month] if month else date(2022, 12, 15)
                 rows.append((issuer.ticker, "SP", effective.isoformat(), SCALE[score - 1]))
@@ -346,7 +442,14 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
     for (ticker, name, sector), (lo, hi) in zip(names, layout, strict=True):
         score = rng.randint(lo, hi)
         issuers.append(
-            Issuer(ticker, name, sector, score, 0.010 if score <= 10 else 0.018, 0.9 + 0.2 * rng.random())
+            Issuer(
+                ticker,
+                name,
+                sector,
+                score,
+                0.010 if score <= 10 else 0.018,
+                0.9 + 0.2 * rng.random(),
+            )
         )
     halden = Issuer("HALD", "Halden Retail Group", "Consumer", 16, 0.02, 1.0)
     marlowe = Issuer("MARL", "Marlowe Offshore", "Energy", 15, 0.02, 1.0)
@@ -376,16 +479,24 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
         )  # fmt: skip
     for issuer in ordinary:
         issuer.cds = False
-    cds_pool = [i for i in ordinary if i.score <= 10][:24] + [i for i in ordinary if i.score > 10][:14]
+    cds_pool = [i for i in ordinary if i.score <= 10][:24] + [i for i in ordinary if i.score > 10][
+        :14
+    ]
     for issuer in [*cds_pool, halden, marlowe]:
         issuer.cds = True
-        issuer.basis = round(rng.gauss(-8.0, 14.0), 1) if issuer.score <= 10 else round(rng.gauss(10.0, 25.0), 1)
+        issuer.basis = (
+            round(rng.gauss(-8.0, 14.0), 1)
+            if issuer.score <= 10
+            else round(rng.gauss(10.0, 25.0), 1)
+        )
     cds_pool[0].basis = -45.0  # planted: a clearly negative basis name
 
     # ---- bonds --------------------------------------------------------------------------
     bonds: list[Bond] = []
 
-    def new_bond(issuer: Issuer, seniority: int, currency: str, recovery: float | None = None) -> None:
+    def new_bond(
+        issuer: Issuer, seniority: int, currency: str, recovery: float | None = None
+    ) -> None:
         maturity = date(rng.randint(2027, 2035), rng.randint(1, 12), rng.choice((1, 15)))
         years = (maturity - first).days / 365.25
         curve = interpolate(CURVE_TENORS, BASE_CURVE[currency], years)
@@ -406,7 +517,9 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
     new_bond(marlowe, 2, "USD", 0.42)
     for issuer in ordinary:
         currency = "EUR" if rng.random() < 0.2 else "USD"
-        new_bond(issuer, 2 if issuer.score <= 10 or rng.random() < 0.6 else rng.choice((1, 3)), currency)
+        new_bond(
+            issuer, 2 if issuer.score <= 10 or rng.random() < 0.6 else rng.choice((1, 3)), currency
+        )
     while len(bonds) < 150:
         issuer = rng.choice(ordinary)
         used = {b.bond_id for b in bonds}
@@ -453,14 +566,14 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
             shock = gauss(issuer.sigma)
             idio[issuer.ticker] = 0.12 * idio[issuer.ticker] + shock  # the momentum seed
             market = m_ig[t] if issuer.score <= 10 else m_hy[t]
-            change = issuer.beta * market + sector_f[issuer.sector][t] + idio[issuer.ticker]
+            move = issuer.beta * market + sector_f[issuer.sector][t] + idio[issuer.ticker]
             ramp = 0.0
             if issuer.default_on is not None and issuer.default_ramp_from is not None:
                 start_i = days.index(issuer.default_ramp_from)
                 if start_i <= t < days.index(issuer.default_on):
                     ramp = math.log(issuer.default_ramp) / (days.index(issuer.default_on) - start_i)
             jump = issuer.jumps.get(days[t], 1.0)
-            path.append(path[-1] * math.exp(change + ramp) * jump)
+            path.append(path[-1] * math.exp(move + ramp) * jump)
     index_spread = {k: [v] for k, v in INDICES.items()}
     for t in range(1, n):
         for k in INDICES:
@@ -499,9 +612,9 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
         for t in range(1, n):
             prev, cur = rows[t - 1], rows[t]
             paid = bond.coupon / 2.0 if _coupon_paid(bond, days[t - 1], days[t]) else 0.0
-            before = float(prev["clean"] or 0) + float(prev["accrued"] or 0)
-            after = float(cur["clean"] or 0) + float(cur["accrued"] or 0)
-            series.append(round((after + paid - before) / before, 8))
+            dirty0 = float(prev["clean"] or 0) + float(prev["accrued"] or 0)
+            dirty1 = float(cur["clean"] or 0) + float(cur["accrued"] or 0)
+            series.append(round((dirty1 + paid - dirty0) / dirty0, 8))
         tr[bond.bond_id] = series
 
     # ---- CDS and indices ----------------------------------------------------------------
@@ -537,10 +650,10 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
     rates: list[dict[str, Any]] = []
     for t, day in enumerate(days):
         for currency, label in (("USD", "UST"), ("EUR", "EURGOV")):
-            for tenor in CURVE_TENORS:
+            for years in CURVE_TENORS:
                 rates.append(
-                    {"dt": day, "series_id": f"{label}_{int(tenor)}Y",
-                     "value": round(yield_curve(currency, t, tenor), 4)}
+                    {"dt": day, "series_id": f"{label}_{int(years)}Y",
+                     "value": round(yield_curve(currency, t, years), 4)}
                 )  # fmt: skip
         rates.append({"dt": day, "series_id": "EURUSD", "value": fx[t]})
 
@@ -556,7 +669,10 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
                        "BUY" if sign > 0 else "SELL", size, px[bond_id][0]["clean"]))  # fmt: skip
         for _ in range(rng.choice((0, 1, 1, 2, 3))):
             t = rng.randint(5, n - 5)
-            if bond_by_id[bond_id].issuer in default_index and t >= default_index[bond_by_id[bond_id].issuer] - 3:
+            if (
+                bond_by_id[bond_id].issuer in default_index
+                and t >= default_index[bond_by_id[bond_id].issuer] - 3
+            ):
                 continue
             delta = sign * round(size * rng.choice((-0.3, -0.2, 0.2, 0.3)), -5)
             for u in range(t, n):
@@ -569,23 +685,25 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
         bond = bond_by_id[bond_id]
         row = px[bond_id][t]
         rate = fx[t] if bond.currency == "EUR" else 1.0
-        return round(face * (float(row["clean"] or 0) + float(row["accrued"] or 0)) / 100.0 * rate, 2)
+        return round(
+            face * (float(row["clean"] or 0) + float(row["accrued"] or 0)) / 100.0 * rate, 2
+        )
 
     pos_rows: list[tuple[Any, ...]] = []
     mv: dict[tuple[str, str], list[float]] = {}
     for (book, bond_id), faces in positions.items():
-        series = [mv_usd(bond_id, t, faces[t]) for t in range(n)]
-        mv[book, bond_id] = series
+        values = [mv_usd(bond_id, t, faces[t]) for t in range(n)]
+        mv[book, bond_id] = values
         for t in range(n):
-            pos_rows.append((days[t].isoformat(), book, bond_id, faces[t], series[t]))
+            pos_rows.append((days[t].isoformat(), book, bond_id, faces[t], values[t]))
     cds_pos: list[tuple[Any, ...]] = []
     cds_notional: dict[str, float] = {}
     for (book, bond_id), faces in positions.items():
         bond = bond_by_id[bond_id]
-        if book == "ig_rv" and by_ticker[bond.issuer].cds and bond.issuer not in cds_notional:
-            if faces[0] > 0:
-                rate = fx[0] if bond.currency == "EUR" else 1.0
-                cds_notional[bond.issuer] = round(0.9 * faces[0] * rate, -5)
+        fresh = bond.issuer not in cds_notional
+        if book == "ig_rv" and by_ticker[bond.issuer].cds and fresh and faces[0] > 0:
+            rate = fx[0] if bond.currency == "EUR" else 1.0
+            cds_notional[bond.issuer] = round(0.9 * faces[0] * rate, -5)
     for ticker, notional in sorted(cds_notional.items()):
         trades.append((len(trades) + 1, first.isoformat(), "ig_rv", "cds", ticker, "BUY_PROTECTION",
                        notional, None))  # fmt: skip
@@ -611,15 +729,15 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
         gap = (days[t] - days[t - 1]).days
         for book in BOOKS:
             gross = financing = 0.0
-            for (b_book, bond_id), series in mv.items():
+            for (b_book, bond_id), held in mv.items():
                 if b_book != book:
                     continue
-                gross += series[t - 1] * float(tr[bond_id][t] or 0.0)
-                if series[t - 1] > 0:
+                gross += held[t - 1] * float(tr[bond_id][t] or 0.0)
+                if held[t - 1] > 0:
                     rate = (repo_rates[t - 1] + repo_spread_bp / 100.0) / 100.0
-                    financing += series[t - 1] * (1 - haircut) * rate * gap / 360.0
+                    financing += held[t - 1] * (1 - haircut) * rate * gap / 360.0
                 else:
-                    financing += -series[t - 1] * fees[bond_id] / 1e4 * gap / 360.0
+                    financing += -held[t - 1] * fees[bond_id] / 1e4 * gap / 360.0
             if book == "ig_rv":
                 for ticker, notional in cds_notional.items():
                     s0, s1 = cds5[ticker][t - 1], cds5[ticker][t]
@@ -635,8 +753,7 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
             pnl[book].append((round(gross, 2), round(financing, 2), round(gross - financing, 2)))
     returns = {
         book: [
-            None if t == 0 else pnl[book][t][2] / CAPITAL.get(book, FUND_CAPITAL)
-            for t in range(n)
+            None if t == 0 else pnl[book][t][2] / CAPITAL.get(book, FUND_CAPITAL) for t in range(n)
         ]
         for book in BOOKS
     }
@@ -656,7 +773,10 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
     for t in range(n):
         row: list[float | None] = []
         for bond in bonds:
-            now, back = px[bond.bond_id][t]["oas"], px[bond.bond_id][t - 20]["oas"] if t >= 20 else None
+            now, back = (
+                px[bond.bond_id][t]["oas"],
+                px[bond.bond_id][t - 20]["oas"] if t >= 20 else None,
+            )
             row.append(None if now is None or back is None else round(-(now / back - 1.0), 6))
         signal.append(row)
 
@@ -678,6 +798,9 @@ def build(root: Path, seed: int = DEFAULT_SEED, fmt: str = "parquet") -> dict[st
         + "\n",
         "utf-8",
     )
+
+    for doc in sorted((Path(__file__).resolve().parents[1] / "research").glob("*.md")):
+        shutil.copy(doc, root / "s3" / RESEARCH / "credit" / doc.name)  # the research bucket
 
     # ---- known answers ------------------------------------------------------------------
     arr_signal = np.array([[np.nan if v is None else v for v in row] for row in signal])
@@ -779,11 +902,14 @@ def _answers(
         dts[book] = round(math.fsum(terms), 6)
     pre = days.index(date(2025, 9, 5))
     jtd: dict[str, float] = {}
-    for (b_book, bond_id), series in mv.items():
+    for (_b_book, bond_id), series in mv.items():
         bond = bond_by_id[bond_id]
         if bond.issuer == "HALD":
             recovery = RECOVERY_ASSUMED[bond.seniority]
-            face_usd = series[pre] / ((float(px[bond_id][pre]["clean"] or 0) + float(px[bond_id][pre]["accrued"] or 0)) / 100.0)
+            face_usd = series[pre] / (
+                (float(px[bond_id][pre]["clean"] or 0) + float(px[bond_id][pre]["accrued"] or 0))
+                / 100.0
+            )
             jtd[bond_id] = round(face_usd * recovery - series[pre], 2)
     basis_date = days.index(date(2025, 12, 15))
     basis: dict[str, float] = {}
@@ -793,7 +919,7 @@ def _answers(
         oas = px[bond.bond_id][basis_date]["oas"]
         if s5 is None or oas is None:
             continue
-        spreads = (0.8 * s5, s5, 1.22 * s5)
+        spreads = (round(s5 * 0.8, 2), s5, round(s5 * 1.22, 2))  # as stored
         cds_at = interpolate(ttm_tenors, spreads, float(px[bond.bond_id][basis_date]["ttm"] or 0))
         basis[bond.bond_id] = round(cds_at - float(oas), 4)
     migration: dict[str, dict[str, int]] = {a: dict.fromkeys(BUCKET_NAMES, 0) for a in BUCKET_NAMES}
@@ -808,8 +934,14 @@ def _answers(
         "bonds": len(bonds),
         "issuers": len(by_ticker),
         "defaults": {
-            "HALD": {"date": "2025-09-12", "recoveries": {b.bond_id: b.recovery for b in bonds if b.issuer == "HALD"}},
-            "MARL": {"date": "2025-11-03", "recoveries": {b.bond_id: b.recovery for b in bonds if b.issuer == "MARL"}},
+            "HALD": {
+                "date": "2025-09-12",
+                "recoveries": {b.bond_id: b.recovery for b in bonds if b.issuer == "HALD"},
+            },
+            "MARL": {
+                "date": "2025-11-03",
+                "recoveries": {b.bond_id: b.recovery for b in bonds if b.issuer == "MARL"},
+            },
             "convention": "recovery is the post-default price as a fraction of face; the bond trades at it from the default date, with no accrued",
         },
         "dts": {
@@ -841,15 +973,25 @@ def _answers(
     }
 
 
-def _write_table(lake: Path, table: str, partition: str, rows: list[dict[str, Any]], fmt: str) -> None:
+def _write_table(
+    lake: Path, table: str, partition: str, rows: list[dict[str, Any]], fmt: str
+) -> None:
     folder = lake / "curated" / table / partition
     folder.mkdir(parents=True, exist_ok=True)
     if fmt == "parquet":
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        columns = {k: [r[k] for r in rows] for k in rows[0]}
-        pq.write_table(pa.table(columns), folder / "part-0000.parquet", compression="zstd", compression_level=9)
+        # An all-null column would be written as type null and break a read across partitions
+        # (found by DuckDB on the first partition's total_return); the curation job pins doubles.
+        columns = {
+            k: pa.array(v, type=pa.float64() if all(x is None for x in v) else None)
+            for k in rows[0]
+            for v in [[r[k] for r in rows]]
+        }
+        pq.write_table(
+            pa.table(columns), folder / "part-0000.parquet", compression="zstd", compression_level=9
+        )
     else:
         with (folder / "part-0000.csv").open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
@@ -924,7 +1066,9 @@ def _write_lake(
     raw.mkdir(parents=True)
     with (raw / "bond_prices_20251231.csv").open("w", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["CUSIP_ID", "Px Clean", "Accrued Int", "YTW %", "OAS (bp)", "Spread Dur", "Mod Dur"])
+        writer.writerow(
+            ["CUSIP_ID", "Px Clean", "Accrued Int", "YTW %", "OAS (bp)", "Spread Dur", "Mod Dur"]
+        )
         for b in bonds:
             row = px[b.bond_id][last]
             writer.writerow([b.bond_id, row["clean"], row["accrued"], row["ytw"], row["oas"], row["sdur"], row["mdur"]])  # fmt: skip
@@ -939,8 +1083,25 @@ def _write_lake(
 
 def _glue_catalog(fmt: str) -> dict[str, Any]:
     tables = {
-        "bond_px_daily": ["bond_id string", "currency string", "clean_price double", "accrued_interest double", "ytw_pct double", "oas_bp double", "spread_duration double", "modified_duration double", "years_to_maturity double", "total_return double"],  # noqa: E501
-        "cds_daily": ["name_id string", "kind string", "tenor string", "spread_bp double", "recovery double"],
+        "bond_px_daily": [
+            "bond_id string",
+            "currency string",
+            "clean_price double",
+            "accrued_interest double",
+            "ytw_pct double",
+            "oas_bp double",
+            "spread_duration double",
+            "modified_duration double",
+            "years_to_maturity double",
+            "total_return double",
+        ],
+        "cds_daily": [
+            "name_id string",
+            "kind string",
+            "tenor string",
+            "spread_bp double",
+            "recovery double",
+        ],
         "rates_daily": ["series_id string", "value double"],
         "sig_spread_momentum": ["dt string", "bond_id string", "value double"],
     }
@@ -955,7 +1116,8 @@ def _glue_catalog(fmt: str) -> dict[str, Any]:
                     "Columns": [dict(zip(("Name", "Type"), c.split(), strict=True)) for c in cols],
                     "Location": f"s3://{LAKE}/curated/{name}/",
                     "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
-                    if fmt == "parquet" else "org.apache.hadoop.mapred.TextInputFormat",
+                    if fmt == "parquet"
+                    else "org.apache.hadoop.mapred.TextInputFormat",
                 },
                 "PartitionKeys": [{"Name": keys.get(name, "dt"), "Type": "string"}],
                 "Parameters": {"classification": fmt, "partition_filtering.enabled": "true"},
@@ -1006,14 +1168,24 @@ def _write_oms(
     books: dict[str, tuple[str, int, float]],
 ) -> None:  # fmt: skip
     del returns
-    pm = {"hy_ls": "pm-hy", "ig_rv": "pm-ig", "distressed": "pm-distressed", "overlay": "pm-overlay"}
+    pm = {
+        "hy_ls": "pm-hy",
+        "ig_rv": "pm-ig",
+        "distressed": "pm-distressed",
+        "overlay": "pm-overlay",
+    }
     book_of_issuer = {b.issuer: books[b.bond_id][0] for b in bonds if b.bond_id in books}
     with closing(sqlite3.connect(path)) as db, db:
         db.executescript(OMS_SCHEMA)
-        db.executemany("INSERT INTO ref_books VALUES (?,?,?)", [(b, pm[b], CAPITAL.get(b)) for b in BOOKS])
+        db.executemany(
+            "INSERT INTO ref_books VALUES (?,?,?)", [(b, pm[b], CAPITAL.get(b)) for b in BOOKS]
+        )
         db.executemany(
             "INSERT INTO ref_issuer_master VALUES (?,?,?,?,?)",
-            [(i.ticker, i.name, i.sector, int(i.cds), book_of_issuer.get(i.ticker)) for i in issuers],
+            [
+                (i.ticker, i.name, i.sector, int(i.cds), book_of_issuer.get(i.ticker))
+                for i in issuers
+            ],
         )
         db.executemany("INSERT INTO pos_eod VALUES (?,?,?,?,?)", pos_rows)
         db.executemany("INSERT INTO pos_cds VALUES (?,?,?,?,?)", cds_pos)
@@ -1029,7 +1201,10 @@ def _write_oms(
         restricted = [i for i in issuers if i.cds][2:3] + [i for i in issuers if not i.cds][:1]
         db.executemany(
             "INSERT INTO cmp_restricted VALUES (?,?,?)",
-            [(restricted[0].ticker, "restricted", "2025-07-01"), (restricted[1].ticker, "wall_crossed", "2025-10-15")],
+            [
+                (restricted[0].ticker, "restricted", "2025-07-01"),
+                (restricted[1].ticker, "wall_crossed", "2025-10-15"),
+            ],
         )
     with closing(sqlite3.connect(path)) as db:
         db.execute("VACUUM")
