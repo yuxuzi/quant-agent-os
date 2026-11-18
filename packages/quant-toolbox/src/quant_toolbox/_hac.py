@@ -39,3 +39,22 @@ def newey_west_t_stat(values: FloatArray, lags: int | None = None) -> float:
     if variance <= FLAT * max(1.0, float(np.mean(data)) ** 2):
         return math.nan
     return float(np.mean(data)) / math.sqrt(variance / n)
+
+
+def newey_west_covariance(design: FloatArray, residuals: FloatArray, lags: int) -> FloatArray:
+    """Newey-West (HAC) covariance of OLS coefficients: ``(X'X)^-1 S (X'X)^-1``.
+
+    ``S`` sums the outer products of the scores ``x_t e_t``, plus Bartlett-weighted
+    autocovariances up to ``lags``: ``(1 - l / (lags + 1)) (G_l + G_l')``. ``lags=0`` is White's
+    heteroskedasticity-robust (HC0) covariance. A singular ``X'X`` uses its pseudo-inverse.
+    """
+    x = np.asarray(design, dtype=np.float64)
+    scores = x * np.asarray(residuals, dtype=np.float64)[:, None]
+    meat = scores.T @ scores
+    for lag in range(1, max(0, min(lags, x.shape[0] - 1)) + 1):
+        weight = 1.0 - lag / (lags + 1.0)
+        gamma = scores[lag:].T @ scores[:-lag]
+        meat += weight * (gamma + gamma.T)
+    bread = np.linalg.pinv(x.T @ x)
+    result: FloatArray = bread @ meat @ bread
+    return result
