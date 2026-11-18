@@ -15,7 +15,9 @@ Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the sam
   with its own version, changelog, README, MIT license, and tests
   ([decision 0027](docs/decisions/0027-quant-toolbox-package.md)). The import name is still `quant_toolbox`.
   The `toolbox`, `interactive`, `excel`, and `empyrical` extras now install the matching `quant-toolbox` extra
-  at the same release, so existing installs keep working. A missing optional library's error now says
+  at the same release, so installs from a tag with uv keep working; uv resolves the workspace member from
+  the same checkout. Installing the platform's wheel file alone, with pip, or from an index also needs the
+  `quant-toolbox` wheel, which the release does not yet build (see [releasing](docs/releasing.md)). A missing optional library's error now says
   `uv add "quant-toolbox[<extra>]"`, where the extras are `charts`, `interactive`, `excel`, `pandas`, and
   `empyrical`.
 - **Generated applications depend on `quant-toolbox` alone** (`quant-apps` 2.1.0, `quant-baseline` 4.1.0),

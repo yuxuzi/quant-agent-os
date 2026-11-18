@@ -93,7 +93,7 @@ def tear_sheet(
         equity_curve(days, series),
         underwater_chart(days, {name: fund}),
     ]
-    if len(days) > periods_per_year:
+    if periods_per_year >= 2 and len(days) > periods_per_year:
         rolled = rolling_sharpe(fund, periods_per_year, periods_per_year, risk_free)
         blocks.append(
             line_chart(

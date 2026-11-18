@@ -94,6 +94,7 @@ def analyze(
             **benchmark_metrics(values, reference, periods_per_year, risk_free, backend=backend),
             **capture_ratios(values, reference),
         }
+    excess = values - risk_free / periods_per_year
     return Analysis(
         as_of=days[-1],
         periods_per_year=periods_per_year,
@@ -101,9 +102,9 @@ def analyze(
         metrics=all_metrics(values, periods_per_year, risk_free, backend=backend),
         benchmark=compared,
         distribution=return_distribution(values),
-        sharpe_inference={
-            "standard_error": sharpe_standard_error(values, periods_per_year),
-            "probabilistic_sharpe_ratio": probabilistic_sharpe_ratio(values, periods_per_year),
+        sharpe_inference={  # of excess returns, like metrics["sharpe_ratio"]
+            "standard_error": sharpe_standard_error(excess, periods_per_year),
+            "probabilistic_sharpe_ratio": probabilistic_sharpe_ratio(excess, periods_per_year),
         },
         horizons={
             label: horizon_return(days, values, label, periods_per_year) for label in horizons

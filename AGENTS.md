@@ -78,7 +78,7 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 | Test Quant Toolbox alone, with only numpy | `cd packages/quant-toolbox && uv run --isolated --no-project --with . --with pytest python -m pytest` |
 | Lint | `uv run ruff check .` |
 | Format check | `uv run ruff format --check .` |
-| Type-check (strict, `src` and `examples`) | `uv run mypy` |
+| Type-check (strict, `src`, `examples`, and `packages/quant-toolbox/src`) | `uv run mypy` |
 | Offline demos | `uv run python examples/portfolio-intelligence/demo.py`, `uv run python examples/portfolio-research/portfolio_research.py`, `uv run python examples/quant-research/research_demo.py`, `uv run python examples/quant-research/sdk_demo.py` |
 | Agent-efficiency evaluation | `uv run python tests/evaluation/agent_efficiency.py` (add `--update` to rebaseline) |
 | Regenerate client bundles (after changing a skill) | `uv run python scripts/client_bundles.py` |

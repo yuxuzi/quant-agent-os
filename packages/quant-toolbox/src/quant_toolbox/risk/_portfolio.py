@@ -83,7 +83,7 @@ def expected_shortfall_contributions(
     NaN for every asset when there are no bars.
     """
     held = np.nan_to_num(np.asarray(weights, dtype=np.float64))
-    returns = np.nan_to_num(np.atleast_2d(np.asarray(asset_returns, dtype=np.float64)))
+    returns = np.nan_to_num(_columns(asset_returns))
     if returns.shape[0] == 0:
         return np.full(held.shape, np.nan)
     book = returns @ held
@@ -105,10 +105,17 @@ def ewma_covariance(
         decay = 0.5 ** (1.0 / halflife)
     if not 0.0 < decay < 1.0:
         raise ValueError(f"decay must be between 0 and 1; got {decay}.")
-    returns = np.nan_to_num(np.atleast_2d(np.asarray(asset_returns, dtype=np.float64)))
+    returns = np.nan_to_num(_columns(asset_returns))
     if returns.shape[0] == 0:
         raise ValueError("EWMA covariance needs at least one bar.")
     weights = decay ** np.arange(returns.shape[0] - 1, -1, -1, dtype=np.float64)
     weights /= weights.sum()
     result: FloatArray = (returns * weights[:, None]).T @ returns * periods_per_year
+    return result
+
+
+def _columns(asset_returns: FloatArray) -> FloatArray:
+    """Bars by assets; a 1-d series is one asset's bars, as in `scenario_shocks`."""
+    values = np.asarray(asset_returns, dtype=np.float64)
+    result: FloatArray = values[:, None] if values.ndim == 1 else values
     return result

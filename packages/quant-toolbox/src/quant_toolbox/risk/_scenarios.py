@@ -6,8 +6,9 @@ Conventions:
   ``end``; a missing return counts as 0 (no move).
 - The book's return is linear, ``sum(w_i * shock_i)``, as in `stress_return`: today's weights,
   held through the window without rebalancing or second-order effects.
-- A window the dates do not cover (the first date after ``start``, or the last before ``end``)
-  gives None, never a shorter window under the same name.
+- A window needs daily data across it: a bar on or before ``start``, a bar on or after ``end``,
+  and no gap longer than `MAX_GAP_DAYS` between them (a weekend and a holiday). Otherwise it
+  gives None, never a shorter window under the same name; monthly or weekly data covers none.
 - `SCENARIOS` are conventional windows for well-known US equity stress episodes, as commonly
   dated by index closes; they are not official definitions, and a firm should set its own.
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 
 import numpy as np
 
@@ -23,6 +25,7 @@ from quant_toolbox._types import FloatArray
 from quant_toolbox.risk._book import stress_return
 
 _D = dt.date
+MAX_GAP_DAYS = 5  # the longest gap between bars inside a covered window, in calendar days
 SCENARIOS: dict[str, tuple[dt.date, dt.date]] = {
     "Quant quake (Aug 2007)": (_D(2007, 8, 3), _D(2007, 8, 10)),
     "Lehman (Sep-Oct 2008)": (_D(2008, 9, 12), _D(2008, 10, 10)),
@@ -44,8 +47,9 @@ def scenario_shocks(
 ) -> FloatArray | None:
     """Each asset's compounded return over the bars dated after ``start`` up to ``end``.
 
-    ``asset_returns`` is bars by assets, one row per date. None when the dates do not cover the
-    window: no bar on or before ``start``, or none on or after ``end``.
+    ``asset_returns`` is bars by assets (a 1-d series is one asset), one row per date. None
+    when the dates do not cover the window: no bar on or before ``start``, none on or after
+    ``end``, or a gap of more than `MAX_GAP_DAYS` between them.
     """
     if end <= start:
         raise ValueError(f"A scenario ends after it starts; got {start} to {end}.")
@@ -54,9 +58,15 @@ def scenario_shocks(
         values = values[:, None]
     if values.shape[0] != len(dates):
         raise ValueError("asset_returns needs one row per date.")
-    if not dates or dates[0] > start or dates[-1] < end:
+    days = list(dates)
+    if not days or days[0] > start or days[-1] < end:
         return None
-    inside = np.array([start < day <= end for day in dates], dtype=bool)
+    first = max(index for index, day in enumerate(days) if day <= start)
+    last = min(index for index, day in enumerate(days) if day >= end)
+    span = days[first : last + 1]
+    if any((later - earlier).days > MAX_GAP_DAYS for earlier, later in pairwise(span)):
+        return None
+    inside = np.array([start < day <= end for day in days], dtype=bool)
     window = np.nan_to_num(values[inside])
     result: FloatArray = np.prod(1.0 + window, axis=0) - 1.0
     return result

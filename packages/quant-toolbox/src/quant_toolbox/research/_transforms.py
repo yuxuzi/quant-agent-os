@@ -21,6 +21,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from quant_toolbox._numeric import FLAT
 from quant_toolbox._types import FloatArray
 
 
@@ -34,7 +35,7 @@ def zscore(signal: FloatArray) -> FloatArray:
         deviation = np.where(valid, values - mean, 0.0)
         spread = np.sqrt((deviation**2).sum(axis=1, keepdims=True) / count)
         scaled = deviation / spread
-    flat = spread <= 1e-12 * np.maximum(1.0, np.abs(mean))
+    flat = spread <= FLAT * np.maximum(1.0, np.abs(mean))
     result: FloatArray = np.where(valid & (count >= 2) & ~flat, scaled, np.nan)
     return result
 

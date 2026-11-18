@@ -206,6 +206,7 @@
     "FactorRisk": "dataclass(volatility: float, factor_volatility: float, specific_volatility: float, exposures: dict[str, float], factor_shares: dict[str, float] | None, specific_share: float | None, contributions: dict[str, float] | None)",
     "LIQUIDITY_BUCKETS": "constant: tuple",
     "Liquidity": "dataclass(days: dict[str, float], within: dict[int, float], buckets: dict[str, float], no_adv: list[str], gross: float, participation: float)",
+    "MAX_GAP_DAYS": "constant: int",
     "MEASURE_CONVENTIONS": "constant: dict",
     "NO_ADV": "constant: str",
     "SCENARIOS": "constant: dict",

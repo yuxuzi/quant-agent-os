@@ -41,7 +41,8 @@ of what funds report, and keeps only numpy required.
   - `Exposures.herfindahl`: the sum of squared shares of gross; `effective_positions` is its reciprocal.
   - Historical scenarios: `SCENARIOS`, twelve conventional US equity stress windows from 2007 to 2024, with
     `scenario_shocks` and `historical_stress`, which apply a window's compounded asset returns to today's
-    weights and answer None when the data does not cover the window.
+    weights. A window needs daily data across it (no gap over `MAX_GAP_DAYS`, five days); otherwise the
+    answer is None, never a shorter window under the scenario's name.
   - `factor_risk`: a vendor's factor model as input (loadings, factor covariance, specific variances), giving
     total, factor, and specific volatility, factor exposures, Euler factor shares, and asset contributions.
   - `style_regression`: returns-based alpha and betas against factor returns the caller supplies, with
@@ -57,6 +58,7 @@ of what funds report, and keeps only numpy required.
     records each bar's charge. `cost_drag` gives gross and net annualised return, the drag, annual turnover,
     the cost per unit of turnover, and the break-even cost in basis points.
   - `quantile_returns`: each signal quantile's mean return per bar; `quantile_spread` is built on it.
+  - `run_backtest` refuses a cost rate that is not finite, naming the asset; a negative rate is a rebate.
   - `ic_summary` adds `rank_ic_std` and `rank_ic_ir` (per bar, not annualised).
   - Signal hygiene that never looks ahead: `zscore`, `winsorize`, `demean_by_group`, and `neutralize`.
 

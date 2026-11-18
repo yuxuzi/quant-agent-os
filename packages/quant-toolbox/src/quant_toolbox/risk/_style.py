@@ -60,7 +60,7 @@ def style_regression(
     keep = np.isfinite(y) & np.isfinite(factors).all(axis=1)
     y, factors = y[keep], factors[keep]
     n, p = y.size, len(names) + 1
-    count = newey_west_lags(n) if lags is None else max(0, lags)
+    count = newey_west_lags(n) if lags is None else max(0, min(lags, n - 1))
     if n <= p:
         nan = dict.fromkeys(names, math.nan)
         return StyleRegression(

@@ -52,6 +52,9 @@ def brinson(
 ) -> Attribution:
     """Brinson-Fachler effects for each of ``groups``; a key outside ``groups`` is an error."""
     known = set(groups)
+    if len(known) != len(groups):
+        repeated = sorted({g for g in groups if list(groups).count(g) > 1})
+        raise ValueError(f"Each group is named once; repeated: {', '.join(repeated)}.")
     for name, mapping in (
         ("portfolio_weights", portfolio_weights),
         ("portfolio_returns", portfolio_returns),

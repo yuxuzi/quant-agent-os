@@ -38,7 +38,12 @@ from quant_toolbox.risk._portfolio import (
     ewma_covariance,
     expected_shortfall_contributions,
 )
-from quant_toolbox.risk._scenarios import SCENARIOS, historical_stress, scenario_shocks
+from quant_toolbox.risk._scenarios import (
+    MAX_GAP_DAYS,
+    SCENARIOS,
+    historical_stress,
+    scenario_shocks,
+)
 from quant_toolbox.risk._style import StyleRegression, style_regression
 
 __all__ = [
@@ -49,6 +54,7 @@ __all__ = [
     "LIQUIDITY_BUCKETS",
     "MEASURE_CONVENTIONS",
     "NO_ADV",
+    "MAX_GAP_DAYS",
     "SCENARIOS",
     "UNGROUPED",
     "Contribution",

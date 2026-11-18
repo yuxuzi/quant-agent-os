@@ -90,6 +90,10 @@ def run_backtest(
     rates = np.asarray(cost_bps, dtype=np.float64)
     if rates.ndim not in (0, 1) or (rates.ndim == 1 and rates.size != weights.shape[-1]):
         raise ValueError("cost_bps must be one rate, or one rate per asset (column of weights).")
+    bad = np.flatnonzero(~np.isfinite(rates.ravel()))  # a negative rate is a rebate
+    if bad.size:
+        where = f" (asset column {int(bad[0])})" if rates.ndim == 1 else ""
+        raise ValueError(f"cost_bps must be a finite number of basis points{where}.")
     asset_returns, exits = bar_returns(prices, delisting_return)
     priced = np.isfinite(prices)
     gone = np.cumsum(exits, axis=0) > 0  # delisted on or before this bar
