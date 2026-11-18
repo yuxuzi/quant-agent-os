@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FUND = ROOT / "examples" / "mock-funds" / "larchmere"
 sys.path.insert(0, str(FUND / "facility" / "gateway"))
 
-import entra_mock  # noqa: E402
+import larchmere_entra_mock  # noqa: E402
 
 from quant_agent_os.mcp.http import GROUPS_CLAIM, TENANT_CLAIM  # noqa: E402
 from quant_agent_os.tools import Caller, FileAccessPolicy  # noqa: E402
@@ -45,17 +45,19 @@ def clock() -> Clock:
 
 
 @pytest.fixture
-def tenant(clock: Clock) -> entra_mock.EntraTenant:
-    return entra_mock.EntraTenant(clock=clock)
+def tenant(clock: Clock) -> larchmere_entra_mock.EntraTenant:
+    return larchmere_entra_mock.EntraTenant(clock=clock)
 
 
 @pytest.fixture
-def base(tenant: entra_mock.EntraTenant) -> Iterator[str]:
-    with entra_mock.running(tenant, RESOURCE, SECRET) as url:
+def base(tenant: larchmere_entra_mock.EntraTenant) -> Iterator[str]:
+    with larchmere_entra_mock.running(tenant, RESOURCE, SECRET) as url:
         yield url
 
 
-def sign_in_file(tmp_path: Path, tenant: entra_mock.EntraTenant, url: str, path: str) -> Path:
+def sign_in_file(
+    tmp_path: Path, tenant: larchmere_entra_mock.EntraTenant, url: str, path: str
+) -> Path:
     """The fund's sign-in file, its introspection URL pointed at this test's loopback server."""
     text = (FUND / "site" / "deploy" / "sign-in.toml").read_text()
     text = text.replace(
@@ -67,7 +69,9 @@ def sign_in_file(tmp_path: Path, tenant: entra_mock.EntraTenant, url: str, path:
     return target
 
 
-def verify(token: str, tmp_path: Path, tenant: entra_mock.EntraTenant, url: str, path: str) -> Any:
+def verify(
+    token: str, tmp_path: Path, tenant: larchmere_entra_mock.EntraTenant, url: str, path: str
+) -> Any:
     sign_in = load_sign_in(
         sign_in_file(tmp_path, tenant, url, path), {"LARCHMERE_INTROSPECTION_SECRET": SECRET}
     )
@@ -75,7 +79,7 @@ def verify(token: str, tmp_path: Path, tenant: entra_mock.EntraTenant, url: str,
 
 
 def test_the_tokens_have_entras_v2_shape_and_verify_against_the_jwks(
-    tenant: entra_mock.EntraTenant,
+    tenant: larchmere_entra_mock.EntraTenant,
 ) -> None:
     token = tenant.issue(UPN)
     claims = jwt.decode(token, options={"verify_signature": False})
@@ -94,7 +98,7 @@ def test_the_tokens_have_entras_v2_shape_and_verify_against_the_jwks(
 
 
 def test_entra_has_no_introspection_endpoint_so_the_platform_refuses_its_tokens(
-    tmp_path: Path, tenant: entra_mock.EntraTenant, base: str
+    tmp_path: Path, tenant: larchmere_entra_mock.EntraTenant, base: str
 ) -> None:
     # The sign-in file needs an introspection URL; pointed at Entra's own path it is a 404.
     path = f"/{tenant.tid}/oauth2/v2.0/introspect"
@@ -102,7 +106,10 @@ def test_entra_has_no_introspection_endpoint_so_the_platform_refuses_its_tokens(
 
 
 def test_entras_claims_as_they_are_do_not_satisfy_the_platform(
-    tmp_path: Path, tenant: entra_mock.EntraTenant, base: str, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    tenant: larchmere_entra_mock.EntraTenant,
+    base: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     # A proxy that only says active and passes the claims on: aud is the app ID URI, scp not scope,
     # and there is no tenant claim of the platform's name.
@@ -113,7 +120,7 @@ def test_entras_claims_as_they_are_do_not_satisfy_the_platform(
 
 
 def test_through_the_shim_the_platform_accepts_a_token_and_reads_guid_groups(
-    tmp_path: Path, tenant: entra_mock.EntraTenant, base: str
+    tmp_path: Path, tenant: larchmere_entra_mock.EntraTenant, base: str
 ) -> None:
     access = verify(tenant.issue(UPN), tmp_path, tenant, base, "/shim/introspect")
     assert access is not None
@@ -136,7 +143,7 @@ def test_through_the_shim_the_platform_accepts_a_token_and_reads_guid_groups(
 )
 def test_the_shim_refuses_what_it_should(
     tmp_path: Path,
-    tenant: entra_mock.EntraTenant,
+    tenant: larchmere_entra_mock.EntraTenant,
     base: str,
     clock: Clock,
     mutation: str,
@@ -155,7 +162,7 @@ def test_the_shim_refuses_what_it_should(
 
 
 def test_a_role_claim_can_be_the_groups_claim_but_cannot_tell_the_deals_apart(
-    tmp_path: Path, tenant: entra_mock.EntraTenant, base: str
+    tmp_path: Path, tenant: larchmere_entra_mock.EntraTenant, base: str
 ) -> None:
     text = sign_in_file(tmp_path, tenant, base, "/shim/introspect").read_text()
     path = tmp_path / "roles.toml"

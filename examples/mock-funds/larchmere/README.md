@@ -29,7 +29,7 @@ security-group GUIDs are the groups; `facility/gateway/directory.json` names the
 | ADLS Gen2 `abfss://curated@...` Parquet, hive-partitioned | `lake/curated/<table>/dt=.../part-0000.parquet`, plus `lake/catalog.json` |
 | Azure SQL Database, schema `clo` (T-SQL in `facility/azure_sql/`) | a SQLite file with the same table and view names |
 | SharePoint library "CLO Research", exported to Blob | `lake/docs/CLO Research/Shared Documents/` (eight Markdown files and one .docx) |
-| Microsoft Entra ID | `facility/gateway/entra_mock.py`: RS256 v2.0 tokens, a JWKS, no introspection, and the fund's shim |
+| Microsoft Entra ID | `facility/gateway/larchmere_entra_mock.py`: RS256 v2.0 tokens, a JWKS, no introspection, and the fund's shim |
 | Key Vault, Container Apps, Log Analytics | `site/deploy/` descriptors, not run in the tests |
 
 Build it with `uv run python facility/warehouse/build_larchmere.py OUT_DIR [--seed N]`; it also writes

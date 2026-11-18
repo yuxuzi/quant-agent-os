@@ -1,6 +1,6 @@
 # Larchmere (fictional): sign-in through Microsoft Entra ID (decision 0028). The platform asks an
 # RFC 7662 introspection endpoint; Entra has none, so the endpoint is the fund's own shim
-# (gateway/entra_mock.py, deployed as the Container App `larchmere-token-shim`).
+# (gateway/larchmere_entra_mock.py, deployed as the Container App `larchmere-token-shim`).
 resource = "https://larchmere-qaos.example.azurecontainerapps.io/mcp"
 
 [[authorization_servers]]

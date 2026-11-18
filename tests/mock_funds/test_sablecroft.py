@@ -30,7 +30,7 @@ for _folder in (
     sys.path.insert(0, str(ROOT / _folder))
 
 import build_sablecroft as build_module  # noqa: E402
-import entra_mock  # noqa: E402
+import sablecroft_entra_mock  # noqa: E402
 import sablecroft_server as server  # noqa: E402
 import sablecroft_tools as tools  # noqa: E402
 from sablecroft_entra import EntraValidator, serve_introspection  # noqa: E402
@@ -62,7 +62,7 @@ PLATFORM_IMPORT = re.compile(
     r"quant_app_factory|quant_toolbox)\b",
     re.MULTILINE,
 )
-GROUP = entra_mock.GROUPS
+GROUP = sablecroft_entra_mock.GROUPS
 ADMIN_MONTH = "202512"
 
 
@@ -628,7 +628,9 @@ def test_the_research_folder_holds_the_documents_and_the_injection_stays_inert(
 # ---- Entra ID, and the platform's sign-in -----------------------------------------------------
 
 
-def verifier_for(issuer: entra_mock.EntraIssuer, introspection_url: str) -> IntrospectionVerifier:
+def verifier_for(
+    issuer: sablecroft_entra_mock.EntraIssuer, introspection_url: str
+) -> IntrospectionVerifier:
     server_entry = AuthorizationServer(
         issuer=issuer.issuer,
         introspection_url=introspection_url,
@@ -646,21 +648,21 @@ def test_the_mock_issuer_has_entras_shapes_and_no_introspection_endpoint() -> No
     import urllib.error
     import urllib.request
 
-    with entra_mock.serve() as issuer:
+    with sablecroft_entra_mock.serve() as issuer:
         token = issuer.user_token("dev.shah@sablecroft.example", audience=RESOURCE)
         header = json.loads(_b64(token.split(".")[0]))
         claims = json.loads(_b64(token.split(".")[1]))
-        assert header == {"typ": "JWT", "alg": "RS256", "kid": entra_mock.KID}
-        assert claims["iss"] == f"{issuer.base_url}/{entra_mock.TENANT_ID}/v2.0"
-        assert claims["tid"] == entra_mock.TENANT_ID and claims["ver"] == "2.0"
+        assert header == {"typ": "JWT", "alg": "RS256", "kid": sablecroft_entra_mock.KID}
+        assert claims["iss"] == f"{issuer.base_url}/{sablecroft_entra_mock.TENANT_ID}/v2.0"
+        assert claims["tid"] == sablecroft_entra_mock.TENANT_ID and claims["ver"] == "2.0"
         assert claims["groups"] == [GROUP["sg-research-eq-ls"]]  # GUIDs, never names
         assert claims["scp"] == "tools.list tools.call" and "roles" not in claims
         app = json.loads(_b64(issuer.app_token().split(".")[1]))
         assert app["roles"] == ["Tools.Call"] and "scp" not in app and "groups" not in app
-        keys = f"{issuer.base_url}/{entra_mock.TENANT_ID}/discovery/v2.0/keys"
+        keys = f"{issuer.base_url}/{sablecroft_entra_mock.TENANT_ID}/discovery/v2.0/keys"
         with urllib.request.urlopen(keys) as response:
-            assert json.load(response)["keys"][0]["kid"] == entra_mock.KID
-        introspect = f"{issuer.base_url}/{entra_mock.TENANT_ID}/oauth2/v2.0/introspect"
+            assert json.load(response)["keys"][0]["kid"] == sablecroft_entra_mock.KID
+        introspect = f"{issuer.base_url}/{sablecroft_entra_mock.TENANT_ID}/oauth2/v2.0/introspect"
         request = urllib.request.Request(introspect, data=b"token=x", method="POST")
         with pytest.raises(urllib.error.HTTPError) as refused:
             urllib.request.urlopen(request)
@@ -675,8 +677,8 @@ def _b64(part: str) -> bytes:
 
 
 def test_the_platforms_sign_in_refuses_every_entra_token_without_introspection() -> None:
-    with entra_mock.serve() as issuer:
-        url = f"{issuer.base_url}/{entra_mock.TENANT_ID}/oauth2/v2.0/introspect"
+    with sablecroft_entra_mock.serve() as issuer:
+        url = f"{issuer.base_url}/{sablecroft_entra_mock.TENANT_ID}/oauth2/v2.0/introspect"
         token = issuer.user_token("dev.shah@sablecroft.example", audience=RESOURCE)
         assert anyio.run(verifier_for(issuer, url).verify_token, token) is None
 
@@ -684,15 +686,15 @@ def test_the_platforms_sign_in_refuses_every_entra_token_without_introspection()
 def test_with_a_validating_sidecar_the_platform_accepts_entra_tokens_and_reads_guid_groups(
     store: SablecroftStore,
 ) -> None:
-    with entra_mock.serve() as issuer:
-        jwks = f"{issuer.base_url}/{entra_mock.TENANT_ID}/discovery/v2.0/keys"
+    with sablecroft_entra_mock.serve() as issuer:
+        jwks = f"{issuer.base_url}/{sablecroft_entra_mock.TENANT_ID}/discovery/v2.0/keys"
         validator = EntraValidator(issuer.issuer, jwks, RESOURCE)
         with serve_introspection(validator, "qaos", "shim-secret") as url:
             verifier = verifier_for(issuer, url)
             token = issuer.user_token("dev.shah@sablecroft.example", audience=RESOURCE)
             access = anyio.run(verifier.verify_token, token)
             assert access is not None
-            assert access.subject == entra_mock.USERS["dev.shah@sablecroft.example"][0]
+            assert access.subject == sablecroft_entra_mock.USERS["dev.shah@sablecroft.example"][0]
             assert set(access.scopes) == {"tools:list", "tools:call"}  # dots mapped to colons
             assert access.claims is not None
             groups = access.claims[GROUPS_CLAIM]

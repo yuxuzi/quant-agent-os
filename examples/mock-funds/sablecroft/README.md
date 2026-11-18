@@ -19,7 +19,7 @@ entitlements are in `facility/access.toml`, keyed by Microsoft Entra ID security
 | Administrator NAV statements and GP capital-account statements as files in `raw/` | CSV files, last 3 months and Q3 2025 |
 | Unity Catalog `sablecroft` (`curated`, `ref`) Delta tables on ADLS | Parquet folders with a minimal `_delta_log/` |
 | Databricks SQL warehouse | DuckDB (dev dependency) over those folders, running `site/sablecroft_views.sql` |
-| Entra ID tenant | `facility/identity/entra_mock.py`: RS256 JWTs, JWKS, no introspection endpoint |
+| Entra ID tenant | `facility/identity/sablecroft_entra_mock.py`: RS256 JWTs, JWKS, no introspection endpoint |
 | Key Vault, Container Apps, PostgreSQL Flexible Server, Log Analytics | descriptors in `site/deploy/`, not run |
 | SharePoint research export | `facility/research/` and `site/deploy/ingest-from-sharepoint.md` |
 
