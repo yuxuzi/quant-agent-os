@@ -23,6 +23,27 @@ _CONVENTIONS = {
     "active_return": "annualised arithmetic mean of returns minus benchmark",
     "tracking_error": "annualised volatility of active returns",
     "information_ratio": "excess Sharpe against the benchmark, annualised",
+    "up_capture": "mean return over mean benchmark return, on bars the benchmark rose",
+    "down_capture": "mean return over mean benchmark return, on bars the benchmark fell",
+    "up_beta": "OLS slope on the benchmark, on bars the benchmark rose",
+    "down_beta": "OLS slope on the benchmark, on bars the benchmark fell",
+    "correlation": "Pearson correlation with the benchmark",
+    "rolling": "trailing window ending at each bar; NaN until full or if it holds a gap; "
+    "annualised with periods per year, never the window",
+    "skewness": "bias-adjusted sample skewness (G1)",
+    "excess_kurtosis": "bias-adjusted sample excess kurtosis (G2); 0 for a normal distribution",
+    "gain_loss_ratio": "mean positive return over the size of the mean negative return",
+    "profit_factor": "sum of positive returns over the size of the sum of negative returns",
+    "sharpe_standard_error": "Mertens (2002), with skew and kurtosis, of the annualised Sharpe",
+    "probabilistic_sharpe_ratio": "probability the true Sharpe exceeds the benchmark Sharpe "
+    "(Bailey and Lopez de Prado, 2012)",
+    "deflated_sharpe_ratio": "probabilistic Sharpe against the expected best of the trials "
+    "(Bailey and Lopez de Prado, 2014)",
+    "minimum_track_record": "bars needed for the probabilistic Sharpe to reach the confidence",
+    "parametric_var": "mean plus the normal quantile times the sample deviation, per bar; "
+    "Cornish-Fisher adjusts the quantile for skew and excess kurtosis",
+    "parametric_expected_shortfall": "Gaussian: mean minus deviation times phi(z) / cutoff",
+    "brinson": "single-period Brinson-Fachler: allocation, selection, interaction; no linking",
 }
 
 

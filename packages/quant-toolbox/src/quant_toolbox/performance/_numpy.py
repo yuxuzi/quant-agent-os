@@ -20,6 +20,8 @@ def annualized_return(values: FloatArray, periods_per_year: int) -> float:
     if values.size == 0:
         return math.nan
     growth = float(np.prod(1.0 + values))
+    if growth < 0.0:  # a loss beyond everything has no real annual rate
+        return math.nan
     return float(growth ** (periods_per_year / values.size)) - 1.0
 
 
