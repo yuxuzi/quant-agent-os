@@ -5,7 +5,7 @@ description = "Quantitative research tools with cited, computed evidence, served
 readme = "README.md"
 requires-python = ">=3.11"
 license = "BUSL-1.1 AND MIT"
-license-files = ["LICENSE", "src/quant_app_factory/packs/LICENSE", "src/quant_toolbox/LICENSE"]
+license-files = ["LICENSE", "src/quant_app_factory/packs/LICENSE"]
 authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
 keywords = ["quant", "agents", "llm", "mcp", "research"]
 classifiers = [
@@ -52,14 +52,15 @@ parquet = ["pandas>=3,<4", "pyarrow>=26,<27"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 # Embeddings on this machine (fastembed, ONNX). Not in `all`: no onnxruntime wheel for Python 3.15.
 local-embeddings = ["fastembed>=0.9,<0.10"]
-# Quant Toolbox (decision 0026): numpy, and pygal for static SVG charts. Generated apps need it.
-toolbox = ["numpy>=1.26", "pygal>=3.1,<4"]
+# Quant Toolbox (decisions 0026, 0027), its own package in packages/quant-toolbox, at the version
+# released with this one. Each extra below is the toolbox extra of the same purpose.
+toolbox = ["quant-toolbox[charts]==0.6.0"]
 # Interactive HTML charts in reports (plotly's graph objects; plotly express would need pandas).
-interactive = ["quant-agent-os[toolbox]", "plotly>=7,<8"]
+interactive = ["quant-toolbox[interactive]==0.6.0"]
 # Reading and writing Excel workbooks.
-excel = ["openpyxl>=3.1,<4"]
+excel = ["quant-toolbox[excel]==0.6.0"]
 # The preferred metrics backend (decision 0010): empyrical, not pyfolio, which adds only plotting.
-empyrical = ["empyrical-reloaded>=0.7,<0.8"]
+empyrical = ["quant-toolbox[empyrical]==0.6.0"]
 # The analytics tools: the toolbox, computing through empyrical.
 analytics = ["quant-agent-os[toolbox,empyrical]"]
 # The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.
@@ -85,6 +86,13 @@ dev = [
 # needs its 3.0 API.
 exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z", pygal = "2026-11-03T00:00:00Z", plotly = "2026-11-03T00:00:00Z", narwhals = "2026-11-03T00:00:00Z", openpyxl = "2026-11-03T00:00:00Z", et-xmlfile = "2026-11-03T00:00:00Z", importlib-metadata = "2026-11-03T00:00:00Z", zipp = "2026-11-03T00:00:00Z" }
 
+[tool.uv.workspace]
+# Quant Toolbox is its own distribution (decision 0027), built and versioned on its own.
+members = ["packages/quant-toolbox"]
+
+[tool.uv.sources]
+quant-toolbox = { workspace = true }
+
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
 build-backend = "uv_build"
@@ -96,7 +104,6 @@ module-name = [
     "quant_app_factory",
     "quant_platform",
     "quant_research",
-    "quant_toolbox",
 ]
 
 [tool.ruff]
@@ -124,7 +131,7 @@ known-first-party = [
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "examples"]
+files = ["src", "examples", "packages/quant-toolbox/src"]
 # Template packs hold code for generated projects, which type-check it themselves.
 exclude = ["src/quant_app_factory/packs/"]
 
@@ -141,7 +148,7 @@ module = ["pandas", "pyarrow", "pyarrow.*"]  # untyped; read in one function of 
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/quant-toolbox/tests"]
 pythonpath = ["examples/firm-tools", "examples/portfolio-intelligence", "examples/portfolio-research", "scripts"]
 filterwarnings = [
     "error::ResourceWarning",

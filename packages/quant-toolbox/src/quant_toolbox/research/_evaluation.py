@@ -18,14 +18,10 @@ import math
 
 import numpy as np
 
+from quant_toolbox._hac import newey_west_lags, newey_west_t_stat
 from quant_toolbox._types import FloatArray
 from quant_toolbox.performance import bar_returns
-from quant_toolbox.research._stats import (
-    information_coefficient,
-    newey_west_lags,
-    newey_west_t_stat,
-    ranks,
-)
+from quant_toolbox.research._stats import information_coefficient, ranks
 
 TRADE_LAG = 1  # bars between a signal's close and the trade (0 trades on that close)
 # Return on the bar an asset's prices stop for good (a delisting without a final price).

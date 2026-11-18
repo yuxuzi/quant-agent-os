@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 from quant_toolbox._optional import MissingExtraError
 
 try:
-    __version__ = version("quant-agent-os")
+    __version__ = version("quant-toolbox")
 except PackageNotFoundError:  # pragma: no cover - running from a source tree without metadata
     __version__ = "0.0.0"
 

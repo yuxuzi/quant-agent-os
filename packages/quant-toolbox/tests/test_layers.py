@@ -126,7 +126,7 @@ assert not any(features().values())
 chart = report.line_chart("x", [dt.date(2024, 1, 1), dt.date(2024, 1, 2)], {"a": [1.0, 2.0]})
 document = report.Document("t", blocks=[chart])
 for call, extra in (
-    (lambda: report.render_html(document), "toolbox"),
+    (lambda: report.render_html(document), "charts"),
     (lambda: report.render_html(document, charts="interactive"), "interactive"),
     (lambda: excel.read_workbook(__import__("pathlib").Path("x.xlsx")), "excel"),
     (lambda: report_excel.write_workbook(document, __import__("pathlib").Path("x.xlsx")), "excel"),
@@ -135,13 +135,13 @@ for call, extra in (
     try:
         call()
     except MissingExtraError as error:
-        assert f"quant-agent-os[{extra}]" in str(error), str(error)
+        assert f"quant-toolbox[{extra}]" in str(error), str(error)
     else:
         raise AssertionError(f"no MissingExtraError for {extra}")
 try:
     frames.to_pandas(None)
 except MissingExtraError as error:
-    assert "uv add pandas" in str(error)
+    assert "quant-toolbox[pandas]" in str(error)
 print("ok")
 """
 

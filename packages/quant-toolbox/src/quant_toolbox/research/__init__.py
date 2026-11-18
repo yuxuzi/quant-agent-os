@@ -6,6 +6,7 @@ describes what a backtest of the same signal can earn. A delisted asset earns
 ``delisting_return`` (`DELISTING_RETURN`, -30%) once in both.
 """
 
+from quant_toolbox._hac import newey_west_lags, newey_west_t_stat
 from quant_toolbox.research._backtest import BacktestResult, run_backtest, walk_forward_splits
 from quant_toolbox.research._evaluation import (
     DELISTING_RETURN,
@@ -18,13 +19,7 @@ from quant_toolbox.research._evaluation import (
     signal_autocorrelation,
 )
 from quant_toolbox.research._signals import look_ahead_bars, momentum, reversal
-from quant_toolbox.research._stats import (
-    MIN_PAIRS,
-    information_coefficient,
-    newey_west_lags,
-    newey_west_t_stat,
-    ranks,
-)
+from quant_toolbox.research._stats import MIN_PAIRS, information_coefficient, ranks
 from quant_toolbox.research._weights import (
     beta_neutral_weights,
     dollar_neutral_weights,

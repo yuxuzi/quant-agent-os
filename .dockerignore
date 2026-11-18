@@ -5,6 +5,10 @@
 !README.md
 !LICENSE
 !src/
+!packages/quant-toolbox/pyproject.toml
+!packages/quant-toolbox/README.md
+!packages/quant-toolbox/LICENSE
+!packages/quant-toolbox/src/
 **/__pycache__
 **/*.py[cod]
 **/.env

@@ -1,0 +1,49 @@
+[project]
+name = "quant-toolbox"
+version = "0.6.0"
+description = "Typed, numpy-first performance, risk, research, and report code for investment teams, with every convention stated"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Leo Liu", email = "yuxuzi@gmail.com" }]
+keywords = ["quant", "performance", "risk", "backtest", "hedge fund", "numpy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+# Only numpy is required (decision 0026); everything else loads in the function that needs it.
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+# Static SVG charts in reports (the default renderer).
+charts = ["pygal>=3.1,<4"]
+# Interactive HTML charts (plotly's graph objects; plotly express would need pandas).
+interactive = ["quant-toolbox[charts]", "plotly>=7,<8"]
+# Reading and writing Excel workbooks.
+excel = ["openpyxl>=3.1,<4"]
+# Converting tables to and from pandas.
+pandas = ["pandas>=2.2"]
+# The preferred metrics backend (decision 0010): empyrical-reloaded, held equal to the numpy one.
+empyrical = ["empyrical-reloaded>=0.7,<0.8"]
+all = ["quant-toolbox[charts,empyrical,excel,interactive,pandas]"]
+
+[project.urls]
+Source = "https://github.com/yuxuzi/quant-agent-os/tree/main/packages/quant-toolbox"
+Changelog = "https://github.com/yuxuzi/quant-agent-os/blob/main/packages/quant-toolbox/CHANGELOG.md"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "quant_toolbox"

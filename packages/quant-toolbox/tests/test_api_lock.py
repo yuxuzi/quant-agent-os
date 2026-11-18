@@ -2,9 +2,9 @@
 
 `api.lock.json` records every public name of every subpackage, with its signature (or, for a
 dataclass, its fields, and for a constant, its type). A change fails this test until the lock is
-rewritten and `CHANGELOG.md` names the change under "Quant Toolbox":
+rewritten and the package's `CHANGELOG.md` names the change:
 
-    QUANT_TOOLBOX_UPDATE_LOCK=1 uv run pytest tests/toolbox/test_api_lock.py
+    QUANT_TOOLBOX_UPDATE_LOCK=1 uv run pytest packages/quant-toolbox/tests/test_api_lock.py
 
 Removing a name or changing a signature is a minor version bump while the toolbox is 0.x, and a
 major one after 1.0. Adding a name is a feature, and nothing else.
@@ -114,5 +114,6 @@ def test_the_public_surface_matches_the_lock() -> None:
         ]
     assert not changes, (
         "Quant Toolbox's public API changed; if that is intended, rewrite the lock with "
-        "QUANT_TOOLBOX_UPDATE_LOCK=1 and say so in CHANGELOG.md:\n" + "\n".join(changes)
+        "QUANT_TOOLBOX_UPDATE_LOCK=1 and say so in packages/quant-toolbox/CHANGELOG.md:\n"
+        + "\n".join(changes)
     )

@@ -6,13 +6,13 @@ import importlib
 import importlib.util
 from types import ModuleType
 
-# The library each extra brings, and the package name to import.
-EXTRAS: dict[str, str | None] = {
-    "pygal": "toolbox",
+# The quant-toolbox extra that brings each optional library, by the name it is imported as.
+EXTRAS: dict[str, str] = {
+    "pygal": "charts",
     "plotly": "interactive",
     "openpyxl": "excel",
     "empyrical": "empyrical",
-    "pandas": None,  # not an extra of its own: install pandas itself
+    "pandas": "pandas",
 }
 
 
@@ -26,11 +26,11 @@ def require(module: str, *, extra: str | None = None, purpose: str = "") -> Modu
         return importlib.import_module(module)
     except ImportError as error:
         root = module.split(".")[0]
-        chosen = extra or EXTRAS.get(root, "toolbox")
+        chosen = extra or EXTRAS.get(root, "all")
         needed = f" for {purpose}" if purpose else ""
-        how = f'`uv add "quant-agent-os[{chosen}]"`' if chosen else f"`uv add {root}`"
         raise MissingExtraError(
-            f"{module} is needed{needed} and is not installed. Install it with {how}."
+            f"{module} is needed{needed} and is not installed. Install the quant-toolbox extra "
+            f'that brings it: `uv add "quant-toolbox[{chosen}]"`.'
         ) from error
 
 

@@ -22,11 +22,14 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 WORKDIR /src
 # Dependencies first, from the lockfile only, so code changes reuse this layer.
+# Quant Toolbox is a workspace member (decision 0027), so its pyproject comes too.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev --no-install-project \
+COPY packages/quant-toolbox/pyproject.toml packages/quant-toolbox/
+RUN uv sync --locked --no-dev --no-install-workspace \
         --extra analytics --extra server --extra pdf --extra postgres
 COPY README.md LICENSE ./
 COPY src src
+COPY packages packages
 RUN uv sync --locked --no-dev --no-editable \
         --extra analytics --extra server --extra pdf --extra postgres
 

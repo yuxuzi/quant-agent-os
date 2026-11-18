@@ -21,7 +21,7 @@ PACKAGES = {
     "quant_research": ROOT / "src" / "quant_research",
     "quant_app_factory": ROOT / "src" / "quant_app_factory",
     "quant_platform": ROOT / "src" / "quant_platform",
-    "quant_toolbox": ROOT / "src" / "quant_toolbox",
+    "quant_toolbox": ROOT / "packages" / "quant-toolbox" / "src" / "quant_toolbox",
 }
 # quant_platform is the composition root: it may import every product, and nothing imports it.
 PRODUCTS = {"quant_analytics", "quant_research", "quant_app_factory"}
