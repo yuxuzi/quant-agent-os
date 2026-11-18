@@ -37,8 +37,16 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_typ
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
 
+# The service's side of a forwarded caller (decision 0030), re-exported for a firm's service.
+from quant_agent_os.caller_assertion import CALLER_HEADER as CALLER_HEADER
+from quant_agent_os.caller_assertion import CallerAssertionError as CallerAssertionError
+from quant_agent_os.caller_assertion import VerifiedCaller as VerifiedCaller
+from quant_agent_os.caller_assertion import WeakSecretError
+from quant_agent_os.caller_assertion import sign_caller as sign_caller
+from quant_agent_os.caller_assertion import verify_caller as verify_caller
 from quant_agent_os.data.datasets import Dataset, DatasetStore
 from quant_agent_os.evidence import Evidence, SourceRef
+from quant_agent_os.tools.access import current_caller
 from quant_agent_os.tools.contracts import ToolContractError, ToolSpec
 from quant_agent_os.tools.permissions import Permission
 from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry
@@ -190,6 +198,8 @@ class FirmApp:
         url: str,
         method: Literal["GET", "POST"] = "POST",
         token_env: str | None = None,
+        forward_caller: bool = False,
+        caller_secret_env: str | None = None,
         name: str | None = None,
         description: str | None = None,
         convention: str | None = None,
@@ -211,7 +221,16 @@ class FirmApp:
         the stub's return type. The host is fixed here, redirects are not
         followed, and a larger answer than ``max_output_bytes`` is refused. ``token_env``
         names an environment variable whose value is sent as a bearer token; it is read at
-        each call and never shown. The tool needs `network`, which needs an approval for each
+        each call and never shown.
+
+        With ``forward_caller=True``, each call also sends who is calling: a signed assertion
+        of the caller's principal, tenant, and groups, and the tool's name, valid for 60 s, in
+        the ``X-QAOS-Caller`` header (decision 0030). It is signed with HMAC-SHA256 under the
+        secret in the environment variable ``caller_secret_env``, read at each call and never
+        shown; the service checks it with `verify_caller`. A call with no caller, as over stdio,
+        is refused rather than sent without one. Off by default.
+
+        The tool needs `network`, which needs an approval for each
         call unless the operator pre-approves it, and the service must not change anything:
         declare `external_action` in ``permissions`` for one that does.
         """
@@ -227,7 +246,7 @@ class FirmApp:
             deterministic=deterministic,
             idempotent=idempotent,
             data=data,
-            endpoint=(url, method, token_env),
+            endpoint=_Endpoint(url, method, token_env, forward_caller, caller_secret_env),
         )
         return stub
 
@@ -245,7 +264,7 @@ class FirmApp:
         deterministic: bool,
         idempotent: bool,
         data: Mapping[str, DataMarker],
-        endpoint: tuple[str, Literal["GET", "POST"], str | None] | None = None,
+        endpoint: _Endpoint | None = None,
     ) -> None:
         tool_name = f"{self.name}_{name or function.__name__}" if self.prefix else name
         tool_name = tool_name or function.__name__
@@ -254,7 +273,7 @@ class FirmApp:
         doc = _Docstring.parse(inspect.getdoc(function) or "")
         inputs = _inputs(function, tool_name, data)
         service = (
-            _Service.build(tool_name, *endpoint, inputs, timeout_seconds, max_output_bytes)
+            _Service.build(tool_name, endpoint, inputs, timeout_seconds, max_output_bytes)
             if endpoint
             else None
         )
@@ -427,12 +446,28 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 @dataclass(frozen=True)
+class _Endpoint:
+    """Where and how `FirmApp.call_service` reaches a service, as registered."""
+
+    url: str
+    method: Literal["GET", "POST"]
+    token_env: str | None
+    forward_caller: bool
+    caller_secret_env: str | None
+
+
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@dataclass(frozen=True)
 class _Service:
     """Calls one endpoint of a firm's service with a tool's arguments."""
 
+    tool_name: str
     url: str  # as registered, with any {name} in the path; safe to show
     method: Literal["GET", "POST"]
     token_env: str | None
+    caller_secret_env: str | None  # set only when the caller is forwarded
     path_names: tuple[str, ...]
     timeout_seconds: float
     max_bytes: int
@@ -441,14 +476,13 @@ class _Service:
     def build(
         cls,
         tool_name: str,
-        url: str,
-        method: Literal["GET", "POST"],
-        token_env: str | None,
+        endpoint: _Endpoint,
         inputs: Sequence[_Input],
         timeout_seconds: float,
         max_bytes: int,
     ) -> _Service:
         """Check the endpoint against the stub's parameters, so mistakes stop the server early."""
+        url, method, token_env = endpoint.url, endpoint.method, endpoint.token_env
         parts = urllib.parse.urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ToolContractError(
@@ -461,10 +495,12 @@ class _Service:
             )
         if method not in ("GET", "POST"):
             raise ToolContractError(f"Tool '{tool_name}': method must be GET or POST.")
-        if token_env and parts.scheme == "http" and parts.hostname not in LOOPBACK:
+        off_loopback = parts.scheme == "http" and parts.hostname not in LOOPBACK
+        if token_env and off_loopback:
             raise ToolContractError(
                 f"Tool '{tool_name}': a token is sent only over https; use an https url."
             )
+        secret_env = _caller_secret_env(tool_name, endpoint, off_loopback)
         names = {item.name for item in inputs}
         try:
             fields = [
@@ -487,7 +523,16 @@ class _Service:
                         f"Tool '{tool_name}': parameter '{item.name}' cannot go in a query "
                         "string; use method='POST'."
                     )
-        return cls(url, method, token_env, tuple(fields), timeout_seconds, max_bytes)
+        return cls(
+            tool_name,
+            url,
+            method,
+            token_env,
+            secret_env,
+            tuple(fields),
+            timeout_seconds,
+            max_bytes,
+        )
 
     def __call__(self, **arguments: Any) -> Any:
         values = _json_ready(_plain(arguments))
@@ -500,6 +545,8 @@ class _Service:
             if not token:
                 raise ServiceError(f"Set {self.token_env} to the token for {self.url}.")
             headers["Authorization"] = f"Bearer {token}"
+        if self.caller_secret_env:
+            headers[CALLER_HEADER] = self._assertion(self.caller_secret_env)
         body = None
         if self.method == "GET":
             query = urllib.parse.urlencode(
@@ -536,6 +583,60 @@ class _Service:
             return json.loads(answer)
         except ValueError:
             raise ServiceError(f"The service at {self.url} did not answer with JSON.") from None
+
+    def _assertion(self, secret_env: str) -> str:
+        """Sign who is calling, or refuse the call: never an assertion without a caller."""
+        caller = current_caller()
+        if caller is None:
+            raise ServiceError(
+                f"{self.tool_name} sends its caller to {self.url}, and this call has no "
+                "authenticated caller; it runs only when served over HTTP."
+            )
+        secret = os.environ.get(secret_env)
+        if not secret:
+            raise ServiceError(f"Set {secret_env} to the secret shared with {self.url}.")
+        try:
+            return sign_caller(
+                secret,
+                principal=caller.principal,
+                tenant=caller.tenant,
+                groups=caller.groups,
+                tool=self.tool_name,
+            )
+        except WeakSecretError:
+            raise ServiceError(f"{secret_env} must hold at least 32 bytes.") from None
+
+
+def _caller_secret_env(tool_name: str, endpoint: _Endpoint, off_loopback: bool) -> str | None:
+    """Return the variable that holds the secret for a forwarded caller, or None; check it."""
+    secret_env = endpoint.caller_secret_env
+    if not endpoint.forward_caller:
+        if secret_env:
+            raise ToolContractError(
+                f"Tool '{tool_name}': caller_secret_env does nothing without "
+                "forward_caller=True; set both, or neither."
+            )
+        return None
+    if not secret_env:
+        raise ToolContractError(
+            f"Tool '{tool_name}': forward_caller=True needs caller_secret_env=, the name of the "
+            "environment variable holding the secret shared with the service."
+        )
+    if not ENV_NAME.fullmatch(secret_env):
+        raise ToolContractError(
+            f"Tool '{tool_name}': caller_secret_env must name an environment variable, such as "
+            "RISK_CALLER_SECRET, not hold the secret."
+        )
+    if secret_env == endpoint.token_env:
+        raise ToolContractError(
+            f"Tool '{tool_name}': caller_secret_env and token_env must differ, or the secret "
+            "would be sent as the token."
+        )
+    if off_loopback:
+        raise ToolContractError(
+            f"Tool '{tool_name}': a caller is forwarded only over https; use an https url."
+        )
+    return secret_env
 
 
 def _path_segment(name: str, value: Any) -> str:

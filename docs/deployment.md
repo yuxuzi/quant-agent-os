@@ -212,11 +212,92 @@ risk.call_service(
   refused. `token_env` names a variable whose value is sent as a bearer token, only over https; it is
   never shown or recorded.
 - The tool needs `network`. Grant it with `QUANT_AGENT_OS_GRANTED_PERMISSIONS`. Each call then needs an
-  approval, unless you give `network` a standing approval with
-  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'` ([configuration](configuration.md)). Register only
-  services that change nothing, or declare `external_action` too.
+  approval, unless you give this tool a standing approval for `network`:
+  `QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["desk_limits"]}'` names exactly the tools that run
+  without one ([configuration](configuration.md#standing-approvals),
+  [decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)). The older
+  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'` approves `network` for every tool the server
+  serves, and draws a warning at start-up. Register only services that change nothing, or declare
+  `external_action` too.
 - A failure such as an unreachable service or an error status reaches the caller as an internal error
   with the call id; the reason is in the run record.
+
+**Telling the service who called.** A service that scopes its answer to the caller, such as a PM's own
+desk's VaR, can receive a signed statement of who is calling. It is off by default; turn it on per tool:
+
+```python
+risk.call_service(
+    desk_var,
+    url="https://risk.internal/desk_var",
+    forward_caller=True,
+    caller_secret_env="RISK_CALLER_SECRET",  # a variable's name; set it on the server and the service
+)
+```
+
+- **What is sent.** Each call carries an `X-QAOS-Caller` header: `v1.<payload>.<signature>`. The payload
+  is base64url, without padding, of compact JSON with sorted keys: `sub` (the caller's principal), `ten`
+  (tenant), `grp` (groups, sorted), `tool` (the tool's name), `iat` and `exp` (seconds since the epoch, 60
+  apart), and `nonce` (32 hex digits). The signature is base64url, without padding, of HMAC-SHA256 over
+  the ASCII `v1.<payload>`, keyed with the secret's UTF-8 bytes.
+- **The secret** is read from `caller_secret_env` at each call, must be at least 32 bytes, and is never
+  shown or recorded; nor is the header. Make one with
+  `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` and give each service its own.
+- **Refusals.** Registration refuses `forward_caller` without `caller_secret_env` (and the reverse), a
+  `caller_secret_env` that is not a variable's name or equals `token_env`, and a plain `http` url off
+  loopback. A call with no authenticated caller, as over stdio or in a test that names none, is refused
+  before anything is sent, never sent anonymously; so is a call whose secret is unset or too short.
+- **In the service**, check the header before answering, and pass the tool's name, so an assertion for one
+  endpoint is refused at another. With the platform's wheel installed:
+
+  ```python
+  from quant_agent_os.registration import CallerAssertionError, verify_caller
+
+  try:
+      caller = verify_caller(headers.get("X-QAOS-Caller"), secret, tool="desk_var")
+  except CallerAssertionError:
+      ...  # answer 401
+  # caller.principal, caller.tenant, caller.groups, caller.nonce
+  ```
+
+  It checks the version, the signature in constant time, the payload, the expiry with 10 s of leeway for
+  clocks, a lifetime of at most 300 s, and the tool, and raises a subclass naming which failed. Without the
+  wheel, copy this standard-library version, which `tests/unit/test_caller_assertion.py` checks against
+  the platform's:
+
+  ```python
+  import base64, hashlib, hmac, json, time
+
+
+  def verify_caller(header: str, secret: bytes, tool: str, leeway: int = 10) -> dict:
+      """Return the claims of an X-QAOS-Caller header once checked; raise ValueError if not."""
+      if len(secret) < 32:
+          raise ValueError("the secret must be at least 32 bytes")
+      version, payload, signature = header.split(".")  # ValueError unless three parts
+      if version != "v1":
+          raise ValueError("unsupported version")
+      signed = f"{version}.{payload}".encode("ascii")
+      digest = hmac.new(secret, signed, hashlib.sha256).digest()
+      expected = base64.urlsafe_b64encode(digest).rstrip(b"=")
+      if not hmac.compare_digest(expected, signature.encode("ascii")):
+          raise ValueError("bad signature")
+      claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+      now = time.time()
+      if claims["exp"] - claims["iat"] > 300:
+          raise ValueError("lives too long")
+      if not claims["iat"] - leeway <= now < claims["exp"] + leeway:
+          raise ValueError("expired, or issued in the future")
+      if claims["tool"] != tool:
+          raise ValueError("issued for another tool")
+      return claims  # sub, ten, grp, tool, iat, exp, nonce
+  ```
+
+- **Replays.** An assertion is good for about a minute. A service that must refuse a repeated request keeps
+  the nonces it has seen until they expire. Serve over https so nothing between the two can read it.
+- **Test it.** `check_app(app, examples, caller=Caller("pm.equity", groups=frozenset({"equity"})))` calls
+  each tool as that caller, and `sign_caller` signs an assertion for the service's own tests.
+- **What it proves.** The service learns who the platform says is calling, as the platform verified them:
+  it trusts the platform's sign-in, keys, and access file, and anyone who holds the secret can sign. It is
+  a statement for scoping answers, not a login.
 
 **Existing code.** For code that is not typed, documented, and pure yet, `qaos legacy` drafts the facades, the
 server file, a service for stateful code, and a `check_app` test from a static scan, on your machine; a developer
