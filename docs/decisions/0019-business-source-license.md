@@ -2,7 +2,8 @@
 
 - Status: accepted (decided by the owner, 2026-11-06; counsel to review before first commercial use)
 - Date: 2026-11-06
-- Amended by: [0026](0026-quant-toolbox.md): `src/quant_toolbox/` stays MIT too
+- Amended by: [0026](0026-quant-toolbox.md): `src/quant_toolbox/` stays MIT too (moved to
+  `packages/quant-toolbox/` by [0027](0027-quant-toolbox-package.md))
 - Closes: open question O-4
 - Amends: [0015](0015-metering-quotas-and-entitlements.md) (Q-18) and
   [0017](0017-hosted-behind-a-command-group.md)

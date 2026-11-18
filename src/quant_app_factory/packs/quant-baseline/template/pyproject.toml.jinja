@@ -20,9 +20,10 @@ dependencies = [
     "duckdb-engine>=0.13",
 {%- endif %}
 {%- endif %}
-    "quant-agent-os[toolbox]",
+    "quant-toolbox[charts]",
     "typer>=0.12",
 {%- if 'agent-tools' in components %}
+    "quant-agent-os",
     "pydantic>=2.7",
 {%- endif %}
 ]
@@ -34,15 +35,23 @@ dependencies = [
 dev = ["mypy>=1.11", "pytest>=8.0", "ruff>=0.6"]
 
 [tool.uv.sources]
+{#- Quant Toolbox is its own package in the Quant-Agent-OS repository (packages/quant-toolbox). #}
 {%- if quant_agent_os_source.startswith('git+') %}
 {%- set pin = quant_agent_os_source[4:].rpartition('@') %}
 {%- if pin[1] and '/' not in pin[2] %}
-quant-agent-os = { git = "{{ pin[0] }}", rev = "{{ pin[2] }}" }
+{%- set repository = 'git = "' ~ pin[0] ~ '", rev = "' ~ pin[2] ~ '"' %}
 {%- else %}
-quant-agent-os = { git = "{{ quant_agent_os_source[4:] }}" }
+{%- set repository = 'git = "' ~ quant_agent_os_source[4:] ~ '"' %}
+{%- endif %}
+quant-toolbox = { {{ repository }}, subdirectory = "packages/quant-toolbox" }
+{%- if 'agent-tools' in components %}
+quant-agent-os = { {{ repository }} }
 {%- endif %}
 {%- else %}
+quant-toolbox = { path = "{{ quant_agent_os_source }}/packages/quant-toolbox", editable = true }
+{%- if 'agent-tools' in components %}
 quant-agent-os = { path = "{{ quant_agent_os_source }}", editable = true }
+{%- endif %}
 {%- endif %}
 
 [build-system]

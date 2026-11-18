@@ -1,7 +1,7 @@
 """The numpy backend: every metric written out, for when empyrical is not installed.
 
 Each function drops missing values itself and answers NaN where a metric is undefined. The
-formulas are empyrical's, and `tests/toolbox/test_backends.py` holds them to it.
+formulas are empyrical's, and `tests/test_backends.py` holds them to it.
 """
 
 from __future__ import annotations

@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Quant Toolbox is now its own package, `quant-toolbox` 0.6.0, released by the same tag; its changes are in
+[packages/quant-toolbox/CHANGELOG.md](packages/quant-toolbox/CHANGELOG.md).
+
+### Changed
+
+- **Quant Toolbox is its own distribution, `quant-toolbox`,** a workspace member at `packages/quant-toolbox`
+  with its own version, changelog, README, MIT license, and tests
+  ([decision 0027](docs/decisions/0027-quant-toolbox-package.md)). The import name is still `quant_toolbox`.
+  The `toolbox`, `interactive`, `excel`, and `empyrical` extras now install the matching `quant-toolbox` extra
+  at the same release, so existing installs keep working. A missing optional library's error now says
+  `uv add "quant-toolbox[<extra>]"`, where the extras are `charts`, `interactive`, `excel`, `pandas`, and
+  `empyrical`.
+- **Generated applications depend on `quant-toolbox` alone** (`quant-apps` 2.1.0, `quant-baseline` 4.1.0),
+  from the repository at the generating release with `subdirectory = "packages/quant-toolbox"`, and on
+  `quant-agent-os` only with the `agent-tools` component. A project without agent tools installs no
+  business-source-licensed code.
+
 ## [0.5.0] - 2026-11-17
 
 Quant Toolbox is new in this release and versioned with it; while it is 0.x, a minor release may change its

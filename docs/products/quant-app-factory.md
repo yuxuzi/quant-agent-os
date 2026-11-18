@@ -81,18 +81,19 @@ A generated project holds its business logic: its settings, its `firm/` code, it
 which it runs things, and its report sections. Its formulas, tables, reports, charts, and run records come
 from [Quant Toolbox](quant-toolbox.md), the library Quant Analytics uses too
 ([decision 0026](../decisions/0026-quant-toolbox.md)). Its `pyproject.toml` depends on
-`quant-agent-os[toolbox]` (performance-report adds `excel`) from the release that generated it:
+`quant-toolbox[charts]` (performance-report adds `excel`) from the release that generated it
+([decision 0027](../decisions/0027-quant-toolbox-package.md)):
 
 ```toml
 [tool.uv.sources]
-quant-agent-os = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.5.0" }
+quant-toolbox = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.6.0", subdirectory = "packages/quant-toolbox" }
 ```
 
 So its numbers change only when you move that tag. To take a later fix to a formula or a report, edit `rev`,
 then run `uv sync` and the project's tests. A fix to the application's own code still arrives the way
-[above](#where-templates-come-from) says: compare with a fresh project. The project installs this wheel for
-its MIT toolbox only, and the platform's server only with `agent-tools`. Charts are static SVG; set
-`charts = "interactive"` in `config.toml` and add the `interactive` extra for plotly charts.
+[above](#where-templates-come-from) says: compare with a fresh project. The project installs only the MIT
+toolbox, and `quant-agent-os` only with `agent-tools`. Charts are static SVG; set
+`charts = "interactive"` in `config.toml` and run `uv add "quant-toolbox[charts,interactive]"` for plotly charts.
 
 To use another definition of a figure, add a separately named one in the project, so that both keep theirs.
 
@@ -107,7 +108,7 @@ What moved to the toolbox, measured in lines of each template's package and test
 | performance-report | 2,075 to 954 | 785 to 343 |
 | quant-lab | 2,092 to 1,154 | 1,334 to 710 |
 
-The tests that left check the toolbox, in `tests/toolbox`; a project keeps the tests of its own code.
+The tests that left check the toolbox, in `packages/quant-toolbox/tests`; a project keeps the tests of its own code.
 
 ## Use
 

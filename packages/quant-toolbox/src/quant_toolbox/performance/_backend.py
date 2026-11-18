@@ -2,7 +2,7 @@
 
 ``QUANT_TOOLBOX_BACKEND`` (``auto``, ``empyrical``, or ``numpy``), or a function's ``backend``
 argument, chooses. ``auto`` is the default. Both backends give the same answer to within 1e-12,
-which `tests/toolbox/test_backends.py` checks on clean data and on the edge cases where empyrical
+which `tests/test_backends.py` checks on clean data and on the edge cases where empyrical
 alone would not (constant series, no downside, gaps).
 """
 

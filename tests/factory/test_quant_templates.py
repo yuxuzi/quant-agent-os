@@ -149,7 +149,7 @@ def test_optional_components_add_their_files_and_dependencies(tmp_path: Path) ->
 
     assert {"momo_lab/tools.py", "tests/test_tools.py"} <= set(preview.files)
     assert "pyarrow>=15" in preview.dependencies
-    assert "quant-agent-os[toolbox]" in preview.dependencies
+    assert "quant-toolbox[charts]" in preview.dependencies
     assert sorted(preview.components) == ["agent-tools", "data-csv", "data-parquet"]
 
 

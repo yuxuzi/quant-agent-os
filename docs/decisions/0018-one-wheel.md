@@ -2,7 +2,8 @@
 
 - Status: accepted
 - Date: 2026-11-05
-- Amended by: [0026](0026-quant-toolbox.md): a sixth import name, `quant_toolbox`
+- Amended by: [0026](0026-quant-toolbox.md): a sixth import name, `quant_toolbox`;
+  [0027](0027-quant-toolbox-package.md): which then became its own distribution, `quant-toolbox`
 - Supersedes: the packaging part of [0003](0003-brand-and-product-structure.md)
 
 ## Context

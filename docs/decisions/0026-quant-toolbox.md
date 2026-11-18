@@ -2,6 +2,8 @@
 
 - Status: accepted (direction from the owner, 2026-11-17)
 - Date: 2026-11-17
+- Amended by: [0027](0027-quant-toolbox-package.md): its own distribution, `quant-toolbox`, in
+  `packages/quant-toolbox`
 - Amends: [0009](0009-quant-baseline-templates.md), [0010](0010-analytics-on-empyrical.md),
   [0018](0018-one-wheel.md), [0019](0019-business-source-license.md), [0022](0022-one-application-per-stage.md)
 

@@ -8,8 +8,9 @@ still open is in [ENGINEERING_REVIEW_PLAN.md](ENGINEERING_REVIEW_PLAN.md).
 Quant-Agent-OS gives AI clients quantitative research tools with cited, computed evidence, over MCP,
 REST, and a Python SDK. It is not a chatbot, and it calls no model: the client supplies the conversation
 and the plan ([decision 0016](decisions/0016-clients-orchestrate.md)). The expected customer is a firm
-or team that hosts it themselves. One wheel holds six import names
-([decision 0018](decisions/0018-one-wheel.md)), and `qaos` is the one command.
+or team that hosts it themselves. One wheel holds five import names
+([decision 0018](decisions/0018-one-wheel.md)), Quant Toolbox is its own package in the same repository
+([decision 0027](decisions/0027-quant-toolbox-package.md)), and `qaos` is the one command.
 
 | Package | Role | Extra |
 | --- | --- | --- |
@@ -97,7 +98,7 @@ Rules, enforced by `tests/contract/test_import_boundaries.py`:
   `pytemplate.api` ([decision 0006](decisions/0006-pytemplate-uv-as-a-library.md)).
 - `quant_toolbox` imports nothing of the platform, and only Quant Analytics and `quant_platform` import it.
   Inside it, a subpackage imports only earlier layers' public names, and only numpy at module level
-  (`tests/toolbox/test_layers.py`).
+  (`packages/quant-toolbox/tests/test_layers.py`).
 - Importing `quant_platform.cli` works with no extra installed, and serving imports no `cli` module.
 
 Core imports downward only: `tools` → `runtime` → `evidence`, `reporting`, `runs` → `config`, `data`,
