@@ -264,3 +264,64 @@ def test_pandas_services_method_facades_and_odd_signatures_pass_as_drafted(
     assert "def blender_blend(*, signal: pd.Series, other: Any, weight: float = 0.5)" in facades
     assert "the legacy code also takes **options, *extra" in facades
     assert _ruff_problems(out) == []
+
+
+LOADER = '''\
+import time
+
+
+class Engine:
+    """Loads once, then answers from memory; it refuses to answer before load()."""
+
+    def __init__(self, lookback=500):
+        self.lookback = lookback
+        self.book = None
+        self._cache = {}
+
+    def load(self):
+        time.sleep(0.01)
+        self.book = {"macro": 2.0}
+        return self
+
+    def var(self, desk):
+        """The desk's value at risk."""
+        if self.book is None:
+            raise RuntimeError("call load() first")
+        return self.book[desk]
+'''
+
+
+def test_the_service_calls_a_set_up_method_it_does_not_serve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "src" / "riskdesk"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "engine.py").write_text(LOADER)
+    inventory = tmp_path / "legacy.toml"
+    write_inventory(scan(package), inventory)
+    kinds = {e.name: e.kind.value for e in load_inventory(inventory).entries}
+    assert kinds == {"engine_load": "service", "engine_var": "service"}
+    inventory.write_text(
+        inventory.read_text().replace(
+            'include = true\nname = "engine_load"', 'include = false\nname = "engine_load"'
+        )
+    )
+
+    out = tmp_path / "tools"
+    wrap(inventory, out)
+    service = (out / "service" / "app.py").read_text()
+
+    assert 'OBJECTS["engine"].load()' in service
+    assert "TODO(config): Engine.load() looks like set-up" in service
+    monkeypatch.syspath_prepend(str(package.parent))
+    spec = importlib.util.spec_from_file_location("riskdesk_service", out / "service" / "app.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "riskdesk_service", module)  # pydantic resolves hints here
+    spec.loader.exec_module(module)
+    with TestClient(module.app) as client:
+        answer = client.post("/engine_var", json={"desk": "macro"})
+    assert answer.status_code == 200 and answer.json() == 2.0
+    for name in [name for name in sys.modules if name.startswith("riskdesk")]:
+        del sys.modules[name]
