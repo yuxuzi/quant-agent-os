@@ -1,51 +1,121 @@
-# Proposals after 0.7.0: features, design, and user experience
+# 0.8.0: a pilot at a mock multi-asset fund
 
-Status: proposed on 2026-11-17, for the owner to choose from. Nothing here is started. Each item says which
-invariant it touches, so a choice does not reopen a decision by accident. Items are ranked within each part by
-value for a fund's first pilot against the work they take.
+Status: plan, revised on 2026-11-17. The first draft listed proposals for the owner to choose from; the
+owner chose to drive 0.8.0 by installing the platform at a mock fund and fixing what that shows. The earlier
+proposals are kept as a backlog in [part 6](#6-backlog-carried-from-the-first-draft), each marked with
+whether the pilot pulls it in.
 
-0.7.0 moved App Factory to pytemplate-uv 3.2 and brought Quant Analytics and the `quant-apps` applications onto
-Quant Toolbox 0.6.0. The proposals start from what that left out.
+0.7.0 moved App Factory to pytemplate-uv 3.2 and brought Quant Analytics and the `quant-apps` applications
+onto Quant Toolbox 0.6.0. What it cannot show is whether a fund could adopt the platform: install it in its
+own facility, sign its people in through its own gateway, read its own warehouse and documents, answer its
+standing research, backtest, and risk questions, and serve its existing code without rewriting it.
 
-## 1. New features
+## 1. Goal and the test of it
 
-| # | Proposal | Why | Size | Invariants touched |
+After this iteration a fund's engineer can take the platform from a built wheel to tools their PMs, risk
+managers, and researchers use, behind the fund's sign-in, with the fund's data, documents, and legacy code,
+and every claim below is shown by a drill that runs offline.
+
+| # | Criterion | Shown by |
+| --- | --- | --- |
+| B1 | **Install** from the wheel into a clean folder, with no network after the download, by following the runbook | The drill script, timed |
+| B2 | **Sign-in** through the fund's identity provider; its groups decide who reaches what; API keys still work | Integration test with the mock gateway |
+| B3 | **Data in place**: the fund's warehouse is read where it is, through one `DatasetStore` adapter, with desk entitlements | Integration test; refused datasets look missing (decision 0021) |
+| B4 | **Research** over the fund's own documents, cited, with injected text left inert | Ingest plus a cited search in the drill |
+| B5 | **Baseline analysis** answers the fund's standing questions on signals, backtests, and risk | Known-answer tests; agent-efficiency delta |
+| B6 | **Legacy code served**: simple functions as functions, complicated code as a service, each passing `check_app` | Converter output in the drill, with the manual edits counted and reported |
+| B7 | **Operate**: agreed cases pass, the audit trail says who called what, and the runbook covers backup and upgrade | `qaos eval`/`run_acceptance` and `qaos runs` in the drill |
+| B8 | **Honest record**: every friction point the drill meets is fixed or written down with a next step | [Part 5](#5-what-the-pilot-found), filled in by the drill |
+
+A quality claim cites a measurement; B6 in particular reports how much a developer had to change by hand.
+
+## 2. The mock fund
+
+**Kestrel Point Capital** is fictional, and so is all its data. It is a multi-asset fund with three desks
+and two support teams:
+
+- **Desks:** equity long/short (US and Europe), macro (government bond futures and G10 FX), and
+  commodities (energy and metals futures). Credit is held as index exposure by the macro desk.
+- **Teams:** risk (sees every desk) and research (sees signals and documents, not positions).
+- **People in the drill:** a PM per desk, a risk manager, a researcher, and an operator, each a user in
+  the fund's identity provider with a group per role.
+
+Its facility lives in `examples/pilot-fund/facility/` and is written as the fund's code, not the platform's:
+nothing in it imports `quant_agent_os` or `quant_platform`.
+
+| Part | What it is | Why it is shaped this way |
+| --- | --- | --- |
+| `warehouse/` | A SQLite warehouse built deterministically: instruments, daily prices in long format, end-of-day positions, trades, signals, benchmark returns, average daily value, and a vendor factor model (loadings, factor covariance, specific variance) | Real warehouses are long and normalized, while the platform's datasets are wide; the adapter has to bridge that, which is the friction a fund meets |
+| `kestrel_quant/` | The fund's legacy package. Simple functions (carry, momentum, and value signals; volatility targeting; a drawdown table) written as funds write them: pandas, module-level configuration, a global connection, printing. A complicated `risk_engine` with a slow model load, a cache, and multi-step VaR, stress, and factor decomposition | Simple code becomes functions; stateful code becomes a service. The smells are the converter's real input |
+| `research/` | About fifteen documents: strategy memos, research notes, risk committee minutes, and one note carrying an injected instruction | Quant Research must cite them and leave the injection inert |
+| `gateway/` | A mock identity provider: it issues tokens to the drill's users and answers RFC 7662 introspection with an audience, an issuer, a tenant, and groups | The platform is a resource server (decision 0013); the fund's provider issues the tokens |
+| `access.toml` | Desk entitlements: each desk sees its own positions; risk sees all; research sees no positions | Per-caller access fails closed (decision 0021) |
+
+What the fund writes to adopt the platform goes in `examples/pilot-fund/site/`: its server module with
+`FirmApp`, the warehouse adapter, the facades and service the converter drafted and a developer finished,
+its acceptance cases, and its settings. `examples/pilot-fund/drill.sh` builds the wheel, installs it into a
+clean folder with its own `HOME`, and runs the fund's day from install to audit.
+
+## 3. Workstreams
+
+Each workstream is one branch and one PR against `main`, built by its own agent in its own worktree. W1 to
+W4 run in parallel; W5 needs all four.
+
+| # | Workstream | Branch | Delivers | Invariants touched |
 | --- | --- | --- | --- | --- |
-| F1 | **`analyze_signal`**, a read-only tool: information coefficient, rank IC and its IR, quantile returns, spread, and decay of a signal dataset against forward returns, both by reference | The research and analytics products meet here, and every PM asks it first; Quant Toolbox already computes all of it, vectorised | M | Data by reference; efficiency delta (one new tool) |
-| F2 | **Historical stress in `analyze_risk`**: Toolbox `SCENARIOS` applied to today's weights when the asset returns are daily and dated across a window, None otherwise | Risk managers report these windows; the toolbox refuses a short window rather than mislabel it, so the tool inherits an honest answer | S | Additive fields only |
-| F3 | **`tear_sheet` resource**: `qaos://tear-sheet/{dataset}/{column}` renders Toolbox `report.tear_sheet` to static HTML (no script) for a client to show or save | Investor relations asks for the same page each month; a resource keeps numbers out of the model | M | Writes stay local (a resource returns text; the client saves it) |
-| F4 | **Factor risk from a vendor model** in `analyze_risk`: loadings, factor covariance, and specific variances by dataset id, through Toolbox `factor_risk` | Funds with Barra or Axioma want their own model's numbers, not OLS betas | M | Data by reference; needs three datasets per call |
-| F5 | **Brinson attribution** as a field of `analyze_performance` when group weights and returns are given | Single-period Brinson-Fachler is exact in the toolbox; multi-period linking is not, so the output must say so | S | Facts versus interpretation: state "single period" in conventions |
-| F6 | **Liquidity profile** (Form PF buckets) when an average-daily-value dataset is named | Needed for regulatory reporting, but only when a firm has ADV data | S | Optional input; refuse rather than guess ADV |
-| F7 | **A `ci` component for `quant-apps` and `quant-baseline`**: GitHub Actions pinned to commit SHAs, no persisted credentials, and Dependabot with a 7-day cooldown, as pytemplate-uv 3.2 gives its own profiles | Generated applications have no CI today, so a firm's edits go untested until someone adds it | S | Pack version bump and mirror republish |
-| F8 | **Build and publish the `quant-toolbox` wheel** with each release | The 0.6.0 notes say installing from a wheel or an index needs it, and the release does not build it | S | Release workflow change: ask first |
-| F9 | **`qaos app status`**, if pytemplate-uv adds generation status to its public API | 3.2 has `pytemplate status`, but only in its command line; App Factory may import only `pytemplate.api` | XS once available | Decision 0006: wait for the public API, never import around it |
+| W1 | **Mock fund facility** | `feat/pilot-fund-facility` | Part 2's `facility/`, deterministic and offline, with tests that the warehouse and the legacy code behave | All data fictional; offline tests; the facility imports nothing of the platform |
+| W2 | **Opt-in OAuth sign-in** | `feat/oauth-sign-in` | `qaos serve` and `serve_apps` accept tokens checked by the existing `IntrospectionVerifier`, configured in settings, **off by default**; API keys keep working; the token's groups feed per-caller access; RFC 9728 metadata is published | A security default: the owner approved it as opt-in on 2026-11-17. A new decision record extends decision 0013 to a firm's own server and closes the open-backlog item |
+| W3 | **Baseline analysis tools** | `feat/baseline-analysis` | In Quant Analytics, on Quant Toolbox: `analyze_signal` (IC, rank IC and IR, quantile returns and spread, decay; was F1), `run_backtest` (signal to weights to net returns with costs and trade lag, then the usual metrics), historical stress in `analyze_risk` (was F2), and factor risk from a vendor model (was F4) | Data by reference; documented conventions and known-answer tests; efficiency delta reported. `run_backtest` leaves the "waiting for a design partner" list by the owner's choice |
+| W4 | **Legacy converter** | `feat/legacy-converter` | `qaos legacy scan PATH` inventories a package and classifies each function as *expose as is*, *needs a facade*, or *needs a service*; `qaos legacy wrap` drafts facades registered with `FirmApp.expose`, or a FastAPI service with `call_service` stubs, plus a `check_app` test; a `quant-legacy` skill steers the agent's scan, wrap, check, and fix loop | Decision 0016 and local writes: the server reads and writes no code; `qaos legacy` is a command the developer runs. Explicit registration: the draft is ordinary code the firm commits. A new decision record says the output is a draft |
+| W5 | **Drill, runbook, and findings** | `feat/pilot-drill` | `drill.sh`, `site/`, an offline integration test of the fund's day, a pilot runbook in the docs, and part 5 filled in | Docs stay true; tests offline; efficiency measured |
 
-Not proposed, because they wait for a named design partner: `run_backtest` as a platform tool, market-data
-connectors, OAuth sign-in on `qaos serve`, and any model provider ([open backlog](../ENGINEERING_REVIEW_PLAN.md)).
+**The converter is a developer's aid, not a promise.** It turns legacy code into a first draft that a developer
+runs, debugs, and steers, most likely with a coding agent and the skill. It will not work first time on real
+code; it says what it could not decide, and the docs say so. Its measure is how far the draft gets and how few
+edits finish it (B6), not that it needs none.
 
-**Recommendation:** F2, F7, and F8 for 0.8.0; they are small and close gaps users already hit. Then F1, the
-largest gain for a research team, measured in the agent-efficiency evaluation before it ships.
+## 4. Order of work
 
-## 2. Design
+1. **Plan** (this document): one PR, docs only.
+2. **W1 to W4 in parallel**, each tested on its own fixtures. W4 tests against a copy of a small legacy
+   module of its own, so it need not wait for W1.
+3. **W5** merges the four on a local integration branch, runs the drill, and writes down every friction point.
+4. **Iteration two**: each friction point is fixed on the branch that owns it, or deferred with a next step
+   in part 5. The drill reruns until B1 to B8 hold.
+5. **Release 0.8.0** only on the owner's word, with a changelog entry per workstream.
 
-| # | Proposal | Why |
+## 5. What the pilot found
+
+Filled in by W5. Each row is one friction point the drill met.
+
+| # | Where | What happened | Fixed by, or next step |
+| --- | --- | --- | --- |
+| | | | |
+
+## 6. Backlog carried from the first draft
+
+| # | Proposal | State in this plan |
 | --- | --- | --- |
-| D1 | **Tag the toolbox on its own** (`quant-toolbox-v0.6.0`) as well as the platform tag | Decision 0027 gives it its own version, but generated applications pin the platform tag, so a toolbox fix waits for a platform release |
-| D2 | **Split `quant_app_factory/cli.py`** (about 800 lines) into one module per command group: `new`, `template`, `settings` | It is the largest command module, and the interactive questions are hard to test in one file |
-| D3 | **One output schema for refusals.** Every refusal carries `reason`, `next_step`, and, for data, the dataset id, across tools and commands | Errors already name a next step in prose; a field lets a client show it without parsing text |
-| D4 | **A summary field first in analytics outputs**: the five numbers an agent quotes, then the detail | The efficiency evaluation counts output tokens; clients often need only the headline |
-| D5 | **Remove the repeated "per-caller access fails closed" invariant in `AGENTS.md`** (done in 0.7.0) | Two wordings of one rule invite drift |
+| F1 | `analyze_signal`, a read-only tool for a signal's IC, quantile returns, spread, and decay | In W3 |
+| F2 | Historical stress in `analyze_risk` | In W3 |
+| F3 | `tear_sheet` resource rendering Toolbox `report.tear_sheet` to static HTML | Backlog |
+| F4 | Factor risk from a vendor model in `analyze_risk` | In W3; the mock fund has a vendor model |
+| F5 | Single-period Brinson attribution in `analyze_performance` | Backlog |
+| F6 | Liquidity profile (Form PF buckets) from an ADV dataset | Backlog; the warehouse carries ADV so it can follow |
+| F7 | A `ci` component for `quant-apps` and `quant-baseline` | Backlog |
+| F8 | Build and publish the `quant-toolbox` wheel with each release | Backlog; release workflow change |
+| F9 | `qaos app status`, once pytemplate-uv's public API has it | Waits for pytemplate-uv (decision 0006) |
+| D1 | Tag the toolbox on its own | Backlog |
+| D2 | Split `quant_app_factory/cli.py` by command group | Backlog; W4 adds `qaos legacy` as its own module rather than growing it |
+| D3 | One output schema for refusals | Backlog; the drill records refusal text a client had to parse |
+| D4 | A summary field first in analytics outputs | Backlog; W3's new tools put the headline first |
+| D5 | Remove the repeated access invariant in `AGENTS.md` | Done in 0.7.0 |
+| U1 | Group `qaos --help` into panels | Backlog; W4 and W2 add commands and settings, which makes it more pressing |
+| U2 | `qaos init --sample --connect claude` | Backlog |
+| U3 | `--json` on every listing command | Backlog |
+| U4 | `qaos runs show RUN --open` | Backlog |
+| U5 | `qaos doctor` prints each fix and exits non-zero | Pulled into W5 if the drill's install check needs it |
+| U6 | A role index on the docs home page | Backlog; the runbook names each drill user's role |
 
-## 3. User experience
-
-| # | Proposal | Why |
-| --- | --- | --- |
-| U1 | **Group `qaos --help`** into Set up (`init`, `doctor`, `connect`), Serve (`serve`, `catalog`, `eval`), Data and research (`data`, `ingest`, `search`, `strategy`), Apps (`app`), and Operate (`keys`, `runs`) with Typer help panels | Fourteen commands in one list; a first user cannot tell which three to run |
-| U2 | **`qaos init --sample --connect claude`**: one command from nothing to a client that sees the sample tools | Getting started takes three commands today; `connect --write` already exists |
-| U3 | **`--json` on every listing command** (`data list`, `runs list`, `catalog`, `app template list`) | Only research commands have it, so scripts parse tables |
-| U4 | **`qaos runs show RUN --open`** renders a recorded run's report, including a tear sheet, to a local HTML file and opens it | Runs are recorded but only readable as JSON |
-| U5 | **`qaos doctor` prints the exact command for each fix** and exits non-zero when anything is off | It already says how to fix; an exit code makes it usable in a deployment check |
-| U6 | **A role index on the docs home page**: CEO or CTO, PM, risk manager, researcher, and operator, each linking to the two pages it needs | The tutorial is written for leaders; the other roles still start from the README |
-
-**Recommendation:** U1, U3, and U5 together in one small release; none changes a security default or a tool.
+Still waiting for a named design partner: market-data connectors, an LLM extractor, `.ipynb` or `.docx`
+loaders, and any model provider ([open backlog](../ENGINEERING_REVIEW_PLAN.md)).
