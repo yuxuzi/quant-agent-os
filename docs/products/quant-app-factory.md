@@ -311,9 +311,10 @@ or `"frame"`), `permissions`, and `convention`. Entry points (`main`, or code th
 for input) start with `include = false`. `wrap` scans the code again, so the draft follows the code as
 it is now.
 
-**Wrap** writes `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and `stubs.py`
-when there are services, `conftest.py` (puts the legacy package on the path until it is installed), and
-`test_tools.py`. The test runs `check_app` on every tool with an example call over made-up sample data, and
+**Wrap** writes a package: `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and
+`stubs.py` when there are services, `conftest.py` (puts the legacy package on the path until it is installed),
+and `test_tools.py`. Its modules import each other relatively, so a firm's server beside the folder imports
+`legacy_tools.server` with no change to `sys.path`; the folder's name must be one Python can import. The test runs `check_app` on every tool with an example call over made-up sample data, and
 fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` with ruff's default
 settings; under another line length, `ruff check --fix` re-sorts the imports.
 - **TODOs say what to decide**: `TODO(type)` for a guessed hint, `TODO(data)` for a guessed series or frame,

@@ -14,6 +14,7 @@ import re
 import sys
 import textwrap
 from dataclasses import dataclass, field
+from pathlib import PurePath
 
 from quant_app_factory.domain.legacy import (
     DataKind,
@@ -93,6 +94,8 @@ class _Imports:
         return "\n\n".join("\n".join(group) for group in groups if group)
 
     def _group(self, module: str) -> int:
+        if module.startswith("."):
+            return 3  # the draft's own modules, imported relative to the package
         top = module.split(".")[0]
         if top == "__future__":
             return 0
@@ -154,13 +157,22 @@ class _Samples:
     frames: dict[str, str] = field(default_factory=dict)  # parameter -> "price" or "return"
 
 
-def draft(inventory: Inventory, found: dict[str, Found], *, source_root: str, legacy: str) -> Draft:
+def draft(
+    inventory: Inventory,
+    found: dict[str, Found],
+    *,
+    source_root: str,
+    legacy: str,
+    package: str = "legacy_tools",
+) -> Draft:
     """Return the drafted files for the included entries of ``inventory``.
 
     ``found`` is a fresh scan of the source by target, ``source_root`` the directory the legacy
-    package imports from, relative to the output, and ``legacy`` the package's name, for the
-    files' words. Raises `LegacyError` when an entry names nothing the scan found, or asks for
-    something a draft cannot do.
+    package imports from, relative to the output, ``legacy`` the package's name, for the
+    files' words, and ``package`` the draft's own: it is a package whose modules import each
+    other relatively, so a firm's server imports ``package.server`` as it is. Raises
+    `LegacyError` when an entry names nothing the scan found, or asks for something a draft
+    cannot do.
     """
     selected: list[_Selected] = []
     for entry in inventory.entries:
@@ -201,7 +213,10 @@ def draft(inventory: Inventory, found: dict[str, Found], *, source_root: str, le
         files["stubs.py"] = _stubs_module(services, legacy)
         files["service/__init__.py"] = '"""The draft service for stateful legacy code."""\n'
         files["service/app.py"] = _service_module(services, legacy, list(found.values()))
-    files["server.py"] = _server_module(inventory.app, selected, legacy, bool(services))
+    files["__init__.py"] = (
+        f'"""Legacy code as tools, drafted by `qaos legacy wrap`; import {package}.server."""\n'
+    )
+    files["server.py"] = _server_module(inventory.app, selected, legacy, bool(services), package)
     files["conftest.py"] = _conftest(source_root)
     files["test_tools.py"] = _test_module(examples, samples, bool(services))
     todos = [
@@ -945,7 +960,9 @@ def _permission_options(entry: Entry, imports: _Imports) -> list[str]:
 # The server
 
 
-def _server_module(app: str, selected: list[_Selected], legacy: str, services: bool) -> str:
+def _server_module(
+    app: str, selected: list[_Selected], legacy: str, services: bool, package: str
+) -> str:
     imports = _Imports()
     imports.add(
         "from __future__ import annotations",
@@ -968,7 +985,7 @@ def _server_module(app: str, selected: list[_Selected], legacy: str, services: b
             if entry.name != found.name:
                 options.append(f'name="{entry.name}"')
         else:
-            imports.add("import facades")
+            imports.add("from . import facades")
             function = f"facades.{entry.name}"
         options += _data_options(entry, imports)
         options += _permission_options(entry, imports)
@@ -991,13 +1008,14 @@ def _server_module(app: str, selected: list[_Selected], legacy: str, services: b
             )
         lines += _wrapped("    ", "app.expose", [function, *options])
     if services:
-        imports.add("import stubs")
+        imports.add("from . import stubs")
         lines.append("    stubs.register(app, service_url)")
     doc = (
         f'"""{legacy} as tools: a draft written by `qaos legacy wrap`; edit it and commit it.\n\n'
         "Every tool is named here, in the firm's own code (decisions 0020 and 0024); nothing is\n"
-        "discovered when the server starts. Serve it with:\n\n"
-        "    uv run python server.py\n"
+        "discovered when the server starts. A firm's server imports build_app from\n"
+        f"{package}.server; to serve the draft alone, run this from the folder above it:\n\n"
+        f"    uv run python -m {package}.server\n"
         '"""'
     )
     service_url = (
@@ -1113,7 +1131,7 @@ def _test_module(examples: list[_Example], samples: _Samples, services: bool) ->
         "from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset",
         "from quant_agent_os.testing import check_app",
         "import pytest",
-        "import server",
+        "from . import server",
     )
     entries = []
     for example in examples:
@@ -1211,7 +1229,7 @@ SERVICE_FIXTURE = '''\
 @pytest.fixture(scope="module")
 def service_url() -> Any:
     """Serve service/app.py on a free loopback port for the test, then stop it."""
-    from service.app import app
+    from .service.app import app
 
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     running = uvicorn.Server(config)
@@ -1254,6 +1272,7 @@ def test_no_decision_is_left_open() -> None:
 
 def describe_next_steps(out: str, draft_: Draft, services: bool) -> list[str]:
     """What the developer does next, in order."""
+    package = PurePath(out).name
     steps = [f"uv run pytest {out}/test_tools.py   (needs quant-agent-os installed)"]
     if services:
         steps[0] += "; the service also needs fastapi and uvicorn"
@@ -1261,6 +1280,8 @@ def describe_next_steps(out: str, draft_: Draft, services: bool) -> list[str]:
         "Read each failure, fix the facade or the inventory, and run it again.",
         f"Decide each of the {len(draft_.todos)} TODOs with the developer, then delete it; "
         "test_no_decision_is_left_open lists those left.",
-        "Done when both tests pass. Then serve: uv run python server.py",
+        f"Done when both tests pass. The draft is the package {package}: a firm's server "
+        f"imports build_app from {package}.server; to serve it alone, run "
+        f"uv run python -m {package}.server from the folder above it.",
     ]
     return steps

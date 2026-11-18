@@ -22,6 +22,8 @@ All notable changes to this project are documented here. The format follows
   services fell from 20 of 26 callables to 8.
 - **Drafted facades are safe on several threads.** They run legacy code under one lock, so concurrent calls
   that print no longer leave `sys.stdout` pointing at stderr.
+- **The draft is a package.** `qaos legacy wrap` writes an `__init__.py` and relative imports, so a firm's
+  server imports `legacy_tools.server` without changing `sys.path`.
 - **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
   firm's own test says why a tool failed without opening the run record.
 - **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the

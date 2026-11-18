@@ -59,6 +59,7 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     files = sorted(p.relative_to(drafted).as_posix() for p in drafted.rglob("*.py"))
 
     assert files == [
+        "__init__.py",
         "conftest.py",
         "facades.py",
         "server.py",
@@ -198,6 +199,33 @@ def test_concurrent_facades_leave_stdout_as_it_was(
     captured = capsys.readouterr()
     assert "legacy output" not in captured.out
     assert captured.err.count("legacy output") == 2
+
+
+def test_a_firms_server_imports_the_draft_as_a_package(drafted: Path) -> None:
+    # The draft used to import facades and stubs by bare name, so a firm's server had to put
+    # the draft's own folder on sys.path. Now only the folder above it (the server's) is needed.
+    environment = {**os.environ, "PYTHONPATH": str(ROOT)}  # the legacy code, as if installed
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from legacy_tools.server import build_app; print(' '.join(build_app().names))",
+        ],
+        cwd=drafted.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "carry_signal" in result.stdout and "risk_model_portfolio_var" in result.stdout
+    assert "from . import facades, stubs" in (drafted / "server.py").read_text()
+
+
+def test_the_draft_folder_must_be_importable(inventory: Path, tmp_path: Path) -> None:
+    with pytest.raises(LegacyError, match="such as legacy_tools"):
+        wrap(inventory, tmp_path / "legacy-tools")
 
 
 def test_wrap_never_overwrites_without_force(inventory: Path, tmp_path: Path) -> None:
