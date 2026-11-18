@@ -122,6 +122,51 @@ def test_the_planted_signals_hold(warehouse: Path, answers: dict[str, Any]) -> N
     assert found["value"][0] > 0
 
 
+def test_the_known_answers_at_the_platforms_default_are_what_analyze_signal_finds(
+    warehouse: Path, answers: dict[str, Any]
+) -> None:
+    pytest.importorskip("empyrical")
+    from quant_agent_os.data import MemoryDatasetStore
+    from quant_agent_os.runtime import ToolCall, ToolExecutor
+    from quant_agent_os.tools import Permission, PermissionPolicy
+    from quant_analytics.tools import SignalRequest, analytics_tools
+
+    defaults = SignalRequest.model_validate(
+        {"signal": {"dataset": "s"}, "returns": {"dataset": "r"}}
+    )
+    planted = answers["signals"]["at_platform_default"]
+    assert (planted["lag"], planted["horizon"]) == (defaults.lag, defaults.horizons[0])
+
+    store = MemoryDatasetStore()
+    px = _frame(warehouse, "SELECT date, instrument_id, total_return FROM mkt_px_daily")
+    store.put("px_returns", px.pivot(index="date", columns="instrument_id", values="total_return"))
+    signals = _frame(warehouse, "SELECT date, instrument_id, signal_name, value FROM sig_daily")
+    policy = PermissionPolicy(granted=PermissionPolicy().granted | {Permission.READ_LOCAL_DATA})
+    executor = ToolExecutor(analytics_tools(store), policy)
+    for name in ("momentum", "carry", "value"):
+        wide = signals[signals.signal_name == name].pivot(
+            index="date", columns="instrument_id", values="value"
+        )
+        store.put(f"signals_{name}", wide)
+        record = executor.execute(
+            ToolCall(
+                tool="analyze_signal",
+                arguments={
+                    "signal": {"dataset": f"signals_{name}"},
+                    "returns": {"dataset": "px_returns"},
+                },
+            )
+        )
+        assert record.status == "ok", record.error
+        summary, expected = record.output["summary"], planted[name]
+        assert summary["dates"] == expected["days"]
+        assert summary["mean_rank_ic"] == pytest.approx(expected["mean_rank_ic"], abs=1e-9)
+        assert summary["rank_ic_ir"] == pytest.approx(expected["rank_ic_ir"], abs=1e-6)
+        assert summary["rank_ic_t_stat"] == pytest.approx(expected["hac_t_stat"], abs=1e-4)
+    # The planted momentum is still found a day later, as the drill's clients see it by default.
+    assert planted["momentum"]["mean_rank_ic"] > 0.015 and planted["momentum"]["hac_t_stat"] > 3
+
+
 def test_desk_pnl_follows_from_positions_and_prices(
     warehouse: Path, answers: dict[str, Any]
 ) -> None:

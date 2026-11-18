@@ -27,7 +27,9 @@ All notable changes to this project are documented here. The format follows
   vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
   report functions and a stateful risk engine; sixteen research documents, one carrying an injected
   instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
-  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`. Its known answers
+  state each signal's mean rank IC, IR, and Newey-West t-statistic both as planted (a signal on day t against
+  day t+1's return, `lag: 0`) and at the platform's default `lag: 1`, which `analyze_signal` reproduces.
 - **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
   by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
   t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
