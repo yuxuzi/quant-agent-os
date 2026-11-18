@@ -1,0 +1,428 @@
+# Legacy inventory, written by `qaos legacy scan`. Edit it, then draft the code with
+#   qaos legacy wrap legacy.toml --out legacy_tools
+#
+# Per entry:
+#   kind         "expose" (register as it is), "facade" (wrap in a typed function), or
+#                "service" (serve behind HTTP, one process holding the state)
+#   include      false leaves the entry out of the draft
+#   name         the tool's name: lowercase letters, digits, and underscores
+#   data         parameters that take a dataset reference: "series" or "frame"
+#   permissions  what the code needs beyond reading datasets: read_local_data,
+#                write_local_data, network, execute_code, external_action
+#   convention   how the figure is defined (window, annualisation, units); empty leaves a TODO
+# The comments above each entry are what the scan found; a rescan rewrites them.
+
+source = "../facility/kestrel_quant"
+app = "legacy"
+
+# log(*args)
+#   no docstring
+#   takes *args; a tool names each parameter
+#   returns nothing; a tool must return a result
+#   reads environment variables: CONFIG
+#   prints
+[[entry]]
+target = "kestrel_quant.config.log"
+kind = "facade"
+include = true
+name = "log"
+data = {}
+permissions = []
+convention = ""
+
+# get_conn()
+#   no type hint: return
+#   no docstring
+#   reads environment variables: CONFIG
+#   opens or uses a database: sqlite3.connect
+#   prints
+#   keeps state between calls: _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.get_conn"
+kind = "service"
+include = true
+name = "get_conn"
+data = {}
+permissions = []
+convention = ""
+
+# close()
+#   no docstring
+#   returns nothing; a tool must return a result
+#   reads module settings: _CACHE.clear
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.close"
+kind = "service"
+include = true
+name = "close"
+data = {}
+permissions = []
+convention = ""
+
+# clear_cache()
+#   no docstring
+#   returns nothing; a tool must return a result
+#   reads module settings: _CACHE.clear
+#   keeps state between calls: _CACHE
+[[entry]]
+target = "kestrel_quant.db.clear_cache"
+kind = "service"
+include = true
+name = "clear_cache"
+data = {}
+permissions = []
+convention = ""
+
+# query(sql, *params, **kwargs)
+#   no type hint: return, sql
+#   no docstring
+#   takes **kwargs, *params; a tool names each parameter
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.query"
+kind = "service"
+include = true
+name = "query"
+data = {}
+permissions = []
+convention = ""
+
+# load_returns(instruments=None, start=None, end=None)
+#   no type hint: end, instruments, return, start
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.load_returns"
+kind = "service"
+include = true
+name = "load_returns"
+data = {}
+permissions = []
+convention = ""
+
+# load_prices(instruments=None)
+#   no type hint: instruments, return
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.load_prices"
+kind = "service"
+include = true
+name = "load_prices"
+data = {}
+permissions = []
+convention = ""
+
+# load_signal(name)
+#   no type hint: name, return
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.load_signal"
+kind = "service"
+include = true
+name = "load_signal"
+data = {}
+permissions = []
+convention = ""
+
+# instruments(desk=None, asset_class=None)
+#   no type hint: asset_class, desk, return
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.db.instruments"
+kind = "service"
+include = true
+name = "instruments"
+data = {}
+permissions = []
+convention = ""
+
+# vol_target_weights(returns, signal=None, *args, **kwargs)
+#   no type hint: return, returns, signal
+#   takes **kwargs, *args; a tool names each parameter
+#   pandas data: returns
+#   reads environment variables: CONFIG
+#   prints
+[[entry]]
+target = "kestrel_quant.portfolio.vol_target_weights"
+kind = "facade"
+include = true
+name = "vol_target_weights"
+data = { returns = "frame", signal = "series" }
+permissions = []
+convention = ""
+
+# backtest(weights, returns, cost_bps=0)
+#   no type hint: cost_bps, return, returns, weights
+#   no docstring
+[[entry]]
+target = "kestrel_quant.portfolio.backtest"
+kind = "facade"
+include = true
+name = "backtest"
+data = { weights = "series", returns = "series" }
+permissions = []
+convention = ""
+
+# drawdown_table(returns, top=5)
+#   no type hint: return, returns, top
+#   pandas data: returns
+[[entry]]
+target = "kestrel_quant.reports.drawdown_table"
+kind = "facade"
+include = true
+name = "drawdown_table"
+data = { returns = "series" }
+permissions = []
+convention = ""
+
+# desk_pnl_report(desk, start=None, end=None, save=True)
+#   no type hint: desk, end, return, save, start
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   writes files: .to_csv()
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.reports.desk_pnl_report"
+kind = "service"
+include = true
+name = "desk_pnl_report"
+data = {}
+permissions = ["external_action"]
+convention = ""
+
+# summary(returns)
+#   no type hint: return, returns
+#   no docstring
+[[entry]]
+target = "kestrel_quant.reports.summary"
+kind = "facade"
+include = true
+name = "summary"
+data = { returns = "series" }
+permissions = []
+convention = ""
+
+# RiskEngine.load()
+#   no type hint: return
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   reads files: json.load, open
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn, self.as_of, self.books, self.cov, self.factor_cov, self.load_seconds, self.loaded, self.loadings, self.model_date, self.returns, self.scenarios, self.specific
+#   not deterministic: time.time
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.load"
+kind = "service"
+include = true
+name = "risk_engine_load"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.refresh(as_of=None)
+#   no type hint: as_of, return
+#   no docstring
+#   reads module settings: _CACHE, _CACHE.clear
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   reads files: json.load, open
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn, self.as_of, self.books, self.cov, self.factor_cov, self.load_seconds, self.loaded, self.loadings, self.model_date, self.returns, self.scenarios, self.specific
+#   not deterministic: time.time
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.refresh"
+kind = "service"
+include = true
+name = "risk_engine_refresh"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.desks()
+#   no type hint: return
+#   no docstring
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.desks"
+kind = "service"
+include = true
+name = "risk_engine_desks"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.exposure(desk)
+#   no type hint: desk, return
+#   no docstring
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.exposure"
+kind = "service"
+include = true
+name = "risk_engine_exposure"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.desk_var(desk, confidence=None, horizon=1, method='historical')
+#   no type hint: confidence, desk, horizon, method, return
+#   reads module settings: Z
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.desk_var"
+kind = "service"
+include = true
+name = "risk_engine_desk_var"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.stress(desk, scenario)
+#   no type hint: desk, return, scenario
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.stress"
+kind = "service"
+include = true
+name = "risk_engine_stress"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.stress_all(desk)
+#   no type hint: desk, return
+#   no docstring
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.stress_all"
+kind = "service"
+include = true
+name = "risk_engine_stress_all"
+data = {}
+permissions = []
+convention = ""
+
+# RiskEngine.factor_decomposition(desk)
+#   no type hint: desk, return
+#   a method of RiskEngine, whose constructor sets state
+#   caches: self._cache
+[[entry]]
+target = "kestrel_quant.risk_engine.engine.RiskEngine.factor_decomposition"
+kind = "service"
+include = true
+name = "risk_engine_factor_decomposition"
+data = {}
+permissions = []
+convention = ""
+
+# momentum_signal(prices=None, lookback=None, skip=None)
+#   no type hint: lookback, prices, return, skip
+#   pandas data: prices
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.signals.momentum_signal"
+kind = "service"
+include = true
+name = "momentum_signal"
+data = { prices = "series" }
+permissions = []
+convention = ""
+
+# carry_signal(asset_class=None, **kwargs)
+#   no type hint: asset_class, return
+#   no docstring
+#   takes **kwargs; a tool names each parameter
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.signals.carry_signal"
+kind = "service"
+include = true
+name = "carry_signal"
+data = {}
+permissions = []
+convention = ""
+
+# value_zscore(values=None, by=None)
+#   no type hint: by, return, values
+#   pandas data: values
+#   reads module settings: _CACHE
+#   reads environment variables: CONFIG
+#   opens or uses a database: pandas.read_sql_query, sqlite3.connect
+#   prints
+#   keeps state between calls: _CACHE, _conn, global _conn
+[[entry]]
+target = "kestrel_quant.signals.value_zscore"
+kind = "service"
+include = true
+name = "value_zscore"
+data = { values = "frame" }
+permissions = []
+convention = ""
+
+# combine(*signals, weights=None)
+#   no type hint: return, weights
+#   no docstring
+#   takes *signals; a tool names each parameter
+[[entry]]
+target = "kestrel_quant.signals.combine"
+kind = "facade"
+include = true
+name = "combine"
+data = { weights = "series" }
+permissions = []
+convention = ""
