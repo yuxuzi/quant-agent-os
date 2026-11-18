@@ -133,10 +133,16 @@ class Drawdown:
     trough: dt.date
     recovered: dt.date | None
     depth: float
+    length: int = 0  # bars from the peak to recovery, or to the last bar while still under it
+    recovery_bars: int | None = None  # bars from the trough to recovery; None if not recovered
 
 
 def drawdowns(dates: list[dt.date], returns: FloatArray, top: int = 5) -> list[Drawdown]:
-    """Return the ``top`` deepest episodes, deepest first."""
+    """Return the ``top`` deepest episodes, deepest first.
+
+    An episode's ``length`` counts bars from its peak (the bar before it first falls, or the
+    start of the series) to the bar it recovers, or to the last bar if it has not.
+    """
     gap = underwater(returns)
     episodes: list[Drawdown] = []
     start: int | None = None
@@ -152,6 +158,8 @@ def drawdowns(dates: list[dt.date], returns: FloatArray, top: int = 5) -> list[D
                     trough=dates[deepest],
                     recovered=dates[index] if value == 0.0 else None,
                     depth=float(gap[deepest]),
+                    length=(index if value == 0.0 else len(gap) - 1) - (start - 1),
+                    recovery_bars=index - deepest if value == 0.0 else None,
                 )
             )
             start = None

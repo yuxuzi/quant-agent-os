@@ -92,10 +92,11 @@ def bar_returns(prices: FloatArray, delisting_return: float = 0.0) -> tuple[Floa
 def annualized_return(
     returns: Series, periods_per_year: int, *, backend: str | None = None
 ) -> float:
-    """Geometric annualised return."""
-    return float(
-        implementation(backend).annualized_return(_numpy.finite(returns), periods_per_year)
-    )
+    """Geometric annualised return; NaN when wealth goes below zero (a loss beyond everything)."""
+    values = _numpy.finite(returns)
+    if values.size and float(np.prod(1.0 + values)) < 0.0:
+        return math.nan  # no real annual rate; empyrical alone would answer a large number
+    return float(implementation(backend).annualized_return(values, periods_per_year))
 
 
 def annualized_volatility(
@@ -224,6 +225,33 @@ def active_metrics(
     error = annualized_volatility(active, periods_per_year, backend=backend)
     ratio = mean / error if _numpy.varies(active) else math.nan
     return {"active_return": mean, "tracking_error": error, "information_ratio": ratio}
+
+
+def capture_ratios(returns: Series, benchmark: Series) -> dict[str, float]:
+    """Up and down capture, up and down beta, and correlation against a benchmark.
+
+    Up capture is the mean return on bars where the benchmark rose over the benchmark's mean on
+    those bars (arithmetic, per bar); down capture the same on bars where it fell. Up and down
+    beta are the OLS slopes on those bars alone. NaN where a side has no bars, or its benchmark
+    returns do not vary.
+    """
+    y, x = _pairs(returns, benchmark)
+    result = {"correlation": _correlation(y, x)}
+    for side, chosen in (("up", x > 0.0), ("down", x < 0.0)):
+        ys, xs = y[chosen], x[chosen]
+        mean = float(xs.mean()) if xs.size else 0.0
+        result[f"{side}_capture"] = float(ys.mean()) / mean if mean != 0.0 else math.nan
+        result[f"{side}_beta"] = _numpy.beta(ys, xs) if _numpy.varies(xs) else math.nan
+    return {
+        key: result[key]
+        for key in ("up_capture", "down_capture", "up_beta", "down_beta", "correlation")
+    }
+
+
+def _correlation(y: FloatArray, x: FloatArray) -> float:
+    if not (_numpy.varies(x) and _numpy.varies(y)):
+        return math.nan
+    return max(-1.0, min(1.0, float(np.corrcoef(y, x)[0, 1])))
 
 
 def benchmark_metrics(
