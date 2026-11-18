@@ -97,7 +97,7 @@ def test_nothing_of_the_platform_is_imported() -> None:
 NUMPY_ONLY = r"""
 import importlib, importlib.abc, sys
 
-BLOCKED = {"pygal", "plotly", "openpyxl", "pandas", "empyrical", "scipy"}
+BLOCKED = {"pygal", "plotly", "openpyxl", "pandas", "empyrical", "scipy", "sqlalchemy"}
 
 class Block(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
@@ -115,7 +115,7 @@ assert not BLOCKED & {m.split(".")[0] for m in sys.modules}
 
 import datetime as dt
 from quant_toolbox import MissingExtraError, features, performance, report
-from quant_toolbox.data import excel, frames
+from quant_toolbox.data import excel, frames, sql
 from quant_toolbox.report import svg, interactive
 from quant_toolbox.report import excel as report_excel
 
@@ -131,6 +131,7 @@ for call, extra in (
     (lambda: excel.read_workbook(__import__("pathlib").Path("x.xlsx")), "excel"),
     (lambda: report_excel.write_workbook(document, __import__("pathlib").Path("x.xlsx")), "excel"),
     (lambda: performance.sharpe_ratio([0.01, -0.02, 0.03], 252, backend="empyrical"), "empyrical"),
+    (lambda: sql.connect("sqlite://"), "sql"),
 ):
     try:
         call()
@@ -166,7 +167,7 @@ def test_with_numpy_alone_everything_imports_and_extras_are_named() -> None:
 def test_importing_performance_loads_no_optional_library() -> None:
     code = (
         "import sys, quant_toolbox.performance, quant_toolbox.risk, quant_toolbox.research; "
-        "print(sorted({'pygal','plotly','openpyxl','pandas','empyrical'} & "
+        "print(sorted({'pygal','plotly','openpyxl','pandas','empyrical','sqlalchemy'} & "
         "{m.split('.')[0] for m in sys.modules}))"
     )
     done = subprocess.run(

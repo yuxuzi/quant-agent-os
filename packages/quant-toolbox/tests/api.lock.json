@@ -24,6 +24,9 @@
     "OUTLIER": "constant: float",
     "PERCENT_LIKE": "constant: float",
     "Panel": "dataclass(dates: list[dt.date], assets: list[str], prices: FloatArray)",
+    "Rows": "dataclass(columns: tuple[str, ...], rows: tuple[tuple[object, ...], ...])",
+    "SqlDataset": "dataclass(id: str, sql: str, params: Mapping[str, object], shape: Shape, index: str | None, column: str | None, value: str | None, duplicates: Duplicates, fill: float | None, calendar: str | None, calendar_source: str | None, source: str | None, description: str)",
+    "SqlError": "class",
     "Table": "dataclass(dates: list[dt.date], columns: list[str], values: FloatArray)",
     "TableError": "class",
     "aligned": "def(table: 'Table', panel: 'Panel', what: 'str') -> 'FloatArray'",
@@ -32,18 +35,23 @@
     "demo_panel": "def() -> 'Panel'",
     "demo_returns": "def(count: 'int' = 1000, seed: 'int' = 11) -> 'Table'",
     "dump_config": "def(config: 'object', header: 'str' = '') -> 'str'",
+    "fetch_rows": "def(engine: 'Engine', sql: 'str', params: 'Mapping[str, object] | None' = None) -> 'Rows'",
     "load_config": "def(path: 'Path', cls: 'type[T]', error: 'type[ValueError]' = <class 'quant_toolbox.data._config.ConfigError'>) -> 'T'",
     "load_csv": "def(path: 'Path') -> 'Table'",
     "load_table": "def(path: 'Path', loaders: 'Mapping[str, Loader] | None' = None) -> 'Table'",
     "meta_path": "def(path: 'Path') -> 'Path'",
     "parse_date": "def(value: 'Any') -> 'dt.date'",
     "percent_like": "def(name: 'str', values: 'Sequence[float]') -> 'list[str]'",
+    "pivot_long": "def(rows: 'Rows', index: 'str', column: 'str', value: 'str', *, duplicates: 'Duplicates' = 'error', fill: 'float | None' = None, index_values: 'Sequence[object] | None' = None) -> 'Rows'",
     "random_walk_panel": "def(n_bars: 'int' = 750, n_assets: 'int' = 30, *, seed: 'int' = 7, signal_strength: 'float' = 0.0, volatility: 'float' = 0.01, delay: 'int' = 0) -> 'tuple[FloatArray, FloatArray]'",
     "read_meta": "def(path: 'Path') -> 'dict[str, Any]'",
     "read_toml": "def(path: 'Path', error: 'type[ValueError]' = <class 'quant_toolbox.data._config.ConfigError'>) -> 'dict[str, Any]'",
     "return_notes": "def(table: 'Table', outlier: 'float' = 0.5) -> 'list[str]'",
+    "rows_to_csv": "def(rows: 'Rows') -> 'str'",
     "save_table": "def(path: 'Path', table: 'Table', *, made_by: 'str', inputs: 'Mapping[str, str] | None' = None) -> 'Path'",
-    "short_sample": "def(name: 'str', count: 'int', minimum: 'int' = 12) -> 'list[str]'"
+    "shape_rows": "def(dataset: 'SqlDataset', rows: 'Rows', calendar: 'Rows | None' = None) -> 'Rows'",
+    "short_sample": "def(name: 'str', count: 'int', minimum: 'int' = 12) -> 'list[str]'",
+    "sql": "constant: module"
   },
   "quant_toolbox.data.excel": {
     "read_workbook": "def(path: 'Path', *, sheet: 'str' = '', header_row: 'int' = 1) -> 'Table'"
@@ -51,6 +59,13 @@
   "quant_toolbox.data.frames": {
     "from_pandas": "def(frame: 'Any') -> 'Table'",
     "to_pandas": "def(table: 'Table') -> 'Any'"
+  },
+  "quant_toolbox.data.sql": {
+    "connect": "def(url: 'str | URL', *, credential: 'Credential | None' = None, read_only: 'bool' = True, **engine_kwargs: 'Any') -> 'Engine'",
+    "fetch_rows": "def(engine: 'Engine', sql: 'str', params: 'Mapping[str, object] | None' = None) -> 'Rows'",
+    "pivot_long": "def(rows: 'Rows', index: 'str', column: 'str', value: 'str', *, duplicates: 'Duplicates' = 'error', fill: 'float | None' = None, index_values: 'Sequence[object] | None' = None) -> 'Rows'",
+    "rows_to_csv": "def(rows: 'Rows') -> 'str'",
+    "shape_rows": "def(dataset: 'SqlDataset', rows: 'Rows', calendar: 'Rows | None' = None) -> 'Rows'"
   },
   "quant_toolbox.performance": {
     "Analysis": "dataclass(as_of: dt.date, periods_per_year: int, observations: int, metrics: dict[str, float], benchmark: dict[str, float] | None, distribution: Distribution, sharpe_inference: dict[str, float], horizons: dict[str, float | None], drawdowns: list[Drawdown], notes: list[str], conventions: dict[str, str], backend: str)",

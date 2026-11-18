@@ -35,7 +35,10 @@ excel = ["openpyxl>=3.1,<4"]
 pandas = ["pandas>=2.2"]
 # The preferred metrics backend (decision 0010): empyrical-reloaded, held equal to the numpy one.
 empyrical = ["empyrical-reloaded>=0.7,<0.8"]
-all = ["quant-toolbox[charts,empyrical,excel,interactive,pandas]"]
+# Reading a firm's SQL database through SQLAlchemy (`quant_toolbox.data.sql`); the database's own
+# driver (psycopg, pyodbc, snowflake-sqlalchemy, databricks-sql-connector) is the firm's install.
+sql = ["sqlalchemy>=2.0,<3"]
+all = ["quant-toolbox[charts,empyrical,excel,interactive,pandas,sql]"]
 
 [project.urls]
 Source = "https://github.com/yuxuzi/quant-agent-os/tree/main/packages/quant-toolbox"
