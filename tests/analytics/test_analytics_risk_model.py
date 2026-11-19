@@ -183,7 +183,7 @@ def test_a_model_given_per_day_is_annualised(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("changes", "weights", "message"),
     [
-        ({}, {"A": 0.5, "D": 0.5}, "loadings 'loadings' have no row for D"),
+        ({}, {"A": 0.5, "D": 0.5}, "specific variance 'specific' has no row for D"),
         (
             {"covariance": "factor,market,size\nmarket,0.04,0\nsize,0,0.01\n"},
             {"A": 1.0},
@@ -197,7 +197,7 @@ def test_a_model_given_per_day_is_annualised(tmp_path: Path) -> None:
         (
             {"specific": "asset,variance\nA,0.01\nC,0.03\n"},
             {"A": 0.5, "B": 0.5},
-            "have no row for B",
+            "has no row for B",
         ),
         ({"specific": "asset,variance\nA,-0.01\nB,0.02\n"}, {"A": 1.0}, "zero or more"),
         (
@@ -239,3 +239,65 @@ def test_risk_with_stress_and_a_model_honours_the_contract(tmp_path: Path) -> No
             "factor_model": FACTOR_MODEL,
         },
     )
+
+
+def test_an_asset_with_no_loading_has_specific_risk_only(tmp_path: Path) -> None:
+    text, _ = _daily_csv()
+    store = _store(
+        tmp_path,
+        {
+            "daily": text.replace("date,A,B", "date,A,C"),
+            **MODEL,
+            "loadings": "asset,market,value\nA,1.0,0.2\nB,0.5,0\n",
+        },
+    )
+
+    record = _run(
+        store,
+        portfolio_id="book",
+        weights={"A": 0.5, "C": 0.5},
+        asset_returns={"dataset": "daily"},
+        factor_model=FACTOR_MODEL,
+    )
+
+    assert record.status == "ok", record.error
+    assert "have no row for C; their risk is specific only." in " ".join(record.output["warnings"])
+    model = record.output["factor_model"]
+    factor_variance = 0.25 * (0.04 + 2 * 0.2 * 0.002 + 0.04 * 0.01)
+    specific = 0.25 * 0.01 + 0.25 * 0.03
+    assert model["volatility"] == pytest.approx((factor_variance + specific) ** 0.5)
+
+
+def test_an_asset_with_short_history_is_left_out_not_every_date(tmp_path: Path) -> None:
+    text, _ = _daily_csv()
+    lines = text.splitlines()
+    rows = len(lines) - 1
+    # C lists halfway through: before, its cells are empty.
+    widened = [lines[0] + ",C"] + [
+        f"{line},{'' if at < rows // 2 else 0.002}" for at, line in enumerate(lines[1:])
+    ]
+    store = _store(tmp_path, {"daily": "\n".join(widened) + "\n"})
+
+    record = _run(
+        store,
+        portfolio_id="book",
+        weights={"A": 0.4, "B": 0.4, "C": 0.2},
+        asset_returns={"dataset": "daily"},
+    )
+
+    assert record.status == "ok", record.error
+    assert record.output["periods"] == rows
+    assert set(record.output["contributions"]) == {"A", "B"}
+    left = next(w for w in record.output["warnings"] if w.startswith("Left out 1 assets"))
+    assert ": C." in left and "20.00%" in left
+
+
+def test_a_weight_with_no_returns_column_is_refused_naming_it(tmp_path: Path) -> None:
+    store = _model_store(tmp_path)
+
+    record = _run(
+        store, portfolio_id="b", weights={"A": 0.5, "Q": 0.5}, asset_returns={"dataset": "daily"}
+    )
+
+    assert record.status == "error"
+    assert "have no column for: Q." in (record.error or "")

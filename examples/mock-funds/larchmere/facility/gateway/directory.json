@@ -1,0 +1,23 @@
+{
+  "tenant_id": "0e6f2a54-3c11-4b7e-8f0d-52a3c9d17b64",
+  "authority": "https://login.microsoftonline.com",
+  "api_app_id_uri": "api://larchmere-qaos",
+  "api_client_id": "c3d4e5f6-0000-4000-8000-00000000a001",
+  "groups": {
+    "CLO-PM-2021-1": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0001",
+    "CLO-PM-2018-2": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0002",
+    "CLO-Analyst": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0003",
+    "CLO-Structuring-Ops": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0004",
+    "IR-Reader": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0005",
+    "CLO-Compliance": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0006",
+    "QAOS-Operators": "4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0007"
+  },
+  "users": [
+    {"upn": "ines.vargas@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000001", "groups": ["CLO-PM-2021-1"], "roles": ["CLO.PM"]},
+    {"upn": "tomas.okafor@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000002", "groups": ["CLO-PM-2018-2"], "roles": ["CLO.PM"]},
+    {"upn": "priya.lindqvist@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000003", "groups": ["CLO-Analyst"], "roles": ["CLO.Analyst"]},
+    {"upn": "marcus.ng@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000004", "groups": ["CLO-Structuring-Ops"], "roles": ["CLO.Ops"]},
+    {"upn": "elena.sorensen@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000005", "groups": ["IR-Reader"], "roles": ["IR.Reader"]},
+    {"upn": "dev.rahman@larchmere.example", "oid": "a1000000-0000-4000-8000-000000000006", "groups": ["CLO-Compliance"], "roles": ["CLO.Compliance"]}
+  ]
+}

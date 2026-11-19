@@ -195,8 +195,8 @@ def show_runs(
             for run in run_store.list_runs(limit):
                 snapshot = run.data_versions.get("corpus_snapshot", "-")
                 console.print(
-                    f"{run.run_id}  {run.started_at:%Y-%m-%d %H:%M:%S}  {run.actor:<4}  "
-                    f"{run.status:<9}  {snapshot}  {run.goal}",
+                    f"{run.run_id}  {run.started_at:%Y-%m-%d %H:%M:%S}  {run.actor:<8}  "
+                    f"{run.principal or '-':<16}  {run.status:<9}  {snapshot}  {run.goal}",
                     soft_wrap=True,  # run ids must stay whole to be copied
                 )
             return

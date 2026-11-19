@@ -28,8 +28,14 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 | Tool | Version | Change |
 | --- | --- | --- |
+| `list_datasets` | 2.0.0 | A listing names the first 20 columns of each dataset, with the new `column_count` and a warning when any are cut; `dataset_id` still gives one dataset's every column. Adds an optional `prefix`, to list only the ids that start with it. |
+| `analyze_signal` | 2.0.0 | Changes the default `horizons`: without them, they follow the dates' frequency (daily 1, 5, 21; weekly 1, 4, 13; monthly 1, 3, 12; quarterly 1, 2, 4), stated in `conventions.horizons`, where before they were always 1, 5, 21 bars. Warns when the signal changes much less often than a horizon (carried forward from a slower frequency) and when there are fewer than 30 instruments. |
+| `analyze_risk` | 3.0.0 | Changes the meaning of a result over returns by reference: a held asset with returns on fewer than 90% of the dates is left out, with its weight reported in a warning and not given to the others, instead of every date where it is missing being cut for all. A weight with no returns column is refused naming every such asset. Under a factor model, an asset with no loadings has specific risk only (a warning); one with no specific variance is still refused. Missing rows in more than three series are one warning. |
 | `analyze_signal` | 1.0.0 | New: a signal's IC, rank IC, IR, HAC t-statistic per horizon, quantile returns and spread, and autocorrelation, from a signal frame and a returns frame by reference. |
 | `run_backtest` | 1.0.0 | New: simulated net returns of a signal as dollar-neutral or long-only weights, with a trade lag and costs, and their metrics. |
+| `analyze_risk` | 2.3.0 | Adds an optional `weights_ref`, the weights by reference instead of inline: a column of a dataset with one row per asset, or one date's row of a frame of dates by assets, the latest by default (`as_of` names another). Exactly one of `weights` and `weights_ref`; the source is in `conventions.weights`. |
+| `find_related_signals` | 1.2.0 | Adds optional `source_prefix`, `published_from`, and `published_to`: search only the sources whose location starts with the prefix, or whose published date overlaps the range. Every channel and the graph walk apply it before the limit. |
+| `get_source_passage` | 1.1.0 | Adds an optional `context` input (0 to 2) and `before` and `after` outputs: the passages around the requested one in its document, each with its own citation and evidence. |
 | `analyze_risk` | 2.2.0 | Adds `historical_stress` and `historical_stress_note` for daily, dated returns, and an optional `factor_model` input (loadings, factor covariance, and specific variances by dataset id) with its `factor_model` output. |
 
 ## 0.7.0

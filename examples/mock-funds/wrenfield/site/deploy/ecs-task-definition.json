@@ -1,0 +1,70 @@
+{
+  "family": "wrenfield-qaos",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "4096",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/wrenfield-qaos-task",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/wrenfield-qaos-execution",
+  "containerDefinitions": [
+    {
+      "name": "qaos",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/wrenfield-qaos:1",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
+      "environment": [
+        {"name": "WRENFIELD_ESTATE", "value": "/etc/qaos/estate"},
+        {"name": "WRENFIELD_OMS_URL", "value": "postgresql://qaos_reader@wrenfield-oms.cluster-c1x2y3.us-east-1.rds.amazonaws.com:5432/oms?sslmode=verify-full"},
+        {"name": "QUANT_AGENT_OS_STORE", "value": "postgresql://qaos_reader@wrenfield-kb.cluster-c1x2y3.us-east-1.rds.amazonaws.com:5432/kb?sslmode=verify-full"},
+        {"name": "QUANT_AGENT_OS_RUNS_FILE", "value": "/data/runs/runs.db"},
+        {"name": "QUANT_AGENT_OS_LOG_LEVEL", "value": "INFO"},
+        {"name": "AWS_REGION", "value": "us-east-1"}
+      ],
+      "secrets": [
+        {"name": "WRENFIELD_OMS_PASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/oms-reader:password::"},
+        {"name": "PGPASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/kb-reader:password::"},
+        {"name": "WRENFIELD_INTROSPECTION_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/introspection:secret::"}
+      ],
+      "mountPoints": [{"sourceVolume": "runs", "containerPath": "/data/runs"}],
+      "healthCheck": {
+        "command": ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"],
+        "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wrenfield-qaos",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "qaos"
+        }
+      }
+    },
+    {
+      "name": "introspection-shim",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/wrenfield-qaos:1",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "entryPoint": ["python", "/home/app/wrenfield_introspection_shim.py"],
+      "portMappings": [{"containerPort": 9600, "protocol": "tcp"}],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wrenfield-qaos",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "shim"
+        }
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "runs",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-0abc1234",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {"accessPointId": "fsap-0def5678", "iam": "ENABLED"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# Larchmere (fictional): sign-in through Microsoft Entra ID (decision 0028). The platform asks an
+# RFC 7662 introspection endpoint; Entra has none, so the endpoint is the fund's own shim
+# (gateway/larchmere_entra_mock.py, deployed as the Container App `larchmere-token-shim`).
+resource = "https://larchmere-qaos.example.azurecontainerapps.io/mcp"
+
+[[authorization_servers]]
+issuer = "https://login.microsoftonline.com/0e6f2a54-3c11-4b7e-8f0d-52a3c9d17b64/v2.0"
+introspection_url = "https://larchmere-token-shim.internal.example.azurecontainerapps.io/shim/introspect"
+client_id = "qaos-server"
+client_secret_env = "LARCHMERE_INTROSPECTION_SECRET"
+tenant_claim = "qaos_tenant"                  # the shim copies Entra's `tid` into this claim
+tenant_claim_value = "0e6f2a54-3c11-4b7e-8f0d-52a3c9d17b64"
+groups_claim = "groups"                        # security-group object IDs, as access.toml names them

@@ -16,13 +16,17 @@ from your own arithmetic.
 
 ### Find the data first
 
-Call `list_datasets` to see the datasets the server can read, with their columns and rows.
-Read one dataset's details with `dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
+Call `list_datasets` to see the datasets the server can read, with their rows, dates, and first
+columns; `prefix` narrows it to ids that start so. Read one dataset's every column with
+`dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
 
 Pass series **by reference**, never by copying values:
 - **Performance:** `analyze_performance` with `returns` as `{"dataset": ID, "column": NAME}`,
   optionally a `benchmark` reference the same way. `risk_free` is an annual rate.
-- **Risk:** `analyze_risk` with `weights` naming each asset, `asset_returns` as
+- **Risk:** `analyze_risk` with the book's weights by reference when a dataset holds them:
+  `weights_ref` as `{"dataset": ID}` for a frame of dates by assets (its latest date; add
+  `"as_of"` for another), or `{"dataset": ID, "column": NAME}` for one row per asset. Otherwise
+  `weights` naming each asset. Then `asset_returns` as
   `{"dataset": ID}` (one column per asset, named like the weights), and, for exposures,
   `factor_returns` as `{"dataset": ID, "columns": [...]}`. For a vendor's model, pass
   `factor_model` with `loadings` and `factor_covariance` dataset ids and `specific_variance`
@@ -181,9 +185,12 @@ claim, and say plainly when it holds nothing on the question.
      enough to choose passages.
    - Narrow with `entity_types`, widen with `hops` 2 or a larger `k`. Raise `min_confidence` to
      keep only strong edges.
+   - When the user names a folder or a period, pass `source_prefix` (such as `notes/`) or
+     `published_from` and `published_to`. Every passage and edge then comes from those sources.
 2. **Read before quoting.** Fetch every passage you rely on with `get_source_passage`
    (`chunk_id` from the results), or read the resource `qaos://passage/{chunk_id}`. Raw ids such
-   as `doc:ab12#3` work as they are.
+   as `doc:ab12#3` work as they are. When a passage starts or ends mid-argument, pass `context`
+   1 or 2 for the passages around it; each one cites its own location.
 3. **Cite.** Name each claim's source and location, for example
    "reversal-and-microstructure.md, lines 17-19, § Mechanism". Mention the corpus snapshot id
    when the user may compare answers later.

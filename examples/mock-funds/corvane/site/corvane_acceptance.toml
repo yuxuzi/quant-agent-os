@@ -1,0 +1,85 @@
+# Corvane Equity Partners (fictional): the cases the fund agreed before using the platform. Run as
+# the operator: CORVANE_SQL_URL=estate://<dir> python site/corvane_server.py acceptance <this file>
+# The numbers come from the default estate (seed 20261118); another seed changes them, which is
+# the point: a changed number fails the case. Cases name callers, to check entitlements too.
+
+[[numeric]]
+name = "LCC active share on 2026-05-15"
+tool = "corvane_active_share"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, as_of = "2026-05-15" }
+value = "active_share"
+expected = 0.4527704693177614
+tolerance = 1e-9
+caller = { principal = "priya", groups = ["pm-us-core"] }
+
+[[numeric]]
+name = "LCC ex-post tracking error to 2026-05-15"
+tool = "corvane_tracking_error"
+arguments = { portfolio_returns = { dataset = "perf_lcc", column = "gross" }, benchmark_returns = { dataset = "bench_ret", column = "BM_US300" }, start = "2026-01-03", end = "2026-05-15" }
+value = "tracking_error"
+expected = 0.023707161648857
+tolerance = 1e-9
+caller = { principal = "raj", groups = ["risk"] }
+
+[[numeric]]
+name = "LCC Industrials allocation, 1 May to 1 June"
+tool = "corvane_attribution_single"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, returns = { dataset = "px_ret_usd" }, sector_code = { dataset = "ref_security", column = "sector_code" }, start = "2026-05-01", end = "2026-06-01" }
+value = "allocation"
+expected = 0.0039037088597374597
+tolerance = 1e-9
+caller = { principal = "raj", groups = ["risk"] }
+
+[[numeric]]
+name = "quality has a positive rank IC at lag 0 (platform's own, with its delisting default)"
+tool = "analyze_signal"
+arguments = { signal = { dataset = "scores_quality" }, returns = { dataset = "px_ret_usd" }, lag = 0 }
+value = "summary.mean_rank_ic"
+expected = 0.03873015809396099
+tolerance = 1e-9
+caller = { principal = "ines", groups = ["analyst-industrials"] }
+
+[[numeric]]
+name = "a client service user reads the client's own performance"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "perf_sma_pen_a", column = "gross" }, benchmark = { dataset = "bench_ret", column = "BM_US300" } }
+value = "periods"
+expected = 109
+tolerance = 0
+caller = { principal = "claire", groups = ["client-service-aldergate"] }
+
+[[retrieval]]
+name = "the committee minute on the spin-off is in the corpus"
+question = "spin-off tobacco shares excluded mandates sold"
+source = "minutes-investment-committee-2026-04.md"
+caller = { principal = "raj", groups = ["risk"] }
+
+[[retrieval]]
+name = "the corpus says nothing on municipal bonds"
+question = "What is the duration of our municipal bond holdings?"
+abstain = true
+caller = { principal = "raj", groups = ["risk"] }
+
+# A list in the output: the Industrials row of the per-sector table (round 2: value paths read lists).
+[[numeric]]
+name = "LCC Industrials selection, 1 May to 1 June (known_answers.json)"
+tool = "corvane_attribution_single"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, returns = { dataset = "px_ret_usd" }, sector_code = { dataset = "ref_security", column = "sector_code" }, start = "2026-05-01", end = "2026-06-01" }
+value = "sectors[sector=Industrials].selection"
+expected = -0.00023899101467240834
+relative_tolerance = 1e-9
+caller = { principal = "raj", groups = ["risk"] }
+
+# Entitlements as cases: Aldergate's client service sees its own account, not the composite.
+[[refusal]]
+name = "Aldergate's client service cannot read the LCC composite's performance"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "perf_lcc", column = "gross" } }
+message = "No dataset 'perf_lcc'"
+caller = { principal = "cam", groups = ["client-service-aldergate"] }
+
+[[refusal]]
+name = "Aldergate's client service cannot run active share"
+tool = "corvane_active_share"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, as_of = "2026-05-15" }
+caller = { principal = "cam", groups = ["client-service-aldergate"] }

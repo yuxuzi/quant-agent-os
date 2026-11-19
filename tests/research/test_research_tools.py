@@ -66,6 +66,13 @@ def test_passages_round_trip_through_get_source_passage(executor: ToolExecutor) 
 
     assert passage["structuredContent"]["chunk_id"] == chunk_id
     assert passage["structuredContent"]["evidence"][0]["kind"] == "retrieved"
+    assert passage["structuredContent"]["before"] == passage["structuredContent"]["after"] == []
+    wider = call_tool(executor, "get_source_passage", {"chunk_id": chunk_id, "context": 1})
+    assert wider["structuredContent"]["before"] or wider["structuredContent"]["after"]
+    too_wide = executor.execute(
+        ToolCall(tool="get_source_passage", arguments={"chunk_id": chunk_id, "context": 3})
+    )
+    assert too_wide.status == "invalid_input"
 
 
 def test_unknown_passages_and_bad_input_fail_with_actionable_messages(

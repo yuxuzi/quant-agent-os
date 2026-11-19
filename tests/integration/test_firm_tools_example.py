@@ -7,20 +7,20 @@ import anyio
 import httpx
 import pytest
 from firm_data import SAMPLE_RETURNS, SqliteDatasetStore, create_sample_database
-from firm_server import build_catalog, main, risk
+from firm_server import main, risk
 from firm_tools import desk_var
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from pydantic import BaseModel
+from starlette.testclient import TestClient
 
-from quant_agent_os.api import KeyRing, add_key, load_keys
+from quant_agent_os.api import add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import UnknownDatasetError
-from quant_agent_os.runs import MemoryRunStore
+from quant_agent_os.registration import FirmApp
+from quant_agent_os.runs import MemoryRunStore, SqliteRunStore
 from quant_agent_os.testing import check_app
-from quant_agent_os.tools import FileAccessPolicy, Permission, PermissionPolicy, tool
-from quant_platform import compose
-from quant_platform.http import build_http_app, single_tenant
+from quant_agent_os.tools import FileAccessPolicy, Permission, PermissionPolicy
+from quant_platform import build_server_app
 
 pytest.importorskip("empyrical")
 
@@ -72,14 +72,8 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
 ) -> None:
     key = add_key(tmp_path / "keys.toml", "alice", ["tools:list", "tools:call", "runs:read"])
     runs = MemoryRunStore()
-    catalog = build_catalog(store, PermissionPolicy())
-    app = build_http_app(
-        single_tenant(catalog, runs, catalog.policy),
-        KeyRing(load_keys(tmp_path / "keys.toml")),
-        instructions=catalog.instructions,
-    )
 
-    async def calls() -> tuple[Any, Any, Any, Any]:
+    async def calls(app: Any) -> tuple[Any, Any, Any, Any]:
         async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(
@@ -103,7 +97,11 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
                 mcp = await session.call_tool("desk_var", ARGS)
             return rest, analytics, initialised, mcp
 
-    rest, analytics, initialised, mcp = anyio.run(calls)
+    # The app serve_apps would serve, built from the same arguments, without running a server.
+    with build_server_app(
+        [risk], datasets=store, policy=PermissionPolicy(), keys=tmp_path / "keys.toml", runs=runs
+    ) as app:
+        rest, analytics, initialised, mcp = anyio.run(calls, app)
     assert rest["status"] == "ok"
     assert rest["output"]["var"] == pytest.approx(0.022)
     assert mcp.structuredContent == rest["output"]
@@ -115,7 +113,6 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
     assert recorded.run.principal == "alice"
     assert recorded.calls[0].tool == "desk_var"
     assert recorded.calls[0].tool_version == "1.0.0"
-    assert catalog.toolsets["desk_var"] == "firm"
 
 
 def test_with_access_rules_the_firms_tool_reads_only_what_the_caller_may(
@@ -125,57 +122,55 @@ def test_with_access_rules_the_firms_tool_reads_only_what_the_caller_may(
     rules.write_text('[groups.risk]\ntools = ["desk_var"]\ndatasets = ["other"]\n')
     keys = tmp_path / "keys.toml"
     key = add_key(keys, "alice", ["tools:call"], groups=["risk"])
-    catalog = build_catalog(store, PermissionPolicy(), access=FileAccessPolicy(rules))
-    app = build_http_app(
-        single_tenant(catalog, MemoryRunStore(), catalog.policy),
-        KeyRing(load_keys(keys)),
-        instructions=catalog.instructions,
-    )
 
-    async def call() -> Any:
-        async with (
-            app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url=BASE,
-                headers={"Authorization": f"Bearer {key}"},
-            ) as client,
-        ):
-            return (await client.post("/v1/tools/desk_var/call", json={"arguments": ARGS})).json()
+    with (
+        build_server_app(
+            [risk],
+            datasets=store,
+            policy=PermissionPolicy(),
+            access=FileAccessPolicy(rules),
+            keys=keys,
+            runs=MemoryRunStore(),
+        ) as app,
+        TestClient(app, base_url=BASE) as client,
+    ):
+        result = client.post(
+            "/v1/tools/desk_var/call",
+            json={"arguments": ARGS},
+            headers={"Authorization": f"Bearer {key}"},
+        ).json()
 
-    result = anyio.run(call)
     assert result["status"] == "error"
     assert "No dataset 'desks'" in result["error"]
 
 
 def test_a_firms_tool_gets_no_permission_it_is_not_granted(tmp_path: Path) -> None:
-    class Empty(BaseModel):
-        pass
+    def call_home() -> float:
+        """Calls home, which needs the network."""
+        return 1.0
 
-    @tool(name="call_home", description="Needs the network.", permissions=[Permission.NETWORK])
-    def call_home(params: Empty) -> Empty:
-        return Empty()
-
+    home = FirmApp("home")
+    home.expose(call_home, permissions=[Permission.NETWORK])
     key = add_key(tmp_path / "keys.toml", "alice", ["tools:call"])
-    catalog = compose(policy=PermissionPolicy(), extra_tools=[call_home])
-    app = build_http_app(
-        single_tenant(catalog, MemoryRunStore(), catalog.policy),
-        KeyRing(load_keys(tmp_path / "keys.toml")),
-        instructions=catalog.instructions,
-    )
+    runs = tmp_path / "runs.db"
 
-    async def call() -> Any:
-        async with (
-            app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url=BASE,
-                headers={"Authorization": f"Bearer {key}"},
-            ) as client,
-        ):
-            return (await client.post("/v1/tools/call_home/call", json={"arguments": {}})).json()
+    with (
+        build_server_app(
+            [home], policy=PermissionPolicy(), keys=tmp_path / "keys.toml", runs=runs
+        ) as app,
+        TestClient(app, base_url=BASE) as client,
+    ):
+        answer = client.post(
+            "/v1/tools/call_home/call",
+            json={"arguments": {}},
+            headers={"Authorization": f"Bearer {key}"},
+        )
 
-    assert anyio.run(call)["status"] == "denied"
+    assert answer.json()["status"] == "denied"
+    # The run store given as a path was opened for the app and closed after it; the call is in it.
+    with SqliteRunStore(runs) as recorded:
+        (run,) = recorded.list_runs(5)
+    assert run.principal == "alice"
 
 
 def test_the_firms_server_starts_from_the_usual_settings(
@@ -199,3 +194,16 @@ def test_the_firms_server_starts_from_the_usual_settings(
         get_settings.cache_clear()
 
     assert served == {"host": "127.0.0.1", "port": 8000}
+
+
+def test_building_the_server_app_refuses_as_serving_would(
+    store: SqliteDatasetStore, tmp_path: Path
+) -> None:
+    from quant_agent_os.api import ApiKeyError
+
+    with (
+        pytest.raises(ApiKeyError, match="No API keys file"),
+        build_server_app([risk], datasets=store, keys=tmp_path / "none.toml", runs=tmp_path / "r"),
+    ):
+        pass
+    assert not (tmp_path / "r").exists()  # refused before the run store was opened

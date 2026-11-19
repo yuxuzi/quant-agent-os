@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,7 +33,9 @@ class SourceFile:
     """A loaded source: text, metadata, and where the text starts in the original.
 
     Text sources set ``body`` and ``body_first_line``. Paged sources (PDF) set ``pages`` instead,
-    one string per page, and leave ``body`` empty.
+    one string per page, and leave ``body`` empty. A paged source that recognises tables lists
+    them in ``tables`` as ``(page, first line, last line)`` of that page's text, so chunking
+    keeps each table in one passage.
     """
 
     uri: str
@@ -43,6 +45,7 @@ class SourceFile:
     metadata: dict[str, str] = field(default_factory=dict)
     pages: tuple[str, ...] | None = None
     loader_version: str = ""
+    tables: tuple[tuple[int, int, int], ...] = ()
 
 
 class SourceLoader(Protocol):
@@ -107,8 +110,15 @@ class VectorIndex(Protocol):
         """Return ``(chunk_id, text)`` for chunks that have no ``model_id`` embedding yet."""
         ...
 
-    def vector_search(self, model_id: str, vector: list[float], limit: int) -> list[VectorHit]:
-        """Return the most similar chunks, best first."""
+    def vector_search(
+        self,
+        model_id: str,
+        vector: list[float],
+        limit: int,
+        *,
+        documents: Collection[str] | None = None,
+    ) -> list[VectorHit]:
+        """Return the most similar chunks, best first, only from ``documents`` when given."""
         ...
 
 
@@ -133,7 +143,12 @@ class GraphEdge(BaseModel):
 
 
 class KnowledgeStore(Protocol):
-    """Persistence for the knowledge graph and its passages."""
+    """Persistence for the knowledge graph and its passages.
+
+    The search reads take an optional ``documents``, a collection of document ids: when given,
+    they consider only chunks of those documents, and relations those chunks support, before
+    any limit applies.
+    """
 
     def has_document(self, sha256: str, pipeline: str | None = None) -> bool:
         """Return whether a document with this content hash is stored.
@@ -189,8 +204,16 @@ class KnowledgeStore(Protocol):
         """Return a document by id."""
         ...
 
+    def list_documents(self) -> list[Document]:
+        """Return every stored document, by id."""
+        ...
+
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         """Return a chunk by id."""
+        ...
+
+    def document_chunks(self, document_id: str, first: int, last: int) -> list[Chunk]:
+        """Return the document's chunks with ordinals ``first``..``last`` (inclusive), in order."""
         ...
 
     def get_entities(self, entity_ids: Iterable[str]) -> dict[str, Entity]:
@@ -201,11 +224,15 @@ class KnowledgeStore(Protocol):
         """Return entity ids mentioned in each chunk."""
         ...
 
-    def chunks_mentioning(self, entity_ids: Iterable[str], limit: int) -> list[str]:
+    def chunks_mentioning(
+        self, entity_ids: Iterable[str], limit: int, *, documents: Collection[str] | None = None
+    ) -> list[str]:
         """Return chunk ids that mention the most of ``entity_ids``, best first."""
         ...
 
-    def keyword_search(self, query: str, limit: int) -> list[KeywordHit]:
+    def keyword_search(
+        self, query: str, limit: int, *, documents: Collection[str] | None = None
+    ) -> list[KeywordHit]:
         """Return the best keyword matches for ``query``, each with the terms it matched."""
         ...
 
@@ -214,7 +241,12 @@ class KnowledgeStore(Protocol):
         ...
 
     def expand(
-        self, entity_ids: Iterable[str], *, hops: int, min_confidence: float
+        self,
+        entity_ids: Iterable[str],
+        *,
+        hops: int,
+        min_confidence: float,
+        documents: Collection[str] | None = None,
     ) -> list[GraphEdge]:
         """Return relations reachable from ``entity_ids`` within ``hops`` steps, either way."""
         ...

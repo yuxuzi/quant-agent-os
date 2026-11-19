@@ -68,7 +68,7 @@ def test_the_platform_pins_the_toolbox_version_it_is_released_with() -> None:
         if requirement.startswith("quant-toolbox")
     }
 
-    assert set(pins) == {"toolbox", "interactive", "excel", "empyrical"}
+    assert set(pins) == {"toolbox", "interactive", "excel", "empyrical", "sql"}
     assert all(requirement.endswith(f"=={version}") for requirement in pins.values()), pins
 
 

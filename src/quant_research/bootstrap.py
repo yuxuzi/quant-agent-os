@@ -9,7 +9,7 @@ from typing import Self
 
 from quant_research.application.ingest import IngestService
 from quant_research.application.retrieval import ResearchService
-from quant_research.domain.ports import Embedder
+from quant_research.domain.ports import Embedder, SourceLoader
 from quant_research.domain.vocabulary import (
     Vocabulary,
     has_firm_terms,
@@ -61,6 +61,7 @@ def open_research(
     embedder: Embedder | None = None,
     read_only: bool = False,
     schema: str = DEFAULT_SCHEMA,
+    pdf: SourceLoader | None = None,
 ) -> ResearchApp:
     """Open (or create) a knowledge store and build the services over it.
 
@@ -77,6 +78,7 @@ def open_research(
     store doubles as the vector index. It is off by default. ``read_only`` opens an existing store
     without creating, migrating, or writing anything. Text and Markdown always load; PDFs load
     when the ``pdf`` extra is installed and are otherwise skipped with an installation hint.
+    ``pdf`` replaces that loader, e.g. with `quant_research.config.make_ragflow_loader`.
     """
     firm = load_vocabulary(vocabulary_path) if vocabulary_path else None  # before creating a store
     store: Store = (
@@ -90,7 +92,11 @@ def open_research(
         store=store,
         vocabulary=vocabulary,
         ingest=IngestService(
-            store, vocabulary, [TextFileLoader(), pdf_loader()], embedder=embedder, vectors=vectors
+            store,
+            vocabulary,
+            [TextFileLoader(), pdf or pdf_loader()],
+            embedder=embedder,
+            vectors=vectors,
         ),
         research=ResearchService(store, vocabulary, embedder=embedder, vectors=vectors),
         embedder=embedder,

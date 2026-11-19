@@ -8,6 +8,56 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`qaos ingest --pdf-parser ragflow` parses PDFs with a firm's own RAGFlow server.** Its DeepDoc parser
+  reads layout and tables and runs OCR, so scanned PDFs get indexed. Each PDF goes to a temporary dataset on
+  `RAGFLOW_URL` (https, or plain http only on this machine) with `RAGFLOW_API_KEY`, and the dataset is deleted
+  afterwards. Quant Research still does the chunking, linking, and citing: a citation names the page and a line
+  range within the page text RAGFlow returned. A table RAGFlow recognises is kept in one passage, as one line
+  per row with cells separated by `|`, and splits between rows only beyond 4,000 characters, so a search
+  for a number finds its row and column headers with it. A chunk that comes back without a page is refused
+  rather than guessed. Serving never contacts RAGFlow, and the default parser is still pypdf. It needs no new
+  dependency. Tested offline against a fake server; its quality on real papers has not been measured yet.
+- **Richer agreed cases for `qaos eval` and `run_acceptance`.** A `value` path can index a list (`rows.0.t_stat`)
+  and pick an item by a field (`sectors[sector=Industrials].selection`); a numeric case can state
+  `relative_tolerance` instead of, or as well as, `tolerance`; `[[exact]]` cases agree text, flags, counts, and
+  lists such as breach dates; and `[[refusal]]` cases state that a caller cannot reach a tool or dataset,
+  optionally with the message. A misspelt tool or argument fails a refusal case. Measured gap of all four mock
+  funds (row 5 of `examples/mock-funds/README.md`).
+- **`SqlDatasetStore` reads a firm's SQL databases as datasets** (decision 0032). Datasets are declared as
+  `SqlDataset` (SQL with `:name` binds, a shape, and a duplicates policy) over named SQLAlchemy engines, long rows
+  are pivoted wide, and the result goes through the platform's own CSV parser, so fingerprints match a file with
+  the same cells. A stamp per source (a version query, a time to live, or a function) decides when to read
+  again; a derived dataset is a marked Python function. It works under per-caller access, and
+  `quant_platform` loads it on first use. New `sql` extra (`quant-toolbox[sql]`, SQLAlchemy); the database's
+  driver is the firm's install. See "Read your firm's database as datasets" in the deployment guide. Quant
+  Toolbox gains `data.sql` (see its changelog).
+- **Sign-in checks JWTs against the provider's keys, for Entra ID and Amazon Cognito** (decision 0031). A
+  `[[authorization_servers]]` entry with `verify = "jwks"` needs no introspection endpoint: the server checks
+  the token's RS256 (or another listed asymmetric) signature against the issuer's JWKS, found by `jwks_uri` or
+  by the issuer's `/.well-known/openid-configuration`, kept for an hour, and fetched again for an unknown key
+  id at most once every 30 seconds; a failed fetch refuses the token. It requires an exact `iss`, an `aud` in
+  `audiences` (any string, such as `api://...` or a GUID) or, for tokens with no `aud`, a `client_id` in
+  `client_ids`, `exp`, `nbf` and `iat` within `leeway_seconds`, and optionally a `token_use`. New optional
+  settings read the provider's claims: `principal_claim`, `scope_claims` with `scope_map`, `groups_claims`
+  with `group_aliases`, and `provider_tenant_claim`, which adds Entra's `tid` to the principal in the audit
+  trail. App roles in `roles` can entitle machine tokens, and Entra's groups overage is read as no groups.
+  Introspection stays the default, and existing sign-in files work unchanged. `deployment.md` section 10
+  now shows Entra and Cognito files.
+- **Four more mock funds** (`examples/mock-funds/`), fictional and offline: a CLO manager on Azure with SQL
+  Server, a long-only equity manager on AWS with Snowflake, an alternatives allocator on Azure with
+  Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
+  tools, store, server, and acceptance cases, and records where the platform falls short in `FINDINGS.md`;
+  `examples/mock-funds/README.md` ranks what they found together. DuckDB joins the dev group for their tests.
+- **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
+  it adds that many passages before and after the requested one, from the same document and in reading
+  order, each citing its own location. A short PDF passage that starts mid-argument can be read in full
+  without a second search. The idea comes from RAGFlow's parent-child chunks, without a second index.
+- **`find_related_signals` can search part of the corpus** (tool version 1.2.0). `source_prefix` keeps the
+  sources whose location starts with it, such as `notes/`, and `published_from` and `published_to` keep
+  those whose published date overlaps the range; undated sources are left out of a date search, with a
+  warning. Keyword, mention, vector, and graph search all apply the filter in the store, before the limit,
+  on SQLite and PostgreSQL alike. It narrows a search and is not access control. The idea comes from
+  RAGFlow's metadata filter.
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
@@ -40,7 +90,9 @@ All notable changes to this project are documented here. The format follows
   vendor factor model, with planted known answers; a legacy `kestrel_quant` package with simple signal and
   report functions and a stateful risk engine; sixteen research documents, one carrying an injected
   instruction; a standard-library mock identity provider answering RFC 7662 introspection with a tenant and
-  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`.
+  groups; and desk entitlements in the access-file format. Tested in `tests/pilot_fund/`. Its known answers
+  state each signal's mean rank IC, IR, and Newey-West t-statistic both as planted (a signal on day t against
+  day t+1's return, `lag: 0`) and at the platform's default `lag: 1`, which `analyze_signal` reproduces.
 - **Signal studies and backtests as tools.** `analyze_signal` (1.0.0) reads a signal frame and a returns frame
   by reference, both dates by instruments, and reports mean IC and rank IC, the rank IC's IR and Newey-West
   t-statistic per horizon, quantile mean returns and the top-minus-bottom spread, and the signal's
@@ -55,6 +107,23 @@ All notable changes to this project are documented here. The format follows
   there is none. `factor_model` takes a vendor's loadings, factor covariance, and specific variances by
   dataset id and reports the volatility under that model, split into factors, specific risk, and assets; a
   model whose shapes do not line up is refused, naming what is missing. Both fields are additive.
+- **`analyze_risk` takes the weights by reference** (2.3.0). `weights_ref` names a dataset instead of inline
+  `weights`: `{dataset}` for a frame of dates by assets, whose latest row is the book unless `as_of` names a
+  date, or `{dataset, column}` for one row per asset. Missing cells are assets not held and are left out, with a
+  note; `conventions.weights` says which row was read. Exactly one of the two is accepted, each refusal names
+  what to fix, and the read goes through the access guard, so a refused dataset looks missing. The tool lock
+  now counts an input that may also take another type, such as `T` to `T | None`, as a minor change.
+- **Agreed cases run as named callers.** A cases file's `[caller]` table, or a case's own `caller`, gives the
+  principal and groups a case runs as, and `run_acceptance(..., caller=...)` takes the run's caller in code. With
+  an access policy, each case reaches what that caller would; a case with no caller is not run and fails, saying
+  why. Without one, the report warns that named callers checked nothing. `qaos eval --access FILE` applies an
+  access file, by default the configured one.
+- **`quant_platform.build_server_app` builds a firm's server without serving it.** It takes `serve_apps`'s
+  arguments, plus `keys`, `runs`, and `sign_in`, and yields the HTTP app `serve_apps` serves, with the same
+  catalog, keys or sign-in, access, and run store, so a firm tests its own server in process with Starlette's
+  `TestClient` and no patching. A run store given as a path is closed when the block ends; one given as a store
+  is the caller's. The [deployment guide](docs/deployment.md#8-add-your-own-tools) and the firm-tools example's
+  test use it.
 - **Opt-in OAuth sign-in on `qaos serve --http` and `serve_apps`**
   ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). A sign-in file, named by
   `QUANT_AGENT_OS_SIGN_IN_FILE` or `--sign-in`, lists the identity providers the server trusts and its resource
@@ -62,6 +131,43 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+- **The pilot at the mock fund** (`examples/pilot-fund/site/`, `drill.sh`, and the
+  [pilot runbook](docs/pilot-runbook.md)). The fund's own server serves the platform's toolsets with its
+  warehouse through one `DatasetStore` adapter, its documents, and its legacy code as finished facades and a
+  risk-engine service, behind its gateway's sign-in and desk entitlements. `drill.sh` installs the built wheels
+  into a clean folder and runs the fund's day offline, timed, from install to audit;
+  `tests/integration/test_pilot_fund.py` tells it in process. What it found is in part 5 of the
+  [0.8.0 plan](docs/plans/proposals-0.8.md#5-what-the-pilot-found).
+
+### Fixed
+
+- **A drafted legacy service calls its set-up method.** When a stateful class loads in a method such as
+  `load()` rather than in `__init__`, and that method is not served, `qaos legacy wrap` now calls it once when
+  the service starts, with a `TODO(config)` to confirm it, instead of answering every request with an error.
+- **`qaos runs show` lists each run's principal**, so the operator sees who called what without opening each
+  run.
+
+### Changed
+
+- **Smaller outputs from wide datasets.** A firm tool that reads many columns of a dataset now cites it
+  once (its column count, the first few names, rows, and fingerprint) and gives one missing-value warning
+  per dataset, not one per column. Measured on the mock funds: Corvane's currency effect fell from 134,651
+  bytes (over the 100,000 limit) to under 5,300, Larchmere's compliance tests from 89,657 to 5,469, and
+  Wrenfield's DTS from 67,663 to under 5,300.
+- **`analyze_risk` 3.0.0 keeps its window when one asset's history is short.** A held asset with returns on
+  fewer than 90% of the dates is left out, its weight reported, instead of every date it misses being cut
+  for all (Sablecroft keeps 60 months, not 42; Corvane 109 days, not 29). A weight with no returns column
+  is refused naming the assets; an asset with no factor loadings has specific risk only.
+- **`analyze_signal` 2.0.0 picks horizons from the dates.** Without `horizons`, daily data gets 1, 5, 21 bars,
+  weekly 1, 4, 13, monthly 1, 3, 12, and quarterly 1, 2, 4, stated in `conventions.horizons`; before, monthly
+  data got 21 months. It warns when the signal changes much less often than a horizon (a monthly score
+  carried forward onto daily dates) and when there are fewer than 30 instruments.
+- **`list_datasets` 2.0.0 summarises wide datasets.** A listing names each dataset's first 20 columns, with
+  `column_count`, and `prefix` narrows it; `dataset_id` still gives every column of one. Larchmere's 19
+  datasets list in 10,517 bytes, down from 25,387.
+- **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
+  policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
+  before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.
 
 ## [0.7.0] - 2026-11-17
 

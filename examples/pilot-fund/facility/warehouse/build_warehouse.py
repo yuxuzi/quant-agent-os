@@ -32,6 +32,9 @@ KNOWN_ANSWERS = "known_answers.json"
 START, END = "2023-01-02", "2026-01-01"  # business days from START, before END
 DAYS_PER_YEAR = 252
 REBALANCE_EVERY = 5  # business days
+# The analysis platform's default signal timing: a signal on day t is traded one day later and
+# scored against the return of day t + 2, over one day.
+PLATFORM_LAG, PLATFORM_HORIZON = 1, 1
 COMMISSION_BPS = 1.0
 
 FACTORS = ("equity_market", "rates", "usd", "commodity", "credit_spread")
@@ -546,9 +549,14 @@ def build(path: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
     with closing(sqlite3.connect(path)) as db:
         db.execute("VACUUM")  # rows arrive out of key order; this packs the pages
 
+    # market.momentum, carry, value, and returns hold the stored, rounded values.
     mom_ic = rank_ic(market.momentum[:-1], market.returns[1:])
     carry_ic = rank_ic(market.carry[:-1, carriers], market.returns[1:, carriers])
     value_ic = rank_ic(market.value[:-1], market.returns[1:, equities])
+    ahead = 1 + PLATFORM_LAG  # rows from a signal to its one-day return
+    mom_default = rank_ic(market.momentum[:-ahead], market.returns[ahead:])
+    carry_default = rank_ic(market.carry[:-ahead, carriers], market.returns[ahead:, carriers])
+    value_default = rank_ic(market.value[:-ahead], market.returns[ahead:, equities])
     answers.update(
         {
             "business_days": len(dates),
@@ -565,6 +573,20 @@ def build(path: Path, seed: int = DEFAULT_SEED) -> dict[str, Any]:
                 "momentum": _ic_summary(mom_ic, "all 40 instruments", "planted, positive"),
                 "carry": _ic_summary(carry_ic, "20 non-equity instruments", "planted, none"),
                 "value": _ic_summary(value_ic, "20 equities", "planted, small positive"),
+                "at_platform_default": {
+                    "convention": (
+                        "the analysis platform's default (analyze_signal with lag 1 and horizon "
+                        "1): a signal on day t, traded on day t+1, against total_return on day "
+                        "t+2. The figures above are its lag 0. Rank IC and IR as above; t-stat "
+                        "is Newey-West with the Bartlett kernel and floor(4 (days / 100)^(2/9)) "
+                        "lags, the population variance, and no small-sample correction"
+                    ),
+                    "lag": PLATFORM_LAG,
+                    "horizon": PLATFORM_HORIZON,
+                    "momentum": _default_summary(mom_default),
+                    "carry": _default_summary(carry_default),
+                    "value": _default_summary(value_default),
+                },
             },
             "benchmarks": ["cash_usd", "eq_world", "multi_asset_60_40"],
             "factor_vol_annual": dict(zip(FACTORS, FACTOR_VOL.tolist(), strict=True)),
@@ -595,6 +617,35 @@ def _ic_summary(ic: Array, universe: str, truth: str) -> dict[str, Any]:
     }
 
 
+def _newey_west_t(ic: Array) -> tuple[float, int]:
+    """The mean's t-statistic with Newey-West standard errors, and its lag count."""
+    values = ic.tolist()
+    n = len(values)
+    lags = math.floor(4.0 * (n / 100.0) ** (2.0 / 9.0))
+    mean = math.fsum(values) / n
+    centred = [value - mean for value in values]
+    variance = math.fsum(d * d for d in centred) / n
+    for lag in range(1, lags + 1):
+        weight = 1.0 - lag / (lags + 1.0)
+        pairs = zip(centred[lag:], centred[:-lag], strict=True)
+        autocovariance = math.fsum(a * b for a, b in pairs) / n
+        variance += 2.0 * weight * autocovariance
+    return mean / math.sqrt(variance / n), lags
+
+
+def _default_summary(ic: Array) -> dict[str, Any]:
+    mean = math.fsum(ic) / len(ic)
+    std = math.sqrt(math.fsum((ic - mean) ** 2) / (len(ic) - 1))
+    t_stat, lags = _newey_west_t(ic)
+    return {
+        "days": len(ic),
+        "mean_rank_ic": round(mean, 10),
+        "rank_ic_ir": round(mean / std, 6),
+        "hac_t_stat": round(t_stat, 4),
+        "hac_lags": lags,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Build the warehouse from the command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
@@ -606,7 +657,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(
         f"Wrote {args.path} ({answers['business_days']} days, {answers['instruments']} "
         f"instruments); momentum IC {signals['momentum']['mean_ic']:.4f}, "
-        f"carry IC {signals['carry']['mean_ic']:.4f}, value IC {signals['value']['mean_ic']:.4f}."
+        f"carry IC {signals['carry']['mean_ic']:.4f}, value IC {signals['value']['mean_ic']:.4f} "
+        f"(lag 0); momentum IC "
+        f"{signals['at_platform_default']['momentum']['mean_rank_ic']:.4f} at the platform's "
+        "default lag 1."
     )
 
 
