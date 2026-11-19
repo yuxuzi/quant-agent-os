@@ -146,7 +146,7 @@ def test_the_report_never_quotes_retrieved_text(demo: list[str]) -> None:
         ('[[retrieval]]\nname = "a"\nquestion = "q"\nsource = "s"\nabstain = true\n', "not both"),
         (
             '[[numeric]]\nname = "a"\ntool = "t"\nvalue = "v"\nexpected = 1.0\n',
-            "numeric.0.tolerance",
+            "state tolerance, relative_tolerance, or both",
         ),
         (
             '[[numeric]]\nname = "a"\ntool = "t"\nvalue = "v"\nexpected = nan\ntolerance = 0.1\n',
@@ -328,3 +328,98 @@ def test_run_acceptance_takes_the_runs_caller_from_code(demo: list[str]) -> None
 
     assert [result.passed for result in report.results] == [True, False]
     assert "No dataset 'value-book'" in report.results[1].actual
+
+
+def test_a_value_path_indexes_lists_and_picks_items_by_a_field() -> None:
+    from quant_platform.acceptance import MISSING, _at
+
+    output = {
+        "rows": [{"t_stat": 5.9}, {"t_stat": 1.2}],
+        "sectors": [{"sector": "Energy", "dts": 3.0}, {"sector": "Industrials", "dts": 4.5}],
+        "flags": [{"held": True, "id": "a"}],
+    }
+
+    assert _at(output, "rows.1.t_stat") == 1.2
+    assert _at(output, "sectors[sector=Industrials].dts") == 4.5
+    assert _at(output, "flags[held=true].id") == "a"
+    assert _at(output, "rows.2.t_stat") is MISSING
+    assert _at(output, "sectors[sector=Utilities].dts") is MISSING
+    assert _at({"rows": [{"k": 1}, {"k": 1}]}, "rows[k=1]") is MISSING  # two match: ambiguous
+
+
+AGREED = """
+[[numeric]]
+name = "growth volatility within a relative tolerance"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "metrics.annualized_volatility"
+expected = 0.1703
+relative_tolerance = 0.001
+
+[[exact]]
+name = "the growth book is monthly"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "periods_per_year"
+equals = 12
+
+[[exact]]
+name = "the first evidence is computed"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "evidence.0.kind"
+equals = "computed"
+
+[[refusal]]
+name = "the growth desk cannot read the value book"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "value-book", column = "book" } }
+message = "No dataset 'value-book'"
+"""
+
+
+def test_exact_refusal_and_relative_cases_pass_as_agreed(demo: list[str], tmp_path: Path) -> None:
+    cases = tmp_path / "cases.toml"
+    cases.write_text(GROWTH + AGREED, "utf-8")
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 0, output
+    assert [result["kind"] for result in report["results"]] == [
+        "numeric",
+        "exact",
+        "exact",
+        "refusal",
+    ]
+    assert report["results"][0]["expected"] == "0.1703 ± 0.001 relative"
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "actual"),
+    [
+        ("expected = 0.1703\n", "expected = 0.1710\n", "0.1702"),
+        ("equals = 12", "equals = 252", "12"),
+        ("equals = 12", "equals = true", "12"),
+        ('dataset = "value-book"', 'dataset = "growth-book"', "ok: the call was allowed"),
+        (
+            'tool = "analyze_performance"\narguments = { returns = { dataset = "value',
+            'tool = "analyse_performance"\narguments = { returns = { dataset = "value',
+            "unknown_tool, not a refusal",
+        ),
+        ("message = \"No dataset 'value-book'\"", 'message = "permission"', "No dataset"),
+    ],
+)
+def test_each_new_kind_of_case_fails_when_it_should(
+    demo: list[str], tmp_path: Path, old: str, new: str, actual: str
+) -> None:
+    assert old in AGREED
+    cases = tmp_path / "cases.toml"
+    cases.write_text(GROWTH + AGREED.replace(old, new, 1), "utf-8")
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 1
+    (failed,) = [result for result in report["results"] if not result["passed"]]
+    assert actual in failed["actual"]

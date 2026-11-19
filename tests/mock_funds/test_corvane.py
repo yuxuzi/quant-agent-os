@@ -435,7 +435,7 @@ def test_the_agreed_acceptance_cases_pass_as_the_named_callers(
     gold, digest = load_gold(ROOT / "site" / "corvane_acceptance.toml")
     report = run_acceptance(catalog, gold, digest)
     assert report.passed, report.markdown()
-    assert report.total == 7
+    assert report.total == 10
 
 
 def test_the_facility_imports_nothing_of_the_platform() -> None:
