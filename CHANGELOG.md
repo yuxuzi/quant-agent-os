@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Richer agreed cases for `qaos eval` and `run_acceptance`.** A `value` path can index a list (`rows.0.t_stat`)
+  and pick an item by a field (`sectors[sector=Industrials].selection`); a numeric case can state
+  `relative_tolerance` instead of, or as well as, `tolerance`; `[[exact]]` cases agree text, flags, counts, and
+  lists such as breach dates; and `[[refusal]]` cases state that a caller cannot reach a tool or dataset,
+  optionally with the message. A misspelt tool or argument fails a refusal case. Measured gap of all four mock
+  funds (row 5 of `examples/mock-funds/README.md`).
 - **`SqlDatasetStore` reads a firm's SQL databases as datasets** (decision 0032). Datasets are declared as
   `SqlDataset` (SQL with `:name` binds, a shape, and a duplicates policy) over named SQLAlchemy engines, long rows
   are pivoted wide, and the result goes through the platform's own CSV parser, so fingerprints match a file with

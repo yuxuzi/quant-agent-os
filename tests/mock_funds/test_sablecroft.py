@@ -439,7 +439,7 @@ def test_acceptance_cases_pass_as_the_cio(store: SablecroftStore, research: Any)
     assert report.total == 7
 
 
-def test_acceptance_cannot_address_a_list_element_in_the_output(
+def test_acceptance_addresses_a_list_element_in_the_output(
     store: SablecroftStore, tmp_path: Path
 ) -> None:
     cases = tmp_path / "cases.toml"
@@ -450,8 +450,8 @@ def test_acceptance_cannot_address_a_list_element_in_the_output(
     )
     gold, digest = load_gold(cases)
     report = run_acceptance(platform_catalog(store), gold, digest)
-    assert not report.passed
-    assert "no number at rows.0.t_stat" in report.results[0].actual
+    assert report.results[0].actual != "no number at rows.0.t_stat"  # the path reads the list
+    assert report.passed, report.results[0].actual
 
 
 def test_the_platforms_analytics_read_the_funds_monthly_data(store: SablecroftStore) -> None:
