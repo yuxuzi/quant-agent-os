@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
+  `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
+  the published mirrors carry these versions.
+
 ## [0.9.0] - 2026-11-19
 
 A Quant Toolbox release: it carries Quant Toolbox 0.8.0, and no served tool or skill changed. The
