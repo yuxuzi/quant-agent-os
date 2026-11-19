@@ -1,0 +1,61 @@
+# Corvane Equity Partners (fictional): who reaches what, in the platform's access-file format
+# (decision 0021). Groups are the Cognito user pool's groups (the cognito:groups claim). Anything
+# not listed is refused, and a refused dataset looks like a missing one.
+#
+# Datasets (see site/corvane_store.py):
+#   market:   px_ret_usd, px_ret_local, px_close_local, fx_ret, adv_usd, bench_ret, bench_w_<bm>,
+#             scores_<factor>, ref_security
+#   accounts: weights_<account>, perf_<account>, mandate_flags_<account>
+#   accounts: lcc, gq (composites), sma_pen_a, sma_fnd_b (US), sma_swf_c (Global)
+# Tools: the platform's, and corvane_* (site/corvane_server.py).
+#
+# A limit of this format: access is by dataset id, so an analyst "by sector" cannot be limited to
+# one sector's securities; sector analysts share one group of market data and signals.
+
+[groups.pm-us-core]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "corvane_*",
+]
+datasets = [
+  "px_*", "fx_*", "adv_*", "bench_*", "scores_*", "ref_*",
+  "*_lcc", "*_sma_pen_a", "*_sma_fnd_b",
+]
+
+[groups.pm-global-quality]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "corvane_*",
+]
+datasets = ["px_*", "fx_*", "adv_*", "bench_*", "scores_*", "ref_*", "*_gq", "*_sma_swf_c"]
+
+# Sector analysts: market data, signals, and research; no holdings and no fund tools.
+[groups.analyst-industrials]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report",
+]
+datasets = ["px_*", "fx_*", "adv_*", "bench_ret", "scores_*", "ref_*"]
+
+# Risk sees every account and alone is meant to run every tool.
+[groups.risk]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "corvane_*",
+]
+datasets = ["*"]
+
+# Compliance: every account's holdings and restrictions, the restriction check, and no analytics.
+[groups.compliance]
+tools = ["server_info", "list_datasets", "corvane_mandate_check", "corvane_active_share"]
+datasets = ["weights_*", "mandate_flags_*", "bench_w_*", "ref_*"]
+
+# Client service for one client: that client's performance and the benchmark, nothing else.
+[groups.client-service-aldergate]
+tools = ["server_info", "list_datasets", "analyze_performance", "corvane_tracking_error"]
+datasets = ["perf_sma_pen_a", "bench_ret"]
+
+# Operators check the server is up; they read no data.
+[groups.operators]
+tools = ["server_info", "list_datasets"]
+datasets = []

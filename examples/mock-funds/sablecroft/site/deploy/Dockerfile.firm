@@ -1,0 +1,12 @@
+# The fund's image: the platform's team-server image plus the fund's own code. Not built in tests.
+# Base: built from the platform's deploy/Dockerfile (docs/deployment.md section 1).
+FROM quant-agent-os:local
+USER root
+# The platform's image has no databricks-sql-connector and no way to add an extra at build time that
+# the fund's site code needs; the fund installs it into the image's venv. (FINDINGS: driver extra.)
+RUN /opt/venv/bin/python -m pip install --no-cache-dir databricks-sql-connector || true
+COPY examples/mock-funds/sablecroft/site /app/site
+COPY examples/mock-funds/sablecroft/facility/access.toml /config/access.toml
+COPY examples/mock-funds/sablecroft/site/deploy/sign-in.toml /config/sign-in.toml
+USER app
+ENTRYPOINT ["python", "/app/site/sablecroft_server.py"]
