@@ -240,3 +240,22 @@ def test_a_wrong_length_mask_or_a_mask_with_a_schedule_is_refused() -> None:
             rebalance_every=2,
             rebalance_on=np.ones(30, dtype=bool),
         )
+
+
+def test_weights_that_do_not_match_the_prices_are_refused() -> None:
+    prices, _ = random_walk_panel(n_bars=30, n_assets=4)
+    weights = dollar_neutral_weights(momentum(prices, 5, 1))
+
+    with pytest.raises(ValueError, match=r"shapes \(30, 3\) and \(30, 4\)"):
+        run_backtest(prices[:, :3], weights, cost_bps=0.0)
+    with pytest.raises(ValueError, match="one row per bar"):
+        run_backtest(prices, weights[:, 0], cost_bps=0.0)
+
+
+def test_a_missing_weight_is_refused_rather_than_written_off() -> None:
+    prices, _ = random_walk_panel(n_bars=30, n_assets=4)
+    weights = dollar_neutral_weights(momentum(prices, 5, 1))
+    weights[12, 2] = np.nan
+
+    with pytest.raises(ValueError, match="first at bar 12, asset column 2: give 0"):
+        run_backtest(prices, weights, cost_bps=0.0)

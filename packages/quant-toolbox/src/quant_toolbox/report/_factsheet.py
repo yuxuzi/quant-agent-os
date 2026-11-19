@@ -168,7 +168,11 @@ def risk_measures_table(
         f"Annualized from per-bar returns; risk-free {risk_free:.2%} in Sharpe and alpha."
     )
     if market is not None:
-        note += " Beta, alpha, and capture are against the benchmark."
+        note += (
+            " Beta, alpha, and capture are against the benchmark; capture is the fund's mean "
+            "return over the benchmark's on the bars it rose (up) or fell (down), per bar and "
+            "arithmetic, not Morningstar's monthly geometric capture."
+        )
     return TableBlock(title, columns, rows, note=note)
 
 
