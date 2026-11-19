@@ -18,6 +18,7 @@ from quant_agent_os.mcp.adapters import call_tool
 from quant_agent_os.registration import FirmApp
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import CallStatus, ToolCallRecord, ToolExecutor
+from quant_agent_os.tools.access import Caller, acting_as
 from quant_agent_os.tools.compatibility import check_lock, lock_entry
 from quant_agent_os.tools.contracts import ToolContractError, ToolSpec
 from quant_agent_os.tools.permissions import READ_ONLY, PermissionPolicy
@@ -25,14 +26,19 @@ from quant_agent_os.tools.registry import ToolRegistry
 
 
 def check_tool(
-    spec: ToolSpec[Any, Any], arguments: dict[str, Any], *, expect: CallStatus = "ok"
+    spec: ToolSpec[Any, Any],
+    arguments: dict[str, Any],
+    *,
+    expect: CallStatus = "ok",
+    caller: Caller | None = None,
 ) -> ToolCallRecord:
     """Check ``spec`` against the platform contract with ``arguments`` and return the record.
 
     The call runs with exactly the permissions the tool declares, granted and pre-approved, so
     the check exercises the tool, not the approval gate. The tool is called up to three times
     (direct, MCP, and a determinism repeat), so give a tool with side effects a scratch target.
-    Raises `ToolContractError` listing every problem found.
+    With ``caller``, every call acts as that caller, as a served call would; a tool registered
+    with ``forward_caller=True`` needs one. Raises `ToolContractError` listing every problem found.
     """
     problems: list[str] = []
     descriptor = spec.descriptor()
@@ -47,6 +53,18 @@ def check_tool(
             problems.append(f"{schema} is not a JSON object schema")
     policy = PermissionPolicy(granted=READ_ONLY | spec.permissions, preapproved=spec.permissions)
     executor = ToolExecutor(ToolRegistry([spec]), policy)
+    with acting_as(caller):
+        return _check_calls(spec, descriptor, executor, arguments, expect, problems)
+
+
+def _check_calls(
+    spec: ToolSpec[Any, Any],
+    descriptor: dict[str, Any],
+    executor: ToolExecutor,
+    arguments: dict[str, Any],
+    expect: CallStatus,
+    problems: list[str],
+) -> ToolCallRecord:
     record = executor.execute(ToolCall(tool=spec.name, arguments=arguments))
     if record.status != expect:
         # A test may show what the run record keeps for an internal error: the exception.
@@ -77,13 +95,15 @@ def check_app(
     datasets: DatasetStore | None = None,
     lock: Path | None = None,
     update_lock: bool = False,
+    caller: Caller | None = None,
 ) -> list[ToolCallRecord]:
     """Check every tool in ``app`` with its example call, for a firm's own CI.
 
     ``examples`` maps each tool's name to the arguments of one call that should succeed over
     ``datasets``. With ``lock``, the tools' versions, permissions, and schemas are compared with
     that file: a schema change needs a version bump at least as big as the change (decision
-    0015). ``update_lock`` writes the file, but only when no bump is too small. Raises
+    0015). ``update_lock`` writes the file, but only when no bump is too small. With ``caller``,
+    each call acts as that caller, as `check_tool` does. Raises
     `ToolContractError` listing every problem found.
     """
     tools = app.tools(datasets)
@@ -101,7 +121,7 @@ def check_app(
     for spec in tools:
         if spec.name in examples:
             try:
-                records.append(check_tool(spec, examples[spec.name]))
+                records.append(check_tool(spec, examples[spec.name], caller=caller))
             except ToolContractError as error:
                 problems.append(str(error))
     if lock is not None:

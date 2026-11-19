@@ -261,7 +261,19 @@ def doctor() -> None:
         add("permissions", "ok", "read-only")
     if settings.preapproved_permissions:
         names = ", ".join(sorted(p.value for p in settings.preapproved_permissions))
-        add("pre-approved", "warn", f"run without an approval: {names}")
+        add(
+            "pre-approved",
+            "warn",
+            f"every tool runs without an approval for: {names}; name the tools instead with "
+            "QUANT_AGENT_OS_PREAPPROVED_TOOLS",
+        )
+    if summary["preapproved_tools"] != "(none)":
+        add(
+            "pre-approved tools",
+            "info",
+            f"run without an approval: {summary['preapproved_tools']} (a server warns at start-up "
+            "about a name it does not serve)",
+        )
 
     for old, new in (
         (Path(".quant-research") / "knowledge.db", "knowledge.db"),

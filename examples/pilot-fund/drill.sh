@@ -116,7 +116,7 @@ export QUANT_AGENT_OS_ACCESS_FILE="$FUND/facility/access.toml"
 export QUANT_AGENT_OS_SIGN_IN_FILE="$FUND/site/sign-in.toml"
 export KESTREL_INTROSPECTION_SECRET=kpc-introspection-fixture
 export QUANT_AGENT_OS_GRANTED_PERMISSIONS='["read_local_data", "network"]'
-export QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'
+export QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["risk_desks", "risk_exposure", "risk_desk_var", "risk_stress", "risk_stress_all", "risk_factor_decomposition"]}'
 mkdir -p "$KPC_OUTPUT"
 
 phase "3. build the warehouse"

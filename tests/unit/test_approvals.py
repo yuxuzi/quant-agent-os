@@ -231,3 +231,145 @@ def test_settings_read_preapproved_permissions(monkeypatch: pytest.MonkeyPatch) 
 
     assert policy.preapproved == {Permission.NETWORK}
     assert policy.needs_approval([Permission.NETWORK, Permission.READ_LOCAL_DATA]) == frozenset()
+
+
+# Per-tool standing approvals (decision 0030)
+
+
+@tool(
+    name="write_other_note",
+    description="Append a note to another file.",
+    permissions=[Permission.WRITE_LOCAL_DATA],
+    idempotent=False,
+)
+def write_other_note(params: Note) -> Written:
+    WRITES.append(params.text)
+    return Written(written=params.text)
+
+
+def test_a_per_tool_standing_approval_covers_only_the_named_tool() -> None:
+    policy = PermissionPolicy(
+        granted=READ_ONLY | {Permission.WRITE_LOCAL_DATA},
+        preapproved_tools={Permission.WRITE_LOCAL_DATA: frozenset({"write_note"})},
+    )
+    with Platform([write_note, write_other_note], policy=policy) as platform:
+        named = platform.call("write_note", text="x")
+        other = platform.call("write_other_note", text="y")
+        stored = platform.get_run(named.run_id or "")
+
+    assert (named.status, named.approval) == ("ok", "standing:write_local_data")
+    assert stored is not None
+    assert stored.events[1].details["approval"] == "standing:write_local_data"
+    # Another tool with the same permission still needs its own approval for each call.
+    assert (other.status, other.approval) == ("approval_required", None)
+    assert WRITES == ["x"]
+    assert policy.needs_approval([Permission.WRITE_LOCAL_DATA], "write_note") == frozenset()
+    assert policy.needs_approval([Permission.WRITE_LOCAL_DATA], "write_other_note") == {
+        Permission.WRITE_LOCAL_DATA
+    }
+    assert policy.needs_approval([Permission.WRITE_LOCAL_DATA]) == {Permission.WRITE_LOCAL_DATA}
+
+
+def test_a_per_tool_standing_approval_grants_nothing() -> None:
+    policy = PermissionPolicy(
+        preapproved_tools={Permission.WRITE_LOCAL_DATA: frozenset({"write_note"})}
+    )
+    with Platform([write_note], policy=policy) as platform:
+        record = platform.call("write_note", text="x")
+
+    assert record.status == "denied"
+    assert WRITES == []
+
+
+def test_settings_read_per_tool_standing_approvals(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("QUANT_AGENT_OS_GRANTED_PERMISSIONS", '["read_local_data", "network"]')
+    monkeypatch.setenv(
+        "QUANT_AGENT_OS_PREAPPROVED_TOOLS", '{"network": ["risk_desk_var", "risk_stress"]}'
+    )
+
+    settings = Settings()
+    policy = settings.policy()
+
+    assert policy.preapproved == frozenset()
+    assert policy.preapproved_tools == {
+        Permission.NETWORK: frozenset({"risk_desk_var", "risk_stress"})
+    }
+    assert policy.needs_approval([Permission.NETWORK], "risk_stress") == frozenset()
+    assert policy.needs_approval([Permission.NETWORK], "embed_query") == {Permission.NETWORK}
+    assert settings.public_summary()["preapproved_tools"] == "network: risk_desk_var, risk_stress"
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ('{"teleport": ["risk_desk_var"]}', "teleport"),
+        ('{"read_local_data": ["risk_desk_var"]}', "needs no approval"),
+        ('{"network": ["risk_*"]}', "exact tool names"),
+        ('{"network": [""]}', "exact tool names"),
+        ('{"network": "risk_desk_var"}', "preapproved_tools"),
+    ],
+)
+def test_settings_refuse_per_tool_standing_approvals_that_are_not_exact(
+    monkeypatch: pytest.MonkeyPatch, value: str, message: str
+) -> None:
+    from pydantic import ValidationError
+
+    monkeypatch.setenv("QUANT_AGENT_OS_PREAPPROVED_TOOLS", value)
+
+    with pytest.raises(ValidationError, match=message):
+        Settings()
+
+
+def test_a_policy_refuses_a_per_tool_approval_of_a_permission_that_needs_none() -> None:
+    with pytest.raises(ValueError, match="needs no approval"):
+        PermissionPolicy(preapproved_tools={Permission.READ_LOCAL_DATA: frozenset({"read_note"})})
+
+
+def test_the_config_file_cannot_pre_approve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from quant_agent_os.config.settings import ConfigFileError
+
+    monkeypatch.setenv("QUANT_AGENT_OS_HOME", str(tmp_path))
+    (tmp_path / "config.toml").write_text('[preapproved_tools]\nnetwork = ["risk_desk_var"]\n')
+
+    with pytest.raises(ConfigFileError, match="preapproved_tools"):
+        Settings()
+
+
+def test_start_up_warns_about_server_wide_and_unserved_standing_approvals(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from quant_platform.serve import warn_about_permissions
+
+    policy = PermissionPolicy(
+        granted=READ_ONLY | {Permission.WRITE_LOCAL_DATA},
+        preapproved=frozenset({Permission.NETWORK}),
+        preapproved_tools={
+            Permission.WRITE_LOCAL_DATA: frozenset({"write_note", "wirte_note", "read_note"})
+        },
+    )
+
+    warn_about_permissions([write_note, write_other_note, read_note], policy)
+    err = " ".join(capsys.readouterr().err.split())
+
+    assert "approves network for every tool this server serves" in err
+    assert "write_local_data for wirte_note, which this server does not serve" in err
+    assert "write_local_data for read_note, which does not declare it" in err
+    assert "write_other_note needs write_local_data, which needs an approval" in err
+    assert "write_note needs" not in err.replace("write_other_note needs", "")
+
+
+def test_start_up_is_quiet_about_exact_standing_approvals(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from quant_platform.serve import warn_about_permissions
+
+    policy = PermissionPolicy(
+        granted=READ_ONLY | {Permission.WRITE_LOCAL_DATA},
+        preapproved_tools={Permission.WRITE_LOCAL_DATA: frozenset({"write_note"})},
+    )
+
+    warn_about_permissions([write_note, read_note], policy)
+
+    assert capsys.readouterr().err == ""

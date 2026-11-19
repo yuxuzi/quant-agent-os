@@ -784,10 +784,31 @@ def _service_module(selected: list[_Selected], legacy: str, scanned: list[Found]
             "",
             "",
             f'app = FastAPI(title="{legacy} service (draft)", lifespan=lifespan)',
+            "",
+            *CALLER_HOOK,
         ]
     )
     parts = [doc + "\n\n" + imports.render() + "\n\n" + setup, *endpoints, *helpers]
     return "\n\n\n".join(parts).rstrip() + "\n"
+
+
+# Decision 0030: a service that scopes answers per caller checks the platform's signed header.
+CALLER_HOOK = (
+    "# TODO(review): to scope answers to who is calling (a PM's own desk), register the stubs",
+    '# with forward_caller=True, caller_secret_env="SERVICE_CALLER_SECRET", and check the',
+    "# X-QAOS-Caller header in each endpoint, naming its tool; otherwise every caller the",
+    "# platform admits sees every answer. For example:",
+    "#     from fastapi import Header, HTTPException",
+    "#     from quant_agent_os.registration import CallerAssertionError, verify_caller",
+    "#",
+    "#     def caller_of(header: str | None, tool: str) -> Any:  # a VerifiedCaller",
+    "#         try:",
+    '#             return verify_caller(header, os.environ["SERVICE_CALLER_SECRET"], tool=tool)',
+    "#         except CallerAssertionError:",
+    "#             raise HTTPException(401) from None",
+    "#",
+    '#     ... x_qaos_caller: str | None = Header(None) ... caller_of(x_qaos_caller, "<tool>")',
+)
 
 
 def _set_up_methods(owner: Found, scanned: list[Found], selected: list[_Selected]) -> list[str]:

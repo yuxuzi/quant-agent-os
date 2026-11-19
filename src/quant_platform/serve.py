@@ -81,10 +81,15 @@ def _applies(access: AccessPolicy, path: Path) -> bool:
 
 
 def warn_about_permissions(tools: list[ToolSpec[Any, Any]], policy: PermissionPolicy) -> None:
-    """Warn about tools the policy will deny, or will hold for an approval on every call."""
+    """Warn about tools the policy will deny, or will hold for an approval on every call.
+
+    Also warn about standing approvals that are wider than the operator may expect: one for
+    every tool (decision 0030), or one naming a tool this server does not serve, which approves
+    nothing.
+    """
     for spec in tools:
         missing = sorted(p.value for p in spec.permissions - policy.granted)
-        unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions))
+        unapproved = sorted(p.value for p in policy.needs_approval(spec.permissions, spec.name))
         if missing:
             errors.print(
                 f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(missing)}, which is "
@@ -95,8 +100,32 @@ def warn_about_permissions(tools: list[ToolSpec[Any, Any]], policy: PermissionPo
             errors.print(
                 f"[yellow]warning:[/yellow] {spec.name} needs {', '.join(unapproved)}, which "
                 "needs an approval for every call, so calls will return approval_required. "
-                "Pre-approve it with QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS, or do not serve it."
+                "Pre-approve it for this tool with QUANT_AGENT_OS_PREAPPROVED_TOOLS, or do not "
+                "serve it."
             )
+    if policy.preapproved:
+        names = ", ".join(sorted(p.value for p in policy.preapproved))
+        errors.print(
+            f"[yellow]warning:[/yellow] QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS approves {names} "
+            "for every tool this server serves, now and later, without a per-call approval. Name "
+            "the tools instead with QUANT_AGENT_OS_PREAPPROVED_TOOLS."
+        )
+    served = {spec.name: spec for spec in tools}
+    for permission, tool_names in sorted(policy.preapproved_tools.items()):
+        for name in sorted(tool_names):
+            named = served.get(name)
+            if named is None:
+                errors.print(
+                    f"[yellow]warning:[/yellow] QUANT_AGENT_OS_PREAPPROVED_TOOLS approves "
+                    f"{permission.value} for {name}, which this server does not serve, so it "
+                    "approves nothing. Check the name."
+                )
+            elif permission not in named.permissions:
+                errors.print(
+                    f"[yellow]warning:[/yellow] QUANT_AGENT_OS_PREAPPROVED_TOOLS approves "
+                    f"{permission.value} for {name}, which does not declare it, so it approves "
+                    "nothing. Remove it."
+                )
 
 
 def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = True) -> None:

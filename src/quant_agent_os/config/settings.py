@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import tomllib
+from collections.abc import Iterable, Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,12 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from quant_agent_os.tools.permissions import READ_ONLY, Permission, PermissionPolicy
+from quant_agent_os.tools.permissions import (
+    READ_ONLY,
+    Permission,
+    PermissionPolicy,
+    check_preapproved_tools,
+)
 
 # What config.toml may set. Permissions are left out on purpose: they come only from the
 # environment or the home's .env, so one more file cannot widen what tools may do.
@@ -78,7 +84,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="QUANT_AGENT_OS_", extra="ignore")
 
     granted_permissions: frozenset[Permission] = READ_ONLY
-    preapproved_permissions: frozenset[Permission] = frozenset()
+    preapproved_permissions: frozenset[Permission] = frozenset()  # every tool; prefer the next
+    preapproved_tools: dict[Permission, frozenset[str]] = Field(default_factory=dict)
     log_level: str = "INFO"
     store: str = Field(default_factory=lambda: str(home_dir() / "knowledge.db"))
     datasets_dir: Path = Field(default_factory=lambda: home_dir() / "datasets")
@@ -96,6 +103,14 @@ class Settings(BaseSettings):
     @classmethod
     def _expand_optional_user(cls, value: Path | None) -> Path | None:
         return value.expanduser() if value is not None else None
+
+    @field_validator("preapproved_tools")
+    @classmethod
+    def _exact_tools(
+        cls, value: dict[Permission, frozenset[str]]
+    ) -> dict[Permission, frozenset[str]]:
+        check_preapproved_tools(value)
+        return value
 
     @classmethod
     def settings_customise_sources(
@@ -116,7 +131,9 @@ class Settings(BaseSettings):
     def policy(self) -> PermissionPolicy:
         """Return the permission policy these settings configure."""
         return PermissionPolicy(
-            granted=self.granted_permissions, preapproved=self.preapproved_permissions
+            granted=self.granted_permissions,
+            preapproved=self.preapproved_permissions,
+            preapproved_tools=self.preapproved_tools,
         )
 
     def public_summary(self) -> dict[str, str]:
@@ -128,12 +145,22 @@ class Settings(BaseSettings):
                 sorted(p.value for p in self.preapproved_permissions)
             )
             or "(none)",
+            "preapproved_tools": describe_preapproved_tools(self.preapproved_tools) or "(none)",
             "log_level": self.log_level,
             "store": re.sub(r"://[^/@]*@", "://***@", self.store),
             "datasets_dir": str(self.datasets_dir),
             "runs_file": str(self.runs_file),
             "api_keys_file": str(self.api_keys_file),
         }
+
+
+def describe_preapproved_tools(value: Mapping[Permission, Iterable[str]]) -> str:
+    """Return per-tool standing approvals as ``network: tool_a, tool_b; ...``, or ``""``."""
+    return "; ".join(
+        f"{permission.value}: {', '.join(sorted(names))}"
+        for permission, names in sorted(value.items())
+        if names
+    )
 
 
 @lru_cache
