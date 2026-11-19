@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   `quant_toolbox.report.pdf.write_pdf` writes any report, such as a tear sheet, as a PDF. Quant Toolbox
   also gains trading calendars, a returns table of a fund against its benchmarks by period, and a firm's
   own metric set in `analyze`; its changelog has the details.
+- **Factsheets and risk reports.** Quant Toolbox builds a fund's monthly factsheet (`report.factsheet`) and
+  a book's risk report (`report.risk_report`) from sections a firm can also compose itself, and
+  `report.write_report` writes any report as HTML, Markdown, JSON, PDF, or Excel by its file's suffix.
 
 ## [0.8.0] - 2026-11-19
 

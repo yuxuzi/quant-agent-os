@@ -44,6 +44,26 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 - **A returns section, by period** (`report.returns_table`, `RETURN_PERIODS`): a row per series (a fund,
   its benchmarks, peers) and a column per period (`1D`, the return on the last date, then MTD, QTD, YTD,
   1Y, 3Y, 5Y, ITD, or any horizon), with the fund's excess over each other series in rows of its own.
+- **A monthly factsheet** (`report.factsheet`), the common elements of UCITS and hedge-fund factsheets: fund
+  facts, returns by period against the benchmark and peers, calendar-year returns (a table and a chart),
+  growth of 1, risk measures over 1, 3, and 5 years, rolling volatility, top holdings, and a breakdown by
+  group against the benchmark's, with a disclaimer as the footer. Only the fund's returns are needed; each
+  other input adds its section. Its sections stand alone: `facts_table`, `calendar_year_table`,
+  `calendar_year_chart`, `risk_measures_table` (return, volatility, Sharpe, Sortino, drawdown, and with a
+  benchmark beta, alpha, correlation, R squared, tracking error, information ratio, and up and down
+  capture, over the horizons of the returns table), `rolling_chart` (volatility or beta),
+  `holdings_table`, `breakdown_table`, and `breakdown_chart`.
+- **A risk report** (`report.risk_report`) of a book's weights and asset returns, laid out from
+  `quant_toolbox.risk`: exposure and concentration, exposure by group, historical and parametric value at
+  risk and expected shortfall, contribution to risk, historical stress, liquidity by bucket (with ADV and
+  positions), factor risk (with a factor model), and correlation among the largest positions. Its
+  sections stand alone too: `exposure_table`, `group_exposure_table`, `tail_risk_table`,
+  `contribution_table`, `stress_table`, `liquidity_table`, `factor_table`, and `correlation_table`.
+- **One call to write a report** (`report.write_report(document, path, charts=)`, `REPORT_FORMATS`): HTML,
+  Markdown, JSON, PDF, or Excel by the file's suffix, creating folders; an unknown suffix, or interactive
+  charts for a format other than HTML, is refused.
+- **Shaded tables and a footer.** `TableBlock(shade=True)` colours numbers by sign in HTML and PDF (gains
+  green, losses red), and `Document(footer=)` (a disclaimer, say) follows every block in every format.
 - **PDF reports** (`quant_toolbox.report.pdf`, the new `pdf` extra: fpdf2, pure Python). `render_pdf(document)`
   and `write_pdf(document, path)` draw any `Document` on A4: tables, and charts drawn as vectors from their
   data. Without the extra, the call raises `MissingExtraError` naming `uv add "quant-toolbox[pdf]"`.
@@ -56,6 +76,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 - Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
   coverage when a calendar is given or configured, and are unchanged otherwise. `analyze` records the
   calendar's name in `conventions`, and `tear_sheet` passes its `calendar=` through.
+- **Calendars in use.** `demo_panel`, `demo_returns`, and `demo_book` take `calendar=` and date their rows by its
+  sessions, or by the default calendar when none is given (identical to weekdays until a calendar is set).
+  `return_notes(table, calendar=)` notes rows on non-sessions and missing sessions when a calendar is given or
+  configured, and is unchanged otherwise.
 
 ## [0.7.0] - 2026-11-19
 

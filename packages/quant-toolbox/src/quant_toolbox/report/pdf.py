@@ -28,6 +28,8 @@ _TEXT = (31, 41, 55)
 _MUTED = (75, 85, 99)
 _RULE = (209, 213, 219)
 _GRID = (229, 231, 235)
+_GAIN = (21, 128, 61)
+_LOSS = (185, 28, 28)
 # Minus, en and em dashes, curly quotes, an ellipsis, and a no-break space, as Latin-1 text.
 _PLAIN = str.maketrans(
     {
@@ -53,6 +55,9 @@ def render_pdf(document: Document) -> bytes:
         _note(pdf, document.subtitle, size=9)
     for block in document.blocks:
         _block(fpdf, pdf, block)
+    if document.footer:
+        pdf.ln(4)
+        _note(pdf, document.footer)
     return bytes(pdf.output())
 
 
@@ -101,8 +106,11 @@ def _table(fpdf: Any, pdf: Any, block: TableBlock) -> None:
     ) as table:
         table.row([_plain(column.name) for column in block.columns])
         for values in block.rows:
-            cells = zip(values, block.columns, strict=True)
-            table.row([_plain(format_cell(value, column.kind)) for value, column in cells])
+            row = table.row()
+            for value, column in zip(values, block.columns, strict=True):
+                colour = _sign_colour(value) if block.shade and column.kind != "text" else None
+                style = fpdf.FontFace(color=colour) if colour else None
+                row.cell(_plain(format_cell(value, column.kind)), style=style)
 
 
 def _chart(pdf: Any, block: ChartBlock) -> None:
@@ -200,6 +208,12 @@ def _note(pdf: Any, text: str, *, size: float = 7.5) -> None:
     pdf.set_text_color(*_MUTED)
     pdf.multi_cell(WIDTH, size * 0.5, _plain(text), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*_TEXT)
+
+
+def _sign_colour(value: object) -> tuple[int, int, int] | None:
+    if not isinstance(value, int | float) or not math.isfinite(value) or value == 0:
+        return None
+    return _GAIN if value > 0 else _LOSS
 
 
 def _tick(value: float, span: float, percent: bool) -> str:
