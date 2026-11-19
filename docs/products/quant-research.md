@@ -58,6 +58,10 @@ uv run qaos ingest ~/research --pdf-parser ragflow
 - Quant Research still chunks, links, and cites the text. A citation names the page and a line
   range within the page text RAGFlow returned, which can differ from pypdf's lines. Changing the
   parser re-processes the PDFs on the next ingestion.
+- A table RAGFlow recognises becomes one passage, cited on the page where it starts, with one
+  line per row and cells separated by `|`, so its numbers stay with their row and column
+  headers. A table longer than 4,000 characters splits between rows. Table cells are searched
+  but, as with pypdf, never read as relations.
 - A chunk RAGFlow returns without a page position makes that file fail with a warning, rather
   than get a guessed citation.
 - Only ingestion talks to RAGFlow; serving and search never do. `RAGFLOW_PARSE_TIMEOUT` (seconds,

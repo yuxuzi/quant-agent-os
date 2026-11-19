@@ -202,7 +202,7 @@ class IngestService:
                 for passage in split_passages(source.body, first_line=source.body_first_line)
             ]
         else:
-            located = [(number, passage) for number, passage in split_pages(source.pages)]
+            located = list(split_pages(source.pages, tables=source.tables))
         chunks = [
             Chunk(
                 id=f"{document_id}#{ordinal}",

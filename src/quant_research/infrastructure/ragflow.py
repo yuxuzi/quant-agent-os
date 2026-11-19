@@ -4,7 +4,9 @@
 RAGFlow's DeepDoc parser, which reads layout and tables and runs OCR on scanned pages, and turns
 the parsed chunks back into page texts. Quant Research then chunks, links, and cites those pages
 as it does pypdf's, so citations name the page and a line range within the page text RAGFlow
-returned, not the PDF's own lines.
+returned, not the PDF's own lines. A chunk RAGFlow marks as a table (``doc_type_kwd`` ``table``,
+its content an HTML table) becomes one line per row, cells separated by `` | ``, and is kept in
+one passage.
 
 Each file gets a temporary dataset: create it, upload, parse, read the chunks, and delete it.
 Only ``qaos ingest`` uses the loader; serving never contacts RAGFlow. Parsing in RAGFlow embeds
@@ -31,6 +33,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Sequence
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +49,7 @@ from quant_research.infrastructure.remote_embedding import (
     urllib_transport,
 )
 
-VERSION = "ragflow-v1"
+VERSION = "ragflow-v2"  # v2: tables as rows, kept in one passage
 PARSER = "general"  # RAGFlow's built-in chunker with DeepDoc layout recognition
 PAGE_SIZE = 100  # the largest page the chunk listing accepts
 _DONE = frozenset({"DONE", "3"})
@@ -111,13 +114,15 @@ class RagflowPdfLoader:
                 self._call("DELETE", "/datasets", {"ids": [dataset]})
             raise
         self._call("DELETE", "/datasets", {"ids": [dataset]})
+        pages, tables = pages_from_chunks(chunks, path.name)
         return SourceFile(
             uri=uri_for(path, root),
             sha256=sha256,
             body="",
             body_first_line=1,
-            pages=pages_from_chunks(chunks, path.name),
+            pages=pages,
             loader_version=VERSION,
+            tables=tables,
         )
 
     def _parse(self, dataset: str, name: str, raw: bytes) -> list[dict[str, Any]]:
@@ -215,16 +220,22 @@ def _multipart(files: dict[str, bytes], boundary: str) -> bytes:
     return b"".join(parts)
 
 
-def pages_from_chunks(chunks: Sequence[dict[str, Any]], name: str) -> tuple[str, ...]:
+def pages_from_chunks(
+    chunks: Sequence[dict[str, Any]], name: str
+) -> tuple[tuple[str, ...], tuple[tuple[int, int, int], ...]]:
     """Place each chunk's text on the page where it starts, in reading order.
 
     A chunk's first position gives its page and its top edge; chunks on one page are ordered by
-    that edge, then by RAGFlow's order. Raises `SourceReadError` when a chunk has text but no
-    page, because its citation would be a guess.
+    that edge, then by RAGFlow's order. Returns the page texts and, for each table chunk,
+    ``(page, first line, last line)`` of its rows in that page's text. Raises `SourceReadError`
+    when a chunk has text but no page, because its citation would be a guess.
     """
-    placed: list[tuple[int, float, int, str]] = []
+    placed: list[tuple[int, float, int, str, bool]] = []
     for order, chunk in enumerate(chunks):
+        table = _is_table(chunk)
         text = str(chunk.get("content") or "").strip()
+        if table:
+            text = table_text(text)
         if not text:
             continue
         positions = chunk.get("positions") or []
@@ -238,10 +249,97 @@ def pages_from_chunks(chunks: Sequence[dict[str, Any]], name: str) -> tuple[str,
             ) from error
         if page < 1:
             raise SourceReadError(f"RAGFlow returned page {page} for a chunk of {name}.")
-        placed.append((page, top, order, text))
+        placed.append((page, top, order, text, table))
     if not placed:
-        return ()
+        return (), ()
     pages: list[list[str]] = [[] for _ in range(max(item[0] for item in placed))]
-    for page, _, _, text in sorted(placed):
+    tables: list[tuple[int, int, int]] = []
+    next_line = [1] * len(pages)
+    for page, _, _, text, table in sorted(placed):
+        count = len(text.splitlines())
+        if table:
+            tables.append((page, next_line[page - 1], next_line[page - 1] + count - 1))
         pages[page - 1].append(text)
-    return tuple("\n\n".join(texts) for texts in pages)
+        next_line[page - 1] += count + 1  # the blank line between chunks
+    return tuple("\n\n".join(texts) for texts in pages), tuple(tables)
+
+
+def _is_table(chunk: dict[str, Any]) -> bool:
+    kind = chunk.get("doc_type_kwd")
+    return kind == "table" or (isinstance(kind, list) and "table" in kind)
+
+
+def table_text(content: str) -> str:
+    """Return an HTML table as one line per row, cells joined by `` | ``, with no blank lines.
+
+    Text outside the table, such as a caption, keeps its place as lines of its own. Content
+    that holds no HTML table is returned with its blank lines removed.
+    """
+    if "<table" not in content.lower():
+        return "\n".join(line.strip() for line in content.splitlines() if line.strip())
+    reader = _TableReader()
+    reader.feed(content)
+    reader.close()
+    return "\n".join(reader.lines)
+
+
+class _TableReader(HTMLParser):
+    """Collects table rows and the text around them; markup is read, never rendered."""
+
+    _BREAKS = frozenset({"table", "caption", "p", "div", "br", "thead", "tbody", "tfoot"})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.lines: list[str] = []
+        self._text: list[str] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._end_row()
+            self._flush()
+            self._row = []
+        elif tag in {"td", "th"} and self._row is not None:
+            self._end_cell()
+            self._cell = []
+        elif tag in self._BREAKS and self._cell is None:
+            self._flush()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"td", "th"}:
+            self._end_cell()
+        elif tag in {"tr", "table"}:
+            self._end_row()
+        if tag in {"td", "th", "tr"}:
+            return
+        if tag in self._BREAKS and self._cell is None:
+            self._flush()
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+        elif self._row is None:
+            self._text.append(data)
+
+    def close(self) -> None:
+        super().close()
+        self._end_row()
+        self._flush()
+
+    def _end_cell(self) -> None:
+        if self._row is not None and self._cell is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+        self._cell = None
+
+    def _end_row(self) -> None:
+        self._end_cell()
+        if self._row is not None and any(self._row):
+            self.lines.append(" | ".join(self._row))
+        self._row = None
+
+    def _flush(self) -> None:
+        text = " ".join("".join(self._text).split())
+        if text:
+            self.lines.append(text)
+        self._text = []

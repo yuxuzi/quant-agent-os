@@ -12,9 +12,11 @@ All notable changes to this project are documented here. The format follows
   reads layout and tables and runs OCR, so scanned PDFs get indexed. Each PDF goes to a temporary dataset on
   `RAGFLOW_URL` (https, or plain http only on this machine) with `RAGFLOW_API_KEY`, and the dataset is deleted
   afterwards. Quant Research still does the chunking, linking, and citing: a citation names the page and a line
-  range within the page text RAGFlow returned. A chunk that comes back without a page is refused rather than
-  guessed. Serving never contacts RAGFlow, and the default parser is still pypdf. It needs no new dependency.
-  Tested offline against a fake server; its quality on real papers has not been measured yet.
+  range within the page text RAGFlow returned. A table RAGFlow recognises is kept in one passage, as one line
+  per row with cells separated by `|`, and splits between rows only beyond 4,000 characters, so a search
+  for a number finds its row and column headers with it. A chunk that comes back without a page is refused
+  rather than guessed. Serving never contacts RAGFlow, and the default parser is still pypdf. It needs no new
+  dependency. Tested offline against a fake server; its quality on real papers has not been measured yet.
 - **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
   it adds that many passages before and after the requested one, from the same document and in reading
   order, each citing its own location. A short PDF passage that starts mid-argument can be read in full

@@ -13,8 +13,9 @@ from pydantic import SecretStr
 from quant_research.application.retrieval import ResearchQuery
 from quant_research.bootstrap import open_research
 from quant_research.config import RagflowSettings, make_ragflow_loader
+from quant_research.domain.chunking import MAX_TABLE_CHARS, split_pages
 from quant_research.domain.ports import SourceReadError
-from quant_research.infrastructure.ragflow import RagflowPdfLoader, pages_from_chunks
+from quant_research.infrastructure.ragflow import RagflowPdfLoader, pages_from_chunks, table_text
 from quant_research.infrastructure.remote_embedding import HttpResponse
 
 KEY = SecretStr("ragflow-secret-key")
@@ -78,12 +79,13 @@ def test_pages_are_rebuilt_in_reading_order(tmp_path: Path) -> None:
     source = _loader(server).load(pdf, tmp_path)
 
     assert source.uri == "paper.pdf"
-    assert source.loader_version == "ragflow-v1"
+    assert source.loader_version == "ragflow-v2"
     assert source.pages == (
         "Low volatility anomaly\n\nWe study betting against beta.",
         "Results: low volatility stocks earn higher risk-adjusted returns.",
     )
     assert b"%PDF-1.4 fake" in server.uploaded
+    assert source.tables == ()
     assert server.calls[-1] == ("DELETE", "/datasets")
     assert server.headers["Authorization"] == "Bearer ragflow-secret-key"
 
@@ -125,6 +127,81 @@ def test_a_slow_parse_times_out(tmp_path: Path) -> None:
 def test_a_chunk_without_a_page_is_refused() -> None:
     with pytest.raises(SourceReadError, match="without a page position"):
         pages_from_chunks([{"content": "text", "positions": []}], "x.pdf")
+
+
+TABLE = (
+    "<table><caption>Table 2: Betting against beta</caption>"
+    "<tr><th>Decile</th><th>Beta</th><th>Alpha</th></tr>"
+    "<tr><td>1</td><td>0.61</td><td>0.52 &amp; significant</td></tr>"
+    "<tr><td>10</td><td>1.72</td><td>-0.03"
+    "</table>\nSource: CRSP, 1926-2012."
+)
+
+
+def test_a_table_becomes_rows_with_its_caption() -> None:
+    assert table_text(TABLE).splitlines() == [
+        "Table 2: Betting against beta",
+        "Decile | Beta | Alpha",
+        "1 | 0.61 | 0.52 & significant",
+        "10 | 1.72 | -0.03",
+        "Source: CRSP, 1926-2012.",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["table", ["table"]])
+def test_a_table_chunk_is_placed_with_its_line_range(kind: object) -> None:
+    pages, tables = pages_from_chunks(
+        [
+            {"content": "We study betting against beta.", "positions": [[1, 0, 0, 10, 20]]},
+            {"content": TABLE, "doc_type_kwd": kind, "positions": [[1, 0, 0, 30, 90]]},
+            {"content": "Alpha falls with beta.", "positions": [[1, 0, 0, 95, 99]]},
+        ],
+        "bab.pdf",
+    )
+
+    lines = pages[0].splitlines()
+    assert tables == ((1, 3, 7),)
+    assert lines[2] == "Table 2: Betting against beta" and lines[6] == "Source: CRSP, 1926-2012."
+    assert lines[8] == "Alpha falls with beta."
+
+
+def test_a_table_stays_in_one_passage() -> None:
+    rows = [f"{decile} | 0.{decile}1 | factor return of decile {decile}" for decile in range(40)]
+    page = "\n".join(["A long introduction that ends here.", "References", *rows, "After."])
+
+    located = split_pages([page], tables=[(1, 2, 2 + len(rows))])
+
+    assert [(passage.line_start, passage.line_end) for _, passage in located] == [
+        (1, 1),
+        (2, 42),
+        (43, 43),
+    ]
+    assert all(passage.section is None for _, passage in located)  # "References" is a cell
+
+
+def test_a_very_long_table_splits_between_rows() -> None:
+    rows = [f"{index} | " + "x" * 90 for index in range(100)]
+
+    located = split_pages(["\n".join(rows)], tables=[(1, 1, len(rows))])
+
+    assert len(located) > 1
+    assert all(len(passage.text) <= MAX_TABLE_CHARS for _, passage in located)
+    assert located[0][1].line_start == 1
+    assert located[-1][1].line_end == len(rows)
+
+
+def test_ingestion_keeps_a_ragflow_table_whole(tmp_path: Path) -> None:
+    (tmp_path / "bab.pdf").write_bytes(b"%PDF-1.4 fake")
+    chunks = [{"content": TABLE, "doc_type_kwd": "table", "positions": [[3, 0, 0, 10, 90]]}]
+
+    with open_research(":memory:", pdf=_loader(FakeRagflow(chunks))) as research:
+        research.ingest.ingest(tmp_path)
+        packet = research.research.find_related(ResearchQuery(query="betting against beta decile"))
+
+    passage = packet.passages[0]
+    assert passage.source.location is not None
+    assert passage.source.location.startswith("page 3, lines 1-5")
+    assert "Decile | Beta | Alpha" in passage.text and "10 | 1.72" in passage.text
 
 
 def test_refusals_carry_ragflow_message_but_never_the_key(tmp_path: Path) -> None:
