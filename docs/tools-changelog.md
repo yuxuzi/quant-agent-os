@@ -28,6 +28,10 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 Nothing yet.
 
+## 0.9.0
+
+No served tool changed.
+
 ## 0.8.0
 
 | Tool | Version | Change |

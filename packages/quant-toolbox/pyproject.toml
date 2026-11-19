@@ -1,6 +1,6 @@
 [project]
 name = "quant-toolbox"
-version = "0.7.0"
+version = "0.8.0"
 description = "Typed, numpy-first performance, risk, research, and report code for investment teams, with every convention stated"
 readme = "README.md"
 requires-python = ">=3.11"

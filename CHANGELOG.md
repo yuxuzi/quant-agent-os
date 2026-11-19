@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-19
+
+A Quant Toolbox release: it carries Quant Toolbox 0.8.0, and no served tool or skill changed. The
+missing tags for 0.3.0, 0.4.0, and 0.6.0 now exist, and every install pin names this release, which a test
+holds.
+
 ### Added
 
 - **PDF reports.** The `pdf` extra now also brings Quant Toolbox's `pdf` extra (fpdf2), so

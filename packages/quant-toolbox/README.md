@@ -12,7 +12,7 @@ platform. MIT licensed.
 Releases are tagged in the Quant-Agent-OS repository; install with uv:
 
 ```bash
-uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.8.0#subdirectory=packages/quant-toolbox"
+uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0#subdirectory=packages/quant-toolbox"
 ```
 
 | Extra | Adds | For |

@@ -6,6 +6,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
+Released with Quant-Agent-OS 0.9.0.
+
 ### Added
 
 - **Trading calendars** (`quant_toolbox.data`, numpy only; decision 0033).
@@ -80,6 +84,15 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   sessions, or by the default calendar when none is given (identical to weekdays until a calendar is set).
   `return_notes(table, calendar=)` notes rows on non-sessions and missing sessions when a calendar is given or
   configured, and is unchanged otherwise.
+
+### Fixed
+
+- **`run_backtest` refuses a missing weight.** A NaN or infinite weight made that bar's return and
+  turnover NaN, then wrote the whole book off and charged a phantom rebuy on the next rebalance. It now
+  raises `ValueError` naming the first bar and asset column, and asks for 0 for no position. Prices and
+  weights of different shapes raise a `ValueError` naming both shapes, where numpy's broadcast error did.
+- The factsheet's risk measures note says how capture is measured (arithmetic, per bar), so it is not
+  read as Morningstar's monthly geometric capture.
 
 ## [0.7.0] - 2026-11-19
 

@@ -9,7 +9,7 @@ version and [changelog](../../packages/quant-toolbox/CHANGELOG.md)
 ([decision 0027](../decisions/0027-quant-toolbox-package.md)):
 
 ```bash
-uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.7.0#subdirectory=packages/quant-toolbox"
+uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0#subdirectory=packages/quant-toolbox"
 ```
 
 The platform's `toolbox` extra installs the same package, so `quant-agent-os[toolbox]` still works.
@@ -24,7 +24,7 @@ Seven subpackages in layers; each imports only the ones above it.
 | 2 | `quant_toolbox.performance` | `analyze`, every measure of a series in one typed, JSON-safe result; returns from prices; annualised return and volatility, Sharpe, Sortino, Calmar, omega, maximum drawdown, tail ratio, stability, historical and parametric (Gaussian, Cornish-Fisher) value at risk and expected shortfall, hit rate, turnover; alpha, beta, active metrics, and up and down capture against a benchmark; rolling volatility, Sharpe, beta, and correlation; skewness, kurtosis, and the distribution of returns; the Sharpe ratio's standard error, probabilistic and deflated Sharpe, and minimum track record; single-period Brinson attribution; horizons (MTD to ITD), monthly and calendar-year returns, drawdown episodes with their lengths |
 | 3 | `quant_toolbox.risk` | a book's exposures and concentration (Herfindahl), group exposures, simulated history; liquidity (days to liquidate at a share of ADV, Form PF-style buckets); Euler volatility contributions from a sample, EWMA, or vendor covariance, and expected-shortfall contributions; factor exposures and variance shares, a vendor factor model's risk, returns-based style regression with Newey-West t-statistics; correlation summaries; linear and historical-scenario stress, with twelve named windows from 2007 to 2024 |
 | 3 | `quant_toolbox.research` | ranks, information coefficients, Newey-West t-statistics, forward returns with a trade lag, quantile returns and spreads, IC decay and IC information ratio; z-scores, winsorizing, and group or factor neutralization; 12-1 momentum and reversal; dollar-neutral, beta-neutral, and long-only weights; the backtest engine with per-asset costs, cost drag and break-even cost; walk-forward and purged k-fold splits |
-| 4 | `quant_toolbox.report` | a report as data (tables, charts, text) rendered to Markdown, HTML, or JSON; the investor tear sheet and monthly grid; chart builders; run reports and comparisons; metric formatting |
+| 4 | `quant_toolbox.report` | a report as data (tables, charts, text) rendered to Markdown, HTML, JSON, PDF, or Excel, with `write_report` choosing by suffix; the investor tear sheet, the monthly factsheet, and the risk report, each built from sections that stand alone; chart builders; run reports and comparisons; metric formatting |
 | 4 | `quant_toolbox.audit` | provenance, code versions, run folders that are never reused, JSON-safe results |
 | 5 | `quant_toolbox.testing` | bias checks for a project's own signals and strategies: no look-ahead, the future never changes the past, costs only cost, no edge on random walks |
 
@@ -33,12 +33,12 @@ Import from a subpackage, never from a file whose name starts with an underscore
 ```python
 from pathlib import Path
 
-from quant_toolbox.data import load_table
+from quant_toolbox.data import demo_returns
 from quant_toolbox.performance import max_drawdown, sharpe_ratio
 from quant_toolbox.report import Document, equity_curve, render_html
 
-returns = load_table(Path("returns.csv"))
-fund = returns.column("fund")
+returns = demo_returns()  # your own: load_table(Path("returns.csv")), a date column then returns
+fund = returns.column("Macro")
 print(sharpe_ratio(fund, 252), max_drawdown(fund))
 chart = equity_curve(returns.dates, {"fund": fund})
 Path("report.html").write_text(render_html(Document("Fund", blocks=[chart])))
@@ -53,9 +53,9 @@ For one series, `analyze` gives everything at once, and `tear_sheet` turns it in
 from quant_toolbox.performance import analyze
 from quant_toolbox.report import tear_sheet
 
-result = analyze(returns.dates, fund, 252, benchmark=returns.column("index"))
+result = analyze(returns.dates, fund, 252, benchmark=returns.column("Index"))
 print(result.metrics["sharpe_ratio"], result.sharpe_inference["probabilistic_sharpe_ratio"])
-document = tear_sheet(returns.dates, fund, 252, name="Fund", benchmark=returns.column("index"))
+document = tear_sheet(returns.dates, fund, 252, name="Fund", benchmark=returns.column("Index"))
 Path("tear-sheet.html").write_text(render_html(document))
 ```
 
@@ -80,7 +80,7 @@ document = factsheet(
     fund,
     252,
     name="Fund",
-    benchmark=returns.column("index"),
+    benchmark=returns.column("Index"),
     facts={"Currency": "USD"},
     disclaimer="For professional investors only.",
 )

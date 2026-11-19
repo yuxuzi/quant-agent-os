@@ -88,6 +88,18 @@ def run_backtest(
     rebalance; it replaces ``rebalance_every``, which must then stay 1. The first close with a
     position always trades.
     """
+    if np.ndim(weights) != 2 or np.shape(prices) != np.shape(weights):
+        raise ValueError(
+            f"prices and weights need one row per bar and one column per asset each; got "
+            f"shapes {np.shape(prices)} and {np.shape(weights)}."
+        )
+    missing = np.argwhere(~np.isfinite(weights))
+    if missing.size:
+        bar, asset = (int(at) for at in missing[0])
+        raise ValueError(
+            f"weights hold {len(missing)} missing or infinite values, the first at bar {bar}, "
+            f"asset column {asset}: give 0 for no position."
+        )
     if lag < 0:
         raise ValueError("lag must be zero or more bars.")
     if rebalance_every < 1:
