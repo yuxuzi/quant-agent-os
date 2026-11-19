@@ -7,7 +7,9 @@ signal study uses the same convention, so its IC describes what this backtest ca
 
 Rebalancing: the book trades to its target weights every ``rebalance_every`` bars, counted from
 the first close with a position to take. In between, holdings drift with prices, and every
-rebalance trades the target minus the drifted holdings. Costs are charged on those trades.
+rebalance trades the target minus the drifted holdings. Costs are charged on those trades. Or,
+with ``rebalance_on``, the book also trades on the closes the mask marks, such as month ends from
+a calendar: ``np.isin(dates, calendar.period_ends(dates[0], dates[-1], "M"))``.
 
 Missing prices: an asset can only be traded at a close where it has a price, so a position is
 carried through a gap and earns the move over the gap when prices resume. A position in an
@@ -34,7 +36,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
 
-from quant_toolbox._types import FloatArray
+from quant_toolbox._types import BoolArray, FloatArray
 from quant_toolbox.performance import bar_returns
 from quant_toolbox.research._evaluation import DELISTING_RETURN, TRADE_LAG
 
@@ -77,16 +79,30 @@ def run_backtest(
     lag: int = TRADE_LAG,
     rebalance_every: int = 1,
     delisting_return: float = DELISTING_RETURN,
+    rebalance_on: BoolArray | None = None,
 ) -> BacktestResult:
     """Return per-bar gross and net returns, turnover, the weights held, and forced exits.
 
     ``cost_bps`` is charged per unit of one-way turnover, on actual trades: one rate, or an
-    array with one rate per asset.
+    array with one rate per asset. ``rebalance_on``, one flag per bar, marks the closes that also
+    rebalance; it replaces ``rebalance_every``, which must then stay 1. The first close with a
+    position always trades.
     """
     if lag < 0:
         raise ValueError("lag must be zero or more bars.")
     if rebalance_every < 1:
         raise ValueError("rebalance_every must be at least one bar.")
+    if rebalance_on is not None:
+        if rebalance_every != 1:
+            raise ValueError(
+                "rebalance_on and rebalance_every both set the schedule: give one, or "
+                "leave rebalance_every at 1 with rebalance_on."
+            )
+        if np.shape(rebalance_on) != (weights.shape[0],):
+            raise ValueError(
+                f"rebalance_on needs one flag per bar ({weights.shape[0]}), "
+                f"got shape {np.shape(rebalance_on)}."
+            )
     rates = np.asarray(cost_bps, dtype=np.float64)
     if rates.ndim not in (0, 1) or (rates.ndim == 1 and rates.size != weights.shape[-1]):
         raise ValueError("cost_bps must be one rate, or one rate per asset (column of weights).")
@@ -109,7 +125,10 @@ def run_backtest(
         target = weights[close - lag] if close >= lag else np.zeros(assets)
         if first is None and np.any(target != 0.0):
             first = close
-        due = first is not None and (close - first) % rebalance_every == 0
+        if rebalance_on is None:
+            due = first is not None and (close - first) % rebalance_every == 0
+        else:
+            due = first is not None and (close == first or bool(rebalance_on[close]))
         before = drifted * ~gone[close]  # a written-off position is simply gone
         held[bar] = np.where(due & priced[close], target, before)
         trades = np.abs(held[bar] - before)
