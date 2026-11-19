@@ -27,6 +27,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   `align_to_calendar(table, calendar=None, fill=, off_session=)` gives a table one row per session (NaN, or
   the previous value), and refuses a row on a non-session, naming it, unless told to drop it. `session_gaps`
   returns the sessions a table lacks and its rows on non-sessions.
+- **Calendars in use.** `demo_panel`, `demo_returns`, and `demo_book` take `calendar=` and date their rows by its
+  sessions, or by the default calendar when none is given (identical to weekdays until a calendar is set).
+  `return_notes(table, calendar=)` notes rows on non-sessions and missing sessions when a calendar is given or
+  configured, and is unchanged otherwise.
 
 ## [0.7.0] - 2026-11-19
 
