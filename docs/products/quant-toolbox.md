@@ -65,6 +65,28 @@ peers), then the fund's excess over each, for the last day, MTD, QTD, YTD, 1Y, 3
 `quant_toolbox.report.pdf.write_pdf(document, Path("tear-sheet.pdf"))` writes it as a PDF; without it, the
 call says which extra to install.
 
+`factsheet` builds a fund's monthly factsheet (facts, returns by period and calendar year, risk measures
+over 1, 3, and 5 years, rolling volatility, top holdings, and a breakdown by group), and `risk_report` a
+book's risk report (exposure, value at risk and expected shortfall, contribution to risk, stress,
+liquidity, factor risk, and correlation). Each section is also a function of its own, so a firm composes
+its own report as a `Document` of the sections it wants, and `write_report` writes any document by its
+file's suffix:
+
+```python
+from quant_toolbox.report import factsheet, write_report
+
+document = factsheet(
+    returns.dates,
+    fund,
+    252,
+    name="Fund",
+    benchmark=returns.column("index"),
+    facts={"Currency": "USD"},
+    disclaimer="For professional investors only.",
+)
+write_report(document, "factsheet.pdf")  # or .html, .md, .json, .xlsx
+```
+
 ## Where it fits
 
 Measured on 2026-11-17 from each project's PyPI metadata, every other open-source performance library requires
