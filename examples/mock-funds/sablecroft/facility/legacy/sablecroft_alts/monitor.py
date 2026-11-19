@@ -1,6 +1,7 @@
 """The NAV monitor: parses every administrator statement once, then answers from memory."""
 
 import glob
+import os
 import time
 
 import pandas as pd
@@ -14,7 +15,7 @@ _LOADED_AT = None
 def refresh(root=None):
     """Re-read all raw statements. Slow: it parses every file under raw/admin-nav."""
     global _STATEMENTS, _LOADED_AT
-    root = root or CONFIG["lake"].replace("/uc/sablecroft", "/raw")
+    root = root or os.path.join(os.path.dirname(os.path.dirname(CONFIG["lake"])), "raw")
     frames = [pd.read_csv(p) for p in glob.glob(root + "/admin-nav/*/*/nav-statement.csv")]
     time.sleep(CONFIG["refresh_delay_s"])
     _STATEMENTS = pd.concat(frames, ignore_index=True)

@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
 
@@ -251,6 +252,16 @@ def connect_lake(uri_map: Mapping[str, str], base: Path) -> Any:
     return connection
 
 
+def sqlite_url(path: Path) -> str:
+    """Return the ``sqlite:///`` URL of a database file, with a drive letter kept on Windows."""
+    return "sqlite:" + path.resolve().as_uri().removeprefix("file:")
+
+
+def sqlite_path(url: str) -> Path:
+    """Return the database file a ``sqlite:///`` URL names."""
+    return Path(url2pathname(urlsplit(url).path))
+
+
 def connect_oms(url: str, environ: Mapping[str, str | None]) -> Any:
     """Return a DB-API connection to the order-management database, read-only where it can be.
 
@@ -260,8 +271,7 @@ def connect_oms(url: str, environ: Mapping[str, str | None]) -> Any:
     """
     parts = urlsplit(url)
     if parts.scheme == "sqlite":
-        path = Path(parts.path)
-        return sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        return sqlite3.connect(f"{sqlite_path(url).resolve().as_uri()}?mode=ro", uri=True)
     import psycopg
 
     connection = psycopg.connect(
@@ -306,7 +316,7 @@ class WrenfieldDatasetStore:
         self._lake: Any = None
 
     def _local_oms_url(self) -> str:
-        return f"sqlite://{(self.base / self.uri_map[OMS_URI]).resolve()}"
+        return sqlite_url(self.base / self.uri_map[OMS_URI])
 
     def lake_dir(self) -> Path:
         """Return the directory the lake's bucket is mapped to."""
@@ -351,9 +361,7 @@ class WrenfieldDatasetStore:
         stamp: tuple[object, ...] = (
             len(parts),
             max((p.stat().st_mtime_ns for p in parts), default=0),
-            None
-            if self.postgres
-            else Path(self.oms_url.removeprefix("sqlite://")).stat().st_mtime_ns,
+            None if self.postgres else sqlite_path(self.oms_url).stat().st_mtime_ns,
         )
         with self._lock:
             if stamp != self._stamp:

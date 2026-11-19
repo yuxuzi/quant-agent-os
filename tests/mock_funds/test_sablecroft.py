@@ -753,7 +753,7 @@ def test_the_run_store_setting_cannot_name_a_managed_postgres(
     finally:
         get_settings.cache_clear()
     assert isinstance(settings.runs_file, Path)  # a filesystem path: the run store is a file
-    assert str(settings.runs_file).startswith("postgresql:/")  # mangled into a relative path
+    assert settings.runs_file.as_posix().startswith("postgresql:")  # mangled into a relative path
     assert "sslmode=require" in settings.store  # the knowledge store takes a URL
 
 

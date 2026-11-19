@@ -43,7 +43,7 @@ def load_px(column="oas_bp"):
     frames = []
     for f in files:
         df = pd.read_parquet(f, columns=["bond_id", column])
-        df["date"] = f.split("dt=")[1].split("/")[0]
+        df["date"] = os.path.basename(os.path.dirname(f))[len("dt=") :]
         frames.append(df)
     wide = pd.concat(frames).pivot(index="date", columns="bond_id", values=column)
     _px_cache[column] = wide

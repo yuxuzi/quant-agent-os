@@ -465,7 +465,7 @@ def test_the_deployment_descriptors_are_consistent_with_the_server(
         settings = get_settings()
         assert (
             settings.store.startswith("postgresql://")
-            and str(settings.runs_file) == "/data/runs/runs.db"
+            and settings.runs_file.as_posix() == "/data/runs/runs.db"
         )
     finally:
         get_settings.cache_clear()

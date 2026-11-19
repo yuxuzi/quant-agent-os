@@ -139,7 +139,7 @@ def test_the_estate_has_the_cloud_layout_and_stays_small(
     estate: Path, answers: dict[str, Any]
 ) -> None:
     total = sum(p.stat().st_size for p in estate.rglob("*") if p.is_file())
-    assert total < 3_000_000
+    assert total < 3_500_000  # parquet sizes vary a little across pyarrow builds
     lake = estate / "s3" / bw.LAKE
     partitions = sorted((lake / "curated" / "bond_px_daily").glob("dt=*"))
     assert len(partitions) == answers["business_days"] == 103
