@@ -162,6 +162,10 @@ template packs' own versions do not change.
   `tests/integration/test_pilot_fund.py` tells it in process. What it found is in part 5 of the
   [0.8.0 plan](docs/plans/proposals-0.8.md#5-what-the-pilot-found).
 
+- **The tutorial runs on 0.8.0.** It shows sign-in through a firm's identity provider beside API keys, standing
+  approvals for named tools, and a new optional Lab 10 that drafts tools from the pilot fund's legacy code and
+  runs the finished draft's tests.
+
 ### Fixed
 
 - **A drafted legacy service calls its set-up method.** When a stateful class loads in a method such as

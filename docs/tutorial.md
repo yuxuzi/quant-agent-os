@@ -10,10 +10,11 @@ this shows**, a short summary for anyone who reads along without running the com
   or Git Bash), and basic Python. Lab 5 can also use Claude Code.
 - **You don't need:** an API key or any money, except for Claude Code itself. After setup, only
   Labs 3 to 5 use the network, to download Python packages. All the data is synthetic.
-- **Time:** about 90 minutes. Labs 3 to 7 build on each other, so do them in order.
+- **Time:** about 90 minutes, and 15 more for each optional lab. Labs 3 to 7 build on each other, so do
+  them in order.
 
-Everything was run on version 0.4.0 on 2026-11-15, and Labs 3 to 7 again on 2026-11-17, except
-that Claude Code itself was not run: Lab 5's MCP endpoint was checked with an MCP client instead.
+Everything was run on version 0.8.0 on 2026-11-19, except that Claude Code itself was not run: Lab 5's
+MCP endpoint was checked with an MCP client instead.
 Run ids, keys, and timings will differ, and some outputs are shortened. This is research software, not investment advice.
 
 > **Can't see the diagrams?** GitHub draws them. In VS Code, install the *Markdown Preview
@@ -31,17 +32,18 @@ So the questions to ask are about the server:
 | Question | The answer, in one line | Lab |
 | --- | --- | --- |
 | Can our team build on it? | A command generates a tested application for a stage of the fund's work. You own its code, and three lines give it to an AI client | [3](#lab-3-generate-a-risk-application), [4](#lab-4-configure-and-customize-it), [5](#lab-5-make-it-usable-by-an-ai-client) |
-| **Authentication:** who gets in? | Every network request needs an API key. Keys are stored as hashes, can expire, and are revoked without a restart | [6](#lab-6-authentication-who-gets-in) |
+| **Authentication:** who gets in? | Every network request needs an API key, or, once you turn on sign-in, a token from your own identity provider. Keys are stored as hashes, can expire, and are revoked without a restart | [6](#lab-6-authentication-who-gets-in) |
 | **Authorization:** who reaches what? | An access file lists each group's tools and datasets, and refuses everything else. A refused dataset looks like one that does not exist | [7](#lab-7-authorization-who-reaches-what) |
 | Can an AI do something consequential on its own? | No. The server is read-only by default, and anything more needs a permission the operator grants and a person's approval of each call | [8](#lab-8-permissions-and-approvals) |
 | Can we prove what happened? | Every call is recorded under the caller's name, with the data's fingerprints and the tool's version | All |
+| Can we use the Python we already have? | A command drafts tools from your existing code, without importing it. The draft is a start for a developer, who finishes and tests it | [10](#lab-10-optional-bring-your-existing-code) |
 | Are the numbers right? | Numbers come from your Python code, never from a model, and each states its convention | [1](#lab-1-your-first-report), [2](#lab-2-numbers-by-reference) |
 
 Every request passes these checks, in this order:
 
 ```mermaid
 flowchart LR
-    A["Request from<br/>an AI client or app"] --> K{"Valid API key?<br/>(authentication)"}
+    A["Request from<br/>an AI client or app"] --> K{"Valid key or<br/>sign-in token?<br/>(authentication)"}
     K -->|No| K1["401"]
     K -->|Yes| S{"Key's scope<br/>allows it?"}
     S -->|No| S1["403"]
@@ -56,7 +58,8 @@ flowchart LR
     K1 & S1 & P1 & V1 & C1 & O --> L[("Recorded:<br/>who, what, data versions")]
 ```
 
-Four words recur. **Authentication** is checking who is calling, by API key. **Authorization** is
+Four words recur. **Authentication** is checking who is calling, by API key or, with sign-in, by a token
+from your identity provider. **Authorization** is
 what that caller may reach: a key's scopes, and the groups in the access file. **Permissions** are
 what the server may do at all, such as reading data or calling a network service. An **approval** is
 a person saying yes to one specific call.
@@ -74,6 +77,7 @@ a person saying yes to one specific call.
 | [7. Authorization](#lab-7-authorization-who-reaches-what) | Groups, refusals, and the auditor's view | 15 min |
 | [8. Permissions and approvals](#lab-8-permissions-and-approvals) | Why an AI can't act on its own | 10 min |
 | [9. Your research, with citations](#lab-9-optional-your-research-with-citations) | Optional: answers from your documents | 15 min |
+| [10. Bring your existing code](#lab-10-optional-bring-your-existing-code) | Optional: tools drafted from a fund's legacy Python | 15 min |
 
 A CEO short on time can read [the first section](#what-a-funds-leadership-should-know-first),
 the **what this shows** box of each lab, and [before production](#before-production).
@@ -116,7 +120,7 @@ uv run qaos --version
 ```
 
 ```text
-qaos 0.4.0
+qaos 0.8.0
 ```
 
 ---
@@ -157,7 +161,7 @@ _None._
 | 1 | annualized_return | 1.0.0 | ok | 0.188 |
 | 2 | max_drawdown | 1.0.0 | ok | 0.118 |
 
-Run `af9eb90d1b3d4343bbe570f9c17bc83c`: platform 0.4.0, registry `1f84e6bfc1cd`, 2026-11-15T19:10:45.892969+00:00 to 2026-11-15T19:10:45.894957+00:00.
+Run `f891dd9c0f82429eb5913789ad568063`: platform 0.8.0, registry `1f84e6bfc1cd`, 2026-11-19T12:48:42.103065+00:00 to 2026-11-19T12:48:42.967901+00:00.
 ```
 
 To see a refusal, copy the configuration:
@@ -276,12 +280,12 @@ desk-risk (quant-apps/risk-monitor) -> .../qaos-tutorial/work/desk-risk
   23 files; components: agent-tools; checks: uv sync, ruff check, ruff format, mypy, pytest
 Create it? It writes files, runs uv, and downloads packages [y/N]: y
 Created .../qaos-tutorial/work/desk-risk with pytemplate-uv==3.2.0.
-  ok  uv sync  (0.3 s)
-  ok  uv run ruff check .  (0.3 s)
-  ok  uv run ruff format --check .  (0.0 s)
-  ok  uv run mypy desk_risk tests  (3.0 s)
-  ok  uv run pytest  (2.7 s)
-Run 9df1a32528c3492fb918a63bb0d3c1ff recorded in .../qaos-tutorial/runs.db.
+  ok  uv sync  (0.8 s)
+  ok  uv run ruff check .  (0.4 s)
+  ok  uv run ruff format --check .  (0.1 s)
+  ok  uv run mypy desk_risk tests  (2.9 s)
+  ok  uv run pytest  (2.2 s)
+Run 06d68127722440f5b1501fefd4403639 recorded in .../qaos-tutorial/runs.db.
 ```
 
 `plan` writes nothing. Your yes to `create` is a recorded, single-use approval, because creating a
@@ -295,7 +299,7 @@ uv run desk-risk check
 ```
 
 ```text
-Wrote reports/20261115T190451Z-risk
+Wrote reports/20261119T124852Z-risk
 This is a synthetic demo book. Set positions in config.toml to use yours.
 ok: Gross exposure: 0.9275 against 2.0000
 ok: Net exposure, upper: 0.2022 against 0.5000
@@ -452,7 +456,7 @@ BREACH: Restricted shorts: -0.1820 against 0.0000
 3 of 8 breached, as of 2023-07-14.
 All checks passed!
 Success: no issues found in 15 source files
-22 passed in 0.17s
+25 passed in 0.17s
 ```
 
 Your rule appears beside the built-in limits, in `check`, in the report, and, after Lab 5, to the AI
@@ -565,10 +569,11 @@ uv run python serve.py
 ```
 
 ```text
-Serving 7 tools at http://127.0.0.1:8765/mcp (MCP) and /v1 (REST) to 1 key.
+Serving 9 tools at http://127.0.0.1:8765/mcp (MCP) and /v1 (REST) to 1 key.
 ```
 
-Leave it running. Terminal 2 now shows the server's log. If it says `address already in use`
+Leave it running. Terminal 2 now shows the server's log. The first start after `uv add` can be slow (see
+[if something goes wrong](#if-something-goes-wrong)); later starts take a few seconds. If it says `address already in use`
 instead, a server from an earlier try is still running: find it with `lsof -i :8765`, stop it, and
 start this one again.
 
@@ -601,8 +606,8 @@ result: -0.0803, convention: Compounded wealth, peak to trough
 ```
 
 The firm's rule from Lab 4 is there. The full answer also carries the data's fingerprint, the code's
-version (`quant-agent-os 0.5.0`, the release whose toolbox computed it), and `computed` evidence, which
-`expose` adds without your writing it.
+version (`quant-toolbox 0.7.0`, the library that computed it), and `computed` evidence, which `expose` adds
+without your writing it.
 
 ### Connect Claude Code
 
@@ -702,7 +707,7 @@ scopes = ["tools:call", "tools:list"]
 principal = "intern"
 sha256 = "854d4c86dd79549fa4ac9f226804658ca50f4d7cae9c208c478b72113277c6d0"
 scopes = ["tools:list"]
-expires = 2026-12-15T19:08:51.724373+00:00
+expires = 2026-12-19T13:05:37.456180+00:00
 ```
 
 Only hashes: a copy of this file lets nobody in. To revoke the intern's key, add `disabled = true` to
@@ -747,9 +752,16 @@ Stop the server for Lab 7: press Ctrl+C in Terminal 2.
 > **What this shows:** every network request needs a key, keys are stored only as hashes, and each
 > key carries scopes, an optional expiry, and the name of the person it was issued to. Revocation
 > takes effect on the next request. A broken keys file locks everyone out, so a mistyped
-> revocation can't leave a key working: the server fails closed. The server has no single sign-on
-> of its own yet, so your firm decides who holds a key and removes leavers
-> ([before production](#before-production)).
+> revocation can't leave a key working: the server fails closed. Your firm decides who holds a key
+> and removes leavers ([before production](#before-production)).
+
+**Sign-in through your identity provider.** Keys suit batch jobs and small teams. For people, a firm's
+server can also accept tokens from its own identity provider, such as Microsoft Entra ID, Amazon
+Cognito, or any provider that answers token introspection. It is off until you add a sign-in file
+([deployment](deployment.md#10-sign-in-through-your-identity-provider)); then your provider decides who
+gets a token, leavers lose access when it stops issuing them, and the token's groups feed Lab 7's access
+file. Keys keep working beside it. The [pilot runbook](pilot-runbook.md) walks through a fictional fund
+that signs five people in through a mock provider, offline, in `examples/pilot-fund/drill.sh`.
 
 ---
 
@@ -880,7 +892,9 @@ When you finish, stop the server with Ctrl+C in Terminal 2. You can close Termin
 > file refuses everything. Every refusal is recorded under the caller's name, for an auditor whose
 > key can read the record but call nothing. For rights the file can't express, such as one
 > portfolio within a dataset, your server can plug in your own entitlement system
-> ([deployment](deployment.md#9-decide-who-reaches-what)).
+> ([deployment](deployment.md#9-decide-who-reaches-what)), and a firm's internal service can be told
+> who is calling, so it can answer a portfolio manager about their own desk only
+> ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)).
 
 ---
 
@@ -929,13 +943,19 @@ uv run python examples/tutorial/lab_guardrails.py
 - **No model, client, or API key can approve anything.** An approval page, where a firm's server
   offers one, needs a separate approver key, which can never also call tools
   ([security](security.md#approvals-for-consequential-permissions)).
+- **A standing approval** is the operator's yes in advance, for tools an AI client must run unattended,
+  such as one that calls your internal risk service over the network. It names the exact tools:
+  `QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["risk_desk_var"]}'` lets that one tool call out without
+  asking each time, and any other tool that needs the network still waits for a person. It is empty by
+  default, only the operator's settings can set it, and every call that uses it is recorded as such.
 
 Copy the lab with `cp examples/tutorial/lab_guardrails.py "$TUT/guards.py"`, and change
 `Permission.EXTERNAL_ACTION` to `Permission.READ_LOCAL_DATA` in the copy: sections 1 and 2 then
 return `ok`, because reading is granted by default and needs no approval.
 
 > **What this shows:** an AI client can't do anything consequential by itself. Your applications
-> declare what they need, the operator grants it, and a person approves each consequential call.
+> declare what they need, the operator grants it, and a person approves each consequential call, or
+> the operator approves named tools in advance.
 > A declared permission is checked, not sandboxed: a tool is your own Python code, so review it as
 > you would any server code ([before production](#before-production)).
 
@@ -984,6 +1004,86 @@ Each passage gives its file and lines, so anyone can open the source and check.
 
 ---
 
+## Lab 10 (optional): Bring your existing code
+
+**Goal:** see how far a command gets in turning a fund's existing Python into tools, and what is left
+for a developer. The code here is the legacy package of Kestrel Point Capital, a fictional fund in
+`examples/pilot-fund/`: pandas signals, a global database connection, module settings, printing, and a
+stateful risk engine with a slow start, written the way funds write them.
+
+Lab 10 runs in a folder of its own:
+
+```bash
+mkdir -p "$TUT/legacy" && cd "$TUT/legacy"
+uv run --project "$REPO" qaos legacy scan "$REPO/examples/pilot-fund/facility/kestrel_quant" --write legacy.toml
+```
+
+The scan reads the code with Python's parser and never imports or runs it. It prints a table with a
+reason for each callable, then:
+
+```text
+0 expose, 18 facade, 8 service
+Wrote legacy.toml. Review each entry with the developer, then run qaos legacy wrap legacy.toml --out legacy_tools
+```
+
+- **expose**: typed, documented, and pure, served as it is.
+- **facade**: a thin typed wrapper around the unchanged function, because it is untyped, prints, reads
+  settings, or reads a database.
+- **service**: it keeps state or starts slowly, so it runs once behind HTTP, here the risk engine.
+
+`legacy.toml` is the developer's to edit: what to include, under which name, and with which
+permissions. Draft the tools from it as it stands, and run the draft's own test:
+
+```bash
+cd "$TUT/legacy"
+uv run --project "$REPO" qaos legacy wrap legacy.toml --out kestrel_tools
+uv run --project "$REPO" pytest -q kestrel_tools/test_tools.py
+```
+
+```text
+Drafted 26 tools with 212 open decisions (TODO). This is a draft: it is not expected to pass first time.
+...
+FAILED kestrel_tools/test_tools.py::test_every_tool_meets_the_contract - ...
+FAILED kestrel_tools/test_tools.py::test_no_decision_is_left_open - ...
+2 failed in 4.23s
+```
+
+Both failures are by design. The first lists each tool that does not yet work, with the reason: most say
+`unable to open database file`, because this legacy code reads its warehouse's path from `KPC_WAREHOUSE`
+when it is imported. The second lists every decision the draft left open, such as a unit, a convention,
+or a realistic example. The draft never guesses those silently.
+
+The fund's developer finished the draft: they left out the plumbing (`get_conn`, `close`, `log`), named the
+tools, chose what each returns, and decided the TODOs. The finished version is in
+`examples/pilot-fund/site/legacy_tools`. Build the fund's warehouse and run its test:
+
+```bash
+cd "$REPO"
+uv run python examples/pilot-fund/facility/warehouse/build_warehouse.py "$TUT/kestrel.db"
+cd examples/pilot-fund/site/legacy_tools
+KPC_WAREHOUSE="$TUT/kestrel.db" PYTHONPATH="$REPO/examples/pilot-fund/facility" \
+  uv run --project "$REPO" pytest -q -p no:cacheprovider test_tools.py
+```
+
+```text
+Wrote .../qaos-tutorial/kestrel.db (783 days, 40 instruments); momentum IC 0.0221, carry IC -0.0118, value IC 0.0186 (lag 0); momentum IC 0.0261 at the platform's default lag 1.
+..                                                                       [100%]
+2 passed in 3.33s
+```
+
+The finished tools pass the same contract checks as the platform's own, on the fund's real warehouse.
+Getting there took the developer about 650 changed lines of a 731-line draft, counted in the
+[pilot's findings](plans/proposals-0.8.md#5-what-the-pilot-found).
+
+> **What this shows:** your existing code can be served without being rewritten, and the business
+> logic stays where it is. The converter is a developer's aid, not a promise
+> ([decision 0029](decisions/0029-legacy-conversion-is-a-local-draft.md)). It drafts the wrappers,
+> lists every decision it couldn't make, and fails its own test until a developer has made them. It
+> runs on the developer's machine. No server tool reads or writes code, and what gets served is
+> ordinary code your firm reviews and commits.
+
+---
+
 ## Before production
 
 Everything above ran on one laptop, over loopback. The [deployment guide](deployment.md) runs the
@@ -1017,7 +1117,7 @@ loopback behind your proxy. Put these questions to your team before real data go
   to auditors.
 - **A tool's own files aren't covered by the access file.** The access file decides who may call
   `check_risk_limits`, but that tool reads whatever its `config.toml` names. For finer rights, your
-  tools can read the caller's identity.
+  tools can read the caller's identity, and your internal services can check a signed statement of it.
 - **Local use trusts whoever starts it.** The stdio server and the Python SDK have no authenticated
   caller and apply no access rules.
 
@@ -1041,6 +1141,7 @@ rm -rf "$TUT"
 | Symptom | Fix |
 | --- | --- |
 | `call: command not found`, or `$REPO` or `$TUT` is empty | New terminal: run `source /path/to/quant-agent-os/examples/tutorial/env.sh`, from any folder. `echo $REPO` should print your clone |
+| Terminal 2 shows nothing for minutes after `uv run python serve.py`, the first time | Wait: on one macOS run of this tutorial, the first start after `uv add` took about 15 minutes before printing `Serving`, with the process idle, and later starts took 2 seconds. The cause is not pinned down. If it never starts, press Ctrl+C and start it again |
 | `$PM`, `$ALICE`, or another key is empty, or a call says `Send an API key` | Keys live in the terminal that issued them. Make the calls in Terminal 1, or issue new keys with the same `qaos keys new` command |
 | `uv run desk-risk` or `uv run python serve.py` fails | Run it in the application's folder: `cd "$TUT/work/desk-risk"` |
 | `no answer: is the server running in Terminal 2...` | Start it in Terminal 2 (Lab 5), and read what Terminal 2 prints. `curl` prints the reason above it: no connection, or no answer within 60 seconds |
@@ -1061,6 +1162,7 @@ call.**
 | --- | --- | --- |
 | **Data** | `qaos data add` | `list_datasets`, `analyze_performance`, `analyze_risk`, `analyze_signal`, `run_backtest` |
 | **Applications** | `qaos app new`, `qaos app create`, editing `config.toml` and `firm/` | The tools your server names, such as `check_risk_limits` |
+| **Existing code** | `qaos legacy scan`, `qaos legacy wrap`, then a developer finishes the draft | The tools your server names from the finished draft |
 | **Access** | `qaos keys new`, `api-keys.toml`, `access.toml` | None |
 | **Documents** | `qaos ingest` | `find_related_signals`, `get_source_passage`, `research_report` |
 | **Record** | `qaos runs`, `qaos runs export` | None. An auditor's key reads runs over REST |
@@ -1071,6 +1173,7 @@ call.**
 | Add a dataset | `uv run qaos data add file.csv --id name` |
 | Issue a key | `uv run qaos keys new --principal NAME --scope tools:list --scope tools:call --group GROUP` |
 | Serve with an access file | `QUANT_AGENT_OS_ACCESS_FILE=access.toml`, then `serve_apps` or `qaos serve --http` |
+| Draft tools from existing code | `uv run qaos legacy scan PATH --write legacy.toml`, then `uv run qaos legacy wrap legacy.toml --out legacy_tools` |
 | See recorded runs | `uv run qaos runs` |
 | See what a client is offered | `uv run qaos catalog` |
 
@@ -1104,6 +1207,7 @@ and paste this template. Skip anything you like.
 | 7 Authorization | | | |
 | 8 Permissions and approvals | | | |
 | 9 Research | | | |
+| 10 Existing code | | | |
 
 **Where did I get stuck?** (the lab, the command, and what I saw)
 
@@ -1118,18 +1222,22 @@ and paste this template. Skip anything you like.
 data and passages from your documents.
 
 These are the questions we most want answered:
-- **Controls:** are keys, scopes, and an access file enough for your firm, or do you need single
-  sign-on first? Which rights can't the access file express?
+- **Controls:** are keys, sign-in, scopes, and an access file enough for your firm? Which rights can't
+  the access file express?
 - **Applications:** would your team keep working in the generated application, or start over? Which
   stage of your work is missing?
 - **Customization:** were the four levels the right split between your risk owner and your
   engineers?
 - **AI client:** did Claude pick the right tools, and report the numbers as computed?
+- **Existing code:** how much of your own code would the converter's draft cover, and what would your
+  developers have to finish?
 - **Audit:** does the record answer the questions your compliance team would ask?
 
 **Already known**, so there's no need to report these, though telling us which ones hurt most does
 help:
-- No single sign-on on `qaos serve`, and no rate limiting without a proxy.
+- No rate limiting without a proxy, and sign-in has been tested against a mock provider and providers'
+  documented token formats, not yet against a firm's live tenant.
+- The legacy converter's draft does not pass first time on real code; a developer finishes it.
 - Research search knows only the [bundled vocabulary](products/quant-research.md#known-limitations)
   unless you add your own terms.
 - App Factory scaffolds and checks your project, but it does not write your research code.
