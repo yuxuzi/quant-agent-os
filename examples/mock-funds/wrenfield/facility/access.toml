@@ -1,0 +1,98 @@
+# Wrenfield Credit Opportunities (fictional): who reaches what, in the platform's access-file format
+# (decision 0021). Groups are the Cognito user pool's groups, read from the `cognito:groups` claim
+# (site/wrenfield_sign_in.toml). Anything not listed is refused, and a refused dataset looks like a
+# missing one.
+#
+# Datasets (site/wrenfield_store.py):
+#   market:     px_*, bond_*, cds_3y, cds_5y, cds_10y, idx_spread, gov_*, fx_eurusd, sig_*, fm_*,
+#               issuer_rating_score_me, bond_rating, bond_static, nav
+#   per book:   mv_<book>, w_<book>, ret_net_<book>, ret_gross_<book>   (books: hy_ls, ig_rv,
+#               distressed, overlay; no mv_ or w_ for the overlay)
+#   fund-wide:  mv_fund, book_returns_net, book_returns_gross
+#   financing:  repo_rate, borrow_fee;  hedges: cds_protection (ig_rv), idx_protection (overlay)
+# Dataset access is all-or-nothing per id: there is no rule for one column or one issuer (the
+# compliance restricted list cannot be enforced here; see FINDINGS.md).
+
+[groups.pm-hy-ls]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "wrenfield_*",
+]
+datasets = [
+  "px_*", "bond_*", "cds_3y", "cds_5y", "cds_10y", "idx_spread", "gov_*", "fx_eurusd", "sig_*",
+  "fm_*", "issuer_rating_score_me", "nav", "repo_rate", "borrow_fee",
+  "mv_hy_ls", "w_hy_ls", "ret_*_hy_ls", "cds_protection",
+]
+
+[groups.pm-ig-rv]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "wrenfield_*",
+]
+datasets = [
+  "px_*", "bond_*", "cds_3y", "cds_5y", "cds_10y", "idx_spread", "gov_*", "fx_eurusd", "sig_*",
+  "fm_*", "issuer_rating_score_me", "nav", "repo_rate", "borrow_fee",
+  "mv_ig_rv", "w_ig_rv", "ret_*_ig_rv", "cds_protection",
+]
+
+[groups.pm-distressed]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "wrenfield_*",
+]
+datasets = [
+  "px_*", "bond_*", "cds_3y", "cds_5y", "cds_10y", "idx_spread", "gov_*", "fx_eurusd", "sig_*",
+  "fm_*", "issuer_rating_score_me", "nav", "repo_rate", "borrow_fee",
+  "mv_distressed", "w_distressed", "ret_*_distressed", "cds_protection",
+]
+
+[groups.pm-overlay]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "find_related_signals", "get_source_passage",
+  "wrenfield_*",
+]
+datasets = [
+  "px_*", "bond_*", "cds_3y", "cds_5y", "cds_10y", "idx_spread", "gov_*", "fx_eurusd", "nav",
+  "issuer_rating_score_me", "ret_*_overlay", "idx_protection", "cds_protection",
+]
+
+# Credit analysts: market data, signals, and research; no positions or P&L.
+[groups.analyst-credit]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "wrenfield_bond_cds_basis",
+  "wrenfield_rating_migration",
+]
+datasets = [
+  "px_*", "bond_*", "cds_3y", "cds_5y", "cds_10y", "idx_spread", "gov_*", "fx_eurusd", "sig_*",
+  "fm_*", "issuer_rating_score_me",
+]
+
+# Risk sees every book and the fund.
+[groups.risk]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "wrenfield_*",
+]
+datasets = ["*"]
+
+# Treasury and financing: positions, repo, and borrow, no alpha signals, no P&L analytics.
+[groups.treasury]
+tools = ["server_info", "list_datasets", "wrenfield_issuer_sector_concentration"]
+datasets = ["mv_*", "nav", "bond_static", "repo_rate", "borrow_fee"]
+
+# Compliance: every position and rating, no signals; research, to check what was relied on.
+[groups.compliance]
+tools = [
+  "server_info", "list_datasets", "find_related_signals", "get_source_passage",
+  "wrenfield_issuer_sector_concentration", "wrenfield_default_stress",
+]
+datasets = [
+  "mv_*", "w_*", "nav", "bond_static", "bond_rating", "bond_oas", "px_*", "cds_protection",
+  "idx_protection", "issuer_rating_score_me",
+]
+
+# Operators check the server is up; they read no data.
+[groups.operators]
+tools = ["server_info", "list_datasets"]
+datasets = []

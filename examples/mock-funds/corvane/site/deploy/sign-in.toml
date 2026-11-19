@@ -1,0 +1,12 @@
+# Corvane's sign-in file (decision 0028): the Cognito user pool, through the introspection shim
+# (site/corvane_introspect.py) because Cognito has no introspection endpoint of its own.
+resource = "https://qaos.corvane.example.com/mcp"
+
+[[authorization_servers]]
+issuer = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbC123dEf"
+introspection_url = "https://introspect.corvane.example.com/oauth2/introspect"
+client_id = "qaos-resource-server"
+client_secret_env = "CORVANE_INTROSPECTION_SECRET"  # injected from Secrets Manager
+tenant = "corvane"
+tenant_claim = ""  # Cognito sends no tenant claim: every token acts in the one pinned tenant
+groups_claim = "cognito:groups"

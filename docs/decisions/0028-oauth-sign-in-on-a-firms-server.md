@@ -4,6 +4,7 @@
   [0013](0013-identity-and-tenancy.md) to a firm's own server, which [0023](0023-no-hosted-service.md) left
   without a command that serves sign-in
 - Date: 2026-11-17
+- Extended by: [0031](0031-jwks-sign-in.md), for providers with no introspection endpoint
 - Plan: [0.8.0](../plans/proposals-0.8.md), workstream W2
 
 ## Context

@@ -30,10 +30,12 @@ import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Any, TypeVar
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from quant_agent_os.api.keys import KEY_PREFIX, SCOPES
+from quant_agent_os.api.server import is_loopback
 from quant_agent_os.mcp.http import GROUPS_CLAIM, TENANT_CLAIM
 from quant_platform.identity.rate import TokenBucket
 
@@ -51,6 +53,36 @@ MAX_CONCURRENT_INTROSPECTIONS = 8
 MAX_CACHED_TOKENS = 10_000
 WARN_EVERY_SECONDS = 60.0
 DEFAULT_TENANT_CLAIM = "qaos_tenant"
+
+
+def check_url(value: str) -> str:
+    """Return ``value`` if it is an https URL, or an http one on loopback; raise otherwise."""
+    parts = urlsplit(value)
+    if not parts.hostname or parts.scheme not in ("https", "http"):
+        raise ValueError(f"'{value}' is not an http(s) URL")
+    if parts.scheme == "http" and not is_loopback(parts.hostname):
+        raise ValueError(f"'{value}' must use https; plain http is allowed only on loopback")
+    return value
+
+
+def resolve_tenant(
+    claims: dict[str, Any],
+    *,
+    tenant_claim: str,
+    tenant_claim_value: str | None,
+    pinned: set[str],
+) -> Any:
+    """Return the tenant a token's claims name for an issuer that pins ``pinned``, or None.
+
+    A provider with no tenant claim acts in its one pinned tenant; with ``tenant_claim_value``
+    the claim must equal it and the token acts in the one pinned tenant (decision 0028).
+    """
+    sole = next(iter(pinned)) if len(pinned) == 1 else None
+    if tenant_claim and tenant_claim_value is not None:
+        return sole if claims.get(tenant_claim) == tenant_claim_value else None
+    if tenant_claim:
+        return claims.get(tenant_claim)
+    return sole  # the provider names no tenant: its one pinned tenant, or none
 
 
 class AuthorizationServer(BaseModel):
@@ -149,7 +181,7 @@ class IntrospectionVerifier:
 
     def _server_for(self, token: str) -> AuthorizationServer | None:
         """Choose the one configured server that may see ``token``, or None."""
-        issuer = _unverified_issuer(token)
+        issuer = unverified_issuer(token)
         if issuer is not None:
             return self.servers.get(issuer)
         if len(self.servers) == 1:
@@ -192,14 +224,12 @@ class IntrospectionVerifier:
         audiences = audience if isinstance(audience, list) else [audience]
         expires = claims.get("exp")
         pinned = self.tenants_by_issuer.get(server.issuer, set())
-        sole = next(iter(pinned)) if len(pinned) == 1 else None
-        if server.tenant_claim and server.tenant_claim_value is not None:
-            claimed = claims.get(server.tenant_claim) == server.tenant_claim_value
-            tenant = sole if claimed else None
-        elif server.tenant_claim:
-            tenant = claims.get(server.tenant_claim)
-        else:  # the provider names no tenant: its one pinned tenant, or none
-            tenant = next(iter(pinned)) if len(pinned) == 1 else None
+        tenant = resolve_tenant(
+            claims,
+            tenant_claim=server.tenant_claim,
+            tenant_claim_value=server.tenant_claim_value,
+            pinned=pinned,
+        )
         groups = claims.get(server.groups_claim) if server.groups_claim else None
         reason = (
             "inactive"
@@ -281,7 +311,7 @@ def protected_resource_routes(resource: str, issuers: list[str]) -> tuple[list[R
     return routes, str(build_resource_metadata_url(url))
 
 
-def _unverified_issuer(token: str) -> str | None:
+def unverified_issuer(token: str) -> str | None:
     """Return a JWT's ``iss`` without verifying it (it only picks a server), or None."""
     parts = token.split(".")
     if len(parts) != 3:

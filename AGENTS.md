@@ -35,7 +35,8 @@ is not a chatbot.
   results, warnings, and evidence; `tools.py` registers `analyze_performance` and friends.
 - **Sign-in and approvals** (`quant_platform.identity`): OAuth token checks and the browser approval page,
   for a firm's own server. `qaos serve --http` and `serve_apps` accept tokens only when a sign-in file
-  is configured ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md)). Each customer
+  is configured ([decision 0028](docs/decisions/0028-oauth-sign-in-on-a-firms-server.md); JWTs checked against a provider's keys, for
+  Entra and Cognito, in [decision 0031](docs/decisions/0031-jwks-sign-in.md)). Each customer
   hosts its own installation, and there is no multi-tenant service ([decision 0023](docs/decisions/0023-no-hosted-service.md)).
 - **Platform server** (`src/quant_platform`): the composition root. `compose()` assembles the
   chosen toolsets' tools, resources, and prompts, plus the deterministic `research_report` and a firm's
