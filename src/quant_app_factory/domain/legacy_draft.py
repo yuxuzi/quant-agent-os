@@ -14,6 +14,7 @@ import re
 import sys
 import textwrap
 from dataclasses import dataclass, field
+from pathlib import PurePath
 
 from quant_app_factory.domain.legacy import (
     DataKind,
@@ -28,13 +29,21 @@ from quant_app_factory.domain.legacy import (
 )
 from quant_app_factory.domain.legacy_analysis import SLOW_CALL
 
-DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py")
+DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py", "test_tools.py")
 STDLIB = frozenset(sys.stdlib_module_names)
 # Ruff's default line length: the draft passes ruff with no configuration.
 WIDTH = 88
 PATH_NAME = re.compile(r"(^|_)(path|file|filename|dest|destination|out|output|target)$")
 WINDOW_NAME = re.compile(r"(window|lookback|period|periods|days|horizon|halflife|span|lag|n)$")
 PRICE_NAME = re.compile(r"price|px|close|level|nav")
+# Untyped parameters named like these take a string: a name, a label, or a date.
+STRING_NAME = re.compile(
+    r"(^|_)(names?|desk|class|sector|region|country|currency|ccy|ticker|symbol|scenario|method|"
+    r"kind|mode|book|fund|strategy|portfolio|account|id|key|label|code|model|source|by|group|"
+    r"benchmark|freq|frequency|type|style|side|venue|exchange)$"
+)
+DATE_NAME = re.compile(r"(^|_)(date|as_of|asof|start|end|since|until|day)$")
+SAMPLE_DATE = "2024-06-28"  # a business day inside the generated test's sample data
 SIMPLE_HINT = re.compile(r"^(int|float|str|bool|None|list|dict|tuple|\[|\]|,| |\||\.\.\.)+$")
 SERVICE_PORT = 8100
 
@@ -93,6 +102,8 @@ class _Imports:
         return "\n\n".join("\n".join(group) for group in groups if group)
 
     def _group(self, module: str) -> int:
+        if module.startswith("."):
+            return 3  # the draft's own modules, imported relative to the package
         top = module.split(".")[0]
         if top == "__future__":
             return 0
@@ -154,13 +165,22 @@ class _Samples:
     frames: dict[str, str] = field(default_factory=dict)  # parameter -> "price" or "return"
 
 
-def draft(inventory: Inventory, found: dict[str, Found], *, source_root: str, legacy: str) -> Draft:
+def draft(
+    inventory: Inventory,
+    found: dict[str, Found],
+    *,
+    source_root: str,
+    legacy: str,
+    package: str = "legacy_tools",
+) -> Draft:
     """Return the drafted files for the included entries of ``inventory``.
 
     ``found`` is a fresh scan of the source by target, ``source_root`` the directory the legacy
-    package imports from, relative to the output, and ``legacy`` the package's name, for the
-    files' words. Raises `LegacyError` when an entry names nothing the scan found, or asks for
-    something a draft cannot do.
+    package imports from, relative to the output, ``legacy`` the package's name, for the
+    files' words, and ``package`` the draft's own: it is a package whose modules import each
+    other relatively, so a firm's server imports ``package.server`` as it is. Raises
+    `LegacyError` when an entry names nothing the scan found, or asks for something a draft
+    cannot do.
     """
     selected: list[_Selected] = []
     for entry in inventory.entries:
@@ -201,7 +221,10 @@ def draft(inventory: Inventory, found: dict[str, Found], *, source_root: str, le
         files["stubs.py"] = _stubs_module(services, legacy)
         files["service/__init__.py"] = '"""The draft service for stateful legacy code."""\n'
         files["service/app.py"] = _service_module(services, legacy, list(found.values()))
-    files["server.py"] = _server_module(inventory.app, selected, legacy, bool(services))
+    files["__init__.py"] = (
+        f'"""Legacy code as tools, drafted by `qaos legacy wrap`; import {package}.server."""\n'
+    )
+    files["server.py"] = _server_module(inventory.app, selected, legacy, bool(services), package)
     files["conftest.py"] = _conftest(source_root)
     files["test_tools.py"] = _test_module(examples, samples, bool(services))
     todos = [
@@ -223,14 +246,22 @@ def _facades_module(selected: list[_Selected], legacy: str) -> str:
     bodies = [_facade(s, imports) for s in selected]
     helpers = [JSON_READY]
     imports.add("import dataclasses", "import math")
-    if any(s.found.has(Trait.PRINTS) for s in selected):
-        helpers.append(QUIET)
-        imports.add("import contextlib", "import sys", "from collections.abc import Iterator")
+    if any(_slices(s.found) for s in selected):
+        helpers.append(CROSS_SECTION)
+    if any(_one_at_a_time(s.found) for s in selected):
+        helpers.append(LEGACY)
+        imports.add(
+            "import contextlib",
+            "import sys",
+            "import threading",
+            "from collections.abc import Iterator",
+        )
     doc = (
         f'"""Typed facades over {legacy}, drafted by `qaos legacy wrap`; edit them freely.\n\n'
         "Each facade calls the legacy code unchanged and adds only what a tool needs: type\n"
-        "hints, a docstring, data by reference, quiet printing, and JSON-ready results. Keep\n"
-        'them thin: business logic stays in the legacy code.\n"""'
+        "hints, a docstring, data by reference, quiet printing one call at a time, and\n"
+        "JSON-ready results. Keep them thin: business logic stays in the legacy code.\n"
+        '"""'
     )
     return "\n\n\n".join([doc + "\n\n" + imports.render(), *bodies, *helpers]).rstrip() + "\n"
 
@@ -262,16 +293,33 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
             late.append(param.name)
             signature.append(f"{param.name}: {hint} | None = None")
         elif param.default is not None:
-            signature.append(f"{param.name}: {hint} = {default}")
+            signature.append(f"{param.name}: {_optional(hint, default)} = {default}")
         else:
             signature.append(f"{param.name}: {hint}")
     if kept_init:
         signature.insert(0, "*")
-    returns, use_json = _returns(found, imports, todos)
+    row = None
+    extra_doc: list[tuple[str, str]] = []
+    if _slices(found):
+        taken = {p.name for p in [*params, *kept_init]}
+        row = "as_of" if "as_of" not in taken else "row_date"
+        signature.append(f"{row}: str | None = None")
+        extra_doc.append((row, "The row to return, a date as YYYY-MM-DD; the last when empty."))
+        returns, use_json = "dict[str, Any]", False
+    else:
+        returns, use_json = _returns(found, imports, todos)
     lines = [line for todo in todos for line in _comment(todo)]
     lines += _wrapped("", f"def {entry.name}", signature, f" -> {returns}:")
-    lines.append(_docstring(found, entry, params + kept_init, "    "))
+    lines.append(_docstring(found, entry, params + kept_init, "    ", extra_doc))
     lines += [line for note in _behaviour_todos(found) for line in _comment(note, "    ")]
+    if row is not None:
+        lines += _comment(
+            "TODO(review): the legacy code returns a whole dates-by-names table (from "
+            f"{found.seen(Trait.RETURNS_TABLE)}), and output over max_output_bytes (100 KB by "
+            f"default) is refused, so this facade returns one date's row ({row}). Return "
+            "another slice, or raise max_output_bytes in server.py, if callers need more.",
+            "    ",
+        )
     if found.has(Trait.VAR_ARGS):
         lines += _comment(
             f"TODO(type): the legacy code also takes {found.seen(Trait.VAR_ARGS)}; add a "
@@ -292,8 +340,8 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
         function = f"instance.{found.name}"
     else:
         function = callee
-    if found.has(Trait.PRINTS):
-        lines.append("    with _quiet():")
+    if _one_at_a_time(found):
+        lines.append("    with _legacy():")
         lines += _wrapped("        ", f"result = {function}", call_args)
     else:
         lines += _wrapped("    ", f"result = {function}", call_args)
@@ -302,9 +350,33 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
         message = f'f"Wrote {{{path}}}."' if path else '"Done."'
         lines.append("    del result  # the legacy code returns nothing")
         lines.append(f"    return {message}")
+    elif row is not None:
+        lines.append(f"    return _cross_section(result, {row})")
     else:
         lines.append(f"    return {'_json_ready(result)' if use_json else 'result'}")
     return "\n".join(lines)
+
+
+def _slices(found: Found) -> bool:
+    """Whether the facade returns one row of the whole table the legacy code returns: a pandas
+    table, as the hint says or as untyped code most often returns."""
+    hint = found.returns or ""
+    return found.has(Trait.RETURNS_TABLE) and not re.search(r"ndarray|NDArray|list|dict", hint)
+
+
+def _whole_table(name: str) -> str:
+    """The note on a tool served as it is that returns a whole dates-by-names table."""
+    return (
+        f"TODO(review): {name} returns a whole dates-by-names table, and output over "
+        "max_output_bytes (100 KB by default) is refused; return a slice from a facade, or pass "
+        "max_output_bytes."
+    )
+
+
+def _one_at_a_time(found: Found) -> bool:
+    """Whether the facade runs the legacy code under `_legacy()`: it prints, or shares module
+    state that another thread may be using."""
+    return found.has(Trait.PRINTS, Trait.MODULE_CACHE, Trait.MUTABLE_STATE)
 
 
 def _argument(param: Param) -> str:
@@ -363,6 +435,10 @@ def _hint(
     guess = _type_of_default(param.default)
     if guess:
         todos.append(f"TODO(type): {param.name}'s hint, {guess}, is guessed from its default.")
+        return guess
+    guess = _type_of_name(param.name)
+    if guess:
+        todos.append(f"TODO(type): {param.name}'s hint, {guess}, is guessed from its name.")
         return guess
     todos.append(f"TODO(type): {param.name} has no hint in the legacy code; name its type.")
     return "Any"
@@ -438,6 +514,23 @@ def _type_of_default(default: str | None) -> str | None:
     return None
 
 
+def _type_of_name(name: str) -> str | None:
+    """A hint for an untyped parameter from its name: ``desk`` or ``as_of`` is a string, and
+    ``window`` an int, so a client sending the wrong type is refused."""
+    if STRING_NAME.search(name) or DATE_NAME.search(name):
+        return "str"
+    if WINDOW_NAME.search(name):
+        return "int"
+    return None
+
+
+def _optional(hint: str, default: str | None) -> str:
+    """``hint`` allowing None when the default is None."""
+    if default == "None" and hint != "Any" and "None" not in hint.replace(" ", "").split("|"):
+        return f"{hint} | None"
+    return hint
+
+
 def _default(param: Param) -> str | None:
     """The legacy default when it can be repeated here: a literal."""
     if param.default is None:
@@ -482,19 +575,23 @@ def _returns(found: Found, imports: _Imports, todos: list[str]) -> tuple[str, bo
     return "Any", True
 
 
-def _docstring(found: Found, entry: Entry, params: list[Param], indent: str) -> str:
+def _docstring(
+    found: Found,
+    entry: Entry,
+    params: list[Param],
+    indent: str,
+    extra: list[tuple[str, str]] | None = None,
+) -> str:
+    args = [f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params]
+    args += [f"    {name}: {text}" for name, text in extra or []]
     if found.doc:
         text = found.doc
-        if not re.search(r"^(Args|Arguments|Parameters):?\s*$", text, re.MULTILINE) and params:
-            text += "\n\nArgs:\n" + "\n".join(
-                f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params
-            )
+        if not re.search(r"^(Args|Arguments|Parameters):?\s*$", text, re.MULTILINE) and args:
+            text += "\n\nArgs:\n" + "\n".join(args)
     else:
         text = f"TODO(doc): say what {entry.name} returns, in one sentence; clients read it."
-        if params:
-            text += "\n\nArgs:\n" + "\n".join(
-                f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params
-            )
+        if args:
+            text += "\n\nArgs:\n" + "\n".join(args)
     text = text.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
     lines = text.splitlines()
     body = [lines[0], *[f"{indent}{line}" if line.strip() else "" for line in lines[1:]]]
@@ -539,6 +636,12 @@ def _behaviour_todos(found: Found) -> list[str]:
         notes.append(
             f"TODO(review): runs programs ({found.seen(Trait.SUBPROCESS)}); execute_code is "
             "declared. Prefer calling the code directly."
+        )
+    if found.has(Trait.MODULE_CACHE):
+        notes.append(
+            f"TODO(review): reads through a module cache ({found.seen(Trait.MODULE_CACHE)}) "
+            "that lives as long as the server, so a result stays as first read until the cache "
+            "is cleared or the server restarts; say how fresh the data must be."
         )
     if found.has(Trait.MUTABLE_STATE):
         notes.append(
@@ -585,11 +688,29 @@ def _key(key: Any) -> str:
         return str(key.isoformat()).removesuffix("T00:00:00")
     return str(key)'''
 
-QUIET = '''\
+CROSS_SECTION = '''\
+def _cross_section(table: Any, as_of: str | None) -> dict[str, Any]:
+    """One date's row of a dates-by-names table: the last, or the one dated ``as_of``."""
+    if len(table.index) == 0:
+        raise ValueError("The legacy code returned no rows; give it a longer history.")
+    dates = [_key(key) for key in table.index]
+    if as_of is not None and as_of not in dates:
+        raise ValueError(f"No row dated {as_of}; the rows run from {dates[0]} to {dates[-1]}.")
+    position = len(dates) - 1 if as_of is None else dates.index(as_of)
+    return {"date": dates[position], "values": _json_ready(table.iloc[position])}'''
+
+LEGACY = '''\
+# One lock for the legacy calls: redirect_stdout swaps sys.stdout for the whole process, and
+# tools run on several threads, so two calls at once could leave stdout pointing at stderr.
+# The lock also keeps the legacy code's module state to one call at a time.
+_LEGACY_LOCK = threading.RLock()
+
+
 @contextlib.contextmanager
-def _quiet() -> Iterator[None]:
-    """Send the legacy code's prints to stderr: over stdio, stdout carries the protocol."""
-    with contextlib.redirect_stdout(sys.stderr):
+def _legacy() -> Iterator[None]:
+    """Run legacy code one call at a time, its prints sent to stderr: over stdio, stdout
+    carries the protocol."""
+    with _LEGACY_LOCK, contextlib.redirect_stdout(sys.stderr):
         yield'''
 
 
@@ -733,7 +854,7 @@ def _endpoint(selected: _Selected, imports: _Imports) -> str:
                 f"    {param.name}: {hint} | None = None  # legacy default: {param.default}"
             )
         elif optional:
-            fields.append(f"    {param.name}: {hint} = {default}")
+            fields.append(f"    {param.name}: {_optional(hint, default)} = {default}")
         else:
             fields.append(f"    {param.name}: {hint}")
         if data is not None:
@@ -781,7 +902,7 @@ def _wire_hint(param: Param, data: DataKind | None, pandas: bool) -> str:
         return "dict[str, Any]" if pandas else "dict[str, list[float | None]]"
     if param.annotation and SIMPLE_HINT.match(param.annotation):
         return param.annotation
-    return _type_of_default(param.default) or "Any"
+    return _type_of_default(param.default) or _type_of_name(param.name) or "Any"
 
 
 PANDAS_INPUTS = '''\
@@ -842,14 +963,16 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
             elif param.annotation and SIMPLE_HINT.match(param.annotation):
                 hint = param.annotation
             else:
-                hint = _type_of_default(param.default) or "Any"
-                what = f"guessed from its default, is {hint}" if hint != "Any" else "is Any"
+                by_default = _type_of_default(param.default)
+                hint = by_default or _type_of_name(param.name) or "Any"
+                source = "its default" if by_default else "its name"
+                what = f"guessed from {source}, is {hint}" if hint != "Any" else "is Any"
                 todos.append(f"TODO(type): {param.name}'s hint {what}; name its type.")
             default = _default(param)
             if param.default is not None and default is None:
                 signature.append(f"{param.name}: {hint} | None = None")
             elif param.default is not None:
-                signature.append(f"{param.name}: {hint} = {default}")
+                signature.append(f"{param.name}: {_optional(hint, default)} = {default}")
             else:
                 signature.append(f"{param.name}: {hint}")
         returns = found.returns if found.returns and SIMPLE_HINT.match(found.returns) else None
@@ -877,6 +1000,8 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
         options = [f'url=f"{{service_url}}/{entry.name}"']
         options += _data_options(entry, imports)
         options += _permission_options(entry, imports)
+        if found.has(Trait.RETURNS_TABLE):
+            registrations += _comment(_whole_table(entry.name), "    ")
         if entry.convention:
             options.append(f"convention={entry.convention!r}")
         else:
@@ -920,7 +1045,9 @@ def _permission_options(entry: Entry, imports: _Imports) -> list[str]:
 # The server
 
 
-def _server_module(app: str, selected: list[_Selected], legacy: str, services: bool) -> str:
+def _server_module(
+    app: str, selected: list[_Selected], legacy: str, services: bool, package: str
+) -> str:
     imports = _Imports()
     imports.add(
         "from __future__ import annotations",
@@ -943,12 +1070,14 @@ def _server_module(app: str, selected: list[_Selected], legacy: str, services: b
             if entry.name != found.name:
                 options.append(f'name="{entry.name}"')
         else:
-            imports.add("import facades")
+            imports.add("from . import facades")
             function = f"facades.{entry.name}"
         options += _data_options(entry, imports)
         options += _permission_options(entry, imports)
         if found.has(Trait.NONDETERMINISTIC):
             options.append("deterministic=False")
+        if found.has(Trait.RETURNS_TABLE) and entry.kind is Kind.EXPOSE:
+            lines += _comment(_whole_table(entry.name), "    ")
         if entry.permissions:
             granted = ", ".join(permission.value for permission in entry.permissions)
             lines += _comment(
@@ -966,13 +1095,14 @@ def _server_module(app: str, selected: list[_Selected], legacy: str, services: b
             )
         lines += _wrapped("    ", "app.expose", [function, *options])
     if services:
-        imports.add("import stubs")
+        imports.add("from . import stubs")
         lines.append("    stubs.register(app, service_url)")
     doc = (
         f'"""{legacy} as tools: a draft written by `qaos legacy wrap`; edit it and commit it.\n\n'
         "Every tool is named here, in the firm's own code (decisions 0020 and 0024); nothing is\n"
-        "discovered when the server starts. Serve it with:\n\n"
-        "    uv run python server.py\n"
+        "discovered when the server starts. A firm's server imports build_app from\n"
+        f"{package}.server; to serve the draft alone, run this from the folder above it:\n\n"
+        f"    uv run python -m {package}.server\n"
         '"""'
     )
     service_url = (
@@ -1037,13 +1167,17 @@ def _example(selected: _Selected, samples: _Samples) -> _Example:
     params = [*found.params, *found.init_params] if entry.kind is Kind.FACADE else found.params
     seen: set[str] = set()
     for param in params:
-        if param.kind in ("var_positional", "var_keyword") or param.default is not None:
+        data = entry.data.get(param.name)
+        # An optional data parameter gets an example too: without one, the legacy code falls
+        # back to reading the firm's data itself.
+        if param.kind in ("var_positional", "var_keyword") or (
+            param.default is not None and data is None
+        ):
             continue
         if param.name in seen:
             continue
         seen.add(param.name)
         kind = "price" if PRICE_NAME.search(param.name) else "return"
-        data = entry.data.get(param.name)
         if data == "series":
             samples.series.setdefault(param.name, kind)
             arguments.append(
@@ -1060,7 +1194,9 @@ def _example(selected: _Selected, samples: _Samples) -> _Example:
 
 
 def _value_for(param: Param) -> str:
-    hint = (param.annotation or "").replace(" ", "")
+    """A placeholder of the parameter's type, or of the type its name suggests: never a number
+    for what may be a name, so a wrong guess fails instead of passing."""
+    hint = (param.annotation or "").replace(" ", "") or _type_of_name(param.name) or ""
     if hint.startswith(("list[float]", "Sequence[float]", "tuple[float")):
         return "[0.01, -0.02, 0.015]"
     if hint.startswith(("dict", "Mapping")):
@@ -1068,7 +1204,7 @@ def _value_for(param: Param) -> str:
     if hint == "bool":
         return "False"
     if hint == "str":
-        return '"example"'
+        return f'"{SAMPLE_DATE}"' if DATE_NAME.search(param.name) else '"example"'
     if hint == "int" or (not hint and WINDOW_NAME.search(param.name)):
         return "20" if WINDOW_NAME.search(param.name) else "1"
     if "conf" in param.name:
@@ -1088,7 +1224,7 @@ def _test_module(examples: list[_Example], samples: _Samples, services: bool) ->
         "from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset",
         "from quant_agent_os.testing import check_app",
         "import pytest",
-        "import server",
+        "from . import server",
     )
     entries = []
     for example in examples:
@@ -1097,7 +1233,7 @@ def _test_module(examples: list[_Example], samples: _Samples, services: bool) ->
             continue
         entries.append(f'    "{example.tool}": {{')
         for name, value, guessed in example.arguments:
-            note = "  # TODO: a realistic value" if guessed else ""
+            note = "  # TODO(data): a realistic value; this one is a guess" if guessed else ""
             entries.append(f'        "{name}": {value},{note}')
         entries.append("    },")
     datasets = []
@@ -1186,7 +1322,7 @@ SERVICE_FIXTURE = '''\
 @pytest.fixture(scope="module")
 def service_url() -> Any:
     """Serve service/app.py on a free loopback port for the test, then stop it."""
-    from service.app import app
+    from .service.app import app
 
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     running = uvicorn.Server(config)
@@ -1229,6 +1365,7 @@ def test_no_decision_is_left_open() -> None:
 
 def describe_next_steps(out: str, draft_: Draft, services: bool) -> list[str]:
     """What the developer does next, in order."""
+    package = PurePath(out).name
     steps = [f"uv run pytest {out}/test_tools.py   (needs quant-agent-os installed)"]
     if services:
         steps[0] += "; the service also needs fastapi and uvicorn"
@@ -1236,6 +1373,8 @@ def describe_next_steps(out: str, draft_: Draft, services: bool) -> list[str]:
         "Read each failure, fix the facade or the inventory, and run it again.",
         f"Decide each of the {len(draft_.todos)} TODOs with the developer, then delete it; "
         "test_no_decision_is_left_open lists those left.",
-        "Done when both tests pass. Then serve: uv run python server.py",
+        f"Done when both tests pass. The draft is the package {package}: a firm's server "
+        f"imports build_app from {package}.server; to serve it alone, run "
+        f"uv run python -m {package}.server from the folder above it.",
     ]
     return steps

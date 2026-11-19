@@ -67,6 +67,19 @@ All notable changes to this project are documented here. The format follows
   FastAPI service with `FirmApp.call_service` stubs for stateful code, and a `check_app` test that fails while
   any `TODO` is left; it never overwrites without `--force`. Permissions follow what the scan saw. The output
   is a draft for a developer to finish, not finished code.
+- **`qaos legacy scan` tells a module cache from state.** A module-level memo dict, or a connection opened
+  once, makes a facade with a `TODO(review)` on freshness, not a service; on the pilot's `kestrel_quant`,
+  services fell from 20 of 26 callables to 8.
+- **Drafted facades are safe on several threads.** They run legacy code under one lock, so concurrent calls
+  that print no longer leave `sys.stdout` pointing at stderr.
+- **The draft is a package.** `qaos legacy wrap` writes an `__init__.py` and relative imports, so a firm's
+  server imports `legacy_tools.server` without changing `sys.path`.
+- **A drafted facade returns one date of a whole table.** When legacy code returns a dates-by-names panel,
+  the facade takes `as_of` and returns that date's row (the last by default), with a `TODO(review)`, since a
+  long panel is over the 100 KB output limit; a function served as it is gets the same `TODO(review)`.
+- **The drafted test's examples fit their parameters.** Optional data parameters get a dataset reference,
+  untyped names such as `desk` or `as_of` are hinted and filled as strings, and each guessed value is a
+  `TODO(data)` the test lists, so a wrong-typed placeholder no longer passes silently.
 - **`check_tool` and `check_app` show an internal error's exception** in their message, in brackets, so a
   firm's own test says why a tool failed without opening the run record.
 - **The `quant-legacy` skill** steers a coding agent through scan, review, wrap, test, and fix with the

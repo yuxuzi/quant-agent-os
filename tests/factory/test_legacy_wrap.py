@@ -5,6 +5,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
+from quant_agent_os.testing import check_tool
+from quant_agent_os.tools.contracts import ToolContractError
 from quant_app_factory.application.legacy import scan, wrap
 from quant_app_factory.domain.legacy import LegacyError
 from quant_app_factory.infrastructure.legacy_files import load_inventory, write_inventory
@@ -58,6 +61,7 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     files = sorted(p.relative_to(drafted).as_posix() for p in drafted.rglob("*.py"))
 
     assert files == [
+        "__init__.py",
         "conftest.py",
         "facades.py",
         "server.py",
@@ -73,8 +77,12 @@ def test_the_draft_has_every_file_and_each_parses(drafted: Path) -> None:
     assert "permissions=[Permission.WRITE_LOCAL_DATA]" in server
     assert "daily_prices" not in server  # excluded in the inventory
     facades = (drafted / "facades.py").read_text()
-    assert "with _quiet():" in facades
+    assert "with _legacy():" in facades
     assert "# TODO(config): the legacy code reads module settings" in facades
+    # A memo cache makes a facade with a note, not a service.
+    assert "facades.index_level" in server
+    assert "index_level" not in (drafted / "stubs.py").read_text()
+    assert "# TODO(review): reads through a module cache (_CACHE)" in facades
 
 
 def _ruff_problems(directory: Path) -> list[str]:
@@ -119,7 +127,7 @@ def test_the_generated_contract_test_passes_and_lists_the_open_decisions(drafted
     assert "FAILED test_tools.py::test_no_decision_is_left_open" in first.stdout
     assert "open decisions" in first.stdout
 
-    for name in ("facades.py", "server.py", "stubs.py", "service/app.py"):
+    for name in ("facades.py", "server.py", "stubs.py", "service/app.py", "test_tools.py"):
         path = drafted / name
         path.write_text(path.read_text().replace("TODO", "DONE"))  # the developer decides
     second = _pytest(drafted)
@@ -155,6 +163,118 @@ def test_the_service_builds_the_object_once_and_answers(
 
     assert answer.status_code == 200 and answer.json() == expected
     assert again.status_code == 200  # a missing value arrives as NaN; the code decides
+
+
+def test_concurrent_facades_leave_stdout_as_it_was(
+    drafted: Path, legacy_importable: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    facades = _load(drafted / "facades.py", "legacy_draft_facades")
+    first_inside, second_inside, first_done = (threading.Event() for _ in range(3))
+
+    def legacy(prices: Any, lookback: Any) -> None:
+        print("legacy output", lookback)
+        if lookback == "first":
+            first_inside.set()
+            second_inside.wait(0.5)  # with no lock, the second call is inside by now
+        else:
+            second_inside.set()
+            first_done.wait(0.5)  # with no lock, it leaves last and restores stderr
+
+    facades.legacy_carry_signal = legacy
+    stdout = sys.stdout
+
+    def call(lookback: str) -> None:
+        facades.carry_signal(prices=None, lookback=lookback)
+        if lookback == "first":
+            first_done.set()
+
+    first = threading.Thread(target=call, args=("first",))
+    first.start()
+    assert first_inside.wait(5)
+    second = threading.Thread(target=call, args=("second",))
+    second.start()
+    first.join(5)
+    second.join(5)
+
+    # redirect_stdout is process-wide: two calls at once used to leave stdout on stderr.
+    assert sys.stdout is stdout
+    captured = capsys.readouterr()
+    assert "legacy output" not in captured.out
+    assert captured.err.count("legacy output") == 2
+
+
+@pytest.fixture
+def draft_package(drafted: Path, legacy_importable: None) -> Iterator[Any]:
+    """The drafted package, imported as a firm's server would import it."""
+    sys.path.insert(0, str(drafted.parent))
+    yield importlib.import_module("legacy_tools.test_tools")
+    sys.path.remove(str(drafted.parent))
+    for name in [name for name in sys.modules if name.startswith("legacy_tools")]:
+        del sys.modules[name]
+
+
+def test_examples_cover_optional_data_and_placeholders_match_the_type(
+    drafted: Path, draft_package: Any
+) -> None:
+    examples = draft_package.EXAMPLES
+    test_text = (drafted / "test_tools.py").read_text()
+    facades = (drafted / "facades.py").read_text()
+
+    # An optional data parameter gets a reference; with none, momentum read the warehouse.
+    assert examples["momentum"] == {"panel": {"dataset": "sample_panel"}}
+    assert "panel: pd.DataFrame | None = None" in facades
+    # An untyped name is a string, guessed from the name, and the guess is an open decision.
+    assert examples["index_level"] == {"name": "example"}
+    assert "def index_level(name: str)" in facades
+    assert '"name": "example",  # TODO(data)' in test_text
+    # A number where a name belongs is refused, where 1.0 used to pass.
+    app = draft_package.server.build_app(draft_package.server.SERVICE_URL)
+    (spec,) = [spec for spec in app.tools(draft_package.STORE) if spec.name == "index_level"]
+    check_tool(spec, {"name": "example"})
+    with pytest.raises(ToolContractError, match="expected 'ok'"):
+        check_tool(spec, {"name": 1.0})
+
+
+def test_a_whole_table_is_returned_one_date_at_a_time(drafted: Path, draft_package: Any) -> None:
+    facades = (drafted / "facades.py").read_text()
+    server = (drafted / "server.py").read_text()
+
+    # momentum returns a dates-by-names panel, which grows past the output limit with history.
+    assert "as_of: str | None = None" in facades
+    assert "return _cross_section(result, as_of)" in facades
+    # cross_section is served as it is, so the draft can only say so.
+    assert "TODO(review): cross_section returns a whole dates-by-names table" in server
+    app = draft_package.server.build_app(draft_package.server.SERVICE_URL)
+    (spec,) = [spec for spec in app.tools(draft_package.STORE) if spec.name == "momentum"]
+    record = check_tool(spec, draft_package.EXAMPLES["momentum"])
+    assert set(record.output["result"]) == {"date", "values"}
+
+
+def test_a_firms_server_imports_the_draft_as_a_package(drafted: Path) -> None:
+    # The draft used to import facades and stubs by bare name, so a firm's server had to put
+    # the draft's own folder on sys.path. Now only the folder above it (the server's) is needed.
+    environment = {**os.environ, "PYTHONPATH": str(ROOT)}  # the legacy code, as if installed
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from legacy_tools.server import build_app; print(' '.join(build_app().names))",
+        ],
+        cwd=drafted.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "carry_signal" in result.stdout and "risk_model_portfolio_var" in result.stdout
+    assert "from . import facades, stubs" in (drafted / "server.py").read_text()
+
+
+def test_the_draft_folder_must_be_importable(inventory: Path, tmp_path: Path) -> None:
+    with pytest.raises(LegacyError, match="such as legacy_tools"):
+        wrap(inventory, tmp_path / "legacy-tools")
 
 
 def test_wrap_never_overwrites_without_force(inventory: Path, tmp_path: Path) -> None:

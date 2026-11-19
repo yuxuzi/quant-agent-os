@@ -47,6 +47,8 @@ def test_each_callable_is_classified_with_its_reasons() -> None:
         "carry_signal": Kind.FACADE,
         "export_positions": Kind.FACADE,
         "daily_prices": Kind.FACADE,
+        "index_level": Kind.FACADE,
+        "momentum": Kind.FACADE,
         "risk_model_portfolio_var": Kind.SERVICE,
     }
     assert entries["annualised_volatility"][1] == ["typed, documented, and pure"]
@@ -59,6 +61,8 @@ def test_each_callable_is_classified_with_its_reasons() -> None:
     ]
     assert "writes files: .to_csv()" in entries["export_positions"][1]
     assert "returns nothing; a tool must return a result" in entries["export_positions"][1]
+    # A module-level memo cache is not state: the drill's helpers were all services before.
+    assert "reads through a module cache: _CACHE" in entries["index_level"][1]
     assert entries["risk_model_portfolio_var"][1][1:] == [
         "a method of RiskModel, whose constructor sets state",
         "slow set-up: time.sleep",
@@ -86,6 +90,9 @@ def test_permissions_and_data_are_drafted_from_what_was_seen() -> None:
     assert entries["export_positions"].data == {"positions": "frame"}
     assert entries["cross_section"].data == {"prices": "frame"}
     assert entries["annualised_volatility"].data == {"returns": "series"}
+    assert entries["momentum"].data == {"panel": "frame"}
+    # read_sql_query may read any database, so the draft declares network until reviewed.
+    assert entries["momentum"].permissions == [Permission.NETWORK]
 
 
 def _module(tmp_path: Path, name: str, text: str) -> Path:
@@ -132,6 +139,36 @@ def test_module_state_makes_a_service_and_all_limits_what_is_public(tmp_path: Pa
     (entry,) = scan(path).entries
 
     assert entry.name == "lookup" and entry.kind is Kind.SERVICE
+
+
+def test_a_module_cache_or_a_connection_opened_once_is_not_state(tmp_path: Path) -> None:
+    path = _module(
+        tmp_path,
+        "warehouse",
+        "import sqlite3\n\n_conn = None\n_SEEN = {}\n_CALLS = 0\n\n"
+        "def _connection():\n    global _conn\n    if _conn is None:\n"
+        "        _conn = sqlite3.connect('w.db')\n    return _conn\n\n"
+        "def close():\n    global _conn\n    if _conn is not None:\n"
+        "        _conn.close()\n        _conn = None\n\n"
+        "def price(ticker: str) -> float:\n"
+        '    """The last price of a ticker, remembered after the first read."""\n'
+        "    if ticker not in _SEEN:\n"
+        "        _SEEN[ticker] = _connection().execute('SELECT 1').fetchone()[0]\n"
+        "    return _SEEN[ticker]\n\n"
+        "def counted(x: int) -> int:\n"
+        '    """Counts its calls: real state."""\n'
+        "    global _CALLS\n    _CALLS += 1\n    return x + _CALLS\n",
+    )
+    inventory = scan(path)
+    entries = {entry.name: entry for entry in inventory.entries}
+    price = inventory.found[entries["price"].target]
+
+    # Filled only after checking for the key, and opened only when unset: a facade.
+    assert entries["price"].kind is Kind.FACADE
+    assert price.traits[Trait.MODULE_CACHE] == ("_SEEN", "_conn (opened once)")
+    assert Trait.MUTABLE_STATE not in price.traits
+    assert entries["close"].kind is Kind.FACADE  # a reset to None is not state either
+    assert entries["counted"].kind is Kind.SERVICE
 
 
 def test_unsupported_types_and_var_args_need_a_facade(tmp_path: Path) -> None:
@@ -220,7 +257,7 @@ def test_the_command_prints_a_table_json_and_writes_an_inventory(tmp_path: Path)
     )
 
     assert table.exit_code == 0, table.output
-    assert "2 expose, 3 facade, 1 service" in table.output
+    assert "2 expose, 5 facade, 1 service" in table.output
     document = json.loads(as_json.output)
     carry = next(e for e in document["entries"] if e["name"] == "carry_signal")
     assert carry["kind"] == "facade" and carry["documented"] is False

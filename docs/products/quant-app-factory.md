@@ -311,15 +311,20 @@ or `"frame"`), `permissions`, and `convention`. Entry points (`main`, or code th
 for input) start with `include = false`. `wrap` scans the code again, so the draft follows the code as
 it is now.
 
-**Wrap** writes `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and `stubs.py`
-when there are services, `conftest.py` (puts the legacy package on the path until it is installed), and
-`test_tools.py`. The test runs `check_app` on every tool with an example call over made-up sample data, and
-fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` with ruff's default
+**Wrap** writes a package: `facades.py`, `server.py` (a `build_app` that names every tool), `service/app.py` and
+`stubs.py` when there are services, `conftest.py` (puts the legacy package on the path until it is installed),
+and `test_tools.py`. Its modules import each other relatively, so a firm's server beside the folder imports
+`legacy_tools.server` with no change to `sys.path`; the folder's name must be one Python can import. The test
+runs `check_app` on every tool with an example call over made-up sample data, and fails while any `TODO(...)` is left in the draft. The generated code passes `ruff check` with ruff's default
 settings; under another line length, `ruff check --fix` re-sorts the imports.
 - **TODOs say what to decide**: `TODO(type)` for a guessed hint, `TODO(data)` for a guessed series or frame,
   `TODO(unit)` and `TODO(convention)` for what a number means, `TODO(config)` for module settings and
   constructor arguments, `TODO(doc)` for a missing description, and `TODO(review)` for permissions, files,
-  databases, and thread safety.
+  databases, module caches, thread safety, and tables returned whole.
+- **Outputs stay small.** Legacy code that returns a whole dates-by-names table gets a facade that takes
+  `as_of` and returns that date's row, the last by default, since a long panel is over the 100 KB output
+  limit. A module-level memo cache, or a connection opened once, makes a facade with a note on freshness,
+  not a service.
 - **Permissions follow the code.** A function that writes files is drafted with `write_local_data`, one that
   calls out with `network`, one that runs programs with `execute_code`, and a service that changes anything
   with `external_action`. Declared permissions are checked, not sandboxed: review them, and add any the scan
@@ -329,9 +334,9 @@ settings; under another line length, `ruff check --fix` re-sorts the imports.
   the legacy code.
 
 **What to expect.** On the converter's test fixture, a typed function, an untyped pandas signal that reads a
-module `CONFIG` and prints, a CSV writer, and a risk model with a slow start and a cache, `wrap` drafts five
-tools and the generated `check_app` test passes as written, the service called over loopback; 27 TODOs are
-left to decide. Real code will need more: the scan misses what only running would show, such as a method called
+module `CONFIG` and prints, a panel signal and a lookup that read through a module cache, a CSV writer, and a
+risk model with a slow start and a cache, `wrap` drafts seven tools and the generated `check_app` test passes
+as written, the service called over loopback; 44 TODOs are left to decide. Real code will need more: the scan misses what only running would show, such as a method called
 on an object passed in, or a library it does not know. A rescan rewrites the inventory, so write it to another
 file to keep your edits.
 
