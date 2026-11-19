@@ -17,12 +17,13 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   the source, so US federal rules plus Good Friday, less Columbus and Veterans Day, give NYSE's 252 sessions
   of 2024. The result, a `SessionCalendar`, knows its days from `first` to `last` and raises `CalendarError`
   outside them rather than guessing; it has `sessions`, `count`, `is_session`, `mask`, `offset`, `roll` (the
-  ISDA following, preceding, and modified conventions), `period_ends` (last session of each week, month,
+  ISDA following, preceding, and modified conventions), `sessions_from`, `period_ends` (last session of each week, month,
   quarter, or year), and `sessions_per_year`. `joint` and `either` combine calendars. Its name records the
   caller's edits, for a report to state. A firm may subclass it, and `as_calendar` returns the subclass as is.
 - **A default calendar and alignment to it.** `set_default_calendar` sets the fund's calendar once for the
   process, and `using_calendar` another for one `with` block (per thread or task), for a fund on several
-  exchanges; with neither, `default_calendar()` is weekdays, named `"weekdays (no holidays)"`.
+  exchanges; with neither, `default_calendar()` is weekdays, named `"weekdays (no holidays)"`, and
+  `configured_calendar()` is None, so a check that would be noise against weekdays can skip.
   `align_to_calendar(table, calendar=None, fill=, off_session=)` gives a table one row per session (NaN, or
   the previous value), and refuses a row on a non-session, naming it, unless told to drop it. `session_gaps`
   returns the sessions a table lacks and its rows on non-sessions.

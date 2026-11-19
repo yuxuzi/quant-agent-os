@@ -46,7 +46,8 @@ Frequency = Literal["W", "M", "Q", "Y"]
 _WEEKDAYS = "1111100"
 _WEEKDAYS_FIRST, _WEEKDAYS_LAST = dt.date(1970, 1, 1), dt.date(2099, 12, 31)
 _ONE_DAY = np.timedelta64(1, "D")
-_DEFAULT: SessionCalendar | None = None
+_DEFAULT: SessionCalendar | None = None  # set by the fund
+_FALLBACK: SessionCalendar | None = None  # weekdays, built on first use
 _SCOPED: ContextVar[SessionCalendar | None] = ContextVar("quant_toolbox_calendar", default=None)
 
 
@@ -137,6 +138,15 @@ class SessionCalendar:
         """Return the sessions from ``start`` to ``end``, both included."""
         low, high = self._range(start, end)
         return [_date(day) for day in self._days[low:high]]
+
+    def sessions_from(self, start: DayLike, count: int) -> list[dt.date]:
+        """Return the first ``count`` sessions on or after ``start``."""
+        low = int(np.searchsorted(self._days, self._known(start), side="left"))
+        if count < 0 or low + count > self._days.size:
+            raise CalendarError(
+                f"{self._name}: {count} sessions from {_day(start)} run past {self._last}"
+            )
+        return [_date(day) for day in self._days[low : low + count]]
 
     def count(self, start: DayLike, end: DayLike) -> int:
         """Return how many sessions fall from ``start`` to ``end``, both included."""
@@ -290,19 +300,29 @@ def as_calendar(
     return SessionCalendar(days, known_first, known_last, label)
 
 
+def configured_calendar() -> SessionCalendar | None:
+    """Return the calendar the fund chose, by `using_calendar` or `set_default_calendar`, or None.
+
+    A check that would be noise against plain weekdays (a holiday reported as a missing session)
+    runs only when this is not None, or when given a calendar.
+    """
+    scoped = _SCOPED.get()
+    return scoped if scoped is not None else _DEFAULT
+
+
 def default_calendar() -> SessionCalendar:
     """Return the calendar a function uses when given none.
 
     That is the one `using_calendar` set for the current block, else the one `set_default_calendar`
     set for the process, else weekdays from 1970 to 2099, named ``"weekdays (no holidays)"``.
     """
-    scoped = _SCOPED.get()
-    if scoped is not None:
-        return scoped
-    global _DEFAULT
-    if _DEFAULT is None:
-        _DEFAULT = as_calendar(None, _WEEKDAYS_FIRST, _WEEKDAYS_LAST)
-    return _DEFAULT
+    chosen = configured_calendar()
+    if chosen is not None:
+        return chosen
+    global _FALLBACK
+    if _FALLBACK is None:
+        _FALLBACK = as_calendar(None, _WEEKDAYS_FIRST, _WEEKDAYS_LAST)
+    return _FALLBACK
 
 
 def set_default_calendar(calendar: object) -> SessionCalendar:

@@ -24,6 +24,7 @@ from quant_toolbox.data import (
     TableError,
     align_to_calendar,
     as_calendar,
+    configured_calendar,
     default_calendar,
     either,
     joint,
@@ -249,6 +250,7 @@ def _prices() -> Table:
 def test_with_no_default_set_the_default_is_named_weekdays() -> None:
     assert default_calendar().name == "weekdays (no holidays)"
     assert default_calendar().is_session("2024-03-29")
+    assert configured_calendar() is None
 
 
 def test_a_default_calendar_applies_where_none_is_given_and_a_block_can_use_another() -> None:
@@ -256,6 +258,7 @@ def test_a_default_calendar_applies_where_none_is_given_and_a_block_can_use_anot
     weekdays = default_calendar()
     try:
         assert set_default_calendar(nyse) is nyse
+        assert configured_calendar() is nyse
         assert session_gaps(_prices()) == (
             [dt.date(2024, 3, 28), dt.date(2024, 4, 1)],
             [dt.date(2024, 3, 29), dt.date(2024, 3, 30)],
@@ -300,3 +303,13 @@ def test_a_subclass_is_kept_by_as_calendar_and_as_the_default() -> None:
     with using_calendar(firm):
         assert not default_calendar().is_session("2024-11-29")
     assert type(as_calendar(firm, holidays=["2024-11-29"])) is SessionCalendar
+
+
+def test_sessions_from_counts_forward_from_a_day() -> None:
+    assert _nyse().sessions_from("2024-03-28", 3) == [
+        dt.date(2024, 3, 28),
+        dt.date(2024, 4, 1),
+        dt.date(2024, 4, 2),
+    ]
+    with pytest.raises(CalendarError, match="run past"):
+        _nyse().sessions_from("2024-12-30", 3)

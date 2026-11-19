@@ -36,6 +36,7 @@
     "aligned": "def(table: 'Table', panel: 'Panel', what: 'str') -> 'FloatArray'",
     "as_calendar": "def(source: 'object' = None, first: 'DayLike | None' = None, last: 'DayLike | None' = None, *, holidays: 'Iterable[DayLike]' = (), open_days: 'Iterable[DayLike]' = (), weekmask: 'str | None' = None, name: 'str | None' = None) -> 'SessionCalendar'",
     "business_days": "def(count: 'int', start: 'dt.date' = datetime.date(2021, 1, 4)) -> 'list[dt.date]'",
+    "configured_calendar": "def() -> 'SessionCalendar | None'",
     "default_calendar": "def() -> 'SessionCalendar'",
     "demo_book": "def(count: 'int' = 400, assets: 'int' = 12, seed: 'int' = 21) -> 'tuple[Table, Table, dict[str, str]]'",
     "demo_panel": "def() -> 'Panel'",
