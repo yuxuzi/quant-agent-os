@@ -7,7 +7,7 @@ import datetime as dt
 import numpy as np
 
 from quant_toolbox._types import FloatArray
-from quant_toolbox.data._calendar import business_days
+from quant_toolbox.data._calendar import SessionCalendar, default_calendar
 from quant_toolbox.data._tables import Panel, Table
 
 
@@ -41,16 +41,22 @@ def random_walk_panel(
     return prices, np.asarray(signal, dtype=np.float64)
 
 
-def demo_panel() -> Panel:
+def demo_panel(*, calendar: SessionCalendar | None = None) -> Panel:
     """A random walk with dates: no signal can have an edge on it, so results near zero are
-    expected."""
+    expected. Its dates are the sessions of ``calendar``, or of the default calendar."""
     prices, _ = random_walk_panel()
     assets = [f"ASSET{index:02d}" for index in range(prices.shape[1])]
-    return Panel(business_days(prices.shape[0], dt.date(2020, 1, 1)), assets, prices)
+    chosen = calendar if calendar is not None else default_calendar()
+    return Panel(chosen.sessions_from(dt.date(2020, 1, 1), prices.shape[0]), assets, prices)
 
 
-def demo_returns(count: int = 1000, seed: int = 11) -> Table:
-    """Three random-walk books and an index: any edge or pattern in them is chance."""
+def demo_returns(
+    count: int = 1000, seed: int = 11, *, calendar: SessionCalendar | None = None
+) -> Table:
+    """Three random-walk books and an index: any edge or pattern in them is chance.
+
+    Its dates are the next ``count`` sessions of ``calendar``, or of the default calendar.
+    """
     generator = np.random.default_rng(seed)
     market = generator.normal(0.0003, 0.009, count)
     books = np.column_stack(
@@ -61,16 +67,26 @@ def demo_returns(count: int = 1000, seed: int = 11) -> Table:
             market,
         ]
     )
-    return Table(business_days(count), ["Equity L/S", "Macro", "Stat Arb", "Index"], books)
+    chosen = calendar if calendar is not None else default_calendar()
+    dates = chosen.sessions_from(dt.date(2021, 1, 4), count)
+    return Table(dates, ["Equity L/S", "Macro", "Stat Arb", "Index"], books)
 
 
 def demo_book(
-    count: int = 400, assets: int = 12, seed: int = 21
+    count: int = 400,
+    assets: int = 12,
+    seed: int = 21,
+    *,
+    calendar: SessionCalendar | None = None,
 ) -> tuple[Table, Table, dict[str, str]]:
-    """Return ``(positions, prices, groups)``: random weights and random-walk prices."""
+    """Return ``(positions, prices, groups)``: random weights and random-walk prices.
+
+    Its dates are the next ``count`` sessions of ``calendar``, or of the default calendar.
+    """
     generator = np.random.default_rng(seed)
     names = [f"ASSET{index:02d}" for index in range(assets)]
-    days = business_days(count, dt.date(2022, 1, 3))
+    chosen = calendar if calendar is not None else default_calendar()
+    days = chosen.sessions_from(dt.date(2022, 1, 3), count)
     market = generator.normal(0.0003, 0.009, count)
     loadings = generator.uniform(0.5, 1.4, assets)
     returns = market[:, None] * loadings + generator.normal(0.0, 0.012, (count, assets))
