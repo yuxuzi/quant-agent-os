@@ -33,7 +33,9 @@ class SourceFile:
     """A loaded source: text, metadata, and where the text starts in the original.
 
     Text sources set ``body`` and ``body_first_line``. Paged sources (PDF) set ``pages`` instead,
-    one string per page, and leave ``body`` empty.
+    one string per page, and leave ``body`` empty. A paged source that recognises tables lists
+    them in ``tables`` as ``(page, first line, last line)`` of that page's text, so chunking
+    keeps each table in one passage.
     """
 
     uri: str
@@ -43,6 +45,7 @@ class SourceFile:
     metadata: dict[str, str] = field(default_factory=dict)
     pages: tuple[str, ...] | None = None
     loader_version: str = ""
+    tables: tuple[tuple[int, int, int], ...] = ()
 
 
 class SourceLoader(Protocol):
