@@ -9,11 +9,32 @@ Optional leaves: `quant_toolbox.data.excel` reads workbooks (openpyxl, the ``exc
 `quant_toolbox.data.frames` converts to and from pandas, and `quant_toolbox.data.sql` reads a SQL
 database through SQLAlchemy (the ``sql`` extra): `sql.connect` makes an engine, `fetch_rows` runs
 SQL with binds, `pivot_long` turns long rows wide, and a `SqlDataset` declares one dataset.
+
+A trading calendar is a `SessionCalendar`: `as_calendar` reads one from exchange_calendars,
+pandas_market_calendars, pandas holiday rules, a numpy business-day calendar, or a list of holidays,
+adds the caller's holidays to the source's, and lets listed open days override them. `joint` and
+`either` combine calendars. `set_default_calendar` sets the fund's calendar once, `using_calendar`
+another for one block, and `align_to_calendar` and `session_gaps` use it when given none.
+`business_days` is weekdays only, for synthetic data.
 """
 
 from quant_toolbox._types import BoolArray, FloatArray
 from quant_toolbox.data import sql
-from quant_toolbox.data._calendar import business_days
+from quant_toolbox.data._calendar import (
+    Calendar,
+    CalendarError,
+    SessionCalendar,
+    align_to_calendar,
+    as_calendar,
+    business_days,
+    configured_calendar,
+    default_calendar,
+    either,
+    joint,
+    session_gaps,
+    set_default_calendar,
+    using_calendar,
+)
 from quant_toolbox.data._checks import (
     MIN_OBSERVATIONS,
     OUTLIER,
@@ -52,22 +73,31 @@ __all__ = [
     "OUTLIER",
     "PERCENT_LIKE",
     "BoolArray",
+    "Calendar",
+    "CalendarError",
     "ConfigError",
     "FloatArray",
     "Loader",
     "Panel",
     "Rows",
+    "SessionCalendar",
     "SqlDataset",
     "SqlError",
     "Table",
     "TableError",
+    "align_to_calendar",
     "aligned",
+    "as_calendar",
     "business_days",
+    "configured_calendar",
+    "default_calendar",
     "demo_book",
     "demo_panel",
     "demo_returns",
     "dump_config",
+    "either",
     "fetch_rows",
+    "joint",
     "load_config",
     "load_csv",
     "load_table",
@@ -81,7 +111,10 @@ __all__ = [
     "return_notes",
     "rows_to_csv",
     "save_table",
+    "session_gaps",
+    "set_default_calendar",
     "shape_rows",
     "short_sample",
     "sql",
+    "using_calendar",
 ]
