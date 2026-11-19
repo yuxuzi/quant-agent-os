@@ -1,0 +1,30 @@
+{
+  "cluster": "corvane-prod",
+  "serviceName": "corvane-qaos",
+  "taskDefinition": "corvane-qaos",
+  "desiredCount": 1,
+  "launchType": "FARGATE",
+  "deploymentConfiguration": {"minimumHealthyPercent": 100, "maximumPercent": 200},
+  "healthCheckGracePeriodSeconds": 60,
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ["subnet-0a1b2c3d4e5f60001", "subnet-0a1b2c3d4e5f60002"],
+      "securityGroups": ["sg-0corvaneqaos0001"],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/corvane-qaos/0123456789abcdef",
+      "containerName": "server",
+      "containerPort": 8000
+    }
+  ],
+  "_targetGroup": {"protocol": "HTTP", "port": 8000, "healthCheck": {"path": "/healthz", "matcher": "200", "intervalSeconds": 30}},
+  "_alb": {
+    "listener": "HTTPS:443",
+    "certificate": "arn:aws:acm:us-east-1:111122223333:certificate/corvane-qaos",
+    "idleTimeoutSeconds": 3600,
+    "note": "MCP over streamable HTTP holds responses open; the ALB's 60 s default idle timeout would cut them."
+  }
+}

@@ -17,6 +17,31 @@ All notable changes to this project are documented here. The format follows
   for a number finds its row and column headers with it. A chunk that comes back without a page is refused
   rather than guessed. Serving never contacts RAGFlow, and the default parser is still pypdf. It needs no new
   dependency. Tested offline against a fake server; its quality on real papers has not been measured yet.
+- **`SqlDatasetStore` reads a firm's SQL databases as datasets** (decision 0032). Datasets are declared as
+  `SqlDataset` (SQL with `:name` binds, a shape, and a duplicates policy) over named SQLAlchemy engines, long rows
+  are pivoted wide, and the result goes through the platform's own CSV parser, so fingerprints match a file with
+  the same cells. A stamp per source (a version query, a time to live, or a function) decides when to read
+  again; a derived dataset is a marked Python function. It works under per-caller access, and
+  `quant_platform` loads it on first use. New `sql` extra (`quant-toolbox[sql]`, SQLAlchemy); the database's
+  driver is the firm's install. See "Read your firm's database as datasets" in the deployment guide. Quant
+  Toolbox gains `data.sql` (see its changelog).
+- **Sign-in checks JWTs against the provider's keys, for Entra ID and Amazon Cognito** (decision 0031). A
+  `[[authorization_servers]]` entry with `verify = "jwks"` needs no introspection endpoint: the server checks
+  the token's RS256 (or another listed asymmetric) signature against the issuer's JWKS, found by `jwks_uri` or
+  by the issuer's `/.well-known/openid-configuration`, kept for an hour, and fetched again for an unknown key
+  id at most once every 30 seconds; a failed fetch refuses the token. It requires an exact `iss`, an `aud` in
+  `audiences` (any string, such as `api://...` or a GUID) or, for tokens with no `aud`, a `client_id` in
+  `client_ids`, `exp`, `nbf` and `iat` within `leeway_seconds`, and optionally a `token_use`. New optional
+  settings read the provider's claims: `principal_claim`, `scope_claims` with `scope_map`, `groups_claims`
+  with `group_aliases`, and `provider_tenant_claim`, which adds Entra's `tid` to the principal in the audit
+  trail. App roles in `roles` can entitle machine tokens, and Entra's groups overage is read as no groups.
+  Introspection stays the default, and existing sign-in files work unchanged. `deployment.md` section 10
+  now shows Entra and Cognito files.
+- **Four more mock funds** (`examples/mock-funds/`), fictional and offline: a CLO manager on Azure with SQL
+  Server, a long-only equity manager on AWS with Snowflake, an alternatives allocator on Azure with
+  Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
+  tools, store, server, and acceptance cases, and records where the platform falls short in `FINDINGS.md`;
+  `examples/mock-funds/README.md` ranks what they found together. DuckDB joins the dev group for their tests.
 - **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
   it adds that many passages before and after the requested one, from the same document and in reading
   order, each citing its own location. A short PDF passage that starts mid-argument can be read in full
@@ -90,6 +115,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Smaller outputs from wide datasets.** A firm tool that reads many columns of a dataset now cites it
+  once (its column count, the first few names, rows, and fingerprint) and gives one missing-value warning
+  per dataset, not one per column. Measured on the mock funds: Corvane's currency effect fell from 134,651
+  bytes (over the 100,000 limit) to under 5,300, Larchmere's compliance tests from 89,657 to 5,469, and
+  Wrenfield's DTS from 67,663 to under 5,300.
+- **`analyze_risk` 3.0.0 keeps its window when one asset's history is short.** A held asset with returns on
+  fewer than 90% of the dates is left out, its weight reported, instead of every date it misses being cut
+  for all (Sablecroft keeps 60 months, not 42; Corvane 109 days, not 29). A weight with no returns column
+  is refused naming the assets; an asset with no factor loadings has specific risk only.
+- **`analyze_signal` 2.0.0 picks horizons from the dates.** Without `horizons`, daily data gets 1, 5, 21 bars,
+  weekly 1, 4, 13, monthly 1, 3, 12, and quarterly 1, 2, 4, stated in `conventions.horizons`; before, monthly
+  data got 21 months. It warns when the signal changes much less often than a horizon (a monthly score
+  carried forward onto daily dates) and when there are fewer than 30 instruments.
+- **`list_datasets` 2.0.0 summarises wide datasets.** A listing names each dataset's first 20 columns, with
+  `column_count`, and `prefix` narrows it; `dataset_id` still gives every column of one. Larchmere's 19
+  datasets list in 10,517 bytes, down from 25,387.
 - **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
   policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
   before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.

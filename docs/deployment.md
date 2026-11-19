@@ -257,6 +257,57 @@ The tool names are in your code and not in a setting, so what the server runs is
 says (decisions [0020](decisions/0020-a-firms-own-server.md) and
 [0024](decisions/0024-registering-a-firms-functions.md)).
 
+### Read your firm's database as datasets
+
+If your data is in a database, declare each dataset as SQL and let `SqlDatasetStore` serve it
+([decision 0032](decisions/0032-sql-dataset-store.md)). Install the `sql` extra, and your database's own
+driver in your image; the platform names the driver and does not ship it.
+
+```python
+from quant_platform import SqlDatasetStore, serve_apps
+from quant_toolbox.data import SqlDataset, sql
+
+oms = sql.connect("postgresql+psycopg://reader@oms.example.com/oms", credential=rds_iam_token)
+store = SqlDatasetStore(
+    {"oms": oms},
+    [
+        SqlDataset(
+            "returns-growth",
+            "SELECT day, desk, ret FROM returns WHERE desk = :desk",
+            params={"desk": "growth"},
+            index_name="date",
+        ),
+    ],
+    stamps={"oms": "SELECT max(loaded_at) FROM load_log"},  # when to read again
+)
+serve_apps([risk], datasets=store)
+```
+
+| Database | SQLAlchemy URL | Driver to install |
+| --- | --- | --- |
+| PostgreSQL, RDS | `postgresql+psycopg://user@host:5432/db` | `psycopg[binary]` |
+| SQL Server, Azure SQL | `mssql+pyodbc://user@host/db?driver=ODBC+Driver+18+for+SQL+Server` | `pyodbc` |
+| Snowflake | `snowflake://user@account/database/schema?warehouse=WH&role=READER` | `snowflake-sqlalchemy` |
+| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sql-connector` |
+| DuckDB (a file, or Parquet through `read_parquet(..., hive_partitioning=true)`) | `duckdb:///lake.duckdb` | `duckdb-engine` |
+
+- **SQL is written once.** Binds are always `:name`, whatever the driver's own style, and a list binds as an
+  `IN` list. A `Decimal` reads as a float, a date as ISO text, a NULL in a column of numbers as a missing value
+  (NaN), and column names as lower case, so Snowflake's upper case reads as everyone else's.
+- **Long rows pivot wide, and duplicates are refused.** A query returning `(date, name, value)` becomes a table
+  of dates by names. Two rows for one date and name are an error naming them, not a silent sum: say
+  `duplicates="sum"` or `"last"` when that is what the data means.
+- **Credentials.** Pass `credential=` a function returning a password or token. It is called for every new
+  connection, so a 15-minute RDS token or an Entra token never goes stale. The URL holds no secret. A driver
+  that takes a connection string (pyodbc) takes its token through `connect_args`.
+- **Read-only is best effort.** SQLite, PostgreSQL (psycopg), and a DuckDB file are opened read-only; any other
+  dialect warns, because nothing in the library limits it. Give the login only read grants.
+- **Freshness.** A dataset is cached until its source's stamp changes: a SQL string returning a version, a
+  time to live in seconds (default 60), or a function returning any value. Cached datasets are the same
+  objects every caller reads, under per-caller access like any other store.
+- **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
+  is where fund-specific logic stays visible.
+
 ## 9. Decide who reaches what
 
 By default any key with `tools:call` reaches every tool and dataset the server serves. To give people
@@ -306,9 +357,19 @@ See [decision 0021](decisions/0021-per-caller-access.md).
 ## 10. Sign in through your identity provider
 
 Off by default. With it on, people add the server as a connector and sign in through your identity provider
-(Entra ID, Okta, Keycloak, and so on) instead of pasting a key, and their directory groups decide what they reach.
-Keys keep working beside it. The server only checks tokens, by RFC 7662 introspection; your provider issues them
-([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md)).
+(Entra ID, Amazon Cognito, Okta, Keycloak, and so on) instead of pasting a key, and their directory groups decide
+what they reach. Keys keep working beside it. Your provider issues the tokens; the server only checks them, in
+one of two ways per provider ([decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md),
+[0031](decisions/0031-jwks-sign-in.md)):
+
+| `verify` | The server | For |
+| --- | --- | --- |
+| `"introspection"` (default) | asks the provider about each token, by RFC 7662 | Okta, Keycloak, and any provider with an introspection endpoint |
+| `"jwks"` | checks the token's signature against the issuer's published keys | **Entra ID and Amazon Cognito**, which have no introspection endpoint |
+
+Both need the provider to put your groups in the token, and both refuse a token unless every check passes.
+
+### With introspection (Okta, Keycloak)
 
 **In your provider:**
 - Register a confidential client the server uses to introspect tokens, and note its id and secret.
@@ -343,23 +404,117 @@ qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_A
 A firm's own server with `serve_apps` reads the same settings. In Docker, mount the file read-only in a compose
 override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment.
 
-- **Tokens are refused unless certain.** A token must be active, unexpired, for this server's URL, from a listed
-  issuer, and name the configured tenant, or come from a provider set to send none. A groups claim that is not a
-  list of strings refuses the token. The server logs why it refused, never the token.
-- **Groups decide access.** The groups claim is what `access.toml` reads, as a key's groups are. Without an access
+### With signed JWTs (Entra ID, Amazon Cognito)
+
+No client secret is needed: the server reads the issuer's public keys, from `jwks_uri` or from the issuer's
+`/.well-known/openid-configuration`. Say which tokens are yours (`audiences`, or `client_ids`) and how to read
+their claims.
+
+**Entra ID.** Register an app for the API (its application ID URI, such as `api://qaos`, is the audience), expose
+the scopes `tools.list` and `tools.call`, and add app roles for machines. In the app's manifest, set
+`accessTokenAcceptedVersion` to 2 (v2.0 tokens) and `groupMembershipClaims` to `SecurityGroup` (groups as object IDs).
+
+```toml
+resource = "https://qaos.example.com/mcp"
+
+[[authorization_servers]]
+issuer = "https://login.microsoftonline.com/<directory-tenant-guid>/v2.0"
+verify = "jwks"
+audiences = ["api://qaos"]           # the token's `aud`: an application ID URI or a client id
+tenant_claim = ""                    # Entra sends no qaos_tenant claim; the issuer pins the directory
+principal_claim = "preferred_username"   # audit shows people, not GUIDs (default: sub)
+scope_claims = ["scp", "roles"]      # delegated scopes, and app roles of machine tokens
+groups_claims = ["groups", "roles"]  # group object ids, and app roles
+provider_tenant_claim = "tid"        # records the directory in the principal: name@<tid>
+
+[authorization_servers.scope_map]    # Entra's dotted names to the server's scopes
+"tools.list" = "tools:list"
+"tools.call" = "tools:call"
+"Tools.Call" = "tools:call"          # an app role that entitles a machine to call tools
+
+[authorization_servers.group_aliases]   # readable names for access.toml
+"6f1c2a10-0000-4000-8000-0000000e0001" = "research-eq"
+"6f1c2a10-0000-4000-8000-0000000e0002" = "research-macro"
+```
+
+**Amazon Cognito.** Use a resource server with the scopes `tools.list` and `tools.call`, and groups for entitlement.
+Cognito's access tokens carry a `client_id` and no `aud`, so list your app clients, and require `token_use =
+"access"` so an ID token is refused.
+
+```toml
+resource = "https://qaos.example.com/mcp"
+
+[[authorization_servers]]
+issuer = "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_AbCdEf"
+verify = "jwks"
+client_ids = ["3n4b5v6c7x8z"]        # accepted for tokens with no `aud`
+token_use = "access"
+tenant_claim = ""
+groups_claims = ["cognito:groups"]
+
+[authorization_servers.scope_map]
+"qaos/tools.list" = "tools:list"
+"qaos/tools.call" = "tools:call"
+```
+
+What each setting does, with its default (a setting that the other mode would ignore is refused):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `verify` | `"introspection"` | `"jwks"` checks signatures instead of asking the provider. |
+| `jwks_uri` | discovered | The keys' address; else the `jwks_uri` in `<issuer>/.well-known/openid-configuration`, whose `issuer` must match. |
+| `audiences` | none | The token's `aud` must be one of these (a string such as `api://qaos` or a GUID). Not the `resource` URL. |
+| `client_ids` | none | For a token with no `aud`, its `client_id` must be one of these. One of the two lists is required. |
+| `algorithms` | `["RS256"]` | Signature algorithms accepted: RS, PS, and ES families only. Never `none`, never HS*. |
+| `leeway_seconds` | `30` | Clock skew allowed on `exp`, `nbf`, and `iat` (0 to 300). |
+| `token_use` | none | When set, the token's `token_use` must equal it (Cognito: `"access"`). |
+| `principal_claim` | `"sub"` | The claim recorded as the caller on every run; `sub` when it is absent. |
+| `scope_claims` | `["scope"]` | Claims that grant scopes, each a space-separated string or a list. `["scp"]` for Entra. |
+| `scope_map` | none | Renames a provider's scope or role to `tools:list`, `tools:call`, or `runs:read`. Others pass unchanged; `runs:approve` is never granted. |
+| `groups_claims` | `["groups"]` | Claims whose values are the caller's groups, joined. Use this, not `groups_claim`. |
+| `group_aliases` | none | Renames a group, such as a GUID, to the name `access.toml` uses. |
+| `provider_tenant_claim` | none | A claim that must be present, such as `tid`; its value is added to the principal as `name@value`. |
+| `tenant_claim`, `tenant_claim_value` | as above | As with introspection. Set `tenant_claim = ""`; or `"tid"` with `tenant_claim_value` to require one directory. |
+
+Machine tokens (Entra client credentials) carry `roles`, no `scp`, no groups. Put `"roles"` in `scope_claims` and
+`groups_claims`, map the app role to a scope, and give the same role a group rule in `access.toml`. Entra leaves out
+the groups of a user who is in too many (about 200) and points to Microsoft Graph instead; the server makes no
+Graph call, reads that user as having no groups, and logs a warning, so access fails closed. Assign app roles, or
+limit the groups the token carries, in Entra.
+
+Checking tokens needs nothing but a request for the keys: they are kept for an hour and fetched again for a key
+id the server does not know, at most once every 30 seconds per provider. When the keys cannot be fetched, tokens
+are refused, and the server tries again after 30 seconds.
+
+### What applies to both
+
+```bash
+qaos doctor                                  # checks the file and secrets, contacts nothing
+qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_AGENT_OS_SIGN_IN_FILE
+```
+
+- **Tokens are refused unless certain.** A token must be unexpired, for this server (its audience, or with
+  introspection the `resource` URL), from a listed issuer, and name the configured tenant, or come from a provider
+  set to send none. With introspection it must also be active. A groups claim that is not a list of strings
+  refuses the token. The server logs why it refused, never the token.
+- **Groups decide access.** The groups are what `access.toml` reads, as a key's groups are. Without an access
   file every signed-in user reaches everything, and the server warns at start-up.
-- **The principal is the token's subject** (`sub`), recorded on every run as a key's principal is. Some providers'
-  subjects are opaque ids; `qaos runs` shows them as they are.
-- **Scopes map one to one.** A token never carries `runs:approve`: approving needs an approver key.
+- **The principal is the token's subject** (`sub`) unless `principal_claim` says otherwise, recorded on every run
+  as a key's principal is.
+- **Scopes map one to one,** after `scope_map`. A token never carries `runs:approve`: approving needs an approver
+  key.
 - **Clients find the provider** from the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`, which
-  every 401 names.
+  every 401 names. Some providers, Entra among them, do not publish OAuth authorization-server metadata, so check that your
+  connector can sign in, or set it up with the provider's addresses by hand.
 - **No keys are needed.** With sign-in on, the server starts with an empty or missing keys file.
-- **Misconfiguration stops the server.** A missing or invalid file, an unknown setting, an unset secret, plain
-  http to a host other than loopback, or a tenant other than `local` each refuse to start, with the fix.
+- **Misconfiguration stops the server.** A missing or invalid file, an unknown setting, a setting the chosen mode
+  would ignore, an unset secret, plain http to a host other than loopback, or a tenant other than `local` each
+  refuse to start, with the fix.
 - **The resource URL's host is admitted** by the DNS-rebinding protection without `--allowed-host`.
-- **Revocation takes up to a minute.** Results are cached for 60 seconds, so a revoked token can still be accepted
-  for that long. Each provider is asked at most 600 times a minute and 8 at once; keep the proxy's limit on
-  unauthenticated requests, which is the first defence.
+- **Revocation takes up to a minute with introspection.** Results are cached for 60 seconds, so a revoked token
+  can still be accepted for that long. Each provider is asked at most 600 times a minute and 8 at once; keep the
+  proxy's limit on unauthenticated requests, which is the first defence. A signed JWT cannot be revoked: it is
+  accepted until its own expiry, so ask your provider for short-lived access tokens (an hour or less).
 
 ## Telemetry and service levels (decision 0015)
 
