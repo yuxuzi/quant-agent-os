@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Sign-in checks JWTs against the provider's keys, for Entra ID and Amazon Cognito** (decision 0031). A
+  `[[authorization_servers]]` entry with `verify = "jwks"` needs no introspection endpoint: the server checks
+  the token's RS256 (or another listed asymmetric) signature against the issuer's JWKS, found by `jwks_uri` or
+  by the issuer's `/.well-known/openid-configuration`, kept for an hour, and fetched again for an unknown key
+  id at most once every 30 seconds; a failed fetch refuses the token. It requires an exact `iss`, an `aud` in
+  `audiences` (any string, such as `api://...` or a GUID) or, for tokens with no `aud`, a `client_id` in
+  `client_ids`, `exp`, `nbf` and `iat` within `leeway_seconds`, and optionally a `token_use`. New optional
+  settings read the provider's claims: `principal_claim`, `scope_claims` with `scope_map`, `groups_claims`
+  with `group_aliases`, and `provider_tenant_claim`, which adds Entra's `tid` to the principal in the audit
+  trail. App roles in `roles` can entitle machine tokens, and Entra's groups overage is read as no groups.
+  Introspection stays the default, and existing sign-in files work unchanged. `deployment.md` section 10
+  now shows Entra and Cognito files.
 - **Four more mock funds** (`examples/mock-funds/`), fictional and offline: a CLO manager on Azure with SQL
   Server, a long-only equity manager on AWS with Snowflake, an alternatives allocator on Azure with
   Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
