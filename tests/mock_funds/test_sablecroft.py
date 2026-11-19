@@ -519,8 +519,10 @@ def test_signal_tools_run_on_manager_returns_but_mean_nothing_here(store: Sablec
     )  # fmt: skip
     assert study.status == "ok"
     assert study.output["summary"]["instruments"] == 22  # a cross-section of 22 funds
-    # Horizons default to 1, 5, 21 *periods*: on monthly data that is 21 months.
-    assert [h["horizon"] for h in study.output["horizons"]] == [1, 5, 21]
+    # Horizons follow the dates: a month, a quarter, and a year on monthly data.
+    assert [h["horizon"] for h in study.output["horizons"]] == [1, 3, 12]
+    assert "monthly" in study.output["conventions"]["horizons"]
+    assert any("Only 22 instruments" in w for w in study.output["warnings"])
     backtest = run(
         catalog, None, "run_backtest",
         {"signal": {"dataset": "ret_best"}, "returns": {"dataset": "ret_usd"}, "cost_bps": 10},

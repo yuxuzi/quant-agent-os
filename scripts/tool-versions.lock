@@ -1014,19 +1014,22 @@
             "type": "number"
           },
           "horizons": {
-            "default": [
-              1,
-              5,
-              21
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "description": "Forward bars; the first is summarised",
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Horizons",
-            "type": "array"
+            "default": null,
+            "description": "Forward bars; the first is summarised. Default by the dates' frequency: daily 1, 5, 21; weekly 1, 4, 13; monthly 1, 3, 12; quarterly 1, 2, 4",
+            "title": "Horizons"
           },
           "lag": {
             "default": 1,
@@ -1518,7 +1521,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     "check_spec": {
       "input_schema": {

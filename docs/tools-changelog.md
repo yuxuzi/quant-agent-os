@@ -28,6 +28,7 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 | Tool | Version | Change |
 | --- | --- | --- |
+| `analyze_signal` | 2.0.0 | Changes the default `horizons`: without them, they follow the dates' frequency (daily 1, 5, 21; weekly 1, 4, 13; monthly 1, 3, 12; quarterly 1, 2, 4), stated in `conventions.horizons`, where before they were always 1, 5, 21 bars. Warns when the signal changes much less often than a horizon (carried forward from a slower frequency) and when there are fewer than 30 instruments. |
 | `analyze_risk` | 3.0.0 | Changes the meaning of a result over returns by reference: a held asset with returns on fewer than 90% of the dates is left out, with its weight reported in a warning and not given to the others, instead of every date where it is missing being cut for all. A weight with no returns column is refused naming every such asset. Under a factor model, an asset with no loadings has specific risk only (a warning); one with no specific variance is still refused. Missing rows in more than three series are one warning. |
 | `analyze_signal` | 1.0.0 | New: a signal's IC, rank IC, IR, HAC t-statistic per horizon, quantile returns and spread, and autocorrelation, from a signal frame and a returns frame by reference. |
 | `run_backtest` | 1.0.0 | New: simulated net returns of a signal as dollar-neutral or long-only weights, with a trade lag and costs, and their metrics. |

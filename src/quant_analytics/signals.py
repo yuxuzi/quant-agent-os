@@ -33,6 +33,11 @@ from quant_toolbox import performance as metrics
 MIN_BARS = data.MIN_OBSERVATIONS
 LOOK_AHEAD_IC = 0.3  # a mean rank IC this large at the trade is more often a leak than skill
 TOP_DRAWDOWNS = 3
+MIN_INSTRUMENTS = 30  # below this, cross-sectional ICs and quantile spreads are noise-dominated
+SLOW_SIGNAL_BARS = 5  # a signal changing less often than this, on average, looks carried forward
+HORIZONS = {252: [1, 5, 21], 52: [1, 4, 13], 12: [1, 3, 12], 4: [1, 2, 4]}
+"""Default horizons in bars by periods per year: a day, week, and month; a week, month, and
+quarter; a month, quarter, and year; a quarter, half, and year."""
 Weighting = Literal["dollar_neutral", "long_only"]
 FloatArray = npt.NDArray[np.float64]
 
@@ -139,6 +144,11 @@ def _common_warnings(panel: Panel, lag: int, delisting_return: float) -> list[st
             "lag is 0: trades happen on the signal's own close, which assumes the signal and the "
             "trade at the same price; results are optimistic."
         )
+    if len(panel.instruments) < MIN_INSTRUMENTS:
+        warnings.append(
+            f"Only {len(panel.instruments)} instruments; cross-sectional ICs and quantile spreads "
+            f"are dominated by noise below {MIN_INSTRUMENTS}."
+        )
     stopped = _stopped(panel)
     if stopped:
         shown = ", ".join(stopped[:10]) + (" and others" if len(stopped) > 10 else "")
@@ -148,6 +158,37 @@ def _common_warnings(panel: Panel, lag: int, delisting_return: float) -> list[st
             "delisting_return 0 if they are not delistings."
         )
     return warnings
+
+
+def default_horizons(periods_per_year: int | None) -> tuple[list[int], str]:
+    """Return the default horizons for data of ``periods_per_year``, and the frequency's name."""
+    names = {252: "daily", 52: "weekly", 12: "monthly", 4: "quarterly"}
+    if periods_per_year is None:
+        return HORIZONS[252], "daily, as the dates do not show a frequency"
+    nearest = min(HORIZONS, key=lambda known: abs(math.log(known / periods_per_year)))
+    return HORIZONS[nearest], names[nearest]
+
+
+def slow_signal(panel: Panel, horizons: list[int]) -> list[str]:
+    """Warn when the signal changes much less often than the horizons it is scored at."""
+    values = panel.signal
+    if values.shape[0] < 2:
+        return []
+    both = np.isfinite(values[1:]) & np.isfinite(values[:-1])
+    changes = int((both & (values[1:] != values[:-1])).sum())
+    pairs = int(both.sum())
+    if pairs == 0:
+        return []
+    every = pairs / changes if changes else math.inf
+    shorter = [horizon for horizon in horizons if horizon < every]
+    if every < SLOW_SIGNAL_BARS or not shorter:
+        return []
+    pace = "never changes" if math.isinf(every) else f"changes about every {every:.0f} bars"
+    return [
+        f"The signal {pace}, so it is likely carried forward from a slower frequency: rank ICs at "
+        f"horizons {', '.join(map(str, shorter))} overlap the same observation and overstate "
+        "the evidence. Score it at its own frequency."
+    ]
 
 
 class HorizonIc(BaseModel):

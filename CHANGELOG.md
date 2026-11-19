@@ -95,6 +95,10 @@ All notable changes to this project are documented here. The format follows
   fewer than 90% of the dates is left out, its weight reported, instead of every date it misses being cut
   for all (Sablecroft keeps 60 months, not 42; Corvane 109 days, not 29). A weight with no returns column
   is refused naming the assets; an asset with no factor loadings has specific risk only.
+- **`analyze_signal` 2.0.0 picks horizons from the dates.** Without `horizons`, daily data gets 1, 5, 21 bars,
+  weekly 1, 4, 13, monthly 1, 3, 12, and quarterly 1, 2, 4, stated in `conventions.horizons`; before, monthly
+  data got 21 months. It warns when the signal changes much less often than a horizon (a monthly score
+  carried forward onto daily dates) and when there are fewer than 30 instruments.
 - **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
   policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
   before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.

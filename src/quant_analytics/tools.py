@@ -53,6 +53,8 @@ from quant_analytics.signals import (
     Weighting,
     analyze_signal,
     backtest,
+    default_horizons,
+    slow_signal,
 )
 from quant_toolbox.performance import backend as metrics_backend
 from quant_toolbox.research import DELISTING_RETURN, TRADE_LAG
@@ -187,11 +189,12 @@ class SignalRequest(BaseModel):
 
     signal: FrameRef = SIGNAL_FRAME
     returns: FrameRef = RETURNS_FRAME
-    horizons: list[int] = Field(
-        default=[1, 5, 21],
+    horizons: list[int] | None = Field(
+        default=None,
         min_length=1,
         max_length=8,
-        description="Forward bars; the first is summarised",
+        description="Forward bars; the first is summarised. Default by the dates' frequency: "
+        "daily 1, 5, 21; weekly 1, 4, 13; monthly 1, 3, 12; quarterly 1, 2, 4",
     )
     quantiles: int = Field(default=5, ge=2, le=10)
     lag: int = LAG_FIELD
@@ -199,7 +202,9 @@ class SignalRequest(BaseModel):
 
     @field_validator("horizons")
     @classmethod
-    def _horizons(cls, values: list[int]) -> list[int]:
+    def _horizons(cls, values: list[int] | None) -> list[int] | None:
+        if values is None:
+            return None
         if not all(1 <= value <= 252 for value in values) or len(set(values)) != len(values):
             raise ValueError("horizons must be distinct numbers of bars from 1 to 252")
         return values
@@ -781,22 +786,30 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         description=SIGNAL_DESCRIPTION + FRAMES,
         permissions=permissions,
         timeout_seconds=30.0,
-        version="1.0.0",
+        version="2.0.0",
     )
     def analyze_signal_tool(params: SignalRequest) -> SignalOutput:
         resolver = _Resolver(store)
         panel, notes = resolver.panel(params.signal, params.returns)
+        horizons, chosen = params.horizons, "given"
+        if horizons is None:
+            horizons, frequency = default_horizons(infer_periods_per_year(panel.dates))
+            chosen = f"from the dates' frequency ({frequency})"
         output = analyze_signal(
             panel,
             (params.signal.dataset, params.returns.dataset),
-            horizons=params.horizons,
+            horizons=horizons,
             quantiles=params.quantiles,
             lag=params.lag,
             delisting_return=params.delisting_return,
         )
         return output.model_copy(
             update={
-                "warnings": [*notes, *output.warnings],
+                "conventions": {
+                    **output.conventions,
+                    "horizons": f"{', '.join(map(str, horizons))} bars, {chosen}",
+                },
+                "warnings": [*notes, *output.warnings, *slow_signal(panel, horizons)],
                 "data_versions": resolver.versions(),
             }
         )
