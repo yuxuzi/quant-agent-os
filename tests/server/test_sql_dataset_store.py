@@ -132,9 +132,8 @@ def test_the_fingerprint_is_the_one_a_file_with_the_same_cells_has(
 ) -> None:
     store = SqlDatasetStore(sources, declared(lake))
     file = tmp_path / "growth-returns.csv"
-    file.write_text(
-        "date,growth\n2024-01-31,0.01\n2024-02-29,-0.02\n2024-03-29,0.03\n", encoding="utf-8"
-    )
+    # Bytes, so Windows does not write \r\n: the fingerprint is of the file's exact bytes.
+    file.write_bytes(b"date,growth\n2024-01-31,0.01\n2024-02-29,-0.02\n2024-03-29,0.03\n")
     on_disk = DirectoryDatasetStore(tmp_path / "datasets")
     on_disk.put("growth-returns", file)
 
