@@ -35,6 +35,7 @@ class TableBlock:
     columns: list[Column]
     rows: list[list[Cell]]
     note: str = ""
+    shade: bool = False  # colour numbers by sign in HTML and PDF: gains green, losses red
 
 
 @dataclass(frozen=True)
@@ -75,11 +76,12 @@ Block = TableBlock | ChartBlock | TextBlock
 
 @dataclass(frozen=True)
 class Document:
-    """A rendered report's content."""
+    """A rendered report's content; ``footer`` (a disclaimer, say) is shown after every block."""
 
     title: str
     subtitle: str = ""
     blocks: list[Block] = field(default_factory=list)
+    footer: str = ""
 
 
 def format_cell(value: Cell, kind: str) -> str:
@@ -118,6 +120,8 @@ def render_markdown(document: Document) -> str:
             lines += ["_A chart: see the HTML report._", ""]
         else:
             lines += [f"- {_md(line)}" for line in block.lines] + [""]
+    if document.footer:
+        lines += ["---", "", _md(document.footer), ""]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -156,6 +160,8 @@ def render_html(document: Document, *, charts: str = "static") -> str:
             items = "".join(f"<li>{escape(line)}</li>" for line in block.lines)
             parts.append(f"<ul>{items}</ul>")
         parts.append("</section>")
+    if document.footer:
+        parts.append(f"<footer>{escape(document.footer)}</footer>")
     parts.append("</body></html>")
     return "\n".join(parts) + "\n"
 
@@ -172,6 +178,7 @@ def to_dict(document: Document) -> dict[str, Any]:
                     "columns": [column.name for column in block.columns],
                     "rows": [[_plain(value) for value in row] for row in block.rows],
                     "note": block.note,
+                    **({"shade": True} if block.shade else {}),
                 }
             )
         elif isinstance(block, ChartBlock):
@@ -189,7 +196,8 @@ def to_dict(document: Document) -> dict[str, Any]:
             blocks.append(chart)
         else:
             blocks.append({"type": "text", "title": block.title, "lines": block.lines})
-    return {"title": document.title, "subtitle": document.subtitle, "blocks": blocks}
+    plain = {"title": document.title, "subtitle": document.subtitle, "blocks": blocks}
+    return plain | ({"footer": document.footer} if document.footer else {})
 
 
 def _html_table(block: TableBlock) -> str:
@@ -198,7 +206,7 @@ def _html_table(block: TableBlock) -> str:
     for row in block.rows:
         cells = []
         for value, column in zip(row, block.columns, strict=True):
-            kind = "text" if column.kind == "text" else "num"
+            kind = "text" if column.kind == "text" else "num" + _sign(value, block.shade)
             cells.append(f'<td class="{kind}">{escape(format_cell(value, column.kind))}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
     return (
@@ -208,6 +216,13 @@ def _html_table(block: TableBlock) -> str:
         + "".join(rows)
         + "</tbody></table></div>"
     )
+
+
+def _sign(value: Cell, shade: bool) -> str:
+    """The class that colours a shaded table's number by its sign, or nothing."""
+    if not shade or isinstance(value, str) or value is None or not math.isfinite(value):
+        return ""
+    return " gain" if value > 0 else " loss" if value < 0 else ""
 
 
 def _draw(block: ChartBlock, charts: str, *, first: bool) -> str:
@@ -239,6 +254,9 @@ h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 28px 0 8p
 th, td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;
   white-space: nowrap; }
 th:first-child, td.text { text-align: left; } td.num { font-variant-numeric: tabular-nums; }
+td.gain { color: #15803d; } td.loss { color: #b91c1c; }
+footer { margin-top: 32px; padding-top: 8px; border-top: 1px solid #e5e7eb; color: #4b5563;
+  font-size: 11px; }
 svg { width: 100%; height: auto; }
 @media print { body { max-width: none; } section { break-inside: avoid; } }
 """

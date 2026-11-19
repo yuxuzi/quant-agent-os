@@ -40,6 +40,11 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 - **A returns section, by period** (`report.returns_table`, `RETURN_PERIODS`): a row per series (a fund,
   its benchmarks, peers) and a column per period (`1D`, the return on the last date, then MTD, QTD, YTD,
   1Y, 3Y, 5Y, ITD, or any horizon), with the fund's excess over each other series in rows of its own.
+- **One call to write a report** (`report.write_report(document, path, charts=)`, `REPORT_FORMATS`): HTML,
+  Markdown, JSON, PDF, or Excel by the file's suffix, creating folders; an unknown suffix, or interactive
+  charts for a format other than HTML, is refused.
+- **Shaded tables and a footer.** `TableBlock(shade=True)` colours numbers by sign in HTML and PDF (gains
+  green, losses red), and `Document(footer=)` (a disclaimer, say) follows every block in every format.
 - **PDF reports** (`quant_toolbox.report.pdf`, the new `pdf` extra: fpdf2, pure Python). `render_pdf(document)`
   and `write_pdf(document, path)` draw any `Document` on A4: tables, and charts drawn as vectors from their
   data. Without the extra, the call raises `MissingExtraError` naming `uv add "quant-toolbox[pdf]"`.

@@ -8,6 +8,7 @@ as static SVG with pygal by default, or interactively with plotly (``charts="int
 
 `tear_sheet` builds the investor one-pager of a return series from `performance.analyze`, and
 `returns_table` the section of a fund, its benchmarks, and its excess over each, by period.
+`write_report` writes any document as HTML, Markdown, JSON, PDF, or Excel by its file's suffix.
 """
 
 from quant_toolbox.report._charts import (
@@ -33,6 +34,7 @@ from quant_toolbox.report._document import (
     to_dict,
 )
 from quant_toolbox.report._format import METRIC_KINDS, format_metric, label, metric_kind
+from quant_toolbox.report._output import REPORT_FORMATS, write_report
 from quant_toolbox.report._returns import RETURN_PERIODS, returns_table
 from quant_toolbox.report._runs import (
     INTERPRETATION,
@@ -49,6 +51,7 @@ __all__ = [
     "HEADLINE",
     "INTERPRETATION",
     "METRIC_KINDS",
+    "REPORT_FORMATS",
     "RETURN_PERIODS",
     "Block",
     "Cell",
@@ -76,4 +79,5 @@ __all__ = [
     "tear_sheet",
     "to_dict",
     "underwater_chart",
+    "write_report",
 ]

@@ -30,6 +30,9 @@ def write_workbook(document: Document, path: Path) -> Path:
     first.append([_safe(document.title)])
     if document.subtitle:
         first.append([_safe(document.subtitle)])
+    if document.footer:
+        first.append([])
+        first.append([_safe(document.footer)])
     used = {"About"}
     for block in document.blocks:
         if isinstance(block, ChartBlock):
