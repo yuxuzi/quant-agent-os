@@ -118,6 +118,21 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+- **The pilot at the mock fund** (`examples/pilot-fund/site/`, `drill.sh`, and the
+  [pilot runbook](docs/pilot-runbook.md)). The fund's own server serves the platform's toolsets with its
+  warehouse through one `DatasetStore` adapter, its documents, and its legacy code as finished facades and a
+  risk-engine service, behind its gateway's sign-in and desk entitlements. `drill.sh` installs the built wheels
+  into a clean folder and runs the fund's day offline, timed, from install to audit;
+  `tests/integration/test_pilot_fund.py` tells it in process. What it found is in part 5 of the
+  [0.8.0 plan](docs/plans/proposals-0.8.md#5-what-the-pilot-found).
+
+### Fixed
+
+- **A drafted legacy service calls its set-up method.** When a stateful class loads in a method such as
+  `load()` rather than in `__init__`, and that method is not served, `qaos legacy wrap` now calls it once when
+  the service starts, with a `TODO(config)` to confirm it, instead of answering every request with an error.
+- **`qaos runs show` lists each run's principal**, so the operator sees who called what without opening each
+  run.
 
 ### Changed
 

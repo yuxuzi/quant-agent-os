@@ -154,6 +154,10 @@ module = ["pygal", "pygal.*", "plotly", "plotly.*", "openpyxl", "openpyxl.*"]  #
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = ["kestrel_quant", "kestrel_quant.*"]  # the pilot fund's legacy package, untyped on purpose
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["empyrical", "empyrical.*"]  # untyped; quant_toolbox.performance types its boundary
 ignore_missing_imports = true
 

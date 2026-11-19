@@ -24,6 +24,10 @@ There are two variants, and they give the same answers for the same corpus:
 Everything below runs from the repository root. You need Docker with Compose v2. With no network on the
 server, see [install with no network](operations.md#install-with-no-network).
 
+**A fund installing from the wheel** into its own Python project, with its own warehouse, identity provider, and
+legacy code, follows the [pilot runbook](pilot-runbook.md) instead: the same settings, without Docker, as the
+0.8.0 pilot did it.
+
 ## 1. Build
 
 ```bash
@@ -401,7 +405,8 @@ qaos doctor                                  # checks the file and the secret, c
 qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_AGENT_OS_SIGN_IN_FILE
 ```
 
-A firm's own server with `serve_apps` reads the same settings. In Docker, mount the file read-only in a compose
+A firm's own server with `serve_apps` reads the same settings; the [pilot runbook](pilot-runbook.md#6-sign-in-and-entitlements)
+shows one behind a mock gateway. In Docker, mount the file read-only in a compose
 override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment.
 
 ### With signed JWTs (Entra ID, Amazon Cognito)
