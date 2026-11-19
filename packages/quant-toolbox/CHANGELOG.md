@@ -6,6 +6,27 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Added
+
+- **Trading calendars** (`quant_toolbox.data`, numpy only; decision 0033).
+  `as_calendar(source, first, last, holidays=, open_days=)` reads an `exchange_calendars` or
+  `pandas_market_calendars` calendar, a pandas `CustomBusinessDay` or holiday calendar (such as
+  `USFederalHolidayCalendar`), a `numpy.busdaycalendar`, any object with `name`, `first`, `last`, and
+  `sessions(start, end)` (the `Calendar` protocol), or nothing (weekdays), by duck typing, so none of those
+  libraries is a dependency. `holidays` adds ad hoc closures to the source's own, and `open_days` overrides
+  the source, so US federal rules plus Good Friday, less Columbus and Veterans Day, give NYSE's 252 sessions
+  of 2024. The result, a `SessionCalendar`, knows its days from `first` to `last` and raises `CalendarError`
+  outside them rather than guessing; it has `sessions`, `count`, `is_session`, `mask`, `offset`, `roll` (the
+  ISDA following, preceding, and modified conventions), `period_ends` (last session of each week, month,
+  quarter, or year), and `sessions_per_year`. `joint` and `either` combine calendars. Its name records the
+  caller's edits, for a report to state. A firm may subclass it, and `as_calendar` returns the subclass as is.
+- **A default calendar and alignment to it.** `set_default_calendar` sets the fund's calendar once for the
+  process, and `using_calendar` another for one `with` block (per thread or task), for a fund on several
+  exchanges; with neither, `default_calendar()` is weekdays, named `"weekdays (no holidays)"`.
+  `align_to_calendar(table, calendar=None, fill=, off_session=)` gives a table one row per session (NaN, or
+  the previous value), and refuses a row on a non-session, naming it, unless told to drop it. `session_gaps`
+  returns the sessions a table lacks and its rows on non-sessions.
+
 ## [0.7.0] - 2026-11-19
 
 Released with Quant-Agent-OS 0.8.0.
