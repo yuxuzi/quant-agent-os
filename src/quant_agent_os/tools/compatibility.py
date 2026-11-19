@@ -6,7 +6,8 @@ does a bump smaller than the change. `classify` reads two JSON Schemas the way a
 - **Major:** an input that is new and required, or newly required; a removed field; a changed
   type; an input enum value removed; an output field that may now be missing; a widened
   permission set.
-- **Minor:** additions only, such as an optional input, a new output field, or a new enum value.
+- **Minor:** additions only, such as an optional input, a new output field, a new enum value, or
+  an input that may now also be another type (``T`` to ``T | None``, say).
 - **Patch:** only descriptions, titles, or examples changed.
 """
 
@@ -142,11 +143,25 @@ def _structure(schema: Any) -> Any:
     }
 
 
+def _widened(narrow: Any, wide: Any) -> bool:
+    """Return whether ``wide`` is ``anyOf`` alternatives, one of which is ``narrow`` as it was."""
+    if not (isinstance(narrow, dict) and isinstance(wide, dict)) or "anyOf" in narrow:
+        return False
+    branches = wide.get("anyOf")
+    ignored = _ANNOTATIONS | {"anyOf", "default"}
+    if not isinstance(branches, list) or any(key not in ignored for key in wide):
+        return False
+    plain = _structure({key: value for key, value in narrow.items() if key != "default"})
+    return any(_structure(branch) == plain for branch in branches)
+
+
 def _schema_change(old: Any, new: Any, direction: Direction) -> Change | None:
     if old == new:
         return None
     if _structure(old) == _structure(new):
         return "patch"
+    if _widened(*((old, new) if direction == "input" else (new, old))):
+        return "minor"  # an input that takes more, or an output that gives less variety
     if not (isinstance(old, dict) and isinstance(new, dict)):
         return "major"
     changes: list[Change | None] = []

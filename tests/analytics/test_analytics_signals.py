@@ -365,3 +365,47 @@ def test_the_signal_tools_need_a_dataset_store() -> None:
         "analyze_performance",
         "analyze_risk",
     ]
+
+
+def test_horizons_follow_the_dates_frequency_when_not_given(tmp_path: Path) -> None:
+    months = [date(2015 + n // 12, n % 12 + 1, 28) for n in range(60)]
+    returns = _random_returns(3, days=60)
+    signal = _random_returns(4, days=60)
+    store = _store(tmp_path, {"sig": (signal, NAMES, months), "ret": (returns, NAMES, months)})
+
+    monthly = _call(store, "analyze_signal", signal={"dataset": "sig"}, returns={"dataset": "ret"})
+    given = _call(
+        store,
+        "analyze_signal",
+        signal={"dataset": "sig"},
+        returns={"dataset": "ret"},
+        horizons=[2],
+    )
+
+    assert [h["horizon"] for h in monthly["horizons"]] == [1, 3, 12]
+    assert (
+        monthly["conventions"]["horizons"] == "1, 3, 12 bars, from the dates' frequency (monthly)"
+    )
+    assert given["conventions"]["horizons"] == "2 bars, given"
+    assert any("Only 10 instruments" in w for w in monthly["warnings"])
+
+
+def test_a_signal_carried_forward_from_a_slower_frequency_is_warned_about(
+    tmp_path: Path,
+) -> None:
+    returns = _random_returns(5)
+    fresh = _random_returns(6)
+    # A new value every 21 days, carried forward in between: a monthly score on daily dates.
+    carried = [fresh[at - at % 21] for at in range(len(fresh))]
+    days = DAYS[: len(returns)]
+    store = _store(
+        tmp_path,
+        {"sig": (carried, NAMES, days), "new": (fresh, NAMES, days), "ret": (returns, NAMES, days)},
+    )
+
+    slow = _call(store, "analyze_signal", signal={"dataset": "sig"}, returns={"dataset": "ret"})
+    daily = _call(store, "analyze_signal", signal={"dataset": "new"}, returns={"dataset": "ret"})
+
+    warning = next(w for w in slow["warnings"] if "carried forward" in w)
+    assert "every 24 bars" in warning and "horizons 1, 5, 21 " in warning  # 119 pairs, 5 changes
+    assert not any("carried forward" in w for w in daily["warnings"])

@@ -185,10 +185,19 @@ def evaluate(
     ] = "markdown",
     store: StoreOption = None,
     datasets: DatasetsOption = None,
+    access: Annotated[
+        Path | None,
+        typer.Option(
+            help="An access file, so each case reaches what its caller would "
+            "(default: QUANT_AGENT_OS_ACCESS_FILE). With one, a case that names no caller fails."
+        ),
+    ] = None,
 ) -> None:
     """Run agreed test cases against the served tools, and write a report to attach to acceptance.
 
-    It exits 0 when every case passes, 1 when any fails, and 2 when the cases cannot be read.
+    Each case runs as the caller it names, or the file's [caller]; with an access file, as the
+    server would apply it. It exits 0 when every case passes, 1 when any fails, and 2 when the
+    cases or the access file cannot be read.
     """
     if output_format not in ("markdown", "json"):
         errors.print(f"[red]error:[/red] --format is 'markdown' or 'json', not {output_format!r}.")
@@ -198,7 +207,15 @@ def evaluate(
     except GoldFileError as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(2) from error
-    catalog, research = open_catalog(list(DEFAULT_TOOLSETS), store, datasets, chosen=False)
+    access = access or get_settings().access_file
+    try:
+        policy = FileAccessPolicy(access) if access is not None else None
+    except AccessFileError as error:
+        errors.print(f"[red]error:[/red] {escape(str(error))}")
+        raise typer.Exit(2) from error
+    catalog, research = open_catalog(
+        list(DEFAULT_TOOLSETS), store, datasets, chosen=False, access=policy
+    )
     try:
         report = run_acceptance(catalog, cases, digest)
     finally:

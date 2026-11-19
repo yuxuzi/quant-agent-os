@@ -149,7 +149,14 @@ def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: 
     add("sign-in", "ok", f"on for {sign_in.resource}, {count} identity provider(s)")
     missing = set(sign_in.missing_secrets(secret_sources()))
     for server in sign_in.authorization_servers:
-        if server.client_secret_env in missing:
+        if server.jwks:
+            claims = f"audiences {', '.join(server.audiences + server.client_ids)}"
+            add(
+                f"sign-in: {server.issuer}",
+                "ok",
+                f"complete; checks signatures against its keys (verify = jwks), {claims}",
+            )
+        elif server.client_secret_env in missing:
             add(
                 f"sign-in: {server.issuer}",
                 "fail",

@@ -13,6 +13,7 @@ EXTRAS: dict[str, str] = {
     "openpyxl": "excel",
     "empyrical": "empyrical",
     "pandas": "pandas",
+    "sqlalchemy": "sql",
 }
 
 

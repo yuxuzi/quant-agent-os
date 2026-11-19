@@ -219,6 +219,10 @@ the matching version, and so the corpus snapshot.
 7. **Package.** Passages with `SourceRef`, graph paths whose edges cite their chunks, matched entities, the
    snapshot id, and warnings.
 
+An optional source filter (`source_prefix`, `published_from`, `published_to`) becomes a set of document ids,
+chosen in Python from the stored documents. Steps 2 to 5 pass it to the store, which applies it in SQL before
+any limit; the graph walk follows only relations supported by chunks of those documents.
+
 Quant Research writes no answers: the client's model does. Retrieved documents are untrusted, and an
 evaluation checks that injected instructions do not change tool selection or permissions.
 

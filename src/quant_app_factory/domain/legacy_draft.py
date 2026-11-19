@@ -26,6 +26,7 @@ from quant_app_factory.domain.legacy import (
     Trait,
     snake,
 )
+from quant_app_factory.domain.legacy_analysis import SLOW_CALL
 
 DRAFTED = ("facades.py", "server.py", "stubs.py", "service/app.py")
 STDLIB = frozenset(sys.stdlib_module_names)
@@ -199,7 +200,7 @@ def draft(inventory: Inventory, found: dict[str, Found], *, source_root: str, le
     if services:
         files["stubs.py"] = _stubs_module(services, legacy)
         files["service/__init__.py"] = '"""The draft service for stateful legacy code."""\n'
-        files["service/app.py"] = _service_module(services, legacy)
+        files["service/app.py"] = _service_module(services, legacy, list(found.values()))
     files["server.py"] = _server_module(inventory.app, selected, legacy, bool(services))
     files["conftest.py"] = _conftest(source_root)
     files["test_tools.py"] = _test_module(examples, samples, bool(services))
@@ -595,7 +596,7 @@ def _quiet() -> Iterator[None]:
 # The service
 
 
-def _service_module(selected: list[_Selected], legacy: str) -> str:
+def _service_module(selected: list[_Selected], legacy: str, scanned: list[Found]) -> str:
     imports = _Imports()
     imports.add(
         "from __future__ import annotations",
@@ -620,6 +621,13 @@ def _service_module(selected: list[_Selected], legacy: str) -> str:
         arguments, todos = _construction(found)
         build += [line for todo in todos for line in _comment(todo, "    ")]
         build.append(f'    OBJECTS["{key}"] = {alias}({arguments})')
+        for method in _set_up_methods(found, scanned, selected):
+            todo = (
+                f"TODO(config): {found.owner}.{method}() looks like set-up, and it is not "
+                "served, so the draft calls it once here; delete the call if the object "
+                "needs none, or add the firm's arguments."
+            )
+            build += [*_comment(todo, "    "), f'    OBJECTS["{key}"].{method}()']
     if not build:
         build.append("    # Nothing to build: the legacy functions keep their own module state.")
     endpoints = [_endpoint(s, imports) for s in selected]
@@ -680,6 +688,24 @@ CALLER_HOOK = (
     "#",
     '#     ... x_qaos_caller: str | None = Header(None) ... caller_of(x_qaos_caller, "<tool>")',
 )
+
+
+def _set_up_methods(owner: Found, scanned: list[Found], selected: list[_Selected]) -> list[str]:
+    """Public methods of ``owner``'s class named like set-up (``load``, ``fit``, ...) that take
+    no required argument and are not served: an object built without them may not answer."""
+    served = {s.found.target for s in selected}
+    return [
+        item.name
+        for item in scanned
+        if item.module == owner.module
+        and item.owner == owner.owner
+        and item.target not in served
+        and SLOW_CALL.search(item.name)
+        and all(
+            p.default is not None or p.kind in ("var_positional", "var_keyword")
+            for p in item.params
+        )
+    ]
 
 
 def _holder(found: Found) -> str:

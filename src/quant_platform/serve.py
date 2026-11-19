@@ -1,8 +1,13 @@
-"""Serve a `Catalog`: what `qaos serve` runs, and what a firm's own server calls (decision 0020)."""
+"""Serve a `Catalog`: what `qaos serve` runs, and what a firm's own server calls (decision 0020).
+
+`build_server_app` gives the HTTP app a firm's server would serve, without serving it, so a firm
+can test its server in process with Starlette's `TestClient`; `serve_apps` serves that same app.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +19,7 @@ from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetStore
 from quant_agent_os.mcp import run_stdio
 from quant_agent_os.registration import FirmApp
-from quant_agent_os.runs import RunRecorder, RunStoreError, SqliteRunStore
+from quant_agent_os.runs import RunRecorder, RunStore, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
 from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools import (
@@ -29,6 +34,8 @@ from quant_platform.http import build_http_app, single_tenant
 from quant_research.application.retrieval import ResearchService
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI
+
     from quant_platform.identity.sign_in import SignIn
 
 errors = Console(stderr=True, soft_wrap=True)
@@ -177,27 +184,16 @@ def open_sign_in(path: Path, tenant: str = DEFAULT_TENANT) -> SignIn:
     return sign_in
 
 
-def serve_http(
+@contextmanager
+def _http_app(
     catalog: Catalog,
     *,
-    keys: Path | None = None,
-    runs: Path | None = None,
-    host: str = DEFAULT_HOST,
-    port: int = DEFAULT_PORT,
-    allowed_hosts: Sequence[str] = (),
-    sign_in: Path | None = None,
-) -> None:
-    """Serve ``catalog`` as MCP at /mcp and REST at /v1 until interrupted (decision 0012).
-
-    Every call needs an API key, or with sign-in (decision 0028) a token from a trusted identity
-    provider, and is recorded with its principal. ``keys``, ``runs``, and ``sign_in`` default to
-    the configured files, and ``allowed_hosts`` are public names clients use; with sign-in, the
-    resource URL's host is one. Binds loopback by default; put TLS and rate limiting in a reverse
-    proxy before binding anything else. Raises `ApiKeyError` without an enabled key (unless
-    sign-in is on), `SignInError` for a sign-in file that is invalid or names an unset secret,
-    `RunStoreError` without a run store, and `ApiUnavailableError` or `MCPUnavailableError`
-    without the ``server`` extra.
-    """
+    keys: Path | None,
+    runs: Path | RunStore | None,
+    allowed_hosts: Sequence[str],
+    sign_in: Path | None,
+) -> Iterator[tuple[FastAPI, str]]:
+    """Yield ``catalog``'s HTTP app, and who it serves, with its run store open until the end."""
     settings = get_settings()
     keys_file = keys or settings.api_keys_file
     sign_in_file = sign_in or settings.sign_in_file
@@ -208,15 +204,15 @@ def serve_http(
     hosts = list(allowed_hosts)
     if signing_in is not None and not is_loopback(signing_in.host):
         hosts.append(signing_in.host)
-    run_store = SqliteRunStore(runs or settings.runs_file)
+    owned = runs is None or isinstance(runs, Path)
+    run_store: RunStore = (
+        SqliteRunStore(runs or settings.runs_file)
+        if runs is None or isinstance(runs, Path)
+        else runs
+    )
     try:
         warn_about_permissions(catalog.tools, catalog.policy)
         warn_about_open_access(catalog, ring, signing_in)
-        if not is_loopback(host):
-            errors.print(
-                f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
-                "serve it behind a reverse proxy that terminates TLS and limits request rates."
-            )
         tenancy = single_tenant(catalog, run_store, catalog.policy)
         if signing_in is None:
             http_app = build_http_app(
@@ -240,13 +236,99 @@ def serve_http(
         signed_in = (
             f" and to users signed in by {', '.join(signing_in.issuers)}" if signing_in else ""
         )
+        yield http_app, f"{len(ring)} key{plural}{signed_in}"
+    finally:
+        if owned:
+            run_store.close()
+
+
+def serve_http(
+    catalog: Catalog,
+    *,
+    keys: Path | None = None,
+    runs: Path | None = None,
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    allowed_hosts: Sequence[str] = (),
+    sign_in: Path | None = None,
+) -> None:
+    """Serve ``catalog`` as MCP at /mcp and REST at /v1 until interrupted (decision 0012).
+
+    Every call needs an API key, or with sign-in (decision 0028) a token from a trusted identity
+    provider, and is recorded with its principal. ``keys``, ``runs``, and ``sign_in`` default to
+    the configured files, and ``allowed_hosts`` are public names clients use; with sign-in, the
+    resource URL's host is one. Binds loopback by default; put TLS and rate limiting in a reverse
+    proxy before binding anything else. Raises `ApiKeyError` without an enabled key (unless
+    sign-in is on), `SignInError` for a sign-in file that is invalid or names an unset secret,
+    `RunStoreError` without a run store, and `ApiUnavailableError` or `MCPUnavailableError`
+    without the ``server`` extra.
+    """
+    with _http_app(catalog, keys=keys, runs=runs, allowed_hosts=allowed_hosts, sign_in=sign_in) as (
+        http_app,
+        audience,
+    ):
+        if not is_loopback(host):
+            errors.print(
+                f"[yellow]warning:[/yellow] binding {host}, which other machines can reach; "
+                "serve it behind a reverse proxy that terminates TLS and limits request rates."
+            )
         errors.print(
             f"Serving {len(catalog.tools)} tools at http://{host}:{port}/mcp (MCP) and /v1 (REST) "
-            f"to {len(ring)} key{plural}{signed_in}."
+            f"to {audience}."
         )
         run_http(http_app, host=host, port=port)
-    finally:
-        run_store.close()
+
+
+def _firm_catalog(
+    apps: Sequence[FirmApp],
+    datasets: DatasetStore | None,
+    research: ResearchService | None,
+    policy: PermissionPolicy | None,
+    access: AccessPolicy | None,
+) -> Catalog:
+    settings = get_settings()
+    if access is None and settings.access_file is not None:
+        access = FileAccessPolicy(settings.access_file)
+    return compose(
+        policy=policy or settings.policy(),
+        research=research,
+        datasets=datasets,
+        access=access,
+        apps=apps,
+    )
+
+
+@contextmanager
+def build_server_app(
+    apps: Sequence[FirmApp],
+    *,
+    datasets: DatasetStore | None = None,
+    research: ResearchService | None = None,
+    policy: PermissionPolicy | None = None,
+    access: AccessPolicy | None = None,
+    keys: Path | None = None,
+    runs: Path | RunStore | None = None,
+    sign_in: Path | None = None,
+    allowed_hosts: Sequence[str] = (),
+) -> Iterator[FastAPI]:
+    """Yield the HTTP app `serve_apps` would serve for ``apps``, without serving it.
+
+    The same catalog, keys or sign-in, access, and run store, from the same settings, so a firm
+    tests its own server in process::
+
+        with build_server_app([risk], datasets=store) as app, TestClient(app) as client:
+            client.post("/v1/tools/desk_var/call", headers=..., json={"arguments": ...})
+
+    ``keys``, ``runs``, and ``sign_in`` default to the configured files. A run store given as a
+    path, or the configured one, is opened here and closed when the block ends; one given as a
+    store, such as `MemoryRunStore`, is the caller's to close. Raises as `serve_apps` does.
+    """
+    catalog = _firm_catalog(apps, datasets, research, policy, access)
+    with _http_app(catalog, keys=keys, runs=runs, allowed_hosts=allowed_hosts, sign_in=sign_in) as (
+        http_app,
+        _,
+    ):
+        yield http_app
 
 
 def serve_apps(
@@ -264,18 +346,9 @@ def serve_apps(
 
     ``datasets`` is the firm's data, read by its apps and by the platform's analytics. The
     permission policy and the access file come from the usual settings unless given, as for
-    `qaos serve`, and keys, sign-in, and the run store are `serve_http`'s. Raises as
-    `serve_http` does, and `ToolContractError` when an app reads data and no ``datasets`` is
-    given.
+    `qaos serve`, and keys, sign-in, and the run store are `serve_http`'s. It serves the app
+    `build_server_app` builds. Raises as `serve_http` does, and `ToolContractError` when an app
+    reads data and no ``datasets`` is given.
     """
-    settings = get_settings()
-    if access is None and settings.access_file is not None:
-        access = FileAccessPolicy(settings.access_file)
-    catalog = compose(
-        policy=policy or settings.policy(),
-        research=research,
-        datasets=datasets,
-        access=access,
-        apps=apps,
-    )
+    catalog = _firm_catalog(apps, datasets, research, policy, access)
     serve_http(catalog, host=host, port=port, allowed_hosts=allowed_hosts)

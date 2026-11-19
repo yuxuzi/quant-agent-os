@@ -16,6 +16,20 @@ which every token's audience must be, and the identity providers it trusts::
     tenant_claim_value = "acme"   # optional: what that claim holds, if not the tenant itself
     groups_claim = "groups"       # optional: "" when it sends no groups
 
+An entry may instead set ``verify = "jwks"`` (decision 0031) for a provider with no introspection
+endpoint (Entra ID, Amazon Cognito): tokens are JWTs checked against the issuer's keys, and the
+introspection settings are not set::
+
+    [[authorization_servers]]
+    issuer = "https://login.microsoftonline.com/<tenant-guid>/v2.0"
+    verify = "jwks"
+    audiences = ["api://qaos"]    # the tokens' `aud`; or `client_ids` for tokens with no `aud`
+    tenant_claim = ""
+    scope_claims = ["scp"]
+    scope_map = { "tools.call" = "tools:call", "tools.list" = "tools:list" }
+    groups_claims = ["groups", "roles"]
+    group_aliases = { "6f1c2a10-0000-4000-8000-0000000e0001" = "research-eq" }
+
 URLs must be https, except on loopback. The secret is read from the environment, then from the
 ``.env`` in the home, held as a `SecretStr`, and never displayed.
 """
@@ -23,11 +37,12 @@ URLs must be https, except on loopback. The secret is read from the environment,
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -40,18 +55,22 @@ from pydantic import (
     model_validator,
 )
 
-from quant_agent_os.api.server import is_loopback
+from quant_agent_os.api.keys import SCOPES
 from quant_agent_os.config import home_env_file
 from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
+from quant_platform.identity.jwks import Algorithm, JwksServer, JwksVerifier, default_algorithms
 from quant_platform.identity.oauth import (
     DEFAULT_TENANT_CLAIM,
     AuthorizationServer,
+    FirstOf,
     IntrospectionVerifier,
+    check_url,
     protected_resource_routes,
 )
 
 if TYPE_CHECKING:
     import httpx
+    from mcp.server.auth.provider import TokenVerifier
     from starlette.routing import Route
 
 CLAIM_NAME = r"^$|^[A-Za-z_][\w:./-]{0,127}$"
@@ -62,34 +81,78 @@ class SignInError(ValueError):
     """Raised when a sign-in file is missing or invalid, or a secret it names is unset."""
 
 
-def check_url(value: str) -> str:
-    """Return ``value`` if it is an https URL, or an http one on loopback; raise otherwise."""
-    parts = urlsplit(value)
-    if not parts.hostname or parts.scheme not in ("https", "http"):
-        raise ValueError(f"'{value}' is not an http(s) URL")
-    if parts.scheme == "http" and not is_loopback(parts.hostname):
-        raise ValueError(f"'{value}' must use https; plain http is allowed only on loopback")
-    return value
+JWKS_ONLY = (
+    "jwks_uri",
+    "audiences",
+    "client_ids",
+    "algorithms",
+    "leeway_seconds",
+    "token_use",
+    "principal_claim",
+    "scope_claims",
+    "scope_map",
+    "groups_claims",
+    "group_aliases",
+    "provider_tenant_claim",
+)
+INTROSPECTION_ONLY = ("introspection_url", "client_id", "client_secret_env")
 
 
 class ServerEntry(BaseModel):
-    """An identity provider in the sign-in file; its secret is read from the environment."""
+    """An identity provider in the sign-in file; its secret is read from the environment.
+
+    ``verify`` is ``"introspection"`` (the default: RFC 7662, with the three introspection
+    settings) or ``"jwks"`` (JWTs checked against the issuer's keys, with the settings that
+    `JwksServer` describes). A setting that the chosen mode would ignore is refused.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     issuer: str
-    introspection_url: str
-    client_id: str = Field(min_length=1)
-    client_secret_env: str = Field(pattern=r"^[A-Z_][A-Z0-9_]*$")
+    verify: Literal["introspection", "jwks"] = "introspection"
+    introspection_url: str | None = None
+    client_id: str | None = Field(default=None, min_length=1)
+    client_secret_env: str | None = Field(default=None, pattern=r"^[A-Z_][A-Z0-9_]*$")
     tenant: str = Field(default=DEFAULT_TENANT, pattern=TENANT_ID.pattern)
     tenant_claim: str = Field(default=DEFAULT_TENANT_CLAIM, pattern=CLAIM_NAME)
     tenant_claim_value: str | None = Field(default=None, min_length=1, max_length=256)
     groups_claim: str = Field(default=DEFAULT_GROUPS_CLAIM, pattern=CLAIM_NAME)
+    jwks_uri: str | None = None
+    audiences: list[str] = Field(default_factory=list)
+    client_ids: list[str] = Field(default_factory=list)
+    algorithms: list[Algorithm] = Field(default_factory=default_algorithms, min_length=1)
+    leeway_seconds: int = Field(default=30, ge=0, le=300)
+    token_use: str | None = Field(default=None, min_length=1, max_length=64)
+    principal_claim: str = Field(default="sub", pattern=CLAIM_NAME, min_length=1)
+    scope_claims: list[str] = Field(default_factory=lambda: ["scope"])
+    scope_map: dict[str, str] = Field(default_factory=dict)
+    groups_claims: list[str] = Field(default_factory=list)
+    group_aliases: dict[str, str] = Field(default_factory=dict)
+    provider_tenant_claim: str = Field(default="", pattern=CLAIM_NAME)
 
-    @field_validator("issuer", "introspection_url")
+    @field_validator("issuer", "introspection_url", "jwks_uri")
     @classmethod
-    def _secure_urls(cls, value: str) -> str:
-        return check_url(value)
+    def _secure_urls(cls, value: str | None) -> str | None:
+        return check_url(value) if value is not None else None
+
+    @field_validator("scope_claims", "groups_claims")
+    @classmethod
+    def _claim_names(cls, names: list[str]) -> list[str]:
+        for name in names:
+            if not re.fullmatch(CLAIM_NAME, name) or not name:
+                raise ValueError(f"'{name}' is not a claim name")
+        return names
+
+    @field_validator("scope_map")
+    @classmethod
+    def _known_scopes(cls, mapping: dict[str, str]) -> dict[str, str]:
+        for name, scope in mapping.items():
+            if scope not in SCOPES or scope == "runs:approve":
+                raise ValueError(
+                    f"'{name}' maps to '{scope}', which is not a scope a token may grant "
+                    f"({', '.join(s for s in SCOPES if s != 'runs:approve')})"
+                )
+        return mapping
 
     @model_validator(mode="after")
     def _value_needs_a_claim(self) -> ServerEntry:
@@ -97,10 +160,62 @@ class ServerEntry(BaseModel):
             raise ValueError("tenant_claim_value needs a tenant_claim to read it from")
         return self
 
+    @model_validator(mode="after")
+    def _settings_fit_the_mode(self) -> ServerEntry:
+        given = self.model_fields_set
+        if self.verify == "introspection":
+            misplaced = [name for name in JWKS_ONLY if name in given]
+            if misplaced:
+                raise ValueError(f'{", ".join(misplaced)} apply only with verify = "jwks"')
+            absent = [name for name in INTROSPECTION_ONLY if getattr(self, name) is None]
+            if absent:
+                raise ValueError(f'{", ".join(absent)} must be set (verify = "introspection")')
+            return self
+        misplaced = [name for name in INTROSPECTION_ONLY if name in given]
+        if misplaced:
+            raise ValueError(f'{", ".join(misplaced)} apply only with verify = "introspection"')
+        if not self.audiences and not self.client_ids:
+            raise ValueError(
+                'verify = "jwks" needs audiences, or client_ids for tokens without aud'
+            )
+        if "groups_claims" in given and "groups_claim" in given:
+            raise ValueError('set groups_claims, not groups_claim, with verify = "jwks"')
+        return self
+
+    @property
+    def jwks(self) -> bool:
+        """Return whether this provider's tokens are JWTs checked against its keys."""
+        return self.verify == "jwks"
+
     def secret(self, environ: Mapping[str, str | None]) -> SecretStr | None:
         """Return the client secret from ``environ``, or None when it is unset or empty."""
-        value = environ.get(self.client_secret_env)
+        value = environ.get(self.client_secret_env) if self.client_secret_env else None
         return SecretStr(value) if value else None
+
+    def jwks_server(self) -> JwksServer:
+        """Return the JWT settings for a ``verify = "jwks"`` provider."""
+        groups = (
+            self.groups_claims
+            if "groups_claims" in self.model_fields_set
+            else ([self.groups_claim] if self.groups_claim else [])
+        )
+        return JwksServer(
+            issuer=self.issuer,
+            jwks_uri=self.jwks_uri,
+            audiences=self.audiences,
+            client_ids=self.client_ids,
+            algorithms=self.algorithms,
+            leeway_seconds=self.leeway_seconds,
+            token_use=self.token_use,
+            tenant_claim=self.tenant_claim,
+            tenant_claim_value=self.tenant_claim_value,
+            principal_claim=self.principal_claim,
+            scope_claims=self.scope_claims,
+            scope_map=self.scope_map,
+            groups_claims=groups,
+            group_aliases=self.group_aliases,
+            provider_tenant_claim=self.provider_tenant_claim,
+        )
 
 
 class SignInFile(BaseModel):
@@ -127,7 +242,11 @@ class SignInFile(BaseModel):
     def missing_secrets(self, environ: Mapping[str, str | None] | None = None) -> list[str]:
         """Return the secret variables that are unset, in the environment and the home's .env."""
         values = environ if environ is not None else secret_sources()
-        return [s.client_secret_env for s in self.authorization_servers if not s.secret(values)]
+        return [
+            s.client_secret_env
+            for s in self.authorization_servers
+            if s.client_secret_env is not None and not s.secret(values)
+        ]
 
     def resolve(self, environ: Mapping[str, str | None] | None = None) -> SignIn:
         """Return the sign-in with its secrets; raise `SignInError` naming any that are unset."""
@@ -140,8 +259,10 @@ class SignInFile(BaseModel):
             )
         servers = []
         for entry in self.authorization_servers:
+            if entry.jwks:
+                continue
             secret = entry.secret(values)
-            assert secret is not None  # checked above
+            assert secret is not None and entry.introspection_url and entry.client_id  # checked
             servers.append(
                 AuthorizationServer(
                     issuer=entry.issuer,
@@ -154,7 +275,8 @@ class SignInFile(BaseModel):
                 )
             )
         tenants = {entry.issuer: {entry.tenant} for entry in self.authorization_servers}
-        return SignIn(self.resource, servers, tenants)
+        jwks = [entry.jwks_server() for entry in self.authorization_servers if entry.jwks]
+        return SignIn(self.resource, servers, tenants, jwks)
 
 
 @dataclass(frozen=True)
@@ -164,11 +286,12 @@ class SignIn:
     resource: str
     servers: list[AuthorizationServer]
     tenants_by_issuer: dict[str, set[str]]
+    jwks_servers: list[JwksServer] = field(default_factory=list)
 
     @property
     def issuers(self) -> list[str]:
-        """Return the trusted issuers, in the file's order."""
-        return [server.issuer for server in self.servers]
+        """Return the trusted issuers: those that introspect, then those checked by their keys."""
+        return [s.issuer for s in self.servers] + [s.issuer for s in self.jwks_servers]
 
     @property
     def host(self) -> str:
@@ -179,14 +302,33 @@ class SignIn:
         """Return every tenant a signed-in user may act in."""
         return set().union(*self.tenants_by_issuer.values())
 
-    def verifier(self, http: httpx.AsyncClient | None = None) -> IntrospectionVerifier:
-        """Return the verifier for these providers' tokens; ``http`` is for tests."""
-        return IntrospectionVerifier(
-            self.servers,
-            resource=self.resource,
-            tenants_by_issuer=self.tenants_by_issuer,
-            http=http,
-        )
+    def verifier(self, http: httpx.AsyncClient | None = None) -> TokenVerifier:
+        """Return the verifier for these providers' tokens; ``http`` is for tests.
+
+        Providers that introspect are asked by `IntrospectionVerifier`, the others checked by
+        `JwksVerifier`; a file with both asks each, and a token goes only to the one that
+        trusts its issuer.
+        """
+        verifiers: list[TokenVerifier] = []
+        if self.servers:
+            verifiers.append(
+                IntrospectionVerifier(
+                    self.servers,
+                    resource=self.resource,
+                    tenants_by_issuer=self.tenants_by_issuer,
+                    http=http,
+                )
+            )
+        if self.jwks_servers:
+            verifiers.append(
+                JwksVerifier(
+                    self.jwks_servers,
+                    resource=self.resource,
+                    tenants_by_issuer=self.tenants_by_issuer,
+                    http=http,
+                )
+            )
+        return verifiers[0] if len(verifiers) == 1 else FirstOf(*verifiers)
 
     def metadata_routes(self) -> tuple[list[Route], str]:
         """Return the RFC 9728 metadata routes and the metadata URL 401 responses name."""

@@ -48,8 +48,15 @@ daily return is the sum of the previous day's weight times each instrument's `to
 (t-statistic near 4), carry has none (|t| under 2), and value a small positive one among equities. They
 hold for every seed we tried, not only the default. The convention is in the file: Spearman correlation
 across instruments, ties sharing their average rank, between a signal on day t and `total_return` on day
-t+1, averaged over days. The answers are computed from the same rounded values the tables hold. The file
-also has each desk's gross P&L and commissions, the row counts, and the factor volatilities.
+t+1, averaged over days, with a naive t-statistic. The answers are computed from the same rounded values the
+tables hold.
+
+That pairing is `lag: 0` to the analysis platform, whose default is `lag: 1`: a signal on day t traded on
+day t+1 and scored against day t+2's return. So `signals.at_platform_default` states each signal's mean
+rank IC, IR, and Newey-West t-statistic (the platform's lag count) at that default, labelled with its
+convention; momentum's is near 0.026. A client that keeps `analyze_signal`'s defaults should find exactly
+these, and `tests/pilot_fund/test_facility.py` checks that it does. The file also has each desk's gross
+P&L and commissions, the row counts, and the factor volatilities.
 
 The generator uses no linear algebra (its Cholesky factor and products are written out) and sums with
 `math.fsum`, so its output should not depend on the platform's BLAS or summation order. The tests still
@@ -125,5 +132,7 @@ A token is inactive once it expires, is revoked, or its user is disabled (`provi
 | `desk_returns_<desk>` | `pos_eod` and `mkt_px_daily` | date x one column |
 
 Each desk's PM sees market data, signals, and its own desk; `risk` sees every dataset; `research` sees
-market data and signals, no positions; `operators` see no data. Tool names beyond the platform's own
-(`kpc_*`, `risk_*`, `run_backtest`) are placeholders for the fund's `site/` code.
+market data and signals, no positions; `operators` see no data. Tools beyond the platform's own are
+the fund's [`site/`](../site/kestrel_server.py) code: `kpc_*` facades over `kestrel_quant` (research
+gets the signal and report ones, not `kpc_desk_pnl`), and `risk_*` from the risk-engine service,
+for the risk team only.

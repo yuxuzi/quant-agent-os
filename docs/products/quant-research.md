@@ -39,11 +39,50 @@ run costs a few cents.
 
 It supports Markdown and text with front matter. PDF needs the extra
 `quant-agent-os[pdf]`, and its locations cite the page and line range. Scanned PDFs
-are reported, because OCR is not supported.
+are reported, because pypdf has no OCR.
+
+### Parsing PDFs with RAGFlow
+
+If your firm runs [RAGFlow](https://github.com/infiniflow/ragflow) (1.0 or later), ingestion can
+use its DeepDoc parser instead of pypdf. DeepDoc reads layout and tables and runs OCR on scanned
+pages:
+
+```bash
+export RAGFLOW_URL=https://ragflow.internal     # plain http only for localhost
+export RAGFLOW_API_KEY=...                      # or put both in the home's .env
+uv run qaos ingest ~/research --pdf-parser ragflow
+```
+
+- Each PDF is uploaded to a temporary dataset, parsed, read back, and deleted. RAGFlow embeds
+  the chunks while it parses, so its tenant needs an embedding model configured.
+- Quant Research still chunks, links, and cites the text. A citation names the page and a line
+  range within the page text RAGFlow returned, which can differ from pypdf's lines. Changing the
+  parser re-processes the PDFs on the next ingestion.
+- A table RAGFlow recognises becomes one passage, cited on the page where it starts, with one
+  line per row and cells separated by `|`, so its numbers stay with their row and column
+  headers. A table longer than 4,000 characters splits between rows. Table cells are searched
+  but, as with pypdf, never read as relations.
+- A chunk RAGFlow returns without a page position makes that file fail with a warning, rather
+  than get a guessed citation.
+- Only ingestion talks to RAGFlow; serving and search never do. `RAGFLOW_PARSE_TIMEOUT` (seconds,
+  default 600) bounds each file's parse.
+- Its quality on the real-paper evaluation has not been measured yet.
 
 To draft a strategy specification whose every item cites its passages, run
 `uv run qaos strategy "trend following"`. Add `--json` to save the spec. What the
 corpus leaves undecided is listed as open questions, not filled with defaults.
+
+`find_related_signals` can search part of the corpus: `source_prefix` keeps sources whose
+location starts with it, such as `notes/`, and `published_from` and `published_to` keep sources
+whose `published` front matter (a year, month, or day) overlaps the range. A source with no
+readable date is left out of a date search, with a warning. The filter applies inside every
+search channel and the graph walk, before the result limit, so passages and edges all come from
+the chosen sources. It narrows a search and is not access control: anyone who can call the tool
+can search the whole corpus ([decision 0021](../decisions/0021-per-caller-access.md)).
+
+`get_source_passage` returns one passage in full. With `context` 1 or 2 it adds the passages
+before and after it in the same document, each with its own citation, for a passage that starts
+mid-argument.
 
 To register the read-only tools (`find_related_signals`, `get_source_passage`,
 `generate_strategy`) in a Quant-Agent-OS registry:
@@ -89,7 +128,7 @@ paths, which these figures do not score. The gold set is small and has no multi-
 - **Paraphrases.** Without an embedder, a question that shares no words with the answer can miss.
 - **Hosted embedders have no measured score floor,** so off-topic questions can return passages with
   them. The local model's floor of 0.8 was measured on one corpus and may not transfer.
-- **PDFs.** Text-layer PDFs only, with no OCR. Some kerning artefacts ("ot her") remain, and tables are
+- **PDFs.** With the default parser, text-layer PDFs only, with no OCR (see RAGFlow above). Some kerning artefacts ("ot her") remain, and tables are
   indexed for search but never read as relations.
 - **Answers.** The client writes the answer from the evidence, so check its citations against the
   passages it quotes.

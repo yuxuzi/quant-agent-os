@@ -1,5 +1,6 @@
 """Unit tests for hybrid retrieval and evidence packets."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -12,8 +13,9 @@ from quant_research.application.retrieval import (
     UnknownPassageError,
     _fuse,
     _shortest_paths,
+    published_period,
 )
-from quant_research.domain.models import Relation
+from quant_research.domain.models import Document, Relation
 from quant_research.domain.ports import GraphEdge
 
 
@@ -75,6 +77,32 @@ def test_passages_can_be_fetched_in_full(research: ResearchApp) -> None:
     assert passage.source.source_id == "notes/earnings.txt"
     with pytest.raises(UnknownPassageError, match="nope"):
         research.research.get_passage("nope")
+
+
+def test_passages_come_with_the_passages_around_them_when_asked(research: ResearchApp) -> None:
+    hit = research.research.find_related(ResearchQuery(query="short-term reversal")).passages[0]
+    found = research.store.get_chunk(hit.chunk_id)
+    assert found is not None
+    chunks = research.store.document_chunks(found.document_id, 0, 10_000)
+    assert len(chunks) >= 3
+    first, middle, last = chunks[0], chunks[1], chunks[-1]
+
+    alone = research.research.get_passage(middle.id)
+    around = research.research.get_passage(middle.id, 1)
+    at_start = research.research.get_passage(first.id, 2)
+    at_end = research.research.get_passage(last.id, 2)
+
+    assert alone.before == alone.after == [] and len(alone.evidence) == 1
+    assert [p.chunk_id for p in around.before] == [first.id]
+    assert [p.chunk_id for p in around.after] == [chunks[2].id]
+    assert around.after[0].source.location == chunks[2].location
+    assert [e.statement for e in around.evidence] == [c.text for c in chunks[:3]]
+    assert at_start.before == [] and [p.chunk_id for p in at_start.after] == [
+        c.id for c in chunks[1:3]
+    ]
+    assert at_end.after == [] and len(at_end.before) == min(2, len(chunks) - 1)
+    with pytest.raises(ValueError, match="between 0 and 2"):
+        research.research.get_passage(middle.id, 3)
 
 
 def test_rank_fusion_rewards_agreement_and_breaks_ties_by_id() -> None:
@@ -216,3 +244,80 @@ def test_graph_edges_require_positive_support_and_hops() -> None:
         GraphEdge(relation=relation, hops=1, support=0)
     with pytest.raises(ValidationError):
         GraphEdge(relation=relation, hops=0)
+
+
+def test_a_source_prefix_keeps_every_passage_and_link_in_those_sources(
+    research: ResearchApp,
+) -> None:
+    packet = research.research.find_related(
+        ResearchQuery(query="short-term reversal", source_prefix="notes/")
+    )
+    cited = [
+        research.store.get_chunk(link.chunk_id)
+        for entity in packet.related
+        for link in [*entity.path, *entity.links]
+    ]
+    documents = {chunk.document_id for chunk in cited if chunk is not None}
+
+    assert packet.passages and packet.related
+    assert all(p.source.source_id.startswith("notes/") for p in packet.passages)
+    assert all(item.sources[0].source_id.startswith("notes/") for item in packet.evidence)
+    assert all(research.store.get_document(d).uri.startswith("notes/") for d in documents)  # type: ignore[union-attr]
+
+
+def test_the_source_filter_applies_before_the_limit(research: ResearchApp) -> None:
+    query = "short-term reversal"
+    best = research.research.find_related(ResearchQuery(query=query, k=1)).passages
+    filtered = research.research.find_related(
+        ResearchQuery(query=query, k=1, source_prefix="notes/")
+    ).passages
+
+    assert not best[0].source.source_id.startswith("notes/")
+    assert [p.source.source_id for p in filtered] == ["notes/order-flow.md"]
+
+
+def test_a_date_range_keeps_dated_sources_in_it_and_says_what_it_left_out(
+    research: ResearchApp,
+) -> None:
+    packet = research.research.find_related(
+        ResearchQuery(query="short-term reversal", published_from=date(2024, 1, 1))
+    )
+
+    assert {p.source.source_id for p in packet.passages} == {"reversal-and-microstructure.md"}
+    assert any("no published date" in warning for warning in packet.warnings)
+
+
+def test_a_filter_no_document_matches_abstains_and_says_so(research: ResearchApp) -> None:
+    packet = research.research.find_related(
+        ResearchQuery(query="short-term reversal", source_prefix="nowhere/")
+    )
+
+    assert packet.abstained and not packet.passages and not packet.related
+    assert "No document matches the source filter." in packet.warnings
+
+
+def test_a_date_range_must_be_in_order() -> None:
+    with pytest.raises(ValidationError):
+        ResearchQuery(query="carry", published_from=date(2024, 2, 1), published_to=date(2024, 1, 1))
+
+
+@pytest.mark.parametrize(
+    ("published", "period"),
+    [
+        ("2024-03-01", (date(2024, 3, 1), date(2024, 3, 1))),
+        ("2024-02", (date(2024, 2, 1), date(2024, 2, 29))),
+        ("2023", (date(2023, 1, 1), date(2023, 12, 31))),
+        ("2024-03-01T09:30:00Z", (date(2024, 3, 1), date(2024, 3, 1))),
+        ("2024-02-30", None),
+        ("March 2024", None),
+        (None, None),
+    ],
+)
+def test_published_dates_read_as_the_period_they_name(
+    published: str | None, period: tuple[date, date] | None
+) -> None:
+    document = Document(
+        id="d", sha256="s", uri="u", title="t", published=published, loader_version="1"
+    )
+
+    assert published_period(document) == period

@@ -136,6 +136,47 @@ def test_every_retrieval_answer_equals_the_reference(
         assert store.mentioned_entities(chunks) == expected.mentioned_entities(chunks)
         assert store.chunks_mentioning(entities, 25) == expected.chunks_mentioning(entities, 25)
         assert store.get_entities(entities) == expected.get_entities(entities)
+        for chunk_id in chunks[:3]:
+            assert app.research.get_passage(chunk_id, 2) == reference.research.get_passage(
+                chunk_id, 2
+            )
+
+
+def test_scoped_reads_equal_the_reference(
+    backend: Backend, corpus_dir: Path, vector_reference: ResearchApp
+) -> None:
+    reference = vector_reference
+    with backend.open(embedder=mock_embedder()) as app:
+        app.ingest.ingest(corpus_dir)
+        store, expected = app.store, reference.store
+        assert store.list_documents() == expected.list_documents()
+        notes = [d.id for d in expected.list_documents() if d.uri.startswith("notes/")]
+        entities = [entity.id for entity in app.vocabulary.entities]
+        assert app.embedder is not None
+        (vector,) = app.embedder.embed(["short-term reversal"], kind="query", deadline=None)
+
+        for scope in (notes, notes[:1], []):
+            for query in QUERIES:
+                hits = store.keyword_search(query, 12, documents=scope)
+                wanted = expected.keyword_search(query, 12, documents=scope)
+                assert [h.chunk_id for h in hits] == [h.chunk_id for h in wanted]
+            for hops in (1, 2):
+                assert store.expand(
+                    entities, hops=hops, min_confidence=0.0, documents=scope
+                ) == expected.expand(entities, hops=hops, min_confidence=0.0, documents=scope)
+            assert store.chunks_mentioning(entities, 25, documents=scope) == (
+                expected.chunks_mentioning(entities, 25, documents=scope)
+            )
+            model = app.embedder.model_id
+            assert {
+                h.chunk_id for h in store.vector_search(model, vector, 10, documents=scope)
+            } == {h.chunk_id for h in expected.vector_search(model, vector, 10, documents=scope)}
+        chunks = {
+            h.chunk_id for h in store.keyword_search("momentum reversal", 25, documents=notes)
+        }
+        assert chunks and all(store.get_chunk(c).document_id in notes for c in chunks)  # type: ignore[union-attr]
+        request = ResearchQuery(query="short-term reversal", source_prefix="notes/")
+        assert app.research.find_related(request) == reference.research.find_related(request)
 
 
 def test_strategy_specs_equal_the_reference(

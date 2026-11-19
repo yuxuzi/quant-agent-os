@@ -14,13 +14,17 @@ from your own arithmetic.
 
 ## Find the data first
 
-Call `list_datasets` to see the datasets the server can read, with their columns and rows.
-Read one dataset's details with `dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
+Call `list_datasets` to see the datasets the server can read, with their rows, dates, and first
+columns; `prefix` narrows it to ids that start so. Read one dataset's every column with
+`dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
 
 Pass series **by reference**, never by copying values:
 - **Performance:** `analyze_performance` with `returns` as `{"dataset": ID, "column": NAME}`,
   optionally a `benchmark` reference the same way. `risk_free` is an annual rate.
-- **Risk:** `analyze_risk` with `weights` naming each asset, `asset_returns` as
+- **Risk:** `analyze_risk` with the book's weights by reference when a dataset holds them:
+  `weights_ref` as `{"dataset": ID}` for a frame of dates by assets (its latest date; add
+  `"as_of"` for another), or `{"dataset": ID, "column": NAME}` for one row per asset. Otherwise
+  `weights` naming each asset. Then `asset_returns` as
   `{"dataset": ID}` (one column per asset, named like the weights), and, for exposures,
   `factor_returns` as `{"dataset": ID, "columns": [...]}`. For a vendor's model, pass
   `factor_model` with `loadings` and `factor_covariance` dataset ids and `specific_variance`

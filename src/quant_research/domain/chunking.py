@@ -10,6 +10,7 @@ CHUNKER_VERSION = "paragraph-v2+page-v2"
 MAX_CHUNK_CHARS = 1200
 MIN_CHUNK_CHARS = 200
 PAGE_CHUNK_CHARS = 500
+MAX_TABLE_CHARS = 4000  # a table stays whole up to this size, then splits between rows
 
 _SENTENCE_END = (".", "?", "!", ":")
 
@@ -100,16 +101,21 @@ def _paragraphs(text: str, first_line: int) -> list[Passage]:
     return paragraphs
 
 
-def split_pages(pages: Sequence[str]) -> list[tuple[int, Passage]]:
+def split_pages(
+    pages: Sequence[str], *, tables: Sequence[tuple[int, int, int]] = ()
+) -> list[tuple[int, Passage]]:
     """Return ``(page number, passage)`` for every page of a PDF, in order.
 
     The section carries across pages: passages after a "References" line belong to the
-    `REFERENCES` section until an appendix heading starts the `APPENDIX` section.
+    `REFERENCES` section until an appendix heading starts the `APPENDIX` section. Each of
+    ``tables``, given as ``(page, first line, last line)``, becomes one passage of its own, split
+    between rows only beyond `MAX_TABLE_CHARS`; its lines never open a section.
     """
     located: list[tuple[int, Passage]] = []
     section: str | None = None
     for number, page in enumerate(pages, start=1):
-        passages, section = _split_page(page, section)
+        spans = {first: last for table_page, first, last in tables if table_page == number}
+        passages, section = _split_page(page, section, spans)
         located += [(number, passage) for passage in passages]
     return located
 
@@ -124,10 +130,14 @@ def split_page(text: str) -> list[Passage]:
     return _split_page(text, None)[0]
 
 
-def _split_page(text: str, section: str | None) -> tuple[list[Passage], str | None]:
+def _split_page(
+    text: str, section: str | None, tables: dict[int, int] | None = None
+) -> tuple[list[Passage], str | None]:
     passages: list[Passage] = []
     lines: list[str] = []
     start = 1
+    tables = tables or {}
+    table_end = 0
 
     def close(end: int) -> None:
         if lines:
@@ -137,6 +147,21 @@ def _split_page(text: str, section: str | None) -> tuple[list[Passage], str | No
     number = 0
     for number, raw in enumerate(text.splitlines(), start=1):
         line = raw.strip()
+        if number in tables:
+            close(number - 1)
+            table_end = tables[number]
+        if table_end:
+            size = sum(len(item) + 1 for item in lines)
+            if line and lines and size + len(line) > MAX_TABLE_CHARS:
+                close(number - 1)
+            if line:
+                if not lines:
+                    start = number
+                lines.append(line)
+            if number >= table_end:
+                close(number)
+                table_end = 0
+            continue
         if not line:
             continue
         opens = (

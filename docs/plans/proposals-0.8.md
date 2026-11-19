@@ -86,11 +86,60 @@ edits finish it (B6), not that it needs none.
 
 ## 5. What the pilot found
 
-Filled in by W5. Each row is one friction point the drill met.
+Filled in by W5 on 2026-11-18. Each row is one friction point the drill or the in-process test met. "Fixed"
+names the commit on `feat/pilot-drill`; anything else is written down with its next step and owner.
 
 | # | Where | What happened | Fixed by, or next step |
 | --- | --- | --- | --- |
-| | | | |
+| P1 | W4 scan | `kestrel_quant.db` keeps a module-level query cache, and the scan passes "keeps state between calls" to every function that reaches it, so 20 of 26 callables came out as *service*, including the plain signals and the P&L report | Fixed by hand in the inventory (part of its 38 changed lines). Next step (W4): tell a module cache from an object's state, and draft a facade with a `TODO(review)` on the cache |
+| P2 | W4 wrap | The drafted service built `RiskEngine()` but never called `load()`, its set-up method, so every risk endpoint answered 500 ("call load() first") | **Fixed** in `cd214ba` (W4): the lifespan calls a public, argument-free method named like set-up that is not served, with a `TODO(config)` |
+| P3 | W4 wrap | The three signal facades returned whole panels, 315 to 528 KB, over the 100 KB output limit | Finished by hand: each facade returns one date's cross-section (`as_of`). Next step (W4): warn in the draft when a function returns a dates-by-names frame |
+| P4 | W4 wrap | Optional data parameters got no example in `test_tools.py` (`{}`), so the test ran the legacy fallback that reads the warehouse directly; required untyped parameters got `1.0`, and `kpc_desk_pnl` "passed" with `desk = 1.0` and an empty report | Finished by hand: examples against the real store. Next step (W4): an example reference for every data parameter, and a string placeholder that fails for a name like `desk` |
+| P5 | W4 draft | `server.py` imports `facades` and `stubs` by bare name, so a firm's own server module must put the draft's folder on `sys.path` | Worked around in `kestrel_server.py`. Next step (W4): draft a package with relative imports, or say so in the next steps |
+| P6 | W4 draft | `_quiet()` uses `contextlib.redirect_stdout`, which is process-wide, while tools run on several threads | Recorded. Next step (W4): a lock, or route prints through logging; it matters only over stdio |
+| P7 | Site, W4 | `kpc_desk_pnl` and the risk engine read the warehouse themselves, past `access.toml`'s dataset rules. A facade can check `current_caller()`, but a service cannot see who called | Facade scoped by hand with `permits` on `positions_<desk>`, refusals noted for the audit; `risk_*` granted to the risk group only, so a PM cannot get their own desk's VaR. Next step (W2/W4 design): let `call_service` forward the caller's principal and groups to the service |
+| P8 | W1, W3 | The planted ICs pair a signal on day t with day t+1's return, which is `lag: 0`; the platform's default `lag: 1` gives a rank IC of 0.0261 for the planted 0.0221, and the skill tells clients to keep the default. With `lag: 0` the IC and IR match to 1e-10, with an "optimistic" warning, and the HAC t (4.05) differs from the planted naive t (3.94) | Recorded; the drill and the cases pass `lag: 0` and say why. Next step (W1): state the known answers at the default lag too |
+| P9 | W3 | `analyze_risk` takes `weights` only inline, so a client must get a desk's book elsewhere; the drill reads it from the warehouse itself | Next step (backlog, data by reference): weights from a dataset's row, such as `{dataset: "weights_macro", row: "last"}` |
+| P10 | W3 | Historical stress covers 2 of 12 windows, because the warehouse starts in 2023 | As designed; the tool's note says so, and the drill quotes it |
+| P11 | Core, W2 | `qaos runs show` listed runs without their principal, so the operator could not see who called what without opening each run, though the deployment guide says runs show it | **Fixed** in `596e1a4`: the listing has a principal column |
+| P12 | Acceptance | `run_acceptance` runs with no caller, so a catalog with an access policy refuses every dataset (fail closed). The fund runs its cases on a second catalog without access: they check numbers, not entitlements, which only the drill and the test check | Recorded. Next step (backlog): `run_acceptance` acting as a named group |
+| P13 | Settings | The risk tools need `network` granted and pre-approved, and pre-approval is server-wide, so any other tool needing `network`, such as a hosted embedder, would also run without approval | Recorded; `kestrel.env` says so. Next step (owner's decision, a security default): standing approvals per tool |
+| P14 | Docs | Backup and upgrade in [operations](../operations.md) cover only Docker; a fund installing the wheel had no steps | **Fixed** in `908bd15`: the [pilot runbook](../pilot-runbook.md#8-operate) covers both for a wheel install. Neither is drilled for a wheel yet |
+| P15 | Testing a firm's server | `serve_http` closes its run store when serving stops, and the site's `serve()` holds the corpus open while it serves, so the in-process test patches both to drive the HTTP app | Recorded. Next step (core): a public way to build a firm's HTTP app without running it |
+| P16 | Refusals | A refused desk reads `DeskRefusedError: No desk 'macro'; the desks are eq_ls.`, and a refused tool returns `denied` over REST with HTTP 200, so a client parses text and statuses to tell refusals apart | Recorded under D3 (one output schema for refusals) |
+| P17 | Legacy package | `kestrel_quant` reads `KPC_WAREHOUSE` into `CONFIG` at import, so the variable must be set before anything imports it; the in-process test sets `CONFIG` too | A legacy smell facades cannot fix; the runbook's settings set it where the server starts |
+| P18 | Type checks | The repository's strict mypy could not find the untyped `kestrel_quant` the facades import | Fixed in `1122f33` with a mypy override for the pilot's legacy package |
+| P19 | The drill | One run started in the background stalled for 15 minutes in phase 7: the server and the risk service were listening but did not answer, the wait's `curl` had no time limit, and the run resumed only after a manual probe. The cause was not pinned down | The drill now gives every `curl` a 5-second limit and a 180-second start deadline, starts its services with stdin from `/dev/null` and `uv run --no-sync`, and has passed in about 30 seconds since. Next step (W5): rerun on Linux CI before trusting it unattended |
+
+### Results against B1 to B8
+
+Measured on macOS with a warm uv cache, from the drill's own summary (`examples/pilot-fund/drill.sh`) and
+`tests/integration/test_pilot_fund.py` (10 tests).
+
+| Drill phase | Seconds |
+| --- | --- |
+| 1. Build both wheels | 0.1 |
+| 2. Install into a clean folder (the only phase allowed the network) | 2.3 |
+| 3. Build the warehouse | 1.6 |
+| 4. `qaos init` and `qaos doctor` | 0.4 |
+| 5. Ingest the 16 documents | 0.2 |
+| 6. Scan, wrap, and test the finished legacy draft | 10.3 |
+| 7. Start the gateway, the risk service (with its 1-second model load), and the server | 12.0 |
+| 8. The fund's day: 19 checks as five signed-in users, a disabled one, and no one, over REST and MCP | 1.0 |
+| 9. The agreed cases | 1.7 |
+| 10. `qaos runs show` | 0.2 |
+| **Total** | **29.8** |
+
+| # | Holds? | Measurement |
+| --- | --- | --- |
+| B1 | Yes, with a warm cache | Both wheels built and installed into a fresh `uv` project with its own `HOME`; every phase after the install runs with `UV_OFFLINE=1`. An install from a cold cache was not measured |
+| B2 | Yes | Five users signed in through the gateway, and a disabled one gets no token; no credential gets 401 with the RFC 9728 pointer; groups decide tools; an API key with a group works beside sign-in (integration test) |
+| B3 | Yes | One adapter, `warehouse_store.py` (about 240 lines), serves 19 datasets read in place; a PM's request for another desk's returns answers word for word as a missing dataset; research reaches no positions |
+| B4 | Yes | 16 documents ingested; the cited search returns the injected note with its text marked untrusted, and the run store shows only the call made |
+| B5 | Yes | `analyze_signal` recovers the planted momentum rank IC, 0.0221294799, to 1e-10 at `lag: 0` (P8), and carry's -0.0117901681; `run_backtest` of momentum at 5 bps; `analyze_risk` on the macro book with the vendor model and 2 stress windows. The agent-efficiency evaluation is unchanged: the platform's tool surface did not change |
+| B6 | Yes, with edits counted | Scan: 26 callables. Inventory: 38 lines changed. Draft: 13 tools (7 facades, 6 service endpoints), 110 TODO lines; its contract test passed for 5 of 13 tools as drafted (after P2's fix). Finishing it changed 342 added and 312 removed lines of the 731-line draft, across six files; both generated tests pass, and the tools pass `check_app` on the real warehouse |
+| B7 | Mostly | Agreed cases: 6 of 6 pass (`acceptance.toml`); `qaos runs show` names each caller (after P11); the runbook covers backup and upgrade for a wheel install (P14), but the drill does not rehearse them |
+| B8 | Yes | This table: 19 friction points, 5 fixed on this branch (P2, P11, P14, P18, P19), the rest with a next step |
 
 ## 6. Backlog carried from the first draft
 

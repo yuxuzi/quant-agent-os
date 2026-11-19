@@ -1,0 +1,58 @@
+# Sablecroft Alternatives (fictional): the cases the fund agreed before using the platform. Run them as
+# the operator with `SAB_LAKE_ROOT=<built lake> python site/sablecroft_server.py acceptance
+# site/sablecroft_acceptance.toml`. The numbers come from the default lake (seed 20251231); a lake
+# rebuilt with another seed changes them, which is the point: a changed number fails the case.
+
+[caller]
+principal = "amira.cole@sablecroft.example"   # the CIO: the cases check the numbers, not who may see them
+groups = ["6f1c2a10-0000-4000-8000-00000000c10a"]
+
+[[numeric]]
+name = "the calibration fund's IRR is exactly 20%"
+tool = "sab_private_fund_returns"
+arguments = { calls = { dataset = "pm_calls", column = "PM01" }, distributions = { dataset = "pm_distributions", column = "PM01" }, nav = { dataset = "pm_nav", column = "PM01" } }
+value = "irr"
+expected = 0.2
+tolerance = 1e-9
+
+[[numeric]]
+name = "the calibration fund's TVPI is 1.32"
+tool = "sab_private_fund_returns"
+arguments = { calls = { dataset = "pm_calls", column = "PM01" }, distributions = { dataset = "pm_distributions", column = "PM01" }, nav = { dataset = "pm_nav", column = "PM01" } }
+value = "tvpi"
+expected = 1.32
+tolerance = 1e-9
+
+[[numeric]]
+name = "Wrenfield's Sharpe, adjusted for its autocorrelation (Lo), is far below the raw 2.7"
+tool = "sab_lo_adjusted_sharpe"
+arguments = { returns = { dataset = "ret_final", column = "IC01" } }
+value = "adjusted_sharpe"
+expected = 1.2093032161501618
+tolerance = 1e-9
+
+[[numeric]]
+name = "Wrenfield's returns look smoothed: unsmoothed volatility is about 1.7x reported"
+tool = "sab_unsmooth_returns"
+arguments = { returns = { dataset = "ret_final", column = "IC01" } }
+value = "vol_ratio"
+expected = 1.7149858514250886
+tolerance = 1e-6
+
+[[numeric]]
+name = "platform analytics on a manager's final returns: annualised volatility of IC01"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "ret_final", column = "IC01" } }
+value = "metrics.annualized_volatility"
+expected = 0.047065514090973794
+tolerance = 1e-9
+
+[[retrieval]]
+name = "the smoothed-returns note is in the corpus"
+question = "Getmansky Lo Makarov weights true volatility"
+source = "note-smoothed-returns.md"
+
+[[retrieval]]
+name = "the corpus says nothing on commodity warehouses"
+question = "What is the rent per square foot of our commodity warehouses?"
+abstain = true

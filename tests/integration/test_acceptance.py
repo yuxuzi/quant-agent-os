@@ -146,7 +146,7 @@ def test_the_report_never_quotes_retrieved_text(demo: list[str]) -> None:
         ('[[retrieval]]\nname = "a"\nquestion = "q"\nsource = "s"\nabstain = true\n', "not both"),
         (
             '[[numeric]]\nname = "a"\ntool = "t"\nvalue = "v"\nexpected = 1.0\n',
-            "numeric.0.tolerance",
+            "state tolerance, relative_tolerance, or both",
         ),
         (
             '[[numeric]]\nname = "a"\ntool = "t"\nvalue = "v"\nexpected = nan\ntolerance = 0.1\n',
@@ -194,3 +194,232 @@ def test_eval_is_a_command_and_not_a_tool() -> None:
     assert not list((ROOT / "scripts").glob("*acceptance*"))
     lock = json.loads((ROOT / "scripts" / "tool-versions.lock").read_text("utf-8"))
     assert not {"eval", "run_acceptance", "qaos_eval"} & set(lock.get("tools", lock))
+
+
+# Callers and per-caller access (P12)
+
+ACCESS = DEMO / "access.toml"
+GROWTH = '[caller]\nprincipal = "gwen"\ngroups = ["growth-desk"]\n'
+VALUE_CALLER = 'caller = { principal = "vic", groups = ["value-desk"] }\n'
+
+
+def _with_callers(tmp_path: Path, header: str, value_case_caller: str = "") -> Path:
+    text = GOLD.read_text("utf-8")
+    old = 'arguments = { returns = { dataset = "value-book", column = "book" } }\n'
+    assert old in text
+    cases = tmp_path / "cases.toml"
+    cases.write_text(header + text.replace(old, old + value_case_caller), "utf-8")
+    return cases
+
+
+def test_with_an_access_file_a_case_without_a_caller_fails_unrun(demo: list[str]) -> None:
+    code, report = _evaluate(GOLD, demo, "--access", str(ACCESS))
+
+    assert code == 1
+    assert "0 of 4 cases passed" in report
+    assert report.count("not run: this catalog has an access policy") == 4
+
+
+def test_each_case_runs_as_its_caller_with_their_entitlements(
+    demo: list[str], tmp_path: Path
+) -> None:
+    cases = _with_callers(tmp_path, GROWTH, VALUE_CALLER)
+
+    code, report = _evaluate(cases, demo, "--access", str(ACCESS))
+
+    assert code == 0, report
+    assert "| Caller |" in report
+    assert "| gwen (growth-desk) | pass |" in report
+    assert "| vic (value-desk) | pass |" in report
+    assert "Warning:" not in report
+
+
+def test_a_case_beyond_its_callers_entitlements_fails_as_if_missing(
+    demo: list[str], tmp_path: Path
+) -> None:
+    cases = _with_callers(tmp_path, GROWTH)  # the value book's case runs as the growth desk
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 1
+    failed = [result for result in report["results"] if not result["passed"]]
+    assert [result["name"] for result in failed] == ["value book volatility"]
+    assert "No dataset 'value-book'" in failed[0]["actual"]
+    assert failed[0]["caller"] == "gwen (growth-desk)"
+
+
+def test_the_configured_access_file_applies(
+    demo: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from quant_agent_os.config import get_settings
+
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(ACCESS))
+    get_settings.cache_clear()
+    try:
+        code, report = _evaluate(GOLD, demo)
+    finally:
+        get_settings.cache_clear()
+
+    assert code == 1
+    assert "not run: this catalog has an access policy" in report
+
+
+def test_callers_without_an_access_policy_are_warned_about(demo: list[str], tmp_path: Path) -> None:
+    code, report = _evaluate(_with_callers(tmp_path, GROWTH), demo)
+
+    assert code == 0, report
+    assert "Warning: The cases name callers, but this catalog has no access policy" in report
+
+
+def test_an_invalid_access_file_is_a_usage_error(demo: list[str], tmp_path: Path) -> None:
+    broken = tmp_path / "access.toml"
+    broken.write_text("[groups.x]\ntools = 1\n", "utf-8")
+
+    assert _evaluate(GOLD, demo, "--access", str(broken))[0] == 2
+
+
+def test_the_runs_caller_is_named_in_one_place(tmp_path: Path) -> None:
+    from quant_agent_os.tools import Caller, FileAccessPolicy, PermissionPolicy
+    from quant_platform import compose
+    from quant_platform.acceptance import run_acceptance
+
+    cases, digest = load_gold(_with_callers(tmp_path, GROWTH))
+    catalog = compose(policy=PermissionPolicy(), access=FileAccessPolicy(ACCESS))
+
+    with pytest.raises(ValueError, match="name it in one place"):
+        run_acceptance(catalog, cases, digest, caller=Caller("gwen"))
+
+
+BOOKS = (("growth", 0.17029039110268307), ("value", 0.12447905949730392))
+
+
+def test_run_acceptance_takes_the_runs_caller_from_code(demo: list[str]) -> None:
+    from quant_agent_os.data import DirectoryDatasetStore
+    from quant_agent_os.tools import Caller, FileAccessPolicy, PermissionPolicy
+    from quant_platform import compose
+    from quant_platform.acceptance import GoldFile, run_acceptance
+
+    datasets = DirectoryDatasetStore(Path(demo[3]))
+    gold = GoldFile.model_validate(
+        {
+            "numeric": [
+                {
+                    "name": name,
+                    "tool": "analyze_performance",
+                    "arguments": {"returns": {"dataset": f"{name}-book", "column": "book"}},
+                    "value": "metrics.annualized_volatility",
+                    "expected": expected,
+                    "tolerance": 1e-9,
+                }
+                for name, expected in BOOKS
+            ]
+        }
+    )
+    catalog = compose(
+        policy=PermissionPolicy(),
+        datasets=datasets,
+        access=FileAccessPolicy(ACCESS),
+    )
+
+    report = run_acceptance(
+        catalog, gold, "sha", caller=Caller("gwen", groups=frozenset({"growth-desk"}))
+    )
+
+    assert [result.passed for result in report.results] == [True, False]
+    assert "No dataset 'value-book'" in report.results[1].actual
+
+
+def test_a_value_path_indexes_lists_and_picks_items_by_a_field() -> None:
+    from quant_platform.acceptance import MISSING, _at
+
+    output = {
+        "rows": [{"t_stat": 5.9}, {"t_stat": 1.2}],
+        "sectors": [{"sector": "Energy", "dts": 3.0}, {"sector": "Industrials", "dts": 4.5}],
+        "flags": [{"held": True, "id": "a"}],
+    }
+
+    assert _at(output, "rows.1.t_stat") == 1.2
+    assert _at(output, "sectors[sector=Industrials].dts") == 4.5
+    assert _at(output, "flags[held=true].id") == "a"
+    assert _at(output, "rows.2.t_stat") is MISSING
+    assert _at(output, "sectors[sector=Utilities].dts") is MISSING
+    assert _at({"rows": [{"k": 1}, {"k": 1}]}, "rows[k=1]") is MISSING  # two match: ambiguous
+
+
+AGREED = """
+[[numeric]]
+name = "growth volatility within a relative tolerance"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "metrics.annualized_volatility"
+expected = 0.1703
+relative_tolerance = 0.001
+
+[[exact]]
+name = "the growth book is monthly"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "periods_per_year"
+equals = 12
+
+[[exact]]
+name = "the first evidence is computed"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "growth-book", column = "book" } }
+value = "evidence.0.kind"
+equals = "computed"
+
+[[refusal]]
+name = "the growth desk cannot read the value book"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "value-book", column = "book" } }
+message = "No dataset 'value-book'"
+"""
+
+
+def test_exact_refusal_and_relative_cases_pass_as_agreed(demo: list[str], tmp_path: Path) -> None:
+    cases = tmp_path / "cases.toml"
+    cases.write_text(GROWTH + AGREED, "utf-8")
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 0, output
+    assert [result["kind"] for result in report["results"]] == [
+        "numeric",
+        "exact",
+        "exact",
+        "refusal",
+    ]
+    assert report["results"][0]["expected"] == "0.1703 ± 0.001 relative"
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "actual"),
+    [
+        ("expected = 0.1703\n", "expected = 0.1710\n", "0.1702"),
+        ("equals = 12", "equals = 252", "12"),
+        ("equals = 12", "equals = true", "12"),
+        ('dataset = "value-book"', 'dataset = "growth-book"', "ok: the call was allowed"),
+        (
+            'tool = "analyze_performance"\narguments = { returns = { dataset = "value',
+            'tool = "analyse_performance"\narguments = { returns = { dataset = "value',
+            "unknown_tool, not a refusal",
+        ),
+        ("message = \"No dataset 'value-book'\"", 'message = "permission"', "No dataset"),
+    ],
+)
+def test_each_new_kind_of_case_fails_when_it_should(
+    demo: list[str], tmp_path: Path, old: str, new: str, actual: str
+) -> None:
+    assert old in AGREED
+    cases = tmp_path / "cases.toml"
+    cases.write_text(GROWTH + AGREED.replace(old, new, 1), "utf-8")
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 1
+    (failed,) = [result for result in report["results"] if not result["passed"]]
+    assert actual in failed["actual"]
