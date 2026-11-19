@@ -357,7 +357,10 @@ def test_the_platforms_analytics_on_the_funds_data(catalog: Any, known: dict[str
         catalog, "analyze_risk", portfolio_id="lcc",
         weights_ref={"dataset": "weights_lcc", "as_of": "2026-05-15"}, asset_returns=RET,
     )  # fmt: skip
-    assert risk.status == "ok" and risk.output["periods"] < 40  # 109 days, cut by two late names
+    assert (
+        risk.status == "ok" and risk.output["periods"] == 109
+    )  # the late names are left out instead
+    assert any("Left out 2 assets" in w and "US0301" in w for w in risk.output["warnings"])
     assert any("US0301" in w for w in risk.output["warnings"])
 
     backtest = _run(

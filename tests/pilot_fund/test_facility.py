@@ -129,13 +129,16 @@ def test_the_known_answers_at_the_platforms_default_are_what_analyze_signal_find
     from quant_agent_os.data import MemoryDatasetStore
     from quant_agent_os.runtime import ToolCall, ToolExecutor
     from quant_agent_os.tools import Permission, PermissionPolicy
+    from quant_analytics.signals import default_horizons
     from quant_analytics.tools import SignalRequest, analytics_tools
 
     defaults = SignalRequest.model_validate(
         {"signal": {"dataset": "s"}, "returns": {"dataset": "r"}}
     )
     planted = answers["signals"]["at_platform_default"]
-    assert (planted["lag"], planted["horizon"]) == (defaults.lag, defaults.horizons[0])
+    daily, _ = default_horizons(252)  # the warehouse's prices are daily
+    assert defaults.horizons is None  # the horizons follow the dates' frequency
+    assert (planted["lag"], planted["horizon"]) == (defaults.lag, daily[0])
 
     store = MemoryDatasetStore()
     px = _frame(warehouse, "SELECT date, instrument_id, total_return FROM mkt_px_daily")
