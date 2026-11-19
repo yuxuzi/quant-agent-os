@@ -194,3 +194,137 @@ def test_eval_is_a_command_and_not_a_tool() -> None:
     assert not list((ROOT / "scripts").glob("*acceptance*"))
     lock = json.loads((ROOT / "scripts" / "tool-versions.lock").read_text("utf-8"))
     assert not {"eval", "run_acceptance", "qaos_eval"} & set(lock.get("tools", lock))
+
+
+# Callers and per-caller access (P12)
+
+ACCESS = DEMO / "access.toml"
+GROWTH = '[caller]\nprincipal = "gwen"\ngroups = ["growth-desk"]\n'
+VALUE_CALLER = 'caller = { principal = "vic", groups = ["value-desk"] }\n'
+
+
+def _with_callers(tmp_path: Path, header: str, value_case_caller: str = "") -> Path:
+    text = GOLD.read_text("utf-8")
+    old = 'arguments = { returns = { dataset = "value-book", column = "book" } }\n'
+    assert old in text
+    cases = tmp_path / "cases.toml"
+    cases.write_text(header + text.replace(old, old + value_case_caller), "utf-8")
+    return cases
+
+
+def test_with_an_access_file_a_case_without_a_caller_fails_unrun(demo: list[str]) -> None:
+    code, report = _evaluate(GOLD, demo, "--access", str(ACCESS))
+
+    assert code == 1
+    assert "0 of 4 cases passed" in report
+    assert report.count("not run: this catalog has an access policy") == 4
+
+
+def test_each_case_runs_as_its_caller_with_their_entitlements(
+    demo: list[str], tmp_path: Path
+) -> None:
+    cases = _with_callers(tmp_path, GROWTH, VALUE_CALLER)
+
+    code, report = _evaluate(cases, demo, "--access", str(ACCESS))
+
+    assert code == 0, report
+    assert "| Caller |" in report
+    assert "| gwen (growth-desk) | pass |" in report
+    assert "| vic (value-desk) | pass |" in report
+    assert "Warning:" not in report
+
+
+def test_a_case_beyond_its_callers_entitlements_fails_as_if_missing(
+    demo: list[str], tmp_path: Path
+) -> None:
+    cases = _with_callers(tmp_path, GROWTH)  # the value book's case runs as the growth desk
+
+    code, output = _evaluate(cases, demo, "--access", str(ACCESS), "--format", "json")
+    report = json.loads(output)
+
+    assert code == 1
+    failed = [result for result in report["results"] if not result["passed"]]
+    assert [result["name"] for result in failed] == ["value book volatility"]
+    assert "No dataset 'value-book'" in failed[0]["actual"]
+    assert failed[0]["caller"] == "gwen (growth-desk)"
+
+
+def test_the_configured_access_file_applies(
+    demo: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from quant_agent_os.config import get_settings
+
+    monkeypatch.setenv("QUANT_AGENT_OS_ACCESS_FILE", str(ACCESS))
+    get_settings.cache_clear()
+    try:
+        code, report = _evaluate(GOLD, demo)
+    finally:
+        get_settings.cache_clear()
+
+    assert code == 1
+    assert "not run: this catalog has an access policy" in report
+
+
+def test_callers_without_an_access_policy_are_warned_about(demo: list[str], tmp_path: Path) -> None:
+    code, report = _evaluate(_with_callers(tmp_path, GROWTH), demo)
+
+    assert code == 0, report
+    assert "Warning: The cases name callers, but this catalog has no access policy" in report
+
+
+def test_an_invalid_access_file_is_a_usage_error(demo: list[str], tmp_path: Path) -> None:
+    broken = tmp_path / "access.toml"
+    broken.write_text("[groups.x]\ntools = 1\n", "utf-8")
+
+    assert _evaluate(GOLD, demo, "--access", str(broken))[0] == 2
+
+
+def test_the_runs_caller_is_named_in_one_place(tmp_path: Path) -> None:
+    from quant_agent_os.tools import Caller, FileAccessPolicy, PermissionPolicy
+    from quant_platform import compose
+    from quant_platform.acceptance import run_acceptance
+
+    cases, digest = load_gold(_with_callers(tmp_path, GROWTH))
+    catalog = compose(policy=PermissionPolicy(), access=FileAccessPolicy(ACCESS))
+
+    with pytest.raises(ValueError, match="name it in one place"):
+        run_acceptance(catalog, cases, digest, caller=Caller("gwen"))
+
+
+BOOKS = (("growth", 0.17029039110268307), ("value", 0.12447905949730392))
+
+
+def test_run_acceptance_takes_the_runs_caller_from_code(demo: list[str]) -> None:
+    from quant_agent_os.data import DirectoryDatasetStore
+    from quant_agent_os.tools import Caller, FileAccessPolicy, PermissionPolicy
+    from quant_platform import compose
+    from quant_platform.acceptance import GoldFile, run_acceptance
+
+    datasets = DirectoryDatasetStore(Path(demo[3]))
+    gold = GoldFile.model_validate(
+        {
+            "numeric": [
+                {
+                    "name": name,
+                    "tool": "analyze_performance",
+                    "arguments": {"returns": {"dataset": f"{name}-book", "column": "book"}},
+                    "value": "metrics.annualized_volatility",
+                    "expected": expected,
+                    "tolerance": 1e-9,
+                }
+                for name, expected in BOOKS
+            ]
+        }
+    )
+    catalog = compose(
+        policy=PermissionPolicy(),
+        datasets=datasets,
+        access=FileAccessPolicy(ACCESS),
+    )
+
+    report = run_acceptance(
+        catalog, gold, "sha", caller=Caller("gwen", groups=frozenset({"growth-desk"}))
+    )
+
+    assert [result.passed for result in report.results] == [True, False]
+    assert "No dataset 'value-book'" in report.results[1].actual

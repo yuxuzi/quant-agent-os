@@ -28,7 +28,7 @@ from typing import Any, NamedTuple
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from quant_agent_os.data import Dataset, DatasetStore, infer_periods_per_year
+from quant_agent_os.data import Dataset, DatasetStore, infer_periods_per_year, parse_date
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_agent_os.registration import FrameRef
 from quant_agent_os.tools import Permission, ToolRegistry, ToolSpec, tool
@@ -74,6 +74,7 @@ RISK_DESCRIPTION = (
     "factor_model, volatility and shares under it. Daily dated returns add historical stress "
     "scenarios. Conventions are stated in the output."
 )
+WEIGHTS_BY_REFERENCE = " Weights held in a dataset go as weights_ref."
 SIGNAL_DESCRIPTION = (
     "A signal's predictive power over instruments' returns: mean IC and rank IC, rank IC IR "
     "and HAC t-statistic per horizon, quantile mean returns and top-minus-bottom spread, and "
@@ -112,6 +113,16 @@ class DatasetRef(BaseModel):
     dataset: str = Field(min_length=1)
 
 
+class WeightsRef(BaseModel):
+    """Weights: a dated row of dates by assets, or a column of assets as rows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset: str = Field(min_length=1)
+    column: str | None = Field(default=None, description="Only for assets as rows")
+    as_of: str | None = Field(default=None, description="Only for dates by assets. Default: last")
+
+
 class ColumnsRef(BaseModel):
     """Several columns of one dataset."""
 
@@ -141,7 +152,8 @@ class RiskRequest(BaseModel):
     """`RiskInput` with returns by value or by reference."""
 
     portfolio_id: str = Field(min_length=1)
-    weights: dict[str, float] = Field(min_length=1, max_length=MAX_ASSETS)
+    weights: dict[str, float] | None = Field(default=None, min_length=1, max_length=MAX_ASSETS)
+    weights_ref: WeightsRef | None = None
     asset_returns: dict[str, list[float]] | DatasetRef
     factor_returns: dict[str, list[float]] | ColumnsRef | None = None
     factor_model: FactorModelRef | None = None
@@ -149,6 +161,11 @@ class RiskRequest(BaseModel):
 
     @model_validator(mode="after")
     def _periods_for_values(self) -> RiskRequest:
+        if (self.weights is None) == (self.weights_ref is None):
+            raise ValueError(
+                "Pass the weights one way: weights inline, as {asset: weight}, or weights_ref, "
+                "as {dataset, column} or {dataset, as_of}; not both and not neither."
+            )
         if isinstance(self.asset_returns, dict) and self.periods_per_year is None:
             raise ValueError(NEEDS_PERIODS)
         return self
@@ -413,6 +430,69 @@ class _Resolver:
             notes,
         )
 
+    def weights(self, reference: WeightsRef) -> tuple[dict[str, float], str, list[str]]:
+        """Return the weights ``reference`` names, where they came from, and notes.
+
+        A dataset with dates is a frame of dates by assets: the row on ``as_of``, or the last
+        row, gives the weights. One without is assets by columns: ``column`` gives them. A
+        missing cell is an asset not held and is left out. Raises ValueError naming what to fix.
+        """
+        table = self.dataset(reference.dataset)
+        dates = table.dates
+        if dates is None:
+            if not table.index:
+                raise ValueError(
+                    f"Dataset '{table.id}' needs one row per asset, named in its first column, or "
+                    "one row per date and one column per asset."
+                )
+            if reference.as_of is not None:
+                raise ValueError(
+                    f"Dataset '{table.id}' has one row per asset and no dates, so as_of does not "
+                    "apply; name the weights column instead."
+                )
+            if reference.column is None:
+                raise ValueError(
+                    f"Dataset '{table.id}' has one row per asset; name the weights column in "
+                    f"weights_ref, one of {_names(list(table.columns))}."
+                )
+            cells = dict(zip(table.index, table.column(reference.column), strict=True))
+            where = f"{table.id}.{reference.column}"
+        else:
+            if reference.column is not None:
+                raise ValueError(
+                    f"Dataset '{table.id}' has one row per date and one column per asset, so "
+                    "column does not apply; pass as_of to pick a date, or leave it out for the "
+                    "latest."
+                )
+            if reference.as_of is None:
+                row, which = len(dates) - 1, ", the latest date"
+            else:
+                day = parse_date(reference.as_of)
+                if day is None:
+                    raise ValueError(f"as_of must be a date, such as {dates[-1].isoformat()}.")
+                if day not in dates:
+                    raise ValueError(
+                        f"Dataset '{table.id}' has no row for {day.isoformat()}; its dates run "
+                        f"from {dates[0].isoformat()} to {dates[-1].isoformat()}."
+                    )
+                row, which = dates.index(day), ""
+            cells = {name: values[row] for name, values in table.columns.items()}
+            where = f"{table.id} on {dates[row].isoformat()}{which}"
+        weights = {name: value for name, value in cells.items() if math.isfinite(value)}
+        if not weights:
+            raise ValueError(f"The weights in {where} are all missing, so there is no portfolio.")
+        if len(weights) > MAX_ASSETS:
+            raise ValueError(
+                f"The weights in {where} name {len(weights)} assets; the most is {MAX_ASSETS}."
+            )
+        skipped = len(cells) - len(weights)
+        notes = (
+            [f"Left out {skipped} assets with no weight in {where}; they are not held."]
+            if skipped
+            else []
+        )
+        return weights, where, notes
+
     def _by_name(self, dataset_id: str, row: str) -> Dataset:
         table = self.dataset(dataset_id)
         if not table.index or table.dates is not None:
@@ -555,24 +635,32 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
 
     @tool(
         name="analyze_risk",
-        description=RISK_DESCRIPTION + by_reference.replace("{dataset, column}", "{dataset}"),
+        description=RISK_DESCRIPTION
+        + by_reference.replace("{dataset, column}", "{dataset}")
+        + ("" if store is None else WEIGHTS_BY_REFERENCE),
         permissions=permissions,
         max_output_bytes=500_000,
-        version="2.2.0",
+        version="2.3.0",
     )
     def analyze_risk(params: RiskRequest) -> RiskOutput:
         resolver = _Resolver(store)
         assets, factors = params.asset_returns, params.factor_returns
         dates: list[date] | None = None
         notes: list[str] = []
+        weights_from: str | None = None
+        if params.weights_ref is not None:
+            weights, weights_from, notes = resolver.weights(params.weights_ref)
+        elif params.weights is not None:
+            weights = params.weights
+        else:  # the request's validator refuses this
+            raise ValueError("Pass weights or weights_ref.")
         if isinstance(assets, DatasetRef):
             if isinstance(factors, dict):
                 raise ValueError(
                     "Pass assets and factors the same way: both values or both references."
                 )
             references = {
-                f"asset:{name}": ColumnRef(dataset=assets.dataset, column=name)
-                for name in params.weights
+                f"asset:{name}": ColumnRef(dataset=assets.dataset, column=name) for name in weights
             }
             if factors is not None:
                 references |= {
@@ -580,8 +668,8 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
                     for name in factors.columns
                 }
             aligned = resolver.aligned(references)
-            dates, notes = aligned.dates, aligned.notes
-            assets = {name: aligned.series[f"asset:{name}"] for name in params.weights}
+            dates, notes = aligned.dates, [*notes, *aligned.notes]
+            assets = {name: aligned.series[f"asset:{name}"] for name in weights}
             factors = (
                 {name: aligned.series[f"factor:{name}"] for name in factors.columns}
                 if factors is not None
@@ -594,24 +682,29 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         periods, chosen, disagreement = _frequency(params.periods_per_year, dates)
         resolved = RiskInput(
             portfolio_id=params.portfolio_id,
-            weights=params.weights,
+            weights=weights,
             asset_returns=assets,
             factor_returns=factors,
             periods_per_year=periods,
         )
         output = portfolio_risk(resolved)
         stress, stress_note, stress_evidence = historical_stress(
-            params.portfolio_id, params.weights, assets, dates, periods
+            params.portfolio_id, weights, assets, dates, periods
         )
         model: ModelRisk | None = None
         model_evidence: list[Evidence] = []
         model_notes: list[str] = []
         conventions = {**output.conventions, "periods_per_year": chosen}
+        if weights_from is not None:
+            conventions["weights"] = (
+                f"From {weights_from}; the asset returns are used over every date given, not "
+                "cut at the weights' date"
+            )
         if stress is not None:
             conventions["historical_stress"] = STRESS_CONVENTION
         if params.factor_model is not None:
-            loaded, model_notes = resolver.factor_model(params.factor_model, list(params.weights))
-            model, model_evidence = model_risk(params.portfolio_id, params.weights, *loaded)
+            loaded, model_notes = resolver.factor_model(params.factor_model, list(weights))
+            model, model_evidence = model_risk(params.portfolio_id, weights, *loaded)
             conventions["factor_model"] = MODEL_CONVENTION
         return output.model_copy(
             update={

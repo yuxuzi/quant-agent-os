@@ -185,6 +185,30 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
 - **Test it.** In your CI, call `check_app(risk, {"desk_var": {...}}, datasets=store)` from
   `quant_agent_os.testing`. With `lock=Path("tools.lock.json")` it also fails when a tool's schemas
   change without a big enough version bump; create the lock with `update_lock=True`.
+- **Test the server too.** `build_server_app` takes `serve_apps`'s arguments, plus `keys`, `runs`, and
+  `sign_in` (each the configured file by default), and gives the HTTP app `serve_apps` would serve, without
+  running it: the same catalog, keys or sign-in, access file, and run store. Drive it in process:
+
+  ```python
+  from starlette.testclient import TestClient
+
+  from quant_agent_os.runs import MemoryRunStore
+  from quant_platform import build_server_app
+
+  with (
+      build_server_app([risk], datasets=store, keys=keys_file, runs=MemoryRunStore()) as app,
+      TestClient(app, base_url="http://127.0.0.1:8000") as client,
+  ):
+      answer = client.post(
+          "/v1/tools/desk_var/call",
+          headers={"Authorization": f"Bearer {key}"},
+          json={"arguments": {"returns": {"dataset": "desks", "column": "growth"}}},
+      )
+  ```
+
+  A run store named by a path, or the configured one, is closed when the block ends; a store you pass,
+  such as `MemoryRunStore`, is yours to inspect and close. Anything your server opens for as long as it
+  serves, such as the research corpus, open around the block as well.
 - **Deploy it.** Build an image from the platform's, as the example's `Dockerfile` does, then run the
   compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
   Mount anything your tools read in a compose override. Every other step above stays the same.

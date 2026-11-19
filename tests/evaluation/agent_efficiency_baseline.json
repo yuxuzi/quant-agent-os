@@ -1,14 +1,14 @@
 {
   "servers": {
     "platform": {
-      "client_only_bytes": 28707,
-      "definition_bytes": 11417,
+      "client_only_bytes": 29375,
+      "definition_bytes": 12761,
       "instruction_bytes": 817,
       "tools": 9
     },
     "platform-with-factory": {
-      "client_only_bytes": 33107,
-      "definition_bytes": 12448,
+      "client_only_bytes": 33775,
+      "definition_bytes": 13792,
       "instruction_bytes": 1145,
       "tools": 11
     }
@@ -16,7 +16,7 @@
   "skills": {
     "quant-analytics": {
       "description_bytes": 313,
-      "skill_bytes": 3746
+      "skill_bytes": 3998
     },
     "quant-app-factory": {
       "description_bytes": 282,
@@ -28,7 +28,7 @@
     },
     "quant-research": {
       "description_bytes": 274,
-      "skill_bytes": 2774
+      "skill_bytes": 3090
     },
     "quant-strategy": {
       "description_bytes": 282,
@@ -41,7 +41,7 @@
       "calls": 2,
       "result_bytes": 8889,
       "skill": "quant-analytics",
-      "skill_bytes": 3746,
+      "skill_bytes": 3998,
       "success": true,
       "tools": [
         "analyze_performance",
@@ -53,7 +53,7 @@
       "calls": 2,
       "result_bytes": 4051,
       "skill": "quant-analytics",
-      "skill_bytes": 3746,
+      "skill_bytes": 3998,
       "success": true,
       "tools": [
         "analyze_risk",
@@ -65,7 +65,7 @@
       "calls": 1,
       "result_bytes": 5233,
       "skill": "quant-analytics",
-      "skill_bytes": 3746,
+      "skill_bytes": 3998,
       "success": true,
       "tools": [
         "run_backtest"
@@ -108,9 +108,9 @@
     "search_and_cite": {
       "argument_bytes": 88,
       "calls": 2,
-      "result_bytes": 5664,
+      "result_bytes": 5691,
       "skill": "quant-research",
-      "skill_bytes": 2774,
+      "skill_bytes": 3090,
       "success": true,
       "tools": [
         "find_related_signals",
@@ -122,7 +122,7 @@
       "calls": 2,
       "result_bytes": 5603,
       "skill": "quant-analytics",
-      "skill_bytes": 3746,
+      "skill_bytes": 3998,
       "success": true,
       "tools": [
         "analyze_signal",
@@ -133,10 +133,10 @@
   "totals": {
     "argument_bytes": 721,
     "calls": 13,
-    "definition_bytes": 11417,
+    "definition_bytes": 12761,
     "instruction_bytes": 817,
-    "result_bytes": 48325,
-    "skill_bytes": 15360,
+    "result_bytes": 48352,
+    "skill_bytes": 15928,
     "skill_description_bytes": 1461,
     "success_rate": 1.0,
     "tools": 9
