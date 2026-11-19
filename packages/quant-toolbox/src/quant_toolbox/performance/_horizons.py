@@ -72,7 +72,7 @@ def horizon_return(
     """Return the compounded, and over a year annualised, return for ``label``, or None.
 
     ``calendar`` is anything `as_calendar` reads with no range; None uses the calendar the fund
-    configured, and weekdays-by-day-allowance when there is none.
+    configured; with neither, calendar month ends and a day allowance.
     """
     if not is_horizon(label):
         raise ValueError(f"{label!r} is not a horizon; use MTD, QTD, YTD, ITD, 3M, or 5Y.")
