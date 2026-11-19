@@ -537,7 +537,8 @@ def _date(day: np.datetime64) -> dt.date:
 
 
 def business_days(count: int, start: dt.date = dt.date(2021, 1, 4)) -> list[dt.date]:
-    """Return ``count`` weekdays from ``start``; holidays are ignored."""
+    """Return ``count`` weekdays from ``start``, holidays ignored: for synthetic data only. A
+    market's days are a `SessionCalendar`'s `sessions_from`."""
     days: list[dt.date] = []
     day = start
     while len(days) < count:
