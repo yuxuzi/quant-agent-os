@@ -86,6 +86,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Smaller outputs from wide datasets.** A firm tool that reads many columns of a dataset now cites it
+  once (its column count, the first few names, rows, and fingerprint) and gives one missing-value warning
+  per dataset, not one per column. Measured on the mock funds: Corvane's currency effect fell from 134,651
+  bytes (over the 100,000 limit) to under 5,300, Larchmere's compliance tests from 89,657 to 5,469, and
+  Wrenfield's DTS from 67,663 to under 5,300.
+- **`analyze_risk` 3.0.0 keeps its window when one asset's history is short.** A held asset with returns on
+  fewer than 90% of the dates is left out, its weight reported, instead of every date it misses being cut
+  for all (Sablecroft keeps 60 months, not 42; Corvane 109 days, not 29). A weight with no returns column
+  is refused naming the assets; an asset with no factor loadings has specific risk only.
 - **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
   policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
   before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.

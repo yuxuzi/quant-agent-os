@@ -354,15 +354,31 @@ def _call(entry: _Exposed, store: DatasetStore | None, params: BaseModel) -> Bas
             columns = {value.column: dataset.column(value.column)}
         else:
             columns = {name: dataset.column(name) for name in value.columns or dataset.columns}
-        for column, values in columns.items():
-            missing = sum(math.isnan(number) for number in values)
-            if missing:
-                passed = "sent as null" if entry.service else "passed as NaN"
-                warnings.append(f"{dataset.id}.{column} has {missing} missing values, {passed}.")
+        passed = "sent as null" if entry.service else "passed as NaN"
+        gaps = {
+            column: missing
+            for column, values in columns.items()
+            if (missing := sum(math.isnan(number) for number in values))
+        }
+        location = f"{dataset.rows} rows, sha256 {dataset.fingerprint[:12]}"
+        if len(columns) == 1:
+            ((column, _),) = columns.items()
+            if gaps:
+                warnings.append(
+                    f"{dataset.id}.{column} has {gaps[column]} missing values, {passed}."
+                )
+            sources.append(SourceRef(source_id=f"{dataset.id}.{column}", location=location))
+        else:
+            # One source and one warning per dataset read: a wide dataset has hundreds of columns.
+            if gaps:
+                warnings.append(
+                    f"{dataset.id}: {len(gaps)} of {len(columns)} columns have missing values "
+                    f"({sum(gaps.values())} cells), {passed}: {_first(gaps)}."
+                )
             sources.append(
                 SourceRef(
-                    source_id=f"{dataset.id}.{column}",
-                    location=f"{len(values)} rows, sha256 {dataset.fingerprint[:12]}",
+                    source_id=dataset.id,
+                    location=f"{len(columns)} columns ({_first(columns)}), {location}",
                 )
             )
         arguments[item.name] = _as_target(item, dataset, columns)
@@ -403,6 +419,11 @@ def _call(entry: _Exposed, store: DatasetStore | None, params: BaseModel) -> Bas
             ],
         }
     )
+
+
+def _first(names: Mapping[str, object], shown: int = 5) -> str:
+    listed = ", ".join(list(names)[:shown])
+    return listed if len(names) <= shown else f"{listed}, and {len(names) - shown} more"
 
 
 def _summary(result: Any) -> str:

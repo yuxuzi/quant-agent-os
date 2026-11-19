@@ -963,7 +963,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "2.3.0"
+      "version": "3.0.0"
     },
     "analyze_signal": {
       "input_schema": {

@@ -250,6 +250,12 @@ class FactorModel(NamedTuple):
     specific: dict[str, float]
 
 
+MIN_HISTORY = 0.9
+"""An asset with returns on fewer than this share of the best-covered asset's dates is left out."""
+LISTED_GAPS = 3
+"""Up to this many series with missing rows are named one by one; more are summarised."""
+
+
 def _names(names: list[str], limit: int = 10) -> str:
     return ", ".join(names[:limit]) + (" and others" if len(names) > limit else "")
 
@@ -278,13 +284,22 @@ class _Resolver:
         rows, dates, notes = _common_rows(list(tables.values()))
         positions = {name: rows[references[name].dataset] for name in references}
         kept = range(len(next(iter(positions.values()))))
-        for name, ref in references.items():
-            gaps = sum(math.isnan(columns[name][at]) for at in positions[name])
-            if gaps:
-                notes.append(
-                    f"Left out {gaps} rows where {ref.dataset}.{ref.column} is missing; nothing "
-                    "was filled in."
-                )
+        gaps = {
+            f"{ref.dataset}.{ref.column}": count
+            for name, ref in references.items()
+            if (count := sum(math.isnan(columns[name][at]) for at in positions[name]))
+        }
+        if len(gaps) <= LISTED_GAPS:
+            notes += [
+                f"Left out {count} rows where {series} is missing; nothing was filled in."
+                for series, count in gaps.items()
+            ]
+        else:
+            worst = sorted(gaps, key=lambda series: -gaps[series])
+            notes.append(
+                f"Left out rows where any of {len(gaps)} series is missing, up to "
+                f"{gaps[worst[0]]} rows for one: {_names(worst, 5)}; nothing was filled in."
+            )
         complete = [
             row
             for row in kept
@@ -302,6 +317,37 @@ class _Resolver:
             [dates[row] for row in complete] if dates else None,
             notes,
         )
+
+    def with_history(
+        self, dataset_id: str, weights: dict[str, float]
+    ) -> tuple[dict[str, float], list[str]]:
+        """Return the held assets with enough history in ``dataset_id``, and notes.
+
+        An asset with values on fewer than ``MIN_HISTORY`` of the dates the best-covered held asset
+        has is left out, so that one listing, delisting, or liquidation does not cut every other
+        asset's window. Its weight is reported, not given to the others.
+        """
+        table = self.dataset(dataset_id)
+        absent = [name for name in weights if name not in table.columns]
+        if absent:
+            raise ValueError(
+                f"The weights name {len(absent)} assets the returns '{table.id}' have no column "
+                f"for: {_names(absent)}."
+            )
+        counts = {
+            name: sum(math.isfinite(value) for value in table.columns[name]) for name in weights
+        }
+        enough = MIN_HISTORY * max(counts.values(), default=0)
+        short = [name for name, count in counts.items() if count < enough]
+        if not short or len(short) == len(weights):
+            return weights, []
+        kept = {name: weight for name, weight in weights.items() if name not in short}
+        left = sum(weights[name] for name in short)
+        return kept, [
+            f"Left out {len(short)} assets with returns on fewer than {MIN_HISTORY:.0%} of the "
+            f"dates in '{table.id}': {_names(short)}. Their weight of {left:.2%} is not in the "
+            "risk figures; the other assets keep their weights."
+        ]
 
     def panel(self, signal: FrameRef, returns: FrameRef) -> tuple[Panel, list[str]]:
         """Return the signal and returns on their shared dates and instruments, and notes.
@@ -385,13 +431,12 @@ class _Resolver:
                 f"Loadings '{loadings.id}' name factors the covariance '{covariance.id}' has not: "
                 f"{_names(unknown)}."
             )
-        for label, names in (
-            (f"loadings '{loadings.id}'", loadings.index or []),
-            (f"specific variance '{specific_table.id}'", list(specific)),
-        ):
-            missing = [asset for asset in assets if asset not in set(names)]
-            if missing:
-                raise ValueError(f"The {label} have no row for {_names(missing)}.")
+        missing = [asset for asset in assets if asset not in specific]
+        if missing:
+            raise ValueError(
+                f"The specific variance '{specific_table.id}' has no row for {_names(missing)}."
+            )
+        unloaded = [asset for asset in assets if asset not in set(loadings.index or [])]
         scale = float(model.periods_per_year)
         position = {name: at for at, name in enumerate(rows)}
         table: dict[str, dict[str, float]] = {}
@@ -416,6 +461,8 @@ class _Resolver:
         gaps = 0
         for asset in assets:
             exposures[asset] = {}
+            if asset in unloaded:
+                continue
             for factor, values in loadings.columns.items():
                 value = values[at[asset]]
                 if math.isfinite(value):
@@ -423,6 +470,11 @@ class _Resolver:
                 else:
                     gaps += 1
         notes = []
+        if unloaded:
+            notes.append(
+                f"The loadings '{loadings.id}' have no row for {_names(unloaded)}; their risk is "
+                "specific only."
+            )
         if gaps:
             notes.append(f"{gaps} loadings of held assets are missing and count as 0.")
         return (
@@ -640,7 +692,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
         + ("" if store is None else WEIGHTS_BY_REFERENCE),
         permissions=permissions,
         max_output_bytes=500_000,
-        version="2.3.0",
+        version="3.0.0",
     )
     def analyze_risk(params: RiskRequest) -> RiskOutput:
         resolver = _Resolver(store)
@@ -659,6 +711,8 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
                 raise ValueError(
                     "Pass assets and factors the same way: both values or both references."
                 )
+            weights, short = resolver.with_history(assets.dataset, weights)
+            notes = [*notes, *short]
             references = {
                 f"asset:{name}": ColumnRef(dataset=assets.dataset, column=name) for name in weights
             }

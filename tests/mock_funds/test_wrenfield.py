@@ -372,8 +372,9 @@ def test_jump_to_default_of_halden_before_its_default(
     )
     unknown = _run(store, "wrenfield_default_stress", scenario_issuers=["ZZZZ"], **arguments)
     assert "No position in ZZZZ." in unknown["warnings"]
-    # The platform adds one warning per column that has a missing value, on any date.
-    assert any("has 4" in w and "missing values" in w for w in unknown["warnings"])
+    # The platform adds one warning per dataset read, counting the columns with a missing value.
+    gaps = [w for w in unknown["warnings"] if "columns have missing values" in w]
+    assert gaps and len(gaps) == len(set(w.split(":")[0] for w in gaps))
 
 
 def test_a_scenario_of_defaults_in_the_relative_value_book_is_hedged_by_the_cds(
@@ -722,7 +723,9 @@ def test_analyze_risk_with_a_credit_factor_model_and_its_limits(
     assert plain["gross_exposure"] == pytest.approx(
         sum(abs(v[-1]) for v in store.get("w_hy_ls").columns.values())
     )
-    assert len([w for w in plain["warnings"] if w.startswith("Left out 1 rows")]) >= 50  # noise
+    # One summary of the rows left out, not one warning per bond.
+    assert not [w for w in plain["warnings"] if w.startswith("Left out 1 rows")]
+    assert len([w for w in plain["warnings"] if w.startswith("Left out rows")]) <= 1
     executor = ToolExecutor(
         __import__("quant_analytics.tools", fromlist=["x"]).analytics_tools(store),
         PermissionPolicy(),
@@ -731,7 +734,9 @@ def test_analyze_risk_with_a_credit_factor_model_and_its_limits(
         "portfolio_id": "hy_ls", "weights_ref": {"dataset": "w_hy_ls"},
         "asset_returns": {"dataset": "bond_tr"}, "factor_model": model,
     }))  # fmt: skip
-    assert held_default.status == "error" and "no row for MARL_28A" in (held_default.error or "")
+    # A defaulted bond with neither a loading nor a specific variance is refused, naming it.
+    assert held_default.status == "error"
+    assert "specific variance 'fm_specific' has no row for MARL_28A" in (held_default.error or "")
 
 
 def test_run_backtest_has_turnover_costs_but_no_financing(store: WrenfieldDatasetStore) -> None:

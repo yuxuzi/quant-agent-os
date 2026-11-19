@@ -487,7 +487,7 @@ def test_the_platforms_analytics_read_the_funds_monthly_data(store: SablecroftSt
     assert est.output["metrics"]["annualized_return"] < fin.output["metrics"]["annualized_return"]
 
 
-def test_analyze_risk_on_the_fund_of_funds_loses_the_window_to_a_liquidated_manager(
+def test_analyze_risk_on_the_fund_of_funds_keeps_the_window_when_a_manager_is_liquidated(
     store: SablecroftStore,
 ) -> None:
     catalog = platform_catalog(store)
@@ -496,19 +496,18 @@ def test_analyze_risk_on_the_fund_of_funds_loses_the_window_to_a_liquidated_mana
         {"portfolio_id": "fund", "asset_returns": {"dataset": "ret_usd"},
          "weights_ref": {"dataset": "fof_weights"}},
     )  # fmt: skip
-    # The weights hold the three quarterly reporters, the returns frame cannot: refused, not
-    # narrowed.
-    assert mixed.status == "error" and "has no column 'IC02'" in mixed.error
+    # The weights hold three quarterly reporters the returns frame lacks: refused, naming them.
+    assert mixed.status == "error" and "no column for: IC02, RA02, RA03." in mixed.error
     monthly = run(
         catalog, None, "analyze_risk",
         {"portfolio_id": "fund", "asset_returns": {"dataset": "ret_usd"},
          "weights_ref": {"dataset": "fof_weights_m"}},
     )  # fmt: skip
     assert monthly.status == "ok"
-    # 60 months of returns, but EV04 stopped in 2024-06: 18 rows are dropped, the latest 18 months.
-    assert monthly.output["periods"] == 42
-    assert any("Left out 18 rows" in w for w in monthly.output["warnings"])
-    assert monthly.output["volatility"] == pytest.approx(0.0340, abs=2e-3)
+    # 60 months of returns, but EV04 stopped in 2024-06: it is left out, not the latest 18 months.
+    assert monthly.output["periods"] == 60
+    assert any("Left out 1 assets" in w and "EV04" in w for w in monthly.output["warnings"])
+    assert monthly.output["volatility"] == pytest.approx(0.0367, abs=2e-3)
     assert monthly.output["effective_positions"] > 15
 
 

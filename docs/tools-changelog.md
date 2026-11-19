@@ -28,6 +28,7 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 | Tool | Version | Change |
 | --- | --- | --- |
+| `analyze_risk` | 3.0.0 | Changes the meaning of a result over returns by reference: a held asset with returns on fewer than 90% of the dates is left out, with its weight reported in a warning and not given to the others, instead of every date where it is missing being cut for all. A weight with no returns column is refused naming every such asset. Under a factor model, an asset with no loadings has specific risk only (a warning); one with no specific variance is still refused. Missing rows in more than three series are one warning. |
 | `analyze_signal` | 1.0.0 | New: a signal's IC, rank IC, IR, HAC t-statistic per horizon, quantile returns and spread, and autocorrelation, from a signal frame and a returns frame by reference. |
 | `run_backtest` | 1.0.0 | New: simulated net returns of a signal as dollar-neutral or long-only weights, with a trade lag and costs, and their metrics. |
 | `analyze_risk` | 2.3.0 | Adds an optional `weights_ref`, the weights by reference instead of inline: a column of a dataset with one row per asset, or one date's row of a frame of dates by assets, the latest by default (`as_of` names another). Exactly one of `weights` and `weights_ref`; the source is in `conventions.weights`. |
