@@ -59,3 +59,27 @@ name = "the corpus says nothing on municipal bonds"
 question = "What is the duration of our municipal bond holdings?"
 abstain = true
 caller = { principal = "raj", groups = ["risk"] }
+
+# A list in the output: the Industrials row of the per-sector table (round 2: value paths read lists).
+[[numeric]]
+name = "LCC Industrials selection, 1 May to 1 June (known_answers.json)"
+tool = "corvane_attribution_single"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, returns = { dataset = "px_ret_usd" }, sector_code = { dataset = "ref_security", column = "sector_code" }, start = "2026-05-01", end = "2026-06-01" }
+value = "sectors[sector=Industrials].selection"
+expected = -0.00023899101467240834
+relative_tolerance = 1e-9
+caller = { principal = "raj", groups = ["risk"] }
+
+# Entitlements as cases: Aldergate's client service sees its own account, not the composite.
+[[refusal]]
+name = "Aldergate's client service cannot read the LCC composite's performance"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "perf_lcc", column = "gross" } }
+message = "No dataset 'perf_lcc'"
+caller = { principal = "cam", groups = ["client-service-aldergate"] }
+
+[[refusal]]
+name = "Aldergate's client service cannot run active share"
+tool = "corvane_active_share"
+arguments = { portfolio = { dataset = "weights_lcc" }, benchmark = { dataset = "bench_w_bm_us300" }, as_of = "2026-05-15" }
+caller = { principal = "cam", groups = ["client-service-aldergate"] }

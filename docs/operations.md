@@ -159,7 +159,28 @@ tool = "analyze_performance"
 arguments = { returns = { dataset = "growth-book", column = "book" } }
 value = "metrics.annualized_volatility"   # where in the tool's output
 expected = 0.17029039110268307
-tolerance = 1e-9                      # absolute, and required
+tolerance = 1e-9                      # absolute; or relative_tolerance = 1e-6, a share of |expected|
+
+[[numeric]]
+name = "Industrials selection effect in May"
+tool = "attribution"
+arguments = { start = "2026-05-01", end = "2026-06-01" }
+value = "sectors[sector=Industrials].selection"   # [field=text] picks a list item; rows.0.x indexes
+expected = 0.0012
+relative_tolerance = 1e-6
+
+[[exact]]
+name = "the mandate was breached on two days"
+tool = "mandate_check"
+value = "breach_days"
+equals = ["2026-03-12", "2026-03-13"]  # text, true or false, a whole number, or a list
+
+[[refusal]]
+name = "the growth desk cannot read the value book"
+tool = "analyze_performance"
+arguments = { returns = { dataset = "value-book", column = "book" } }
+caller = { principal = "gwen", groups = ["growth-desk"] }
+message = "No dataset 'value-book'"   # optional; a refused dataset reads as a missing one
 
 [[retrieval]]
 name = "momentum crash risk is in the research"
@@ -176,6 +197,10 @@ abstain = true                        # must find no qualifying passage
 GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval > acceptance.md
 GOLD=/path/to/cases.toml docker compose -f deploy/compose.yaml run --rm -T eval --format json > acceptance.json
 ```
+
+A numeric case states `tolerance`, `relative_tolerance`, or both, and passes within the larger. A refusal
+case passes when the call is refused or answered as if the data were missing, and fails when the call is
+allowed or when its tool or arguments are wrong, so a misspelling cannot pass as a refusal.
 
 It runs the tools a client would get, under the same permissions, and changes nothing. The report gives each case's
 verdict, what it expected and got, the platform version, the SHA-256 of the cases file, and the data versions, so
