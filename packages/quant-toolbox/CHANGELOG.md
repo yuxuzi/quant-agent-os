@@ -16,8 +16,8 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   NULL as NaN in a column of numbers, and lower-case column names (Snowflake's upper case reads as everyone's).
   `pivot_long` turns `(index, column, value)` rows wide and refuses two rows for one pair, naming them, unless told
   `duplicates="sum"` or `"last"`: a call and a distribution on one day, netted, is a silent error. `SqlDataset`
-  declares a dataset as data, `shape_rows` shapes its rows, and `rows_to_csv` writes them. The database's own
-  driver is the caller's install.
+  declares a dataset as data (with `index_name` to rename the index column), `shape_rows` shapes its rows,
+  and `rows_to_csv` writes them. The database's own driver is the caller's install.
 
 ## [0.6.0] - 2026-11-17
 

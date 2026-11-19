@@ -86,7 +86,8 @@ class SqlDataset:
     replaces a cell with no row, never a NULL). ``calendar``, for a long dataset, is SQL returning
     the index values to pivot onto, on the source ``calendar_source`` (default: ``source``), so a
     series with gaps still has a row for every business day. ``source`` names a database when
-    a store has several; ``description`` is for people.
+    a store has several; ``description`` is for people. ``index_name`` renames the index column of
+    the result (``date``), so the SQL need not alias an expression.
     """
 
     id: str
@@ -102,6 +103,7 @@ class SqlDataset:
     calendar_source: str | None = None
     source: str | None = None
     description: str = ""
+    index_name: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id or not self.sql.strip():
@@ -357,6 +359,13 @@ def shape_rows(dataset: SqlDataset, rows: Rows, calendar: Rows | None = None) ->
 
     ``calendar`` is the result of the dataset's calendar SQL; its first column is the index.
     """
+    shaped = _shaped(dataset, rows, calendar)
+    if dataset.index_name is None:
+        return shaped
+    return Rows((dataset.index_name.lower(), *shaped.columns[1:]), shaped.rows)
+
+
+def _shaped(dataset: SqlDataset, rows: Rows, calendar: Rows | None) -> Rows:
     if dataset.shape == "long":
         if dataset.index is None or dataset.column is None or dataset.value is None:
             if len(rows.columns) < 3:

@@ -257,6 +257,57 @@ The tool names are in your code and not in a setting, so what the server runs is
 says (decisions [0020](decisions/0020-a-firms-own-server.md) and
 [0024](decisions/0024-registering-a-firms-functions.md)).
 
+### Read your firm's database as datasets
+
+If your data is in a database, declare each dataset as SQL and let `SqlDatasetStore` serve it
+([decision 0032](decisions/0032-sql-dataset-store.md)). Install the `sql` extra, and your database's own
+driver in your image; the platform names the driver and does not ship it.
+
+```python
+from quant_platform import SqlDatasetStore, serve_apps
+from quant_toolbox.data import SqlDataset, sql
+
+oms = sql.connect("postgresql+psycopg://reader@oms.example.com/oms", credential=rds_iam_token)
+store = SqlDatasetStore(
+    {"oms": oms},
+    [
+        SqlDataset(
+            "returns-growth",
+            "SELECT day, desk, ret FROM returns WHERE desk = :desk",
+            params={"desk": "growth"},
+            index_name="date",
+        ),
+    ],
+    stamps={"oms": "SELECT max(loaded_at) FROM load_log"},  # when to read again
+)
+serve_apps([risk], datasets=store)
+```
+
+| Database | SQLAlchemy URL | Driver to install |
+| --- | --- | --- |
+| PostgreSQL, RDS | `postgresql+psycopg://user@host:5432/db` | `psycopg[binary]` |
+| SQL Server, Azure SQL | `mssql+pyodbc://user@host/db?driver=ODBC+Driver+18+for+SQL+Server` | `pyodbc` |
+| Snowflake | `snowflake://user@account/database/schema?warehouse=WH&role=READER` | `snowflake-sqlalchemy` |
+| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sql-connector` |
+| DuckDB (a file, or Parquet through `read_parquet(..., hive_partitioning=true)`) | `duckdb:///lake.duckdb` | `duckdb-engine` |
+
+- **SQL is written once.** Binds are always `:name`, whatever the driver's own style, and a list binds as an
+  `IN` list. A `Decimal` reads as a float, a date as ISO text, a NULL in a column of numbers as a missing value
+  (NaN), and column names as lower case, so Snowflake's upper case reads as everyone else's.
+- **Long rows pivot wide, and duplicates are refused.** A query returning `(date, name, value)` becomes a table
+  of dates by names. Two rows for one date and name are an error naming them, not a silent sum: say
+  `duplicates="sum"` or `"last"` when that is what the data means.
+- **Credentials.** Pass `credential=` a function returning a password or token. It is called for every new
+  connection, so a 15-minute RDS token or an Entra token never goes stale. The URL holds no secret. A driver
+  that takes a connection string (pyodbc) takes its token through `connect_args`.
+- **Read-only is best effort.** SQLite, PostgreSQL (psycopg), and a DuckDB file are opened read-only; any other
+  dialect warns, because nothing in the library limits it. Give the login only read grants.
+- **Freshness.** A dataset is cached until its source's stamp changes: a SQL string returning a version, a
+  time to live in seconds (default 60), or a function returning any value. Cached datasets are the same
+  objects every caller reads, under per-caller access like any other store.
+- **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
+  is where fund-specific logic stays visible.
+
 ## 9. Decide who reaches what
 
 By default any key with `tools:call` reaches every tool and dataset the server serves. To give people

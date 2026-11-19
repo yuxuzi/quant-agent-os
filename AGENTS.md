@@ -27,8 +27,8 @@ is not a chatbot.
   ([decision 0027](docs/decisions/0027-quant-toolbox-package.md)). Seven subpackages in layers,
   `data` → `performance` → `risk`, `research` → `report`, `audit` → `testing`; a layer imports only
   earlier ones, and only their public names. Only numpy at module level: pygal, plotly, openpyxl,
-  pandas, and empyrical load in the function that needs them. Metrics run on empyrical when it is
-  installed and on numpy otherwise, held equal by `packages/quant-toolbox/tests/test_backends.py`. Its
+  pandas, sqlalchemy, and empyrical load in the function that needs them. Metrics run on empyrical
+  when it is installed and on numpy otherwise, held equal by `packages/quant-toolbox/tests/test_backends.py`. Its
   public API is locked in `packages/quant-toolbox/tests/api.lock.json`.
 - **Quant Analytics** (`src/quant_analytics`): performance and risk metrics as tools, computed by Quant
   Toolbox ([decision 0010](docs/decisions/0010-analytics-on-empyrical.md)). `computed.py` adds typed
@@ -43,8 +43,9 @@ is not a chatbot.
   with `FirmApp.expose` ([decision 0024](docs/decisions/0024-registering-a-firms-functions.md));
   `qaos serve` serves them as one MCP server, a firm's own server does so with `serve_apps` (and
   tests that app in process with `build_server_app`),
-  `open_platform()` opens them from a notebook, and `qaos eval` runs agreed test cases against the
-  platform's own tools (a firm's own tools go through `run_acceptance` with its catalog).
+  `open_platform()` opens them from a notebook, `SqlDatasetStore` serves a firm's SQL databases as
+  datasets ([decision 0032](docs/decisions/0032-sql-dataset-store.md)), and `qaos eval` runs agreed
+  test cases against the platform's own tools (a firm's own tools go through `run_acceptance` with its catalog).
 - **Skills and client packaging**: `skills/` holds the five instruction-only skills,
   `.claude-plugin/` makes the repository a Claude Code plugin (server plus skills), and
   `clients/` holds the generated Cursor and VS Code bundles

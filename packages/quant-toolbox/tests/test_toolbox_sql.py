@@ -270,3 +270,14 @@ def test_sqlalchemy_duckdb_engine_and_duckdb_work_together_over_parquet(
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         assert pivot_long(rows, "d", "bond", "px").rows == (("2024-03-29", 99.5),)
+
+
+def test_index_name_renames_the_index_column_of_any_shape() -> None:
+    rows = Rows(("strftime(dt)", "k", "v"), (("2024-01-02", "a", 1.0),))
+    long = SqlDataset("a", "SELECT 1", index_name="Date")
+
+    assert shape_rows(long, rows).columns == ("date", "a")
+    assert (
+        shape_rows(SqlDataset("a", "SELECT 1", shape="table", index_name="d"), rows).columns[0]
+        == "d"
+    )

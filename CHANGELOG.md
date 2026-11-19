@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`SqlDatasetStore` reads a firm's SQL databases as datasets** (decision 0032). Datasets are declared as
+  `SqlDataset` (SQL with `:name` binds, a shape, and a duplicates policy) over named SQLAlchemy engines, long rows
+  are pivoted wide, and the result goes through the platform's own CSV parser, so fingerprints match a file with
+  the same cells. A stamp per source (a version query, a time to live, or a function) decides when to read
+  again; a derived dataset is a marked Python function. It works under per-caller access, and
+  `quant_platform` loads it on first use. New `sql` extra (`quant-toolbox[sql]`, SQLAlchemy); the database's
+  driver is the firm's install. See "Read your firm's database as datasets" in the deployment guide. Quant
+  Toolbox gains `data.sql` (see its changelog).
 - **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
   it adds that many passages before and after the requested one, from the same document and in reading
   order, each citing its own location. A short PDF passage that starts mid-argument can be read in full

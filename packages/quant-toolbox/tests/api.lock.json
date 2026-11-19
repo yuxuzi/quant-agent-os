@@ -25,7 +25,7 @@
     "PERCENT_LIKE": "constant: float",
     "Panel": "dataclass(dates: list[dt.date], assets: list[str], prices: FloatArray)",
     "Rows": "dataclass(columns: tuple[str, ...], rows: tuple[tuple[object, ...], ...])",
-    "SqlDataset": "dataclass(id: str, sql: str, params: Mapping[str, object], shape: Shape, index: str | None, column: str | None, value: str | None, duplicates: Duplicates, fill: float | None, calendar: str | None, calendar_source: str | None, source: str | None, description: str)",
+    "SqlDataset": "dataclass(id: str, sql: str, params: Mapping[str, object], shape: Shape, index: str | None, column: str | None, value: str | None, duplicates: Duplicates, fill: float | None, calendar: str | None, calendar_source: str | None, source: str | None, description: str, index_name: str | None)",
     "SqlError": "class",
     "Table": "dataclass(dates: list[dt.date], columns: list[str], values: FloatArray)",
     "TableError": "class",
