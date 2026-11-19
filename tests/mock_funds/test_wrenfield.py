@@ -821,7 +821,9 @@ def test_the_legacy_scan_classifies_what_it_finds() -> None:
     entries = {e["name"]: e for e in inventory.get("entries", inventory.get("callables", []))}
     assert len(entries) == 10
     kinds = {name: entry["kind"] for name, entry in entries.items()}
-    assert kinds["dts_by_book"] == "service" and kinds["load_curves"] == "service"
+    assert kinds["load_curves"] == "service" and kinds["basis_monitor"] == "service"
+    # Reading through the module's connection and price cache no longer makes a service (P1).
+    assert kinds["dts_by_book"] == "facade" and kinds["cs01_ladder"] == "facade"
     # Wrong: both read the LOADED flag that load_curves sets, so they are not plain facades.
     assert kinds["survival"] == "facade" and kinds["jtd_cds"] == "facade"
     assert not any(kind == "expose" for kind in kinds.values())
