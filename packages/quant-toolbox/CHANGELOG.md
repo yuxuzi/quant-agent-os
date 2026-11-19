@@ -37,8 +37,18 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   names a set other than the default, and the tear sheet shows the standard headline metrics the set has, then
   the rest.
 
+- **A returns section, by period** (`report.returns_table`, `RETURN_PERIODS`): a row per series (a fund,
+  its benchmarks, peers) and a column per period (`1D`, the return on the last date, then MTD, QTD, YTD,
+  1Y, 3Y, 5Y, ITD, or any horizon), with the fund's excess over each other series in rows of its own.
+- **PDF reports** (`quant_toolbox.report.pdf`, the new `pdf` extra: fpdf2, pure Python). `render_pdf(document)`
+  and `write_pdf(document, path)` draw any `Document` on A4: tables, and charts drawn as vectors from their
+  data. Without the extra, the call raises `MissingExtraError` naming `uv add "quant-toolbox[pdf]"`.
+
 ### Changed
 
+- **The tear sheet's returns table** compares the fund with its benchmark and with each series in the
+  new `compare=`, adds excess rows and a `1D` column, and takes `periods=`; it was one row of the fund's
+  horizons.
 - Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
   coverage when a calendar is given or configured, and are unchanged otherwise. `analyze` records the
   calendar's name in `conventions`, and `tear_sheet` passes its `calendar=` through.

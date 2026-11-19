@@ -14,6 +14,7 @@ EXTRAS: dict[str, str] = {
     "empyrical": "empyrical",
     "pandas": "pandas",
     "sqlalchemy": "sql",
+    "fpdf": "pdf",
 }
 
 

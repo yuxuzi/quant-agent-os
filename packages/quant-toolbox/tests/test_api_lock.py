@@ -82,6 +82,7 @@ def _surface() -> dict[str, dict[str, str]]:
         "report.svg",
         "report.interactive",
         "report.excel",
+        "report.pdf",
     ):
         module = importlib.import_module(f"quant_toolbox.{leaf}")
         surface[module.__name__] = {

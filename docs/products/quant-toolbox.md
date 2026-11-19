@@ -59,6 +59,12 @@ document = tear_sheet(returns.dates, fund, 252, name="Fund", benchmark=returns.c
 Path("tear-sheet.html").write_text(render_html(document))
 ```
 
+Its returns table has a row for the fund, the benchmark, and each series in `compare=` (more benchmarks or
+peers), then the fund's excess over each, for the last day, MTD, QTD, YTD, 1Y, 3Y, 5Y, and ITD, or the
+`periods=` given. `returns_table` is the same section for any report. With the `pdf` extra,
+`quant_toolbox.report.pdf.write_pdf(document, Path("tear-sheet.pdf"))` writes it as a PDF; without it, the
+call says which extra to install.
+
 ## Where it fits
 
 Measured on 2026-11-17 from each project's PyPI metadata, every other open-source performance library requires
@@ -109,6 +115,7 @@ installs it.
 | `charts` | pygal (532 KB, pure Python) | static SVG charts in reports |
 | `interactive` | plotly (38 MB) | `render_html(..., charts="interactive")`: plotly.js inline once, so the page works offline; `"interactive-cdn"` links it instead |
 | `excel` | openpyxl | `data.excel.read_workbook`, `report.excel.write_workbook` |
+| `pdf` | fpdf2 (pure Python), with Pillow and fontTools (28 MB) | `report.pdf.render_pdf` and `write_pdf`: A4, tables and charts drawn as vectors from the document's data |
 | `empyrical` | empyrical-reloaded, with pandas and scipy (138 MB) | the empyrical backend |
 
 Static charts carry no script and no link: a test checks every SVG. pandas is never required;
