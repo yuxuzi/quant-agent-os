@@ -4,7 +4,7 @@ description: Turn a fund's existing Python into Quant-Agent-OS tools with a deve
 license: MIT
 compatibility: Needs the qaos command on the developer's machine; drafting a service needs fastapi and uvicorn. Uses no server tools - the server never reads or converts code.
 metadata:
-  min-server-version: "0.7.0"
+  min-server-version: "0.8.0"
 ---
 
 # Converting legacy code into tools

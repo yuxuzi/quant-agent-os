@@ -90,7 +90,7 @@ from [Quant Toolbox](quant-toolbox.md), the library Quant Analytics uses too
 
 ```toml
 [tool.uv.sources]
-quant-toolbox = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.6.0", subdirectory = "packages/quant-toolbox" }
+quant-toolbox = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.8.0", subdirectory = "packages/quant-toolbox" }
 ```
 
 So its numbers change only when you move that tag. To take a later fix to a formula or a report, edit `rev`,

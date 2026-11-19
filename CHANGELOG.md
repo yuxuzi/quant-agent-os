@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
+0.8.0 was driven by a pilot at a fictional multi-asset fund, Kestrel Point Capital
+([plan](docs/plans/proposals-0.8.md)): install the platform from a built wheel, sign the fund's people in through
+its own gateway, read its warehouse in place, answer its research, backtest, and risk questions, and serve its
+existing code. `examples/pilot-fund/drill.sh` runs that day offline in about 30 seconds; what it found, and what
+was fixed, is in part 5 of the plan. Four more mock funds in `examples/mock-funds/` record where the platform
+still falls short. Quant Toolbox moves to 0.7.0, released by this tag. Generated projects pin `v0.8.0`; the
+template packs' own versions do not change.
+
 ### Added
 
 - **A firm's service can be told who called** (decision 0030). `FirmApp.call_service(...,
@@ -181,9 +191,6 @@ All notable changes to this project are documented here. The format follows
 - **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
   policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
   before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.
-
-### Changed
-
 - **`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` warns at start-up** that it approves the permission for every tool
   the server serves, and `qaos doctor` says so and shows per-tool standing approvals. It works as before.
 

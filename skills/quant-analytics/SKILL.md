@@ -4,7 +4,7 @@ description: Compute performance, risk, signal, and backtest metrics (Sharpe, dr
 license: MIT
 compatibility: Needs the Quant-Agent-OS MCP server (`qaos serve`) with the analytics toolset.
 metadata:
-  min-server-version: "0.1.2"
+  min-server-version: "0.8.0"
 ---
 
 # Performance and risk metrics
