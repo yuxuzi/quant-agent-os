@@ -18,7 +18,15 @@ from collections.abc import Sequence
 import numpy as np
 
 from quant_toolbox._types import FloatArray
-from quant_toolbox.performance import Analysis, Series, analyze, monthly_returns, rolling_sharpe
+from quant_toolbox.performance import (
+    Analysis,
+    MetricsFunction,
+    Series,
+    all_metrics,
+    analyze,
+    monthly_returns,
+    rolling_sharpe,
+)
 from quant_toolbox.report._charts import equity_curve, line_chart, underwater_chart
 from quant_toolbox.report._document import Block, Cell, Column, Document, TableBlock, TextBlock
 from quant_toolbox.report._format import format_metric, label
@@ -59,6 +67,14 @@ def monthly_table(
     return TableBlock(title, columns, rows, note="Compounded from per-bar returns.")
 
 
+def _headline(values: dict[str, float], standard: bool) -> dict[str, float]:
+    """The standard headline metrics a set has, then, for a firm's own set, the rest of it."""
+    chosen = {key: values[key] for key in HEADLINE if key in values}
+    if not standard:
+        chosen.update({key: value for key, value in values.items() if key not in chosen})
+    return chosen
+
+
 def tear_sheet(
     dates: Sequence[dt.date],
     returns: Series,
@@ -70,10 +86,23 @@ def tear_sheet(
     risk_free: float = 0.0,
     backend: str | None = None,
     title: str | None = None,
+    calendar: object = None,
+    metrics: MetricsFunction | None = None,
 ) -> Document:
-    """The investor tear sheet of ``returns`` (one per date), against ``benchmark`` if given."""
+    """The investor tear sheet of ``returns`` (one per date), against ``benchmark`` if given.
+
+    ``metrics`` is `analyze`'s: the headline table shows the standard headline metrics it has,
+    then any others it adds.
+    """
     analysis = analyze(
-        dates, returns, periods_per_year, benchmark=benchmark, risk_free=risk_free, backend=backend
+        dates,
+        returns,
+        periods_per_year,
+        benchmark=benchmark,
+        risk_free=risk_free,
+        backend=backend,
+        calendar=calendar,
+        metrics=metrics,
     )
     fund = np.asarray(returns, dtype=np.float64).ravel()
     days = list(dates)
@@ -81,7 +110,9 @@ def tear_sheet(
     if benchmark is not None:
         series[benchmark_name] = np.asarray(benchmark, dtype=np.float64).ravel()
     blocks: list[Block] = [
-        _metrics_table("Headline metrics", {key: analysis.metrics[key] for key in HEADLINE}),
+        _metrics_table(
+            "Headline metrics", _headline(analysis.metrics, metrics in (None, all_metrics))
+        ),
         _horizons_table(analysis),
     ]
     if analysis.benchmark is not None:

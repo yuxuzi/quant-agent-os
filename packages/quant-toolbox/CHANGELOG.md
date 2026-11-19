@@ -27,6 +27,21 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   `align_to_calendar(table, calendar=None, fill=, off_session=)` gives a table one row per session (NaN, or
   the previous value), and refuses a row on a non-session, naming it, unless told to drop it. `session_gaps`
   returns the sessions a table lacks and its rows on non-sessions.
+- **`run_backtest(rebalance_on=)`** rebalances on the closes a per-bar flag marks, such as month ends from a
+  calendar, as well as on the first close with a position. It needs `rebalance_every` left at 1, and one
+  flag per bar.
+
+- **A firm's own metric set.** `analyze(metrics=)` and `tear_sheet(metrics=)` take any function with
+  `all_metrics`'s signature (the `MetricsFunction` protocol); None, the default, is `all_metrics`. A set can extend the
+  standard one by calling it, or replace it. Its result is checked to be numbers by name, `conventions["metrics"]`
+  names a set other than the default, and the tear sheet shows the standard headline metrics the set has, then
+  the rest.
+
+### Changed
+
+- Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
+  coverage when a calendar is given or configured, and are unchanged otherwise. `analyze` records the
+  calendar's name in `conventions`, and `tear_sheet` passes its `calendar=` through.
 
 ## [0.7.0] - 2026-11-19
 
