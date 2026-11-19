@@ -10,6 +10,9 @@ Conventions:
 - A horizon the series does not fully cover is None (n/a), never a shorter period shown under
   the longer one's name. ITD is always available.
 - Missing returns are left out of compounding; the report's data notes count them.
+- With a calendar (given, or configured with ``set_default_calendar``), a month end is the last
+  session of the month and coverage counts sessions; without one, calendar month ends and a day
+  allowance, as before.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from quant_toolbox._types import FloatArray
+from quant_toolbox.data import CalendarError, SessionCalendar, as_calendar, configured_calendar
 from quant_toolbox.performance._metrics import annualized_return
 
 HORIZON = re.compile(r"^(MTD|QTD|YTD|ITD|[1-9][0-9]?[MY])$")
@@ -58,9 +62,18 @@ def horizon_start(label: str, as_of: dt.date) -> dt.date | None:
 
 
 def horizon_return(
-    dates: list[dt.date], returns: FloatArray, label: str, periods_per_year: int
+    dates: list[dt.date],
+    returns: FloatArray,
+    label: str,
+    periods_per_year: int,
+    *,
+    calendar: object = None,
 ) -> float | None:
-    """Return the compounded, and over a year annualised, return for ``label``, or None."""
+    """Return the compounded, and over a year annualised, return for ``label``, or None.
+
+    ``calendar`` is anything `as_calendar` reads with no range; None uses the calendar the fund
+    configured, and weekdays-by-day-allowance when there is none.
+    """
     if not is_horizon(label):
         raise ValueError(f"{label!r} is not a horizon; use MTD, QTD, YTD, ITD, 3M, or 5Y.")
     values = np.asarray(returns, dtype=np.float64)
@@ -68,19 +81,22 @@ def horizon_return(
     if not known:
         return None
     if label == "ITD":
-        chosen = values[known]
-        if chosen.size >= periods_per_year:
-            return annualized_return(chosen, periods_per_year)
-        return float(np.prod(1.0 + chosen)) - 1.0
+        chosen_returns = values[known]
+        if chosen_returns.size >= periods_per_year:
+            return annualized_return(chosen_returns, periods_per_year)
+        return float(np.prod(1.0 + chosen_returns)) - 1.0
+    chosen = as_calendar(calendar) if calendar is not None else configured_calendar()
     as_of = dates[-1]
     start = horizon_start(label, as_of)
     assert start is not None
-    if not _covers(dates[known[0]], start, periods_per_year):
+    if chosen is not None and _length_in_months(label) > 0:
+        start = _calendar_start(label, as_of, chosen)
+    if not _covers_start(dates[known[0]], start, periods_per_year, chosen):
         return None
-    chosen = np.array([values[i] for i in known if dates[i] > start], dtype=np.float64)
-    if chosen.size == 0:
+    picked = np.array([values[i] for i in known if dates[i] > start], dtype=np.float64)
+    if picked.size == 0:
         return None
-    growth = float(np.prod(1.0 + chosen))
+    growth = float(np.prod(1.0 + picked))
     months = _length_in_months(label)
     return growth ** (12.0 / months) - 1.0 if months > 12 else growth - 1.0
 
@@ -170,3 +186,39 @@ def _covers(first: dt.date, start: dt.date, periods_per_year: int) -> bool:
     """A first return dated within one bar after ``start`` covers the time from ``start``."""
     grace = max(math.ceil(366 / periods_per_year), 4)
     return (first - start).days <= grace
+
+
+def _covers_start(
+    first: dt.date, start: dt.date, periods_per_year: int, chosen: SessionCalendar | None
+) -> bool:
+    """Return whether the first return covers ``start``: no session lies between them.
+
+    Without a calendar, or where the calendar does not know the days, the day allowance decides.
+    """
+    if chosen is None:
+        return _covers(first, start, periods_per_year)
+    after, before = start + dt.timedelta(days=1), first - dt.timedelta(days=1)
+    if after > before:
+        return True
+    try:
+        return chosen.count(after, before) == 0
+    except CalendarError:
+        return _covers(first, start, periods_per_year)
+
+
+def _calendar_start(label: str, as_of: dt.date, chosen: SessionCalendar) -> dt.date:
+    """Return a trailing horizon's start by ``chosen``: the last session of the month it reaches.
+
+    That applies when ``as_of`` is a month-end session. Otherwise, or where the calendar does not
+    know the month, the start is `months_before`, as without a calendar.
+    """
+    plain = months_before(as_of, _length_in_months(label))
+    try:
+        if chosen.period_ends(as_of, as_of, "M") != [as_of]:
+            return plain
+        month_last = calendar.monthrange(plain.year, plain.month)[1]
+        month = dt.date(plain.year, plain.month, month_last)
+        ends = chosen.period_ends(plain.replace(day=1), month, "M")
+    except CalendarError:
+        return plain
+    return ends[0] if len(ends) == 1 else plain
