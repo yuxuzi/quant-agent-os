@@ -1,0 +1,59 @@
+{
+  "family": "corvane-qaos",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "4096",
+  "runtimePlatform": {"cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX"},
+  "executionRoleArn": "arn:aws:iam::111122223333:role/corvane-qaos-execution",
+  "taskRoleArn": "arn:aws:iam::111122223333:role/corvane-qaos-task",
+  "volumes": [
+    {
+      "name": "runs",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-0abc1234def567890",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {"accessPointId": "fsap-0123456789abcdef0", "iam": "ENABLED"}
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "server",
+      "image": "111122223333.dkr.ecr.us-east-1.amazonaws.com/corvane-qaos:0.7.0",
+      "essential": true,
+      "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
+      "mountPoints": [{"sourceVolume": "runs", "containerPath": "/data/runs"}],
+      "readonlyRootFilesystem": true,
+      "environment": [
+        {"name": "CORVANE_SQL_URL", "value": "snowflake://corvane-xy12345.us-east-1/CORVANE?role=CORVANE_PLATFORM_READER&warehouse=CORVANE_WH_XS"},
+        {"name": "CORVANE_PORT", "value": "8000"},
+        {"name": "QUANT_AGENT_OS_STORE", "value": "postgresql://qaos_reader@corvane-pg.cluster-ro-abc.us-east-1.rds.amazonaws.com:5432/knowledge"},
+        {"name": "QUANT_AGENT_OS_ACCESS_FILE", "value": "/opt/corvane/access.toml"},
+        {"name": "QUANT_AGENT_OS_SIGN_IN_FILE", "value": "/opt/corvane/sign-in.toml"},
+        {"name": "QUANT_AGENT_OS_RUNS_FILE", "value": "/data/runs/runs.db"}
+      ],
+      "secrets": [
+        {"name": "CORVANE_SNOWFLAKE_USER", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/snowflake:user::"},
+        {"name": "CORVANE_SNOWFLAKE_PRIVATE_KEY", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/snowflake:private_key::"},
+        {"name": "CORVANE_INTROSPECTION_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/introspection:secret::"},
+        {"name": "PGPASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/knowledge-reader:password::"}
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/corvane-qaos",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "server"
+        }
+      }
+    }
+  ]
+}

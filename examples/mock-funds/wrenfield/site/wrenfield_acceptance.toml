@@ -1,0 +1,76 @@
+# Wrenfield Credit Opportunities (fictional): the cases the fund agreed before using the platform.
+# Run as the operator: `WRENFIELD_ESTATE=... python wrenfield_server.py acceptance wrenfield_acceptance.toml`.
+# The numbers come from the default estate (seed 20261118; facility/warehouse/build_wrenfield.py
+# writes them in known_answers.json); a rebuilt estate with another seed changes them, which is
+# the point. A value path reaches fields of objects only, so each case reads a scalar.
+
+[[numeric]]
+name = "spread momentum rank IC at lag 0 matches the planted value"
+tool = "analyze_signal"
+arguments = { signal = { dataset = "sig_spread_momentum" }, returns = { dataset = "bond_tr" }, lag = 0 }
+value = "summary.mean_rank_ic"
+expected = 0.0208088373
+tolerance = 1e-9
+
+[[numeric]]
+name = "spread momentum rank IC at the default lag 1"
+tool = "analyze_signal"
+arguments = { signal = { dataset = "sig_spread_momentum" }, returns = { dataset = "bond_tr" }, lag = 1 }
+value = "summary.mean_rank_ic"
+expected = 0.0049256131
+tolerance = 1e-9
+
+[[numeric]]
+name = "high-yield book DTS on the last day"
+tool = "wrenfield_spread_duration_dts"
+arguments = { mv = { dataset = "mv_hy_ls" }, sprdur = { dataset = "bond_sprdur" }, oas = { dataset = "bond_oas" }, static = { dataset = "bond_static" }, rating = { dataset = "bond_rating" }, capital = { dataset = "nav", column = "hy_ls" }, group_by = "none" }
+value = "total_dts_bp_years"
+expected = 1103.350619
+tolerance = 1e-4
+
+[[numeric]]
+name = "relative-value book DTS on the last day"
+tool = "wrenfield_spread_duration_dts"
+arguments = { mv = { dataset = "mv_ig_rv" }, sprdur = { dataset = "bond_sprdur" }, oas = { dataset = "bond_oas" }, static = { dataset = "bond_static" }, rating = { dataset = "bond_rating" }, capital = { dataset = "nav", column = "ig_rv" }, group_by = "none" }
+value = "total_dts_bp_years"
+expected = 430.282933
+tolerance = 1e-4
+
+[[numeric]]
+name = "fund DTS on the last day, over the three books' capital"
+tool = "wrenfield_spread_duration_dts"
+arguments = { mv = { dataset = "mv_fund" }, sprdur = { dataset = "bond_sprdur" }, oas = { dataset = "bond_oas" }, static = { dataset = "bond_static" }, rating = { dataset = "bond_rating" }, capital = { dataset = "nav", column = "fund" }, group_by = "none" }
+value = "total_dts_bp_years"
+expected = 722.06317
+tolerance = 1e-4
+
+[[numeric]]
+name = "jump to default of Halden Retail on 5 September, before its default"
+tool = "wrenfield_default_stress"
+arguments = { mv = { dataset = "mv_distressed" }, px_clean = { dataset = "px_clean" }, px_accrued = { dataset = "px_accrued" }, oas = { dataset = "bond_oas" }, static = { dataset = "bond_static" }, cds_protection = { dataset = "cds_protection" }, capital = { dataset = "nav", column = "distressed" }, scenario_issuers = ["HALD"], as_of = "2025-09-05" }
+value = "scenario_pnl_usd"
+expected = -417983.0
+tolerance = 1.0
+
+[[numeric]]
+name = "mean bond-CDS basis on 15 December"
+tool = "wrenfield_bond_cds_basis"
+arguments = { oas = { dataset = "bond_oas" }, ttm = { dataset = "bond_ttm" }, cds_3y = { dataset = "cds_3y" }, cds_5y = { dataset = "cds_5y" }, cds_10y = { dataset = "cds_10y" }, as_of = "2025-12-15" }
+value = "mean_basis_bp"
+expected = -4.2149643836
+tolerance = 1e-4
+
+[[retrieval]]
+name = "the Halden recoveries are in the corpus"
+question = "Halden Retail recovery senior secured senior unsecured notes default"
+source = "note-halden-retail-restructuring.md"
+
+[[retrieval]]
+name = "the fund DTS limit is in the risk committee minutes"
+question = "fund DTS limit basis-point years risk committee"
+source = "minutes-risk-committee-2025-10.md"
+
+[[retrieval]]
+name = "the corpus says nothing on emerging market sovereigns"
+question = "What is our exposure to emerging market sovereign eurobonds in Argentina?"
+abstain = true

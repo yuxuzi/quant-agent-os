@@ -20,6 +20,11 @@ All notable changes to this project are documented here. The format follows
   trail. App roles in `roles` can entitle machine tokens, and Entra's groups overage is read as no groups.
   Introspection stays the default, and existing sign-in files work unchanged. `deployment.md` section 10
   now shows Entra and Cognito files.
+- **Four more mock funds** (`examples/mock-funds/`), fictional and offline: a CLO manager on Azure with SQL
+  Server, a long-only equity manager on AWS with Snowflake, an alternatives allocator on Azure with
+  Databricks, and a credit hedge fund on AWS with PostgreSQL and DuckDB. Each adopts the platform with its own
+  tools, store, server, and acceptance cases, and records where the platform falls short in `FINDINGS.md`;
+  `examples/mock-funds/README.md` ranks what they found together. DuckDB joins the dev group for their tests.
 - **`get_source_passage` can return the passages around one** (tool version 1.1.0). With `context` 1 or 2,
   it adds that many passages before and after the requested one, from the same document and in reading
   order, each citing its own location. A short PDF passage that starts mid-argument can be read in full

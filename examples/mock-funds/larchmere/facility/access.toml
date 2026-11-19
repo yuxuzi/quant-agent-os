@@ -1,0 +1,57 @@
+# Larchmere Loan Partners (fictional): who reaches what, in the platform's access-file format
+# (decision 0021). Entra ID sends security-group object IDs (GUIDs) in the `groups` claim, so the
+# groups below are GUIDs; the names are in the comments (gateway/directory.json lists them).
+# Anything not listed is refused, and a refused dataset looks like a missing one.
+#
+# Datasets (site/larchmere_store.py):
+#   market: loan_static, rf_all, sofr, loan_price_daily, loan_return_daily
+#   per deal (suffix larch_2021_1 or larch_2018_2): par_, price_, discount_, loan_return_monthly_,
+#     structure_, equity_returns_, equity_cf_
+
+# CLO-PM-2021-1: portfolio managers of Larchmere CLO 2021-1: market data and their own deal.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0001"]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "clo_*",
+]
+datasets = ["loan_*", "rf_all", "sofr", "*_larch_2021_1"]
+
+# CLO-PM-2018-2: the same for Larchmere CLO 2018-2.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0002"]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "clo_*",
+]
+datasets = ["loan_*", "rf_all", "sofr", "*_larch_2018_2"]
+
+# CLO-Analyst: credit analysts see market data and research, never a deal's holdings, tranche
+# balances, or cash flows (a deal-level dataset's missing cells would show what a deal holds).
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0003"]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report",
+]
+datasets = ["loan_*", "rf_all", "sofr"]
+
+# CLO-Structuring-Ops: both deals, in full, and the CLO tools.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0004"]
+tools = [
+  "server_info", "list_datasets", "analyze_*", "run_backtest",
+  "find_related_signals", "get_source_passage", "research_report", "clo_*",
+]
+datasets = ["*"]
+
+# IR-Reader: investor relations see the equity's returns and cash flows only.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0005"]
+tools = ["server_info", "list_datasets", "analyze_performance", "clo_equity_returns"]
+datasets = ["equity_*"]
+
+# CLO-Compliance: every dataset and tool, to check the trustee's tests.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0006"]
+tools = ["*"]
+datasets = ["*"]
+
+# Operators check the server is up; they read no data.
+[groups."4b1f0c52-6a4e-4d36-9a21-0a1b2c3d0007"]
+tools = ["server_info", "list_datasets"]
+datasets = []
