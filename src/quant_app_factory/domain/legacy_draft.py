@@ -364,6 +364,15 @@ def _slices(found: Found) -> bool:
     return found.has(Trait.RETURNS_TABLE) and not re.search(r"ndarray|NDArray|list|dict", hint)
 
 
+def _whole_table(name: str) -> str:
+    """The note on a tool served as it is that returns a whole dates-by-names table."""
+    return (
+        f"TODO(review): {name} returns a whole dates-by-names table, and output over "
+        "max_output_bytes (100 KB by default) is refused; return a slice from a facade, or pass "
+        "max_output_bytes."
+    )
+
+
 def _one_at_a_time(found: Found) -> bool:
     """Whether the facade runs the legacy code under `_legacy()`: it prints, or shares module
     state that another thread may be using."""
@@ -992,12 +1001,7 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
         options += _data_options(entry, imports)
         options += _permission_options(entry, imports)
         if found.has(Trait.RETURNS_TABLE):
-            registrations += _comment(
-                f"TODO(review): {entry.name} returns a whole dates-by-names table, and output "
-                "over max_output_bytes (100 KB by default) is refused; return a slice from a "
-                "facade, or pass max_output_bytes.",
-                "    ",
-            )
+            registrations += _comment(_whole_table(entry.name), "    ")
         if entry.convention:
             options.append(f"convention={entry.convention!r}")
         else:
@@ -1073,12 +1077,7 @@ def _server_module(
         if found.has(Trait.NONDETERMINISTIC):
             options.append("deterministic=False")
         if found.has(Trait.RETURNS_TABLE) and entry.kind is Kind.EXPOSE:
-            lines += _comment(
-                f"TODO(review): {entry.name} returns a whole dates-by-names table, and output "
-                "over max_output_bytes (100 KB by default) is refused; return a slice from a "
-                "facade, or pass max_output_bytes.",
-                "    ",
-            )
+            lines += _comment(_whole_table(entry.name), "    ")
         if entry.permissions:
             granted = ", ".join(permission.value for permission in entry.permissions)
             lines += _comment(
