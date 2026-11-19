@@ -132,6 +132,10 @@ CACHE_DECORATORS = ("functools.lru_cache", "functools.cache", "functools.cached_
 MUTATORS = frozenset(
     {"append", "extend", "insert", "update", "setdefault", "pop", "popitem", "clear", "add"}
 )
+# A module-level dict with a name like this, or one a function checks for a key before filling
+# it, is a memo cache: it remembers what was read, and a fresh process could read it again.
+CACHE_NAME = re.compile(r"cache|memo", re.IGNORECASE)
+MAPPINGS = frozenset({"dict", "OrderedDict", "defaultdict"})
 SLOW_CALL = re.compile(r"(^|_)(load|fit|train|calibrate|download|warm|estimate|bootstrap)")
 PANDAS_ATTRIBUTES = frozenset(
     {
@@ -233,6 +237,7 @@ class _Module:
     imports: dict[str, str] = field(default_factory=dict)  # local name -> dotted origin
     import_lines: dict[str, str] = field(default_factory=dict)  # local name -> import statement
     settings: dict[str, str] = field(default_factory=dict)  # global -> "setting", "env", ...
+    caches: set[str] = field(default_factory=set)  # module-level memo caches
     connections: dict[str, str] = field(default_factory=dict)  # global -> the connect call
     functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = field(default_factory=dict)
     classes: dict[str, ast.ClassDef] = field(default_factory=dict)
@@ -262,6 +267,10 @@ class _Facts:
     attributes: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     frame_use: set[str] = field(default_factory=set)  # params used as tables
     self_stores: set[str] = field(default_factory=set)  # self.x assigned or changed
+    lazy: set[str] = field(default_factory=set)  # globals set only once, when still unset
+    returned: list[ast.expr] = field(default_factory=list)  # what the return statements return
+    assigned: dict[str, list[ast.expr]] = field(default_factory=lambda: defaultdict(list))
+    table: str | None = None  # where a whole dates-by-names table it returns comes from
 
     def add(self, trait: Trait, seen: str) -> None:
         self.traits[trait].add(seen)
@@ -299,6 +308,7 @@ def analyse(sources: Iterable[ModuleSource]) -> tuple[list[Found], list[str]]:
                         module, item, _param_names(item)
                     )
     _propagate(facts)
+    _find_tables(modules, facts, data_types)
     reexported = {origin for m in modules if not m.private for origin in m.imports.values()}
     found: list[Found] = []
     for module in modules:
@@ -352,7 +362,49 @@ def _index(source: ModuleSource, tree: ast.Module) -> _Module:
                     module.connections[target] = seen
                 elif kind != "constant":
                     module.settings[target] = kind
+    module.caches = _caches(module, tree)
     return module
+
+
+def _caches(module: _Module, tree: ast.Module) -> set[str]:
+    """The module's memo caches: empty dicts at the top level, named like a cache or filled by
+    a function that first checks whether a key is there."""
+    mappings: set[str] = set()
+    for node in tree.body:
+        targets, value = _assignment(node)
+        called = (_dotted(value.func) or "") if isinstance(value, ast.Call) else ""
+        empty = (isinstance(value, ast.Dict) and not value.keys) or (
+            isinstance(value, ast.Call)
+            and called.rsplit(".", 1)[-1] in MAPPINGS
+            and not value.keywords
+            and len(value.args) <= (1 if called.endswith("defaultdict") else 0)
+        )
+        if empty:
+            mappings.update(target for target in targets if target in module.settings)
+    caches = {name for name in mappings if CACHE_NAME.search(name)}
+    for function in module.functions.values():
+        checked: set[str] = set()
+        filled: set[str] = set()
+        for item in ast.walk(function):
+            if isinstance(item, ast.Compare) and any(
+                isinstance(op, ast.In | ast.NotIn) for op in item.ops
+            ):
+                checked |= {c.id for c in item.comparators if isinstance(c, ast.Name)}
+            elif (
+                isinstance(item, ast.Call)
+                and isinstance(item.func, ast.Attribute)
+                and item.func.attr == "get"
+                and isinstance(item.func.value, ast.Name)
+            ):
+                checked.add(item.func.value.id)
+            elif (
+                isinstance(item, ast.Subscript)
+                and isinstance(item.ctx, ast.Store)
+                and isinstance(item.value, ast.Name)
+            ):
+                filled.add(item.value.id)
+        caches |= mappings & checked & filled
+    return caches
 
 
 def _top_level(body: list[ast.stmt]) -> Iterator[ast.stmt]:
@@ -458,8 +510,15 @@ def _body(
         elif isinstance(item, ast.Global):
             declared_global.update(item.names)
     local -= declared_global
-    for name in declared_global:
-        facts.add(Trait.MUTABLE_STATE, f"global {name}")
+    for name in sorted(declared_global):
+        lazily = _set_once(node, name)
+        if lazily is None:
+            continue  # declared, never assigned: read only
+        if lazily:
+            facts.lazy.add(name)
+            facts.add(Trait.MODULE_CACHE, f"{name} (opened once)")
+        else:
+            facts.add(Trait.MUTABLE_STATE, f"global {name}")
     for decorator in node.decorator_list:
         target = decorator.func if isinstance(decorator, ast.Call) else decorator
         called = module.resolve(_dotted(target) or "")
@@ -467,7 +526,65 @@ def _body(
             facts.add(Trait.CACHE, f"@{called.rsplit('.', 1)[-1]}")
     for item in _walk_body(node):
         _visit(module, item, facts, local, params)
+    for item in _own_nodes(node):
+        if isinstance(item, ast.Return) and item.value is not None:
+            facts.returned.append(item.value)
+        names, value = _assignment(item) if isinstance(item, ast.stmt) else ([], None)
+        for assigned in names:
+            if value is not None:
+                facts.assigned[assigned].append(value)
     return facts
+
+
+def _set_once(function: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool | None:
+    """Whether a global is only set while still unset (``if _conn is None: _conn = ...``) or
+    reset to None, as a connection opened once is; None when the function never assigns it."""
+    parents = {
+        child: parent for parent in ast.walk(function) for child in ast.iter_child_nodes(parent)
+    }
+    stores = [
+        item
+        for item in ast.walk(function)
+        if isinstance(item, ast.Name) and item.id == name and isinstance(item.ctx, ast.Store)
+    ]
+    if not stores:
+        return None
+    for store in stores:
+        statement = parents.get(store)
+        if isinstance(statement, ast.Assign) and (
+            isinstance(statement.value, ast.Constant) and statement.value.value is None
+        ):
+            continue  # a reset
+        if not isinstance(statement, ast.Assign | ast.AnnAssign):
+            return False  # += and loops change it
+        child: ast.AST = statement
+        parent = parents.get(child)
+        guarded = False
+        while parent is not None and parent is not function:
+            if isinstance(parent, ast.If) and child in parent.body and _unset(parent.test, name):
+                guarded = True
+                break
+            child, parent = parent, parents.get(parent)
+        if not guarded:
+            return False
+    return True
+
+
+def _unset(test: ast.expr, name: str) -> bool:
+    """Whether ``test`` holds when ``name`` is still unset: ``x is None``, ``not x``."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or):
+        return any(_unset(value, name) for value in test.values)
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return isinstance(test.operand, ast.Name) and test.operand.id == name
+    return (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == name
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Is)
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value is None
+    )
 
 
 def _walk_body(node: ast.AST) -> Iterator[ast.AST]:
@@ -493,7 +610,7 @@ def _visit(
     elif isinstance(item, ast.AugAssign | ast.Assign):
         targets = item.targets if isinstance(item, ast.Assign) else [item.target]
         for target in targets:
-            if isinstance(target, ast.Name) and target.id not in local:
+            if isinstance(target, ast.Name) and target.id not in local | facts.lazy:
                 facts.add(Trait.MUTABLE_STATE, target.id)  # only after `global`
 
 
@@ -501,7 +618,9 @@ def _subscript(
     module: _Module, item: ast.Subscript, facts: _Facts, local: set[str], params: set[str]
 ) -> None:
     value = item.value
-    if isinstance(value, ast.Name) and value.id not in local and value.id in module.settings:
+    if isinstance(value, ast.Name) and value.id not in local and value.id in module.caches:
+        facts.add(Trait.MODULE_CACHE, value.id)
+    elif isinstance(value, ast.Name) and value.id not in local and value.id in module.settings:
         key = item.slice
         shown = f"{value.id}[{key.value!r}]" if isinstance(key, ast.Constant) else value.id
         if isinstance(item.ctx, ast.Store | ast.Del):
@@ -533,7 +652,9 @@ def _attribute(
             facts.attributes[owner].add(item.attr)
         if owner == "self" and isinstance(item.ctx, ast.Store):
             facts.self_stores.add(item.attr)
-        if (
+        if owner not in local and owner in module.caches:
+            facts.add(Trait.MODULE_CACHE, owner)
+        elif (
             owner not in local
             and owner in module.settings
             and module.settings[owner] != "env"
@@ -578,7 +699,11 @@ def _call(module: _Module, item: ast.Call, facts: _Facts, local: set[str]) -> No
         facts.add(Trait.SLOW_INIT, "time.sleep")
     if method in MUTATORS and isinstance(func, ast.Attribute):
         target = func.value
-        if isinstance(target, ast.Name) and target.id not in local and target.id in module.settings:
+        if isinstance(target, ast.Name) and target.id not in local and target.id in module.caches:
+            facts.add(Trait.MODULE_CACHE, target.id)
+        elif (
+            isinstance(target, ast.Name) and target.id not in local and target.id in module.settings
+        ):
             facts.add(Trait.MUTABLE_STATE, target.id)
         if (
             isinstance(target, ast.Attribute)
@@ -639,6 +764,108 @@ def _propagate(facts: dict[str, _Facts]) -> None:
                     changed = True
 
 
+# Tables returned whole
+
+# Methods that shrink a table to a row, a column, or a number; after rolling() and the like
+# they keep its shape.
+REDUCERS = frozenset(
+    {"sum", "mean", "std", "var", "median", "min", "max", "count", "prod", "sem", "skew", "kurt"}
+    | {"quantile", "idxmin", "idxmax", "head", "tail", "nlargest", "nsmallest", "describe"}
+    | {"item", "tolist", "to_dict", "any", "all", "nunique", "value_counts", "squeeze", "corr"}
+    | {"cov", "agg", "aggregate", "first_valid_index", "last_valid_index", "dot"}
+)
+WINDOWED = frozenset({"rolling", "ewm", "expanding", "resample", "groupby"})
+SHAPE_ATTRIBUTES = frozenset({"index", "columns", "shape", "dtypes", "name", "size", "empty"})
+ELEMENTWISE = frozenset({"sign", "abs", "log", "exp", "sqrt", "where", "clip", "nan_to_num"})
+
+
+def _find_tables(modules: list[_Module], facts: dict[str, _Facts], data_types: set[str]) -> None:
+    """Mark each body that returns a whole dates-by-names table, built from a table it was
+    given or from a helper that returns one, and not reduced to a row or a number on the way."""
+    bodies: list[tuple[_Module, str, set[str]]] = []
+    for module in modules:
+        for name, node in module.functions.items():
+            target = f"{module.name}.{name}"
+            params, _ = _signature(module, node, facts[target], data_types, skip_first=False)
+            bodies.append((module, target, {p.name for p in params if p.data == "frame"}))
+        for class_name, class_node in module.classes.items():
+            for item in class_node.body:
+                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    target = f"{module.name}.{class_name}.{item.name}"
+                    params, _ = _signature(module, item, facts[target], data_types, skip_first=True)
+                    bodies.append((module, target, {p.name for p in params if p.data == "frame"}))
+    changed = True
+    while changed:
+        changed = False
+        for module, target, frames in bodies:
+            own = facts[target]
+            if own.table is not None:
+                continue
+            for value in own.returned:
+                source = _table_source(value, module, own, frames, facts, set())
+                if source is not None:
+                    own.table, changed = source, True
+                    break
+
+
+def _table_source(
+    value: ast.expr,
+    module: _Module,
+    own: _Facts,
+    frames: set[str],
+    facts: dict[str, _Facts],
+    visiting: set[str],
+) -> str | None:
+    """Where ``value`` gets a whole table from: a parameter or a helper's name, or None."""
+
+    def source(item: ast.expr) -> str | None:
+        return _table_source(item, module, own, frames, facts, visiting)
+
+    if isinstance(value, ast.Name):
+        if value.id in frames:
+            return value.id
+        if value.id in own.assigned and value.id not in visiting:
+            visiting.add(value.id)
+            return next(filter(None, map(source, own.assigned[value.id])), None)
+        return None
+    if isinstance(value, ast.BinOp):
+        return source(value.left) or source(value.right)
+    if isinstance(value, ast.IfExp):
+        return source(value.body) or source(value.orelse)
+    if isinstance(value, ast.Attribute):
+        return None if value.attr in SHAPE_ATTRIBUTES else source(value.value)
+    if isinstance(value, ast.Subscript):
+        index = value.slice
+        if isinstance(index, ast.Tuple) and index.elts:
+            index = index.elts[0]
+        if isinstance(index, ast.Constant | ast.UnaryOp):
+            return None  # one row or one column
+        return source(value.value)
+    if not isinstance(value, ast.Call):
+        return None
+    func = value.func
+    if isinstance(func, ast.Attribute) and not isinstance(func.value, ast.Name | ast.Attribute):
+        inner = func.value
+        if func.attr in REDUCERS and not (
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr in WINDOWED
+        ):
+            return None
+        return source(inner)
+    called = module.resolve(_dotted(func) or "")
+    helper = facts.get(called)
+    if helper is not None and helper.table is not None:
+        return f"{called.rsplit('.', 1)[-1]}()"
+    if called.startswith("numpy.") and called.rsplit(".", 1)[-1] in ELEMENTWISE and value.args:
+        return source(value.args[0])
+    if isinstance(func, ast.Attribute) and helper is None:
+        if func.attr in REDUCERS:
+            return None
+        return source(func.value)  # a method of a local table: x.shift(1)
+    return None
+
+
 # Results
 
 
@@ -652,6 +879,8 @@ def _function(
     params, traits = _signature(module, node, own, data_types, skip_first=False)
     for trait, seen in own.traits.items():
         traits[trait] = traits.get(trait, set()) | seen
+    if own.table is not None:
+        traits[Trait.RETURNS_TABLE] = {own.table}
     return _found(module, node, None, params, traits)
 
 
@@ -705,6 +934,8 @@ def _methods(
                 traits[trait] = traits.get(trait, set()) | seen
         for trait, seen in class_traits.items():
             traits[trait] = traits.get(trait, set()) | seen
+        if own.table is not None:
+            traits[Trait.RETURNS_TABLE] = {own.table}
         cached = {name for name in own.self_stores if re.search("cache|memo", name, re.IGNORECASE)}
         if cached:
             traits[Trait.CACHE] = traits.get(Trait.CACHE, set()) | {f"self.{n}" for n in cached}

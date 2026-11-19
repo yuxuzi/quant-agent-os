@@ -6,6 +6,7 @@ server takes no part: what the draft registers is what the firm commits.
 
 from __future__ import annotations
 
+import keyword
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,12 @@ def wrap(inventory_path: Path, out: Path, *, force: bool = False) -> Wrapped:
     developer's decisions from the inventory. Nothing is overwritten unless ``force``. Raises
     `LegacyError` naming what to fix.
     """
+    package = out.resolve().name
+    if not package.isidentifier() or keyword.iskeyword(package):
+        raise LegacyError(
+            f"The draft is a Python package, so --out must end in a name Python can import, "
+            f"such as legacy_tools, not '{package}'."
+        )
     inventory = load_inventory(inventory_path)
     sources, root = find_sources(inventory.source)
     found, _ = analyse(sources)
@@ -65,6 +72,7 @@ def wrap(inventory_path: Path, out: Path, *, force: bool = False) -> Wrapped:
         {item.target: item for item in found},
         source_root=source_root,
         legacy=legacy,
+        package=package,
     )
     written = write_draft(out, result.files, force=force)
     services = any(e.include and e.kind is Kind.SERVICE for e in inventory.entries)
