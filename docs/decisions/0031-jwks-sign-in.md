@@ -1,6 +1,7 @@
 # 0031: Sign-in can check JWTs against the provider's keys
 
-- Status: proposed (a gap measured by two mock funds on Azure; the owner decides)
+- Status: accepted (opt-in, off by default, as 0028; a gap measured by all four mock funds on Azure and AWS;
+  the owner delegated the decision on 2026-11-18)
 - Date: 2026-11-18
 - Extends: [0028](0028-oauth-sign-in-on-a-firms-server.md)
 
