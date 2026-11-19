@@ -14,8 +14,9 @@ from your own arithmetic.
 
 ## Find the data first
 
-Call `list_datasets` to see the datasets the server can read, with their columns and rows.
-Read one dataset's details with `dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
+Call `list_datasets` to see the datasets the server can read, with their rows, dates, and first
+columns; `prefix` narrows it to ids that start so. Read one dataset's every column with
+`dataset_id`, or the resource `qaos://dataset/{dataset_id}`.
 
 Pass series **by reference**, never by copying values:
 - **Performance:** `analyze_performance` with `returns` as `{"dataset": ID, "column": NAME}`,

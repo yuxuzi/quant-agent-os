@@ -2637,8 +2637,21 @@
               }
             ],
             "default": null,
-            "description": "One dataset's id",
+            "description": "One dataset's id, with all columns",
             "title": "Dataset Id"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only the datasets whose id starts so",
+            "title": "Prefix"
           }
         },
         "title": "DatasetQuery",
@@ -2649,6 +2662,12 @@
           "DatasetInfo": {
             "description": "What a client needs to choose a dataset and its columns, without the values.",
             "properties": {
+              "column_count": {
+                "default": 0,
+                "description": "All columns, when `columns` lists fewer",
+                "title": "Column Count",
+                "type": "integer"
+              },
               "columns": {
                 "items": {
                   "type": "string"
@@ -2845,7 +2864,7 @@
       "permissions": [
         "read_local_data"
       ],
-      "version": "1.1.0"
+      "version": "2.0.0"
     },
     "research_report": {
       "input_schema": {

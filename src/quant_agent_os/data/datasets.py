@@ -62,6 +62,7 @@ class DatasetInfo(BaseModel):
     id: str
     rows: int
     columns: list[str]
+    column_count: int = Field(default=0, description="All columns, when `columns` lists fewer")
     index_name: str | None = None
     first_index: str | None = None
     last_index: str | None = None
@@ -114,6 +115,7 @@ class Dataset(BaseModel):
             id=self.id,
             rows=self.rows,
             columns=list(self.columns),
+            column_count=len(self.columns),
             index_name=self.index_name,
             first_index=self.index[0] if self.index else None,
             last_index=self.index[-1] if self.index else None,

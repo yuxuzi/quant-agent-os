@@ -99,6 +99,9 @@ All notable changes to this project are documented here. The format follows
   weekly 1, 4, 13, monthly 1, 3, 12, and quarterly 1, 2, 4, stated in `conventions.horizons`; before, monthly
   data got 21 months. It warns when the signal changes much less often than a horizon (a monthly score
   carried forward onto daily dates) and when there are fewer than 30 instruments.
+- **`list_datasets` 2.0.0 summarises wide datasets.** A listing names each dataset's first 20 columns, with
+  `column_count`, and `prefix` narrows it; `dataset_id` still gives every column of one. Larchmere's 19
+  datasets list in 10,517 bytes, down from 25,387.
 - **`qaos eval` and `run_acceptance` apply per-caller access.** `run_acceptance` now checks the catalog's access
   policy for each case, and `qaos eval` applies the configured `QUANT_AGENT_OS_ACCESS_FILE`, which it ignored
   before. A cases file run where an access file is configured needs a `[caller]`, or its cases fail unrun.

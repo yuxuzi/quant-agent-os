@@ -235,6 +235,40 @@ def test_list_datasets_describes_without_values_and_honours_the_contract(tmp_pat
     assert check_tool(spec, {"dataset_id": "nope"}, expect="error").error
 
 
+def test_list_datasets_shortens_wide_datasets_and_filters_by_prefix(tmp_path: Path) -> None:
+    store = DirectoryDatasetStore(tmp_path / "datasets")
+    names = [f"c{n:02d}" for n in range(30)]
+    wide = tmp_path / "wide.csv"
+    wide.write_text(
+        "date,"
+        + ",".join(names)
+        + "\n"
+        + "".join(f"2024-01-0{day}," + ",".join("1" for _ in names) + "\n" for day in (2, 3, 4)),
+        "utf-8",
+    )
+    prices = tmp_path / "returns.csv"
+    prices.write_bytes(PRICES)
+    store.put("par_deal_a", wide)
+    store.put("par_deal_b", wide)
+    store.put("returns", prices)
+    (spec,) = dataset_tools(store)
+
+    listed = check_tool(spec, {}).output
+    narrowed = check_tool(spec, {"prefix": "par_"}).output
+    one = check_tool(spec, {"dataset_id": "par_deal_a"}).output
+    assert listed is not None and narrowed is not None and one is not None
+
+    by_id = {info["id"]: info for info in listed["datasets"]}
+    assert by_id["par_deal_a"]["columns"] == names[:20]
+    assert by_id["par_deal_a"]["column_count"] == 30
+    assert by_id["returns"]["columns"] == ["fund", "market"]
+    assert "2 datasets have more than 20 columns" in listed["warnings"][0]
+    assert [info["id"] for info in narrowed["datasets"]] == ["par_deal_a", "par_deal_b"]
+    assert one["datasets"][0]["columns"] == names and not one["warnings"]
+    empty = check_tool(spec, {"prefix": "zz"}).output
+    assert empty is not None and empty["warnings"] == ["No dataset id starts with 'zz'."]
+
+
 def test_the_dataset_resource_reads_through_list_datasets(tmp_path: Path) -> None:
     executor = ToolExecutor(ToolRegistry(dataset_tools(_store(tmp_path))), PermissionPolicy())
 
