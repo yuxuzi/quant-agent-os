@@ -54,11 +54,12 @@ def check_tool(
     policy = PermissionPolicy(granted=READ_ONLY | spec.permissions, preapproved=spec.permissions)
     executor = ToolExecutor(ToolRegistry([spec]), policy)
     with acting_as(caller):
-        return _check_calls(spec, executor, arguments, expect, problems)
+        return _check_calls(spec, descriptor, executor, arguments, expect, problems)
 
 
 def _check_calls(
     spec: ToolSpec[Any, Any],
+    descriptor: dict[str, Any],
     executor: ToolExecutor,
     arguments: dict[str, Any],
     expect: CallStatus,
@@ -75,7 +76,7 @@ def _check_calls(
     if record.status == "ok":
         if via_mcp.get("structuredContent") != record.output:
             problems.append("MCP output differs from the direct output")
-        problem = _schema_problem(record.output, spec.descriptor()["output_schema"])
+        problem = _schema_problem(record.output, descriptor["output_schema"])
         if problem:
             problems.append(f"output does not match the published output schema: {problem}")
         if spec.deterministic:

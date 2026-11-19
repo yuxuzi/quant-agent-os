@@ -107,7 +107,7 @@ the real results.
    `RunRecorder`, and audit. `runs/` reuses only the `REDACTED` marker and
    `redact_text` from `observability/logging.py`.
 4. `config/`, `data/` (datasets read by id), `serving.py` (tenant surfaces), `registration.py`
-   (`FirmApp`), `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`, `check_app`), `observability/`,
+   (`FirmApp`; `caller_assertion.py` signs a forwarded caller), `mcp/` (stdio, HTTP), `sdk/`, `testing.py` (`check_tool`, `check_app`), `observability/`,
    `cli.py`.
 
 Tests live in `tests/unit`, `tests/contract` (every tool honours the contract; MCP equals a

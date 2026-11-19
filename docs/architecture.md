@@ -78,7 +78,7 @@ small hooks such as `UsageGate`.
 | MCP | `mcp/adapters.py`, `mcp/server.py`, `mcp/http.py` | Definitions and calls over the executor; stdio; stateless Streamable HTTP |
 | REST | `api/` | FastAPI over the same executor; scoped API keys stored as hashes |
 | SDK | `sdk/` | `Platform`: `call`, `report`, `approve`, `resume`, run lookup |
-| Registration | `registration.py` | `FirmApp.expose`: a firm's typed function as a tool, with data by reference and provenance; `call_service`: a read-only internal service, from a typed stub |
+| Registration | `registration.py` | `FirmApp.expose`: a firm's typed function as a tool, with data by reference and provenance; `call_service`: a read-only internal service, from a typed stub, optionally told who called (`caller_assertion.py`, decision 0030) |
 | Contract checks | `testing.py` | `check_tool`, also used by generated tool packages; `check_app` and its schema lock |
 | Observability | `observability/logging.py` | Logging with secret redaction |
 
@@ -375,8 +375,10 @@ See [security.md](security.md) for details.
   tool eligible to run, and each call still needs a single-use approval bound to the run, the tool, and the
   input hash ([decision 0005](decisions/0005-approval-gates.md)).
 - Approvals come from the operator: through the SDK, a terminal prompt, or the approval page
-  ([decision 0014](decisions/0014-approvals-in-the-client.md)). A model can never grant one. Standing approval
-  (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`) is empty by default, and each use is recorded.
+  ([decision 0014](decisions/0014-approvals-in-the-client.md)). A model can never grant one. Standing approvals,
+  for named tools (`QUANT_AGENT_OS_PREAPPROVED_TOOLS`) or, with a start-up warning, for every tool
+  (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`), are empty by default, and each use is recorded
+  ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)).
 - Programs run through `run_command`. The one exception to its scrubbed environment is App Factory's approved
   connection check, which passes exactly the variables a spec references and redacts their values.
 - Specs, `factory.toml`, and generated files hold environment-variable names, never secret values, and a value

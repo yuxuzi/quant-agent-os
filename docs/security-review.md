@@ -15,6 +15,12 @@
 - **2026-11-17:** [decision 0028](decisions/0028-oauth-sign-in-on-a-firms-server.md) serves OAuth sign-in, opt-in,
   on `qaos serve --http` and `serve_apps`, on REST as well as MCP, with groups from the token. Not yet re-reviewed;
   `tests/server/test_sign_in.py` covers its refusals. The rows below are updated where it changes them.
+- **2026-11-18:** [decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md), from the 0.8.0 pilot
+  drill: `call_service(..., forward_caller=True)` sends a firm's service a signed, 60-second statement of the
+  verified caller (HMAC-SHA256, opt-in, refused with no caller), and `QUANT_AGENT_OS_PREAPPROVED_TOOLS` gives a
+  standing approval to named tools only, while the server-wide form warns at start-up. Not yet re-reviewed;
+  `tests/unit/test_forward_caller.py`, `tests/unit/test_caller_assertion.py`, and `tests/unit/test_approvals.py`
+  cover their refusals. Open questions for that review are in the decision record.
 
 The general model is in [security.md](security.md). This page checks it against the code and
 lists what is still open.
@@ -54,7 +60,7 @@ permission policy, input validation, plan limits, approval, timeout, and output 
 
 | Practice | Status |
 | --- | --- |
-| **No token passthrough.** The server accepts only tokens issued for it (audience equals the sign-in file's `resource`) and never forwards a client's token to another service. Tools never see credentials. | Met |
+| **No token passthrough.** The server accepts only tokens issued for it (audience equals the sign-in file's `resource`) and never forwards a client's token to another service; `call_service`'s opt-in caller assertion (decision 0030) is a new statement the platform signs, not the client's token. Tools never see credentials. | Met |
 | **Confused deputy.** The server is a resource server only. It does not proxy OAuth to a third party or hold a static client id for users, so there is no consent to bypass. | Not applicable |
 | **Session hijacking.** The transport is stateless: there are no session ids to steal or inject, and every request is authenticated on its own. | Met |
 | **Scope minimization.** Four scopes; OAuth tokens get only those they name, never `runs:approve`. The policy is read-only by default per tenant. | Met |
@@ -102,6 +108,8 @@ and F-2 matter much less. Severity from F-6 on is for one firm's server.
 | **F-11** | Low | **Partly fixed.** Keys with groups on a server with no access file reach everything. That stays, since no file means no policy, but it was silent. | `serve_http` and `qaos doctor` now warn. |
 | **F-12** | Low | **Fixed.** An invalid API keys file put key hashes in its error, which reached logs and `doctor`. | It names the field and the problem only. |
 | **F-13** | Low | **A prune records no person.** Its audit event has actor `cli`, because operator commands trust the host, so who ran it is not on record. | Run operator commands through your own change process, and keep the host's own logs. |
+| **F-14** | Low | **Opened 2026-11-18, mitigated.** A standing approval was server-wide: pre-approving `network` for one firm's risk service also let any other tool needing `network` run without an approval. | `QUANT_AGENT_OS_PREAPPROVED_TOOLS` names the tools (decision 0030); the server-wide form stays for compatibility and warns at start-up and in `qaos doctor`. |
+| **F-15** | Low | **Opened 2026-11-18, by design.** A forwarded caller assertion can be replayed to the same endpoint within its minute by whoever reads it, and does not bind the request's arguments. A shared secret lets its holder sign any caller. | Serve over https; one secret per service; a service that must refuse replays remembers nonces until they expire. Binding a hash of the request is an open question for the next review. |
 
 No finding allows a cross-tenant read, or an approval without an approver key. Through the platform's own tools, none
 allows a read outside a caller's access rules once they apply. A firm's own tools are outside that claim (F-6).

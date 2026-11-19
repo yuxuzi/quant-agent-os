@@ -458,7 +458,8 @@ objective over 30 days, calls by status, and refusals by tenant. Choose your own
 The server is read-only by default. The tools that need more (for example `network`, for a
 hosted embedder) are refused unless the operator sets `QUANT_AGENT_OS_GRANTED_PERMISSIONS` on
 the `server` service. Consequential permissions also need a per-call approval, which no API
-key can give ([security](security.md)).
+key can give ([security](security.md)), unless `QUANT_AGENT_OS_PREAPPROVED_TOOLS` gives the named tools a
+standing approval ([configuration](configuration.md#standing-approvals)).
 
 ## PostgreSQL
 

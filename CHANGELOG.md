@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A firm's service can be told who called** (decision 0030). `FirmApp.call_service(...,
+  forward_caller=True, caller_secret_env="NAME")`, off by default, sends each call an `X-QAOS-Caller` header:
+  `v1.<payload>.<signature>`, with the verified caller's principal, tenant, and groups, the tool, a 60-second
+  lifetime, and a nonce, signed with HMAC-SHA256 under a secret read from the environment at each call and
+  never shown or recorded. A call with no authenticated caller, or an unset or short secret, is refused before
+  anything is sent; registration refuses the option without a secret variable, and plain http off loopback.
+  The service checks it with `verify_caller` from `quant_agent_os.registration` (standard library only), or a
+  documented 30-line copy; `sign_caller` signs one for its tests, and `check_tool` and `check_app` take
+  `caller=`. `qaos legacy wrap`'s service draft carries a commented hook.
+- **Standing approvals for named tools** (decision 0030). `QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network":
+  ["risk_desk_var"]}'` lets exactly those tools use a consequential permission without a per-call approval;
+  another tool needing it still waits for one. Patterns, unknown permissions, and permissions that need no
+  approval are refused, and a named tool the server does not serve draws a start-up warning.
+
 - **`qaos legacy` drafts tools from a fund's existing Python** (decision 0029). `qaos legacy scan PATH` reads a
   package with `ast`, never importing it, and classifies each public function and method as *expose as is*,
   *needs a facade*, or *needs a service*, with the reasons: missing hints or docstrings, pandas data, module
@@ -49,6 +63,11 @@ All notable changes to this project are documented here. The format follows
   subject is the recorded principal, its groups claim feeds `access.toml`, and the RFC 9728 metadata is
   published. A bad file or an unset secret stops the server from starting, and `qaos doctor` reports each
   provider's settings. Off by default: without a sign-in file nothing changes.
+
+### Changed
+
+- **`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` warns at start-up** that it approves the permission for every tool
+  the server serves, and `qaos doctor` says so and shows per-tool standing approvals. It works as before.
 
 ## [0.7.0] - 2026-11-17
 

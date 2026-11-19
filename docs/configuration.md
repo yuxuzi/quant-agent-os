@@ -22,7 +22,8 @@ permissions come only from the environment or the home's `.env`.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `QUANT_AGENT_OS_GRANTED_PERMISSIONS` | `["read_local_data"]` | JSON list of granted tool permissions. |
-| `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `[]` | JSON list of consequential permissions approved for every call (a standing approval). Leave it empty unless one permission must run unattended, such as `network` for a hosted embedder. |
+| `QUANT_AGENT_OS_PREAPPROVED_TOOLS` | `{}` | JSON object naming, for each consequential permission, the exact tools that run without a per-call approval (a standing approval for those tools only). See [standing approvals](#standing-approvals). |
+| `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `[]` | JSON list of consequential permissions approved for every call of every tool. Kept for compatibility; the server warns at start-up that it covers every tool. Prefer `QUANT_AGENT_OS_PREAPPROVED_TOOLS`. |
 | `QUANT_AGENT_OS_LOG_LEVEL` | `INFO` | Logging level. |
 | `QUANT_AGENT_OS_STORE` | `knowledge.db` in the home | SQLite path or `postgresql://` URL. |
 | `QUANT_AGENT_OS_DATASETS_DIR` | `datasets/` in the home | Datasets directory. |
@@ -50,6 +51,34 @@ groups_claim = "groups"          # optional: the claim listing the user's groups
 
 `qaos doctor` checks the setup and shows what is off, with no secret values.
 
+### Standing approvals
+
+A tool that declares a consequential permission (`network`, `write_local_data`, `execute_code`, or
+`external_action`) needs that permission granted, and then an operator's approval for each call
+([decision 0005](decisions/0005-approval-gates.md)). MCP clients cannot approve, so a tool that must run
+unattended, such as a firm's risk service behind `call_service`, needs a standing approval. Name exactly the
+tools it covers ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)):
+
+```bash
+# in the environment, or the home's .env
+QUANT_AGENT_OS_GRANTED_PERMISSIONS='["read_local_data", "network"]'
+QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["risk_desk_var", "risk_stress"]}'
+```
+
+- **Only the named tools.** Another tool that needs `network`, such as search with a hosted embedder, still
+  waits for an approval on every call. Each call that uses a standing approval records
+  `standing:<permission>` on its run.
+- **Exact names.** A pattern such as `risk_*` or an empty name is refused, because it would approve tools
+  added later; so is a permission that is not one of the four, or one that needs no approval.
+- **Checked at start-up.** `qaos serve` and `serve_apps` warn about a named tool the server does not serve,
+  or one that does not declare the permission, because it approves nothing; check the name.
+- **It grants nothing.** The permission must also be in `QUANT_AGENT_OS_GRANTED_PERMISSIONS`.
+- **Only from the environment or the home's `.env`**, like every permission setting: `config.toml` refuses
+  it, and no tool, client, or model can set it.
+- **The server-wide form**, `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'`, still works, and
+  approves the permission for every tool the server serves, including ones added later. The server warns
+  about it at start-up, and `qaos doctor` shows both.
+
 ## Bring your own
 
 - **Models:** the platform calls no model. Your client plans, or your own code does, with its
@@ -64,9 +93,10 @@ groups_claim = "groups"          # optional: the claim listing the user's groups
 
 `qaos serve` serves the default toolsets over stdio, and `--toolsets` chooses others. It applies
 `QUANT_AGENT_OS_GRANTED_PERMISSIONS` (read-only by default) and
-`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It warns on stderr when a tool needs a permission that
-is not granted, or one that needs approval for every call. For example, a hosted embedder needs
-`network` both granted and pre-approved, because MCP clients cannot approve calls.
+`QUANT_AGENT_OS_PREAPPROVED_TOOLS` (and the server-wide `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). It
+warns on stderr when a tool needs a permission that is not granted, or one that needs approval for every
+call. For example, search with a hosted embedder needs `network` both granted and pre-approved for
+`find_related_signals`, because MCP clients cannot approve calls.
 It needs the `server` extra (`quant-agent-os[server]`); the development environment includes it.
 
 Every call is recorded as a run in the home's `runs.db`. Change the file with `--runs PATH`, or

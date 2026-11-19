@@ -87,8 +87,8 @@ The platform is software you run. It has no service of ours behind it, so nothin
   [export it](operations.md#retention-and-export) to a system they do not control.
 - **A client can be talked into things.** A passage can hold instructions. Results are marked untrusted, and the server
   says not to follow them, but only the client decides. Consequential calls still stop for a person's approval, unless
-  an operator gave that permission a standing approval with `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`, which is empty by
-  default and recorded on each use.
+  an operator gave that permission a standing approval: for named tools with `QUANT_AGENT_OS_PREAPPROVED_TOOLS`, or
+  for every tool with `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. Both are empty by default, and each use is recorded.
 - **Local use trusts whoever starts it.** stdio and the SDK have no authenticated caller, and apply no access rules.
 - **Sign-in is off until configured.** With a sign-in file, the server also accepts tokens from the firm's identity
   provider ([below](#oauth)); anyone the provider issues a token for this server can then call it, within the access file.
@@ -123,7 +123,8 @@ sends data to that provider:
 - **Search** sends the query text. `find_related_signals` then declares the `network`
   permission. It runs only when the operator grants `network`
   (`QUANT_AGENT_OS_GRANTED_PERMISSIONS`) and either approves each call or pre-approves
-  `network` (`QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`). The default policy refuses it.
+  `network` for it (`QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["find_related_signals"]}'`). The
+  default policy refuses it.
 
 Keys come from `VOYAGE_API_KEY` or `OPENAI_API_KEY` and are held as `SecretStr`. Error messages name the variable, never its value. Use
 the `local` embedder, or none, for documents that must not leave the machine. It sends no text
@@ -225,6 +226,27 @@ configured, and then it denies what is not listed. How to use it, and what it do
   warning at start-up, and `qaos doctor` reports groups with no access file.
 - `tests/server/test_platform_authorization.py` is a release gate, over MCP and REST.
 
+## A firm's service and who called
+
+A firm's service behind `call_service` can be told who is calling, so it can scope its answer, with
+`forward_caller=True` ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md); how to use
+it is in [deployment](deployment.md#8-add-your-own-tools)). It is off by default.
+- **What is sent.** Each call carries `X-QAOS-Caller`: the caller's principal, tenant, and groups, the tool's
+  name, a 60-second lifetime, and a nonce, signed with HMAC-SHA256 under a secret the platform and the service
+  share. The platform never sends a caller it did not verify: the caller is the one its keys or sign-in bound.
+- **Fails closed.** A call with no authenticated caller is refused before anything is sent, never sent
+  anonymously; so is a call whose secret is unset or shorter than 32 bytes. Registration refuses the option
+  without a secret variable, a variable equal to `token_env`, and plain http off loopback.
+- **Secrets.** The secret is read from the environment at each call and never displayed, logged, or recorded;
+  nor is the header, which is a credential for its minute.
+- **The service checks it** with `verify_caller`: the version, the signature in constant time, the expiry
+  (10 s of leeway), a lifetime of at most 300 s, and the tool. Each refusal is a specific error that never
+  names the secret.
+- **What it does not do.** It proves to the service only what the platform says; anyone holding the secret can
+  sign any caller, so give each service its own secret and keep it out of tool code. Within its minute an
+  assertion can be replayed to the same endpoint, by anyone who can read it; a service that must refuse
+  that remembers nonces until they expire. It does not bind the request's arguments.
+
 ## OAuth
 
 `quant_platform.identity.oauth` checks tokens from a firm's identity provider by introspection
@@ -321,9 +343,15 @@ which refuses a call over its limits with `quota_exceeded` before any approval i
     new hash and needs a new approval.
   - **Locally**, creating a project is a terminal command, `qaos app create`, whose prompt
     is the approval. No MCP server offers it.
-- **Standing approvals.** An operator can pre-approve a permission for every call with
-  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS`. It is empty by default, and every call that uses
-  it records `standing:<permission>`.
+- **Standing approvals** ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)). An
+  operator can pre-approve a permission for the exact tools named in `QUANT_AGENT_OS_PREAPPROVED_TOOLS`;
+  another tool needing the same permission still needs an approval for each call. A pattern, an empty
+  name, an unknown permission, or one that needs no approval is refused, and a named tool the server does
+  not serve, or that does not declare the permission, draws a start-up warning. The older
+  `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` pre-approves a permission for every tool, now and later, and
+  draws a start-up warning saying so; `qaos doctor` shows both. Both are empty by default, come only from
+  the environment or the home's `.env` (never `config.toml`, a tool, or a client), grant nothing by
+  themselves, and every call that uses one records `standing:<permission>`.
 - **Running programs.** Programs run through `run_command`:
   - a fixed working directory and no stdin;
   - an allowlisted environment: `PATH`, home, temp, locale, uv caches, and certificates. API
