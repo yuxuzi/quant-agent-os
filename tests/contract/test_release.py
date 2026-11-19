@@ -79,3 +79,27 @@ def test_the_toolbox_needs_only_numpy_and_names_its_version_in_its_changelog() -
     assert [re.split(r"[<>=]", item)[0] for item in project["dependencies"]] == ["numpy"]
     assert project["license"] == "MIT"
     assert f"## [{project['version']}]" in changelog or "## [Unreleased]" in changelog
+
+
+# Where a reader or a generated project installs from a tag. Plans, decisions, and changelogs are
+# records of their day and keep the version they name.
+PINNED = [
+    ROOT / "README.md",
+    ROOT / "docs" / "getting-started.md",
+    *sorted((ROOT / "docs" / "products").glob("*.md")),
+    TOOLBOX / "README.md",
+    *sorted((ROOT / "src" / "quant_app_factory" / "packs").glob("*/questions.yml")),
+]
+PIN = re.compile(r'quant-agent-os(?:\.git)?@(v[^#"\s]+)|rev = "(v[^"]+)"')
+
+
+def test_every_install_pin_names_this_release() -> None:
+    tag = f"v{_project()['version']}"
+    pins = {
+        f"{path.relative_to(ROOT)}: {found.group(0)}"
+        for path in PINNED
+        for found in PIN.finditer(path.read_text("utf-8"))
+    }
+
+    assert len(pins) >= 8  # the README, getting started, two products, the toolbox, three packs
+    assert [pin for pin in pins if tag not in pin] == [], f"pin these to {tag}"
