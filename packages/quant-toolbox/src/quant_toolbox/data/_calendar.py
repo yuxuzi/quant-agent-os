@@ -32,7 +32,7 @@ import datetime as dt
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 import numpy as np
 
@@ -228,8 +228,8 @@ class SessionCalendar:
         start, end = dt.date(first_year, 1, 1), dt.date(last_year, 12, 31)
         return self.count(start, end) / (last_year - first_year + 1)
 
-    def _known(self, day: DayLike | np.datetime64) -> np.datetime64:
-        target = np.datetime64(day, "D")
+    def _known(self, day: DayLike) -> np.datetime64:
+        target = np.datetime64(_day(day), "D")
         if not np.datetime64(self._first, "D") <= target <= np.datetime64(self._last, "D"):
             raise CalendarError(
                 f"{self._name}: {_date(target)} is outside the days it knows, "
@@ -513,8 +513,7 @@ def _day(value: Any) -> dt.date:
 
 
 def _date(day: np.datetime64) -> dt.date:
-    value: dt.date = np.datetime64(day, "D").astype(dt.date)
-    return value
+    return cast(dt.date, day.astype("datetime64[D]").astype(dt.date))
 
 
 def business_days(count: int, start: dt.date = dt.date(2021, 1, 4)) -> list[dt.date]:
