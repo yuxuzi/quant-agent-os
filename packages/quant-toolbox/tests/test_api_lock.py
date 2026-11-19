@@ -75,7 +75,14 @@ def _surface() -> dict[str, dict[str, str]]:
         surface[module.__name__] = {
             item: _describe(getattr(module, item)) for item in sorted(module.__all__)
         }
-    for leaf in ("data.excel", "data.frames", "report.svg", "report.interactive", "report.excel"):
+    for leaf in (
+        "data.excel",
+        "data.frames",
+        "data.sql",
+        "report.svg",
+        "report.interactive",
+        "report.excel",
+    ):
         module = importlib.import_module(f"quant_toolbox.{leaf}")
         surface[module.__name__] = {
             item: _describe(value)

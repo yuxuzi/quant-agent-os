@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`SqlDatasetStore` reads a firm's SQL databases as datasets** (decision 0032). Datasets are declared as
+  `SqlDataset` (SQL with `:name` binds, a shape, and a duplicates policy) over named SQLAlchemy engines, long rows
+  are pivoted wide, and the result goes through the platform's own CSV parser, so fingerprints match a file with
+  the same cells. A stamp per source (a version query, a time to live, or a function) decides when to read
+  again; a derived dataset is a marked Python function. It works under per-caller access, and
+  `quant_platform` loads it on first use. New `sql` extra (`quant-toolbox[sql]`, SQLAlchemy); the database's
+  driver is the firm's install. See "Read your firm's database as datasets" in the deployment guide. Quant
+  Toolbox gains `data.sql` (see its changelog).
 - **Sign-in checks JWTs against the provider's keys, for Entra ID and Amazon Cognito** (decision 0031). A
   `[[authorization_servers]]` entry with `verify = "jwks"` needs no introspection endpoint: the server checks
   the token's RS256 (or another listed asymmetric) signature against the issuer's JWKS, found by `jwks_uri` or

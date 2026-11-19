@@ -6,6 +6,19 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Added
+
+- **A standard SQL connection** (`quant_toolbox.data.sql`, the new `sql` extra: SQLAlchemy 2, loaded in the function
+  that needs it). `connect(url, credential=, read_only=)` makes an engine, with a credential callable run for every
+  new connection so an RDS IAM or Entra token never goes stale, and a best-effort read-only session for SQLite,
+  PostgreSQL (psycopg), and a DuckDB file (a warning for any other dialect, never silence). `fetch_rows(engine, sql,
+  params)` runs SQL with `:name` binds on any driver and returns `Rows` with `Decimal` as float, dates as ISO text,
+  NULL as NaN in a column of numbers, and lower-case column names (Snowflake's upper case reads as everyone's).
+  `pivot_long` turns `(index, column, value)` rows wide and refuses two rows for one pair, naming them, unless told
+  `duplicates="sum"` or `"last"`: a call and a distribution on one day, netted, is a silent error. `SqlDataset`
+  declares a dataset as data (with `index_name` to rename the index column), `shape_rows` shapes its rows,
+  and `rows_to_csv` writes them. The database's own driver is the caller's install.
+
 ## [0.6.0] - 2026-11-17
 
 The first release as a package of its own. It adds what a fund's PM, risk manager, researcher, and investor
