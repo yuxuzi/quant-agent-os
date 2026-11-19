@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from quant_toolbox.data import SessionCalendar, as_calendar, set_default_calendar
-from quant_toolbox.performance import horizon_return
+from quant_toolbox.performance import analyze, horizon_return
 
 NYSE_2023_HOLIDAYS = [
     "2023-01-02",
@@ -102,3 +102,13 @@ def test_dates_outside_the_calendars_range_do_not_raise() -> None:
     value = horizon_return(dates, returns, "3M", 52, calendar=short)
     assert isinstance(value, float)
 
+
+def test_analyze_passes_the_calendar_and_records_its_name() -> None:
+    nyse = _nyse()
+    dates, returns = _series(nyse)
+    result = analyze(dates, returns, 252, calendar=nyse, horizons=("3M",))
+    assert result.conventions["calendar"] == "XNYS + 20 holidays"
+    assert result.horizons["3M"] == pytest.approx(
+        horizon_return(dates, returns, "3M", 252, calendar=nyse)
+    )
+    assert "calendar" not in analyze(dates, returns, 252).conventions

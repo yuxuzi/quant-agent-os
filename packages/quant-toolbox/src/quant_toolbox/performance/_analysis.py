@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 
-from quant_toolbox.data import percent_like, short_sample
+from quant_toolbox.data import as_calendar, configured_calendar, percent_like, short_sample
 from quant_toolbox.performance._backend import backend as chosen_backend
 from quant_toolbox.performance._conventions import conventions
 from quant_toolbox.performance._distribution import Distribution, return_distribution
@@ -66,12 +66,16 @@ def analyze(
     risk_free: float = 0.0,
     backend: str | None = None,
     horizons: Sequence[str] = HORIZONS,
+    calendar: object = None,
 ) -> Analysis:
     """Metrics, benchmark comparison, distribution, Sharpe inference, horizons, and drawdowns.
 
     ``dates`` has one date per return, ascending. ``benchmark``, when given, has one return per
-    date too; benchmark measures use the bars where both are present.
+    date too; benchmark measures use the bars where both are present. ``calendar`` is anything
+    `as_calendar` reads with no range; None uses the configured calendar, and the horizons use
+    it, and the conventions name it, when one is set.
     """
+    chosen = as_calendar(calendar) if calendar is not None else configured_calendar()
     values = np.asarray(returns, dtype=np.float64).ravel()
     days = list(dates)
     if len(days) != values.size:
@@ -107,11 +111,15 @@ def analyze(
             "probabilistic_sharpe_ratio": probabilistic_sharpe_ratio(excess, periods_per_year),
         },
         horizons={
-            label: horizon_return(days, values, label, periods_per_year) for label in horizons
+            label: horizon_return(days, values, label, periods_per_year, calendar=chosen)
+            for label in horizons
         },
         drawdowns=drawdowns(days, values),
         notes=notes,
-        conventions=conventions(backend),
+        conventions={
+            **conventions(backend),
+            **({} if chosen is None else {"calendar": chosen.name}),
+        },
         backend=chosen_backend(backend),
     )
 

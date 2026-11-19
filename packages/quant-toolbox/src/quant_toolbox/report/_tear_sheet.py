@@ -70,10 +70,17 @@ def tear_sheet(
     risk_free: float = 0.0,
     backend: str | None = None,
     title: str | None = None,
+    calendar: object = None,
 ) -> Document:
     """The investor tear sheet of ``returns`` (one per date), against ``benchmark`` if given."""
     analysis = analyze(
-        dates, returns, periods_per_year, benchmark=benchmark, risk_free=risk_free, backend=backend
+        dates,
+        returns,
+        periods_per_year,
+        benchmark=benchmark,
+        risk_free=risk_free,
+        backend=backend,
+        calendar=calendar,
     )
     fund = np.asarray(returns, dtype=np.float64).ravel()
     days = list(dates)
