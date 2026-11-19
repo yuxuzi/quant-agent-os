@@ -26,6 +26,10 @@ mature enough. Version bumps and the lock still apply, so every change stays vis
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.8.0
+
 | Tool | Version | Change |
 | --- | --- | --- |
 | `list_datasets` | 2.0.0 | A listing names the first 20 columns of each dataset, with the new `column_count` and a warning when any are cut; `dataset_id` still gives one dataset's every column. Adds an optional `prefix`, to list only the ids that start with it. |

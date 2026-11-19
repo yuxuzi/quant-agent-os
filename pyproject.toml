@@ -1,6 +1,6 @@
 [project]
 name = "quant-agent-os"
-version = "0.7.0"
+version = "0.8.0"
 description = "Quantitative research tools with cited, computed evidence, served to AI clients over MCP: cited keyword search with entity linking over your own corpus, performance and risk metrics by dataset reference, and application generation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -54,15 +54,15 @@ postgres = ["psycopg[binary]>=3.2,<4"]
 local-embeddings = ["fastembed>=0.9,<0.10"]
 # Quant Toolbox (decisions 0026, 0027), its own package in packages/quant-toolbox, at the version
 # released with this one. Each extra below is the toolbox extra of the same purpose.
-toolbox = ["quant-toolbox[charts]==0.6.0"]
+toolbox = ["quant-toolbox[charts]==0.7.0"]
 # Interactive HTML charts in reports (plotly's graph objects; plotly express would need pandas).
-interactive = ["quant-toolbox[interactive]==0.6.0"]
+interactive = ["quant-toolbox[interactive]==0.7.0"]
 # Reading and writing Excel workbooks.
-excel = ["quant-toolbox[excel]==0.6.0"]
+excel = ["quant-toolbox[excel]==0.7.0"]
 # The preferred metrics backend (decision 0010): empyrical, not pyfolio, which adds only plotting.
-empyrical = ["quant-toolbox[empyrical]==0.6.0"]
+empyrical = ["quant-toolbox[empyrical]==0.7.0"]
 # Reading a firm's SQL database through SQLAlchemy (decision 0032); the database's driver is the firm's.
-sql = ["quant-toolbox[sql]==0.6.0"]
+sql = ["quant-toolbox[sql]==0.7.0"]
 # The analytics tools: the toolbox, computing through empyrical.
 analytics = ["quant-agent-os[toolbox,empyrical]"]
 # The App Factory (decision 0006). Optional, so a team image need not carry pytemplate-uv.

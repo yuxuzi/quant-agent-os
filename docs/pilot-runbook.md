@@ -37,7 +37,7 @@ server needs the `server` and `analytics` extras; Quant Toolbox is its own wheel
 uv build --wheel --out-dir dist                           # in the platform's source
 uv build --wheel --package quant-toolbox --out-dir dist
 uv init --bare --name kestrel-site                       # in the fund's own folder
-uv add dist/quant_toolbox-0.6.0-py3-none-any.whl "quant-agent-os[server,analytics] @ dist/quant_agent_os-0.7.0-py3-none-any.whl"
+uv add dist/quant_toolbox-0.7.0-py3-none-any.whl "quant-agent-os[server,analytics] @ dist/quant_agent_os-0.8.0-py3-none-any.whl"
 export UV_OFFLINE=1                                      # nothing is fetched after this
 ```
 

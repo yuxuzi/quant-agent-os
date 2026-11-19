@@ -6,6 +6,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-19
+
+Released with Quant-Agent-OS 0.8.0.
+
 ### Added
 
 - **A standard SQL connection** (`quant_toolbox.data.sql`, the new `sql` extra: SQLAlchemy 2, loaded in the function
