@@ -52,6 +52,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 - Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
   coverage when a calendar is given or configured, and are unchanged otherwise. `analyze` records the
   calendar's name in `conventions`, and `tear_sheet` passes its `calendar=` through.
+- **Calendars in use.** `demo_panel`, `demo_returns`, and `demo_book` take `calendar=` and date their rows by its
+  sessions, or by the default calendar when none is given (identical to weekdays until a calendar is set).
+  `return_notes(table, calendar=)` notes rows on non-sessions and missing sessions when a calendar is given or
+  configured, and is unchanged otherwise.
 
 ## [0.7.0] - 2026-11-19
 
