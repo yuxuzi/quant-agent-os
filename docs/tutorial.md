@@ -1048,9 +1048,10 @@ FAILED kestrel_tools/test_tools.py::test_no_decision_is_left_open - ...
 2 failed in 4.23s
 ```
 
-Both failures are by design. The first lists each tool that does not yet work, with the reason: most say
-`unable to open database file`, because this legacy code reads its warehouse's path from `KPC_WAREHOUSE`
-when it is imported. The second lists every decision the draft left open, such as a unit, a convention,
+Both failures are by design. The first lists each tool that does not yet work, with the reason. Nine of the
+19 say `unable to open database file`, because this legacy code reads its warehouse's path from
+`KPC_WAREHOUSE` when it is imported; the risk engine's seven answer 500 until its service is set up; and three
+signals fail on the made-up sample data the draft tests them with. The second lists every decision the draft left open, such as a unit, a convention,
 or a realistic example. The draft never guesses those silently.
 
 The fund's developer finished the draft: they left out the plumbing (`get_conn`, `close`, `log`), named the
@@ -1062,7 +1063,7 @@ cd "$REPO"
 uv run python examples/pilot-fund/facility/warehouse/build_warehouse.py "$TUT/kestrel.db"
 cd examples/pilot-fund/site/legacy_tools
 KPC_WAREHOUSE="$TUT/kestrel.db" PYTHONPATH="$REPO/examples/pilot-fund/facility" \
-  uv run --project "$REPO" pytest -q -p no:cacheprovider test_tools.py
+  uv run --project "$REPO" pytest -q -p no:cacheprovider --no-cov test_tools.py
 ```
 
 ```text
