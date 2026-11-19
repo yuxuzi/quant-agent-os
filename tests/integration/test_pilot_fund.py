@@ -41,6 +41,15 @@ SITE = PILOT / "site"
 FACILITY = PILOT / "facility"
 RESOURCE = "http://127.0.0.1:8000"
 SECRET = "kpc-introspection-fixture"
+# The tools that call the risk service, the only ones given a standing approval for network.
+RISK_TOOLS = [
+    "risk_desks",
+    "risk_exposure",
+    "risk_desk_var",
+    "risk_stress",
+    "risk_stress_all",
+    "risk_factor_decomposition",
+]
 
 
 @dataclass
@@ -138,7 +147,7 @@ def day(
         "QUANT_AGENT_OS_SIGN_IN_FILE": str(sign_in),
         "KESTREL_INTROSPECTION_SECRET": SECRET,
         "QUANT_AGENT_OS_GRANTED_PERMISSIONS": '["read_local_data", "network"]',
-        "QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS": '["network"]',
+        "QUANT_AGENT_OS_PREAPPROVED_TOOLS": json.dumps({"network": RISK_TOOLS}),
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)

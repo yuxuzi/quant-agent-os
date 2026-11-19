@@ -137,7 +137,7 @@ Kestrel's [`sign-in.toml`](../examples/pilot-fund/site/sign-in.toml) names its g
 | `KESTREL_INTROSPECTION_SECRET` | the introspection client's secret | Named by the sign-in file; never in it |
 | `QUANT_AGENT_OS_ACCESS_FILE` | `facility/access.toml` | Groups decide tools and datasets |
 | `QUANT_AGENT_OS_GRANTED_PERMISSIONS` | `["read_local_data", "network"]` | The risk tools call a service |
-| `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `["network"]` | Clients cannot approve each call; this applies to every tool that needs `network` |
+| `QUANT_AGENT_OS_PREAPPROVED_TOOLS` | `{"network": ["risk_desks", ...]}`, the six `risk_*` tools | Clients cannot approve each call; only the named tools skip the approval, so another tool needing `network` still waits for one ([decision 0030](decisions/0030-caller-assertion-and-per-tool-approvals.md)) |
 | `KPC_WAREHOUSE`, `KPC_RISK_SERVICE_URL` | the warehouse file, `http://127.0.0.1:8100` | Read by the store, the legacy code, and the server |
 
 Keys keep working beside tokens, for batch jobs and teams without the provider:
