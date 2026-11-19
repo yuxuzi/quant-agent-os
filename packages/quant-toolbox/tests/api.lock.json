@@ -91,12 +91,13 @@
     "GroupAttribution": "dataclass(allocation: float, selection: float, interaction: float, total: float)",
     "HORIZONS": "constant: tuple",
     "METRIC_NAMES": "constant: tuple",
+    "MetricsFunction": "class(*args, **kwargs)",
     "Series": "union: Sequence | ndarray",
     "VAR_METHODS": "constant: tuple",
     "active_metrics": "def(returns: 'Series', benchmark: 'Series', periods_per_year: 'int', *, backend: 'str | None' = None) -> 'dict[str, float]'",
     "all_metrics": "def(returns: 'Series', periods_per_year: 'int', risk_free: 'float' = 0.0, *, backend: 'str | None' = None) -> 'dict[str, float]'",
     "alpha": "def(returns: 'Series', market: 'Series', periods_per_year: 'int', risk_free: 'float' = 0.0, *, backend: 'str | None' = None) -> 'float'",
-    "analyze": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, benchmark: 'Series | None' = None, risk_free: 'float' = 0.0, backend: 'str | None' = None, horizons: 'Sequence[str]' = ('MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD')) -> 'Analysis'",
+    "analyze": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, benchmark: 'Series | None' = None, risk_free: 'float' = 0.0, backend: 'str | None' = None, horizons: 'Sequence[str]' = ('MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD'), calendar: 'object' = None, metrics: 'MetricsFunction | None' = None) -> 'Analysis'",
     "annualized_return": "def(returns: 'Series', periods_per_year: 'int', *, backend: 'str | None' = None) -> 'float'",
     "annualized_volatility": "def(returns: 'Series', periods_per_year: 'int', *, backend: 'str | None' = None) -> 'float'",
     "backend": "def(choice: 'str | None' = None) -> 'str'",
@@ -115,7 +116,7 @@
     "expected_maximum_sharpe": "def(trials: 'int', variance: 'float') -> 'float'",
     "expected_shortfall": "def(returns: 'Series', cutoff: 'float' = 0.05) -> 'float'",
     "hit_rate": "def(returns: 'Series') -> 'float'",
-    "horizon_return": "def(dates: 'list[dt.date]', returns: 'FloatArray', label: 'str', periods_per_year: 'int') -> 'float | None'",
+    "horizon_return": "def(dates: 'list[dt.date]', returns: 'FloatArray', label: 'str', periods_per_year: 'int', *, calendar: 'object' = None) -> 'float | None'",
     "horizon_start": "def(label: 'str', as_of: 'dt.date') -> 'dt.date | None'",
     "is_horizon": "def(label: 'str') -> 'bool'",
     "max_drawdown": "def(returns: 'Series', *, backend: 'str | None' = None) -> 'float'",
@@ -156,6 +157,7 @@
     "HEADLINE": "constant: tuple",
     "INTERPRETATION": "constant: list",
     "METRIC_KINDS": "constant: dict",
+    "RETURN_PERIODS": "constant: tuple",
     "TableBlock": "dataclass(title: str, columns: list[Column], rows: list[list[Cell]], note: str)",
     "TextBlock": "dataclass(title: str, lines: list[str])",
     "bar_chart": "def(title: 'str', labels: 'Sequence[str]', series: 'Mapping[str, Sequence[float] | FloatArray]', *, note: 'str' = '', percent: 'bool' = False) -> 'ChartBlock'",
@@ -170,10 +172,11 @@
     "monthly_table": "def(dates: 'Sequence[dt.date]', returns: 'Series', *, title: 'str' = 'Monthly returns') -> 'TableBlock'",
     "render_html": "def(document: 'Document', *, charts: 'str' = 'static') -> 'str'",
     "render_markdown": "def(document: 'Document') -> 'str'",
+    "returns_table": "def(dates: 'Sequence[dt.date]', series: 'Mapping[str, Series]', periods_per_year: 'int', *, periods: 'Sequence[str]' = ('1D', 'MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD'), excess_over: 'str | None' = None, calendar: 'object' = None, title: 'str' = 'Returns by horizon') -> 'TableBlock'",
     "rolling_sharpe_chart": "def(dates: 'Sequence[dt.date]', returns: 'Mapping[str, Sequence[float] | FloatArray]', periods_per_year: 'int', *, window: 'int | None' = None, risk_free: 'float' = 0.0, title: 'str' = 'Rolling one-year Sharpe', note: 'str | None' = None) -> 'ChartBlock'",
     "run_calendar_years": "def(results: 'dict[str, Any]') -> 'dict[str, float]'",
     "run_markdown": "def(results: 'dict[str, Any]', chart: 'str | None' = None) -> 'str'",
-    "tear_sheet": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, name: 'str' = 'Fund', benchmark: 'Series | None' = None, benchmark_name: 'str' = 'Benchmark', risk_free: 'float' = 0.0, backend: 'str | None' = None, title: 'str | None' = None) -> 'Document'",
+    "tear_sheet": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, name: 'str' = 'Fund', benchmark: 'Series | None' = None, benchmark_name: 'str' = 'Benchmark', risk_free: 'float' = 0.0, backend: 'str | None' = None, title: 'str | None' = None, calendar: 'object' = None, metrics: 'MetricsFunction | None' = None, compare: 'Mapping[str, Series] | None' = None, periods: 'Sequence[str]' = ('1D', 'MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD')) -> 'Document'",
     "to_dict": "def(document: 'Document') -> 'dict[str, Any]'",
     "underwater_chart": "def(dates: 'Sequence[dt.date]', returns: 'Mapping[str, Sequence[float] | FloatArray]', *, title: 'str' = 'Drawdown from peak', note: 'str' = '') -> 'ChartBlock'"
   },
@@ -183,6 +186,10 @@
   "quant_toolbox.report.interactive": {
     "chart_html": "def(block: 'ChartBlock', *, include_plotlyjs: 'bool | str' = True) -> 'str'",
     "figure": "def(block: 'ChartBlock') -> 'Any'"
+  },
+  "quant_toolbox.report.pdf": {
+    "render_pdf": "def(document: 'Document') -> 'bytes'",
+    "write_pdf": "def(document: 'Document', path: 'Path') -> 'Path'"
   },
   "quant_toolbox.report.svg": {
     "chart_svg": "def(block: 'ChartBlock', *, width: 'int' = 720, height: 'int' = 320, standalone: 'bool' = False) -> 'str'"
@@ -215,7 +222,7 @@
     "ranks": "def(values: 'FloatArray') -> 'FloatArray'",
     "reversal": "def(prices: 'FloatArray', lookback: 'int') -> 'FloatArray'",
     "rolling_betas": "def(prices: 'FloatArray', window: 'int', market: 'FloatArray | None' = None) -> 'FloatArray'",
-    "run_backtest": "def(prices: 'FloatArray', weights: 'FloatArray', *, cost_bps: 'float | FloatArray', lag: 'int' = 1, rebalance_every: 'int' = 1, delisting_return: 'float' = -0.3) -> 'BacktestResult'",
+    "run_backtest": "def(prices: 'FloatArray', weights: 'FloatArray', *, cost_bps: 'float | FloatArray', lag: 'int' = 1, rebalance_every: 'int' = 1, delisting_return: 'float' = -0.3, rebalance_on: 'BoolArray | None' = None) -> 'BacktestResult'",
     "signal_autocorrelation": "def(signal: 'FloatArray', lag: 'int' = 1) -> 'float'",
     "walk_forward_splits": "def(n_bars: 'int', train: 'int', test: 'int', step: 'int | None' = None, start: 'int' = 0, *, purge: 'int' = 0, embargo: 'int' = 0) -> 'list[tuple[range, range]]'",
     "winsorize": "def(signal: 'FloatArray', lower: 'float' = 0.01, upper: 'float' = 0.99) -> 'FloatArray'",

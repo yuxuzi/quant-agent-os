@@ -59,7 +59,10 @@ def test_the_tear_sheet_shows_the_numbers_analyze_computes() -> None:
     assert sharpe == f"{analysis.metrics['sharpe_ratio']:.2f}"
     horizons = document.blocks[1]
     assert isinstance(horizons, TableBlock)
-    assert horizons.rows[0] == list(analysis.horizons.values())
+    shown = dict(zip([column.name for column in horizons.columns], horizons.rows[0], strict=True))
+    assert shown["Series"] == document.title.split(":")[0]
+    for label, value in analysis.horizons.items():
+        assert shown.get(label, value) == value
     assert sum(isinstance(block, ChartBlock) for block in document.blocks) == 3
     assert isinstance(document.blocks[-1], TextBlock)
     json.dumps(to_dict(document))  # JSON-safe

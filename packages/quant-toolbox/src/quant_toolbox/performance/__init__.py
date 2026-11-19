@@ -11,7 +11,7 @@ ratios and minimum track record, and single-period Brinson attribution.
 """
 
 from quant_toolbox._types import BoolArray, FloatArray
-from quant_toolbox.performance._analysis import HORIZONS, Analysis, analyze
+from quant_toolbox.performance._analysis import HORIZONS, Analysis, MetricsFunction, analyze
 from quant_toolbox.performance._attribution import Attribution, GroupAttribution, brinson
 from quant_toolbox.performance._backend import (
     BACKEND_VARIABLE,
@@ -95,6 +95,7 @@ __all__ = [
     "Drawdown",
     "FloatArray",
     "GroupAttribution",
+    "MetricsFunction",
     "Series",
     "active_metrics",
     "all_metrics",

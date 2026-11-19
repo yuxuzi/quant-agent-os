@@ -31,6 +31,31 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   sessions, or by the default calendar when none is given (identical to weekdays until a calendar is set).
   `return_notes(table, calendar=)` notes rows on non-sessions and missing sessions when a calendar is given or
   configured, and is unchanged otherwise.
+- **`run_backtest(rebalance_on=)`** rebalances on the closes a per-bar flag marks, such as month ends from a
+  calendar, as well as on the first close with a position. It needs `rebalance_every` left at 1, and one
+  flag per bar.
+
+- **A firm's own metric set.** `analyze(metrics=)` and `tear_sheet(metrics=)` take any function with
+  `all_metrics`'s signature (the `MetricsFunction` protocol); None, the default, is `all_metrics`. A set can extend the
+  standard one by calling it, or replace it. Its result is checked to be numbers by name, `conventions["metrics"]`
+  names a set other than the default, and the tear sheet shows the standard headline metrics the set has, then
+  the rest.
+
+- **A returns section, by period** (`report.returns_table`, `RETURN_PERIODS`): a row per series (a fund,
+  its benchmarks, peers) and a column per period (`1D`, the return on the last date, then MTD, QTD, YTD,
+  1Y, 3Y, 5Y, ITD, or any horizon), with the fund's excess over each other series in rows of its own.
+- **PDF reports** (`quant_toolbox.report.pdf`, the new `pdf` extra: fpdf2, pure Python). `render_pdf(document)`
+  and `write_pdf(document, path)` draw any `Document` on A4: tables, and charts drawn as vectors from their
+  data. Without the extra, the call raises `MissingExtraError` naming `uv add "quant-toolbox[pdf]"`.
+
+### Changed
+
+- **The tear sheet's returns table** compares the fund with its benchmark and with each series in the
+  new `compare=`, adds excess rows and a `1D` column, and takes `periods=`; it was one row of the fund's
+  horizons.
+- Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
+  coverage when a calendar is given or configured, and are unchanged otherwise. `analyze` records the
+  calendar's name in `conventions`, and `tear_sheet` passes its `calendar=` through.
 
 ## [0.7.0] - 2026-11-19
 

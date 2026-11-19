@@ -21,6 +21,7 @@ uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.
 | `charts` | pygal | static SVG charts in HTML reports |
 | `interactive` | plotly | interactive charts |
 | `excel` | openpyxl | reading and writing workbooks |
+| `pdf` | fpdf2 (pure Python), Pillow, fontTools | PDF reports: `report.pdf.write_pdf` |
 | `pandas` | pandas | `data.frames.to_pandas` and `from_pandas` |
 | `empyrical` | empyrical-reloaded | computing the shared metrics through empyrical, held equal to numpy |
 | `all` | all of the above | |

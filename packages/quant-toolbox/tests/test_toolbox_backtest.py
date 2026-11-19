@@ -194,3 +194,49 @@ def test_walk_forward_tests_always_follow_their_training_range() -> None:
         (20, 60, 60, 80),
         (40, 80, 80, 100),
     ]
+
+
+def test_a_mask_of_every_bar_rebalances_as_daily_does() -> None:
+    prices, _ = random_walk_panel(n_bars=120, n_assets=6)
+    weights = dollar_neutral_weights(momentum(prices, 10, 1))
+
+    daily = run_backtest(prices, weights, cost_bps=5.0, lag=1, rebalance_every=1)
+    masked = run_backtest(
+        prices, weights, cost_bps=5.0, lag=1, rebalance_on=np.ones(120, dtype=bool)
+    )
+
+    np.testing.assert_array_equal(masked.held, daily.held)
+    np.testing.assert_array_equal(masked.net, daily.net)
+
+
+def test_a_mask_marking_every_fifth_bar_rebalances_as_every_fifth_does() -> None:
+    prices = np.array(
+        [[100.0, 50.0], [102.0, 51.0], [101.0, 53.0], [104.0, 52.0], [103.0, 55.0]] * 4
+    )
+    weights = np.zeros_like(prices)
+    weights[:, 0] = 0.5  # the first non-zero row is row 0
+    weights[:, 1] = -0.5
+    mask = np.zeros(prices.shape[0], dtype=bool)
+    mask[::5] = True  # every 5th bar from the first position
+
+    scheduled = run_backtest(prices, weights, cost_bps=3.0, lag=0, rebalance_every=5)
+    marked = run_backtest(prices, weights, cost_bps=3.0, lag=0, rebalance_on=mask)
+
+    np.testing.assert_array_equal(marked.held, scheduled.held)
+    np.testing.assert_array_equal(marked.turnover, scheduled.turnover)
+
+
+def test_a_wrong_length_mask_or_a_mask_with_a_schedule_is_refused() -> None:
+    prices, _ = random_walk_panel(n_bars=30, n_assets=4)
+    weights = dollar_neutral_weights(momentum(prices, 5, 1))
+
+    with pytest.raises(ValueError, match="one flag per bar"):
+        run_backtest(prices, weights, cost_bps=0.0, rebalance_on=np.ones(29, dtype=bool))
+    with pytest.raises(ValueError, match="rebalance_on and rebalance_every"):
+        run_backtest(
+            prices,
+            weights,
+            cost_bps=0.0,
+            rebalance_every=2,
+            rebalance_on=np.ones(30, dtype=bool),
+        )

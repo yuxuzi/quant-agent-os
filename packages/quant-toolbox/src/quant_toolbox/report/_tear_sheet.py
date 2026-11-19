@@ -13,15 +13,24 @@ from __future__ import annotations
 
 import calendar
 import datetime as dt
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 
 from quant_toolbox._types import FloatArray
-from quant_toolbox.performance import Analysis, Series, analyze, monthly_returns, rolling_sharpe
+from quant_toolbox.performance import (
+    Analysis,
+    MetricsFunction,
+    Series,
+    all_metrics,
+    analyze,
+    monthly_returns,
+    rolling_sharpe,
+)
 from quant_toolbox.report._charts import equity_curve, line_chart, underwater_chart
 from quant_toolbox.report._document import Block, Cell, Column, Document, TableBlock, TextBlock
 from quant_toolbox.report._format import format_metric, label
+from quant_toolbox.report._returns import RETURN_PERIODS, returns_table
 
 MONTHS = tuple(calendar.month_abbr[1:])
 HEADLINE = (
@@ -59,6 +68,14 @@ def monthly_table(
     return TableBlock(title, columns, rows, note="Compounded from per-bar returns.")
 
 
+def _headline(values: dict[str, float], standard: bool) -> dict[str, float]:
+    """The standard headline metrics a set has, then, for a firm's own set, the rest of it."""
+    chosen = {key: values[key] for key in HEADLINE if key in values}
+    if not standard:
+        chosen.update({key: value for key, value in values.items() if key not in chosen})
+    return chosen
+
+
 def tear_sheet(
     dates: Sequence[dt.date],
     returns: Series,
@@ -70,10 +87,29 @@ def tear_sheet(
     risk_free: float = 0.0,
     backend: str | None = None,
     title: str | None = None,
+    calendar: object = None,
+    metrics: MetricsFunction | None = None,
+    compare: Mapping[str, Series] | None = None,
+    periods: Sequence[str] = RETURN_PERIODS,
 ) -> Document:
-    """The investor tear sheet of ``returns`` (one per date), against ``benchmark`` if given."""
+    """The investor tear sheet of ``returns`` (one per date), against ``benchmark`` if given.
+
+    The returns table shows the fund, the benchmark, and each series in ``compare`` (more
+    benchmarks or peers, one return per date each), with the fund's excess over each, for
+    ``periods`` (`RETURN_PERIODS` by default: the last day, MTD, QTD, YTD, 1Y, 3Y, 5Y, and ITD).
+
+    ``metrics`` is `analyze`'s: the headline table shows the standard headline metrics it has,
+    then any others it adds.
+    """
     analysis = analyze(
-        dates, returns, periods_per_year, benchmark=benchmark, risk_free=risk_free, backend=backend
+        dates,
+        returns,
+        periods_per_year,
+        benchmark=benchmark,
+        risk_free=risk_free,
+        backend=backend,
+        calendar=calendar,
+        metrics=metrics,
     )
     fund = np.asarray(returns, dtype=np.float64).ravel()
     days = list(dates)
@@ -81,8 +117,20 @@ def tear_sheet(
     if benchmark is not None:
         series[benchmark_name] = np.asarray(benchmark, dtype=np.float64).ravel()
     blocks: list[Block] = [
-        _metrics_table("Headline metrics", {key: analysis.metrics[key] for key in HEADLINE}),
-        _horizons_table(analysis),
+        _metrics_table(
+            "Headline metrics", _headline(analysis.metrics, metrics in (None, all_metrics))
+        ),
+        _returns_section(
+            days,
+            fund,
+            name,
+            benchmark,
+            benchmark_name,
+            compare,
+            periods,
+            periods_per_year,
+            calendar,
+        ),
     ]
     if analysis.benchmark is not None:
         blocks.append(_metrics_table(f"Against {benchmark_name}", analysis.benchmark))
@@ -121,14 +169,29 @@ def _shown(key: str, value: float) -> Cell:
     return format_metric(key, value, ratio_digits=2)
 
 
-def _horizons_table(analysis: Analysis) -> TableBlock:
-    labels = list(analysis.horizons)
-    row: list[Cell] = [analysis.horizons[key] for key in labels]
-    return TableBlock(
-        "Returns by horizon",
-        [Column(key) for key in labels],
-        [row],
-        note="Over one year annualised; n/a where the series does not cover the horizon.",
+def _returns_section(
+    days: list[dt.date],
+    fund: FloatArray,
+    name: str,
+    benchmark: Series | None,
+    benchmark_name: str,
+    compare: Mapping[str, Series] | None,
+    periods: Sequence[str],
+    periods_per_year: int,
+    calendar: object,
+) -> TableBlock:
+    series: dict[str, Series] = {name: fund}
+    if benchmark is not None:
+        series[benchmark_name] = benchmark
+    for other, values in (compare or {}).items():
+        if other in series:
+            raise ValueError(
+                f"{other!r} names two series in the tear sheet; give each its own name."
+            )
+        series[other] = values
+    excess = name if len(series) > 1 else None
+    return returns_table(
+        days, series, periods_per_year, periods=periods, excess_over=excess, calendar=calendar
     )
 
 
