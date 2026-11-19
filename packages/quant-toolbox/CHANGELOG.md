@@ -31,6 +31,12 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   calendar, as well as on the first close with a position. It needs `rebalance_every` left at 1, and one
   flag per bar.
 
+- **A firm's own metric set.** `analyze(metrics=)` and `tear_sheet(metrics=)` take any function with
+  `all_metrics`'s signature (the `MetricsFunction` protocol); None, the default, is `all_metrics`. A set can extend the
+  standard one by calling it, or replace it. Its result is checked to be numbers by name, `conventions["metrics"]`
+  names a set other than the default, and the tear sheet shows the standard headline metrics the set has, then
+  the rest.
+
 ### Changed
 
 - Horizons (`horizon_return`, `analyze(calendar=)`) use a calendar's month-end sessions and session
