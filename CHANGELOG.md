@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **PDF reports.** The `pdf` extra now also brings Quant Toolbox's `pdf` extra (fpdf2), so
+  `quant_toolbox.report.pdf.write_pdf` writes any report, such as a tear sheet, as a PDF. Quant Toolbox
+  also gains trading calendars, a returns table of a fund against its benchmarks by period, and a firm's
+  own metric set in `analyze`; its changelog has the details.
+
 ## [0.8.0] - 2026-11-19
 
 0.8.0 was driven by a pilot at a fictional multi-asset fund, Kestrel Point Capital

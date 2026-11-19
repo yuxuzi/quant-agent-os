@@ -38,7 +38,9 @@ empyrical = ["empyrical-reloaded>=0.7,<0.8"]
 # Reading a firm's SQL database through SQLAlchemy (`quant_toolbox.data.sql`); the database's own
 # driver (psycopg, pyodbc, snowflake-sqlalchemy, databricks-sql-connector) is the firm's install.
 sql = ["sqlalchemy>=2.0,<3"]
-all = ["quant-toolbox[charts,empyrical,excel,interactive,pandas,sql]"]
+# PDF reports (`quant_toolbox.report.pdf`): fpdf2, pure Python, with Pillow and fontTools.
+pdf = ["fpdf2>=2.9,<3"]
+all = ["quant-toolbox[charts,empyrical,excel,interactive,pandas,pdf,sql]"]
 
 [project.urls]
 Source = "https://github.com/yuxuzi/quant-agent-os/tree/main/packages/quant-toolbox"

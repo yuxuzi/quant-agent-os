@@ -157,6 +157,7 @@
     "HEADLINE": "constant: tuple",
     "INTERPRETATION": "constant: list",
     "METRIC_KINDS": "constant: dict",
+    "RETURN_PERIODS": "constant: tuple",
     "TableBlock": "dataclass(title: str, columns: list[Column], rows: list[list[Cell]], note: str)",
     "TextBlock": "dataclass(title: str, lines: list[str])",
     "bar_chart": "def(title: 'str', labels: 'Sequence[str]', series: 'Mapping[str, Sequence[float] | FloatArray]', *, note: 'str' = '', percent: 'bool' = False) -> 'ChartBlock'",
@@ -171,10 +172,11 @@
     "monthly_table": "def(dates: 'Sequence[dt.date]', returns: 'Series', *, title: 'str' = 'Monthly returns') -> 'TableBlock'",
     "render_html": "def(document: 'Document', *, charts: 'str' = 'static') -> 'str'",
     "render_markdown": "def(document: 'Document') -> 'str'",
+    "returns_table": "def(dates: 'Sequence[dt.date]', series: 'Mapping[str, Series]', periods_per_year: 'int', *, periods: 'Sequence[str]' = ('1D', 'MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD'), excess_over: 'str | None' = None, calendar: 'object' = None, title: 'str' = 'Returns by horizon') -> 'TableBlock'",
     "rolling_sharpe_chart": "def(dates: 'Sequence[dt.date]', returns: 'Mapping[str, Sequence[float] | FloatArray]', periods_per_year: 'int', *, window: 'int | None' = None, risk_free: 'float' = 0.0, title: 'str' = 'Rolling one-year Sharpe', note: 'str | None' = None) -> 'ChartBlock'",
     "run_calendar_years": "def(results: 'dict[str, Any]') -> 'dict[str, float]'",
     "run_markdown": "def(results: 'dict[str, Any]', chart: 'str | None' = None) -> 'str'",
-    "tear_sheet": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, name: 'str' = 'Fund', benchmark: 'Series | None' = None, benchmark_name: 'str' = 'Benchmark', risk_free: 'float' = 0.0, backend: 'str | None' = None, title: 'str | None' = None, calendar: 'object' = None, metrics: 'MetricsFunction | None' = None) -> 'Document'",
+    "tear_sheet": "def(dates: 'Sequence[dt.date]', returns: 'Series', periods_per_year: 'int', *, name: 'str' = 'Fund', benchmark: 'Series | None' = None, benchmark_name: 'str' = 'Benchmark', risk_free: 'float' = 0.0, backend: 'str | None' = None, title: 'str | None' = None, calendar: 'object' = None, metrics: 'MetricsFunction | None' = None, compare: 'Mapping[str, Series] | None' = None, periods: 'Sequence[str]' = ('1D', 'MTD', 'QTD', 'YTD', '1Y', '3Y', '5Y', 'ITD')) -> 'Document'",
     "to_dict": "def(document: 'Document') -> 'dict[str, Any]'",
     "underwater_chart": "def(dates: 'Sequence[dt.date]', returns: 'Mapping[str, Sequence[float] | FloatArray]', *, title: 'str' = 'Drawdown from peak', note: 'str' = '') -> 'ChartBlock'"
   },
@@ -184,6 +186,10 @@
   "quant_toolbox.report.interactive": {
     "chart_html": "def(block: 'ChartBlock', *, include_plotlyjs: 'bool | str' = True) -> 'str'",
     "figure": "def(block: 'ChartBlock') -> 'Any'"
+  },
+  "quant_toolbox.report.pdf": {
+    "render_pdf": "def(document: 'Document') -> 'bytes'",
+    "write_pdf": "def(document: 'Document', path: 'Path') -> 'Path'"
   },
   "quant_toolbox.report.svg": {
     "chart_svg": "def(block: 'ChartBlock', *, width: 'int' = 720, height: 'int' = 320, standalone: 'bool' = False) -> 'str'"
