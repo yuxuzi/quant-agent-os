@@ -6,6 +6,10 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
+Released with Quant-Agent-OS 0.9.0.
+
 ### Added
 
 - **Trading calendars** (`quant_toolbox.data`, numpy only; decision 0033).
