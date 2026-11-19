@@ -68,6 +68,7 @@ class Trait(StrEnum):
     SLOW_INIT = "slow_init"
     CACHE = "cache"
     BLOCKS = "blocks"
+    RETURNS_TABLE = "returns_table"
 
 
 # Traits of what a body does, which pass from a helper to its callers.
@@ -229,6 +230,8 @@ def describe(found: Found) -> list[str]:
         Trait.SLOW_INIT: "slow set-up: {}",
         Trait.CACHE: "caches: {}",
         Trait.BLOCKS: "may never return (an entry point or server): {}; left out",
+        Trait.RETURNS_TABLE: "returns a whole dates-by-names table (from {}), which may be over "
+        "the output limit",
     }
     reasons = []
     for trait, phrase in phrases.items():

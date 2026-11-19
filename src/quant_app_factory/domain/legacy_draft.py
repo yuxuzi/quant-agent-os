@@ -246,6 +246,8 @@ def _facades_module(selected: list[_Selected], legacy: str) -> str:
     bodies = [_facade(s, imports) for s in selected]
     helpers = [JSON_READY]
     imports.add("import dataclasses", "import math")
+    if any(_slices(s.found) for s in selected):
+        helpers.append(CROSS_SECTION)
     if any(_one_at_a_time(s.found) for s in selected):
         helpers.append(LEGACY)
         imports.add(
@@ -296,11 +298,28 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
             signature.append(f"{param.name}: {hint}")
     if kept_init:
         signature.insert(0, "*")
-    returns, use_json = _returns(found, imports, todos)
+    row = None
+    extra_doc: list[tuple[str, str]] = []
+    if _slices(found):
+        taken = {p.name for p in [*params, *kept_init]}
+        row = "as_of" if "as_of" not in taken else "row_date"
+        signature.append(f"{row}: str | None = None")
+        extra_doc.append((row, "The row to return, a date as YYYY-MM-DD; the last when empty."))
+        returns, use_json = "dict[str, Any]", False
+    else:
+        returns, use_json = _returns(found, imports, todos)
     lines = [line for todo in todos for line in _comment(todo)]
     lines += _wrapped("", f"def {entry.name}", signature, f" -> {returns}:")
-    lines.append(_docstring(found, entry, params + kept_init, "    "))
+    lines.append(_docstring(found, entry, params + kept_init, "    ", extra_doc))
     lines += [line for note in _behaviour_todos(found) for line in _comment(note, "    ")]
+    if row is not None:
+        lines += _comment(
+            "TODO(review): the legacy code returns a whole dates-by-names table (from "
+            f"{found.seen(Trait.RETURNS_TABLE)}), and output over max_output_bytes (100 KB by "
+            f"default) is refused, so this facade returns one date's row ({row}). Return "
+            "another slice, or raise max_output_bytes in server.py, if callers need more.",
+            "    ",
+        )
     if found.has(Trait.VAR_ARGS):
         lines += _comment(
             f"TODO(type): the legacy code also takes {found.seen(Trait.VAR_ARGS)}; add a "
@@ -331,9 +350,18 @@ def _facade(selected: _Selected, imports: _Imports) -> str:
         message = f'f"Wrote {{{path}}}."' if path else '"Done."'
         lines.append("    del result  # the legacy code returns nothing")
         lines.append(f"    return {message}")
+    elif row is not None:
+        lines.append(f"    return _cross_section(result, {row})")
     else:
         lines.append(f"    return {'_json_ready(result)' if use_json else 'result'}")
     return "\n".join(lines)
+
+
+def _slices(found: Found) -> bool:
+    """Whether the facade returns one row of the whole table the legacy code returns: a pandas
+    table, as the hint says or as untyped code most often returns."""
+    hint = found.returns or ""
+    return found.has(Trait.RETURNS_TABLE) and not re.search(r"ndarray|NDArray|list|dict", hint)
 
 
 def _one_at_a_time(found: Found) -> bool:
@@ -538,19 +566,23 @@ def _returns(found: Found, imports: _Imports, todos: list[str]) -> tuple[str, bo
     return "Any", True
 
 
-def _docstring(found: Found, entry: Entry, params: list[Param], indent: str) -> str:
+def _docstring(
+    found: Found,
+    entry: Entry,
+    params: list[Param],
+    indent: str,
+    extra: list[tuple[str, str]] | None = None,
+) -> str:
+    args = [f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params]
+    args += [f"    {name}: {text}" for name, text in extra or []]
     if found.doc:
         text = found.doc
-        if not re.search(r"^(Args|Arguments|Parameters):?\s*$", text, re.MULTILINE) and params:
-            text += "\n\nArgs:\n" + "\n".join(
-                f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params
-            )
+        if not re.search(r"^(Args|Arguments|Parameters):?\s*$", text, re.MULTILINE) and args:
+            text += "\n\nArgs:\n" + "\n".join(args)
     else:
         text = f"TODO(doc): say what {entry.name} returns, in one sentence; clients read it."
-        if params:
-            text += "\n\nArgs:\n" + "\n".join(
-                f"    {p.name}: TODO(unit): what it holds, and in which unit." for p in params
-            )
+        if args:
+            text += "\n\nArgs:\n" + "\n".join(args)
     text = text.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
     lines = text.splitlines()
     body = [lines[0], *[f"{indent}{line}" if line.strip() else "" for line in lines[1:]]]
@@ -646,6 +678,17 @@ def _key(key: Any) -> str:
     if hasattr(key, "isoformat"):
         return str(key.isoformat()).removesuffix("T00:00:00")
     return str(key)'''
+
+CROSS_SECTION = '''\
+def _cross_section(table: Any, as_of: str | None) -> dict[str, Any]:
+    """One date's row of a dates-by-names table: the last, or the one dated ``as_of``."""
+    if len(table.index) == 0:
+        raise ValueError("The legacy code returned no rows; give it a longer history.")
+    dates = [_key(key) for key in table.index]
+    if as_of is not None and as_of not in dates:
+        raise ValueError(f"No row dated {as_of}; the rows run from {dates[0]} to {dates[-1]}.")
+    position = len(dates) - 1 if as_of is None else dates.index(as_of)
+    return {"date": dates[position], "values": _json_ready(table.iloc[position])}'''
 
 LEGACY = '''\
 # One lock for the legacy calls: redirect_stdout swaps sys.stdout for the whole process, and
@@ -948,6 +991,13 @@ def _stubs_module(selected: list[_Selected], legacy: str) -> str:
         options = [f'url=f"{{service_url}}/{entry.name}"']
         options += _data_options(entry, imports)
         options += _permission_options(entry, imports)
+        if found.has(Trait.RETURNS_TABLE):
+            registrations += _comment(
+                f"TODO(review): {entry.name} returns a whole dates-by-names table, and output "
+                "over max_output_bytes (100 KB by default) is refused; return a slice from a "
+                "facade, or pass max_output_bytes.",
+                "    ",
+            )
         if entry.convention:
             options.append(f"convention={entry.convention!r}")
         else:
@@ -1022,6 +1072,13 @@ def _server_module(
         options += _permission_options(entry, imports)
         if found.has(Trait.NONDETERMINISTIC):
             options.append("deterministic=False")
+        if found.has(Trait.RETURNS_TABLE) and entry.kind is Kind.EXPOSE:
+            lines += _comment(
+                f"TODO(review): {entry.name} returns a whole dates-by-names table, and output "
+                "over max_output_bytes (100 KB by default) is refused; return a slice from a "
+                "facade, or pass max_output_bytes.",
+                "    ",
+            )
         if entry.permissions:
             granted = ", ".join(permission.value for permission in entry.permissions)
             lines += _comment(

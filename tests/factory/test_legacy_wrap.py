@@ -235,6 +235,21 @@ def test_examples_cover_optional_data_and_placeholders_match_the_type(
         check_tool(spec, {"name": 1.0})
 
 
+def test_a_whole_table_is_returned_one_date_at_a_time(drafted: Path, draft_package: Any) -> None:
+    facades = (drafted / "facades.py").read_text()
+    server = (drafted / "server.py").read_text()
+
+    # momentum returns a dates-by-names panel, which grows past the output limit with history.
+    assert "as_of: str | None = None" in facades
+    assert "return _cross_section(result, as_of)" in facades
+    # cross_section is served as it is, so the draft can only say so.
+    assert "TODO(review): cross_section returns a whole dates-by-names table" in server
+    app = draft_package.server.build_app(draft_package.server.SERVICE_URL)
+    (spec,) = [spec for spec in app.tools(draft_package.STORE) if spec.name == "momentum"]
+    record = check_tool(spec, draft_package.EXAMPLES["momentum"])
+    assert set(record.output["result"]) == {"date", "values"}
+
+
 def test_a_firms_server_imports_the_draft_as_a_package(drafted: Path) -> None:
     # The draft used to import facades and stubs by bare name, so a firm's server had to put
     # the draft's own folder on sys.path. Now only the folder above it (the server's) is needed.

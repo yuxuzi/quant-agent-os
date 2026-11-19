@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format follows
   that print no longer leave `sys.stdout` pointing at stderr.
 - **The draft is a package.** `qaos legacy wrap` writes an `__init__.py` and relative imports, so a firm's
   server imports `legacy_tools.server` without changing `sys.path`.
+- **A drafted facade returns one date of a whole table.** When legacy code returns a dates-by-names panel,
+  the facade takes `as_of` and returns that date's row (the last by default), with a `TODO(review)`, since a
+  long panel is over the 100 KB output limit; a function served as it is gets the same `TODO(review)`.
 - **The drafted test's examples fit their parameters.** Optional data parameters get a dataset reference,
   untyped names such as `desk` or `as_of` are hinted and filled as strings, and each guessed value is a
   `TODO(data)` the test lists, so a wrong-typed placeholder no longer passes silently.

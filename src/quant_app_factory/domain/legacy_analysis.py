@@ -268,6 +268,9 @@ class _Facts:
     frame_use: set[str] = field(default_factory=set)  # params used as tables
     self_stores: set[str] = field(default_factory=set)  # self.x assigned or changed
     lazy: set[str] = field(default_factory=set)  # globals set only once, when still unset
+    returned: list[ast.expr] = field(default_factory=list)  # what the return statements return
+    assigned: dict[str, list[ast.expr]] = field(default_factory=lambda: defaultdict(list))
+    table: str | None = None  # where a whole dates-by-names table it returns comes from
 
     def add(self, trait: Trait, seen: str) -> None:
         self.traits[trait].add(seen)
@@ -305,6 +308,7 @@ def analyse(sources: Iterable[ModuleSource]) -> tuple[list[Found], list[str]]:
                         module, item, _param_names(item)
                     )
     _propagate(facts)
+    _find_tables(modules, facts, data_types)
     reexported = {origin for m in modules if not m.private for origin in m.imports.values()}
     found: list[Found] = []
     for module in modules:
@@ -522,6 +526,13 @@ def _body(
             facts.add(Trait.CACHE, f"@{called.rsplit('.', 1)[-1]}")
     for item in _walk_body(node):
         _visit(module, item, facts, local, params)
+    for item in _own_nodes(node):
+        if isinstance(item, ast.Return) and item.value is not None:
+            facts.returned.append(item.value)
+        names, value = _assignment(item) if isinstance(item, ast.stmt) else ([], None)
+        for assigned in names:
+            if value is not None:
+                facts.assigned[assigned].append(value)
     return facts
 
 
@@ -753,6 +764,108 @@ def _propagate(facts: dict[str, _Facts]) -> None:
                     changed = True
 
 
+# Tables returned whole
+
+# Methods that shrink a table to a row, a column, or a number; after rolling() and the like
+# they keep its shape.
+REDUCERS = frozenset(
+    {"sum", "mean", "std", "var", "median", "min", "max", "count", "prod", "sem", "skew", "kurt"}
+    | {"quantile", "idxmin", "idxmax", "head", "tail", "nlargest", "nsmallest", "describe"}
+    | {"item", "tolist", "to_dict", "any", "all", "nunique", "value_counts", "squeeze", "corr"}
+    | {"cov", "agg", "aggregate", "first_valid_index", "last_valid_index", "dot"}
+)
+WINDOWED = frozenset({"rolling", "ewm", "expanding", "resample", "groupby"})
+SHAPE_ATTRIBUTES = frozenset({"index", "columns", "shape", "dtypes", "name", "size", "empty"})
+ELEMENTWISE = frozenset({"sign", "abs", "log", "exp", "sqrt", "where", "clip", "nan_to_num"})
+
+
+def _find_tables(modules: list[_Module], facts: dict[str, _Facts], data_types: set[str]) -> None:
+    """Mark each body that returns a whole dates-by-names table, built from a table it was
+    given or from a helper that returns one, and not reduced to a row or a number on the way."""
+    bodies: list[tuple[_Module, str, set[str]]] = []
+    for module in modules:
+        for name, node in module.functions.items():
+            target = f"{module.name}.{name}"
+            params, _ = _signature(module, node, facts[target], data_types, skip_first=False)
+            bodies.append((module, target, {p.name for p in params if p.data == "frame"}))
+        for class_name, class_node in module.classes.items():
+            for item in class_node.body:
+                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    target = f"{module.name}.{class_name}.{item.name}"
+                    params, _ = _signature(module, item, facts[target], data_types, skip_first=True)
+                    bodies.append((module, target, {p.name for p in params if p.data == "frame"}))
+    changed = True
+    while changed:
+        changed = False
+        for module, target, frames in bodies:
+            own = facts[target]
+            if own.table is not None:
+                continue
+            for value in own.returned:
+                source = _table_source(value, module, own, frames, facts, set())
+                if source is not None:
+                    own.table, changed = source, True
+                    break
+
+
+def _table_source(
+    value: ast.expr,
+    module: _Module,
+    own: _Facts,
+    frames: set[str],
+    facts: dict[str, _Facts],
+    visiting: set[str],
+) -> str | None:
+    """Where ``value`` gets a whole table from: a parameter or a helper's name, or None."""
+
+    def source(item: ast.expr) -> str | None:
+        return _table_source(item, module, own, frames, facts, visiting)
+
+    if isinstance(value, ast.Name):
+        if value.id in frames:
+            return value.id
+        if value.id in own.assigned and value.id not in visiting:
+            visiting.add(value.id)
+            return next(filter(None, map(source, own.assigned[value.id])), None)
+        return None
+    if isinstance(value, ast.BinOp):
+        return source(value.left) or source(value.right)
+    if isinstance(value, ast.IfExp):
+        return source(value.body) or source(value.orelse)
+    if isinstance(value, ast.Attribute):
+        return None if value.attr in SHAPE_ATTRIBUTES else source(value.value)
+    if isinstance(value, ast.Subscript):
+        index = value.slice
+        if isinstance(index, ast.Tuple) and index.elts:
+            index = index.elts[0]
+        if isinstance(index, ast.Constant | ast.UnaryOp):
+            return None  # one row or one column
+        return source(value.value)
+    if not isinstance(value, ast.Call):
+        return None
+    func = value.func
+    if isinstance(func, ast.Attribute) and not isinstance(func.value, ast.Name | ast.Attribute):
+        inner = func.value
+        if func.attr in REDUCERS and not (
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr in WINDOWED
+        ):
+            return None
+        return source(inner)
+    called = module.resolve(_dotted(func) or "")
+    helper = facts.get(called)
+    if helper is not None and helper.table is not None:
+        return f"{called.rsplit('.', 1)[-1]}()"
+    if called.startswith("numpy.") and called.rsplit(".", 1)[-1] in ELEMENTWISE and value.args:
+        return source(value.args[0])
+    if isinstance(func, ast.Attribute) and helper is None:
+        if func.attr in REDUCERS:
+            return None
+        return source(func.value)  # a method of a local table: x.shift(1)
+    return None
+
+
 # Results
 
 
@@ -766,6 +879,8 @@ def _function(
     params, traits = _signature(module, node, own, data_types, skip_first=False)
     for trait, seen in own.traits.items():
         traits[trait] = traits.get(trait, set()) | seen
+    if own.table is not None:
+        traits[Trait.RETURNS_TABLE] = {own.table}
     return _found(module, node, None, params, traits)
 
 
@@ -819,6 +934,8 @@ def _methods(
                 traits[trait] = traits.get(trait, set()) | seen
         for trait, seen in class_traits.items():
             traits[trait] = traits.get(trait, set()) | seen
+        if own.table is not None:
+            traits[Trait.RETURNS_TABLE] = {own.table}
         cached = {name for name in own.self_stores if re.search("cache|memo", name, re.IGNORECASE)}
         if cached:
             traits[Trait.CACHE] = traits.get(Trait.CACHE, set()) | {f"self.{n}" for n in cached}
