@@ -12,6 +12,12 @@ All notable changes to this project are documented here. The format follows
   backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
   than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
   serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
+### Added
+
+- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
+  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
+  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
+  [operations](docs/operations.md#show-how-ai-was-used).
 
 ### Changed
 
