@@ -128,3 +128,35 @@ The performance view against the investment committee's need: the page gives the
 series, in the order the tool returns them. The committee needs the horizon table (in `performance-report`, not
 the page), the vintage of each figure (R1-S5), the currency (R1-S13), and a flag for a last quarter that is not
 yet final (R1-S4, R1-S5). None of these is in the page.
+
+## Round 2 (2026-11-24)
+
+Baseline before the round: `tests/mock_funds -k sablecroft` passed in this run (see the cross-fund section of the README).
+
+**Round-1 fixes, status:**
+- Fixed in #98 (reconcile), verified round 2: `reconcile` on the administrator's workbook (R1-S8) by
+  `test_sablecroft_round1.py` and the reconcile run in the round-1 test file.
+- Did not hold: R1-S9 (readiness). Measured by the round-1 test `test_readyz_still_says_ready_when_the_warehouse_folder_is_gone`
+  (passes, so the gap is still there): `SablecroftStore.ids()` returns the static `ENTRIES`, and the store defines no `check()`.
+- Not verified: R1-S2 and R1-S4 (periods auto, stale-date note). Both are in the platform's Unreleased entries, and the
+  fund's tests here do not run the auto default or a stale-date note; not run this round.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R2-S1 | EUR share class (EV03), `analyze_performance` and the view | Round 1's R1-S13 holds: the view draws the metrics with no currency (`test_the_view_draws_the_metrics_but_not_the_currency_of_an_eur_manager`). The store converts EUR returns to USD (`test_cash_flows_are_gross_and_eur_returns_are_converted`), so the figures are USD and the tool says nothing about it. | Measured (both tests pass) | Generic (a currency in the result's conventions) | friction | State the reporting currency and the conversion in the result's conventions. |
+| R2-S2 | `performance-report` for the EUR class | Not run this round. Inferred: the report has no currency line for a series, so a reader sees USD figures labelled as the manager's. | Inferred | Generic | friction | As R2-S1. |
+| R2-S3 | `/readyz` | Round 1's R1-S9 holds as above; the fund still has no `check()`. | Measured (round-1 test) | Fund's own store | friction | Add `check()` that reads the warehouse. |
+
+### Round 2 data model notes
+
+| Standard table | Where it lives today | Keys and identifiers | History or vintages | Reshaping in `sablecroft_store.py` |
+| --- | --- | --- | --- | --- |
+| Security master (funds, managers) | The warehouse's fund table (`sablecroft_views.sql`) | manager code (IC02, RA02, RA03, EV03, ...) | static | `Entry` table in `ENTRIES` |
+| Prices | Public index series `idx_public` | date | daily | `Entry` entry |
+| Returns (by fund, strategy) | `ret_final` (monthly), `ret_final_q` (quarterly), `ret_final_eq_ls` | date by manager | vintages: estimate and final; a first print at the cut | `_entries`, periods per entry |
+| Holdings or positions | Not in the store; the PM calls are a dataset (`pm_calls`) | PM01, date | none | none |
+| Measures (performance, risk) | Computed by the tools, not stored | none | none | none |
+| Reference (calendars, FX, published dates) | `published_date` on the curated quarterly table; the EUR conversion is in the store | quarter end, manager | the publication lag is the history | the FX step in `_build` |
+
+What a standard set would save: a "returns with vintage and published date" table would replace the estimate/final
+split. What does not fit: the first print, which the source does not keep, and the PM calls, which are not a return.

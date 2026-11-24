@@ -136,3 +136,37 @@ Closed by the adoption, with tests: round-0 C1 to C5 (sign-in), C9 (health), C10
 | R1-C14 | `performance-report` app creation | Found while creating Wrenfield's app (R1-W13), not this one: a 101-character description was copied unwrapped into the package docstring, so the generated project's `ruff check` failed (E501) and `app create` stopped after writing files. Corvane's description is shorter and passed. | Measured (the first Wrenfield `qaos app create`) | Generic (the template) | Cosmetic | Wrap the description in the template. |
 | R1-C15 | Run records for the scratch apps | `qaos app create` without `QUANT_AGENT_OS_HOME` recorded its run in the default home store (`~/.quant-agent-os/runs.db`); later commands used a scratch home. | Measured (the command's output line) | Generic (default location) | Cosmetic | The round's commands set `QUANT_AGENT_OS_HOME` (noted, not changed). |
 
+
+## Round 2 (2026-11-24)
+
+Baseline before the round: the full fund suite passed in this run (`tests/mock_funds`, 245 passed, 1 skipped).
+
+**Round-1 fixes, status:**
+- Fixed in #98 (reconcile), verified round 2 by `test_corvane_round1.py` (the administrator's workbook and the
+  `reconcile` break, R1-C10).
+- Per-book benchmarks (R1-C9, #98 or #106): not verified by name. `test_a_2026_client_gets_the_figures_and_the_view_link_for_a_benchmark_comparison`
+  passes but does not assert a per-book benchmark. Not run as a per-book check this round.
+- `/readyz` and `CorvaneDatasetStore.ids()` (R1-C4) held: the TTL'd `ids()` reads the warehouse, and with the
+  connection unreachable the probe is NOT READY (measured, `test_r2_corvane_readiness_fails_when_its_warehouse_is_unreachable`).
+  No `check()` is defined, so the fix is the TTL path, not the protocol.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R2-C1 | Analyst joins (a new Cognito group) | Not run. The access file maps a group to scopes and entitlements, and the analyst refusal is tested (`test_corvane_round1.py` line 230, `ines` refused `analyze_risk`), so the existing groups behave. A new group needs an edit to the access file and a restart, which the fund's descriptor does not reload. | Inferred (code read; the refusal test passes) | Generic (groups in a file read at start) | friction | Reload the access file, or a group sync from Cognito. |
+| R2-C2 | AI-use report, a new analyst | Not run. R1-C7 says the report names each caller and refusal, so a new analyst's first session would appear once their calls exist. | Inferred (R1-C7 measured on three callers) | Generic | cosmetic | Check after the first session. |
+| R2-C3 | Per-book benchmark (R1-C9) | Not verified; see above. | Not run | Generic (the platform's per-book option) | friction | Add a per-book benchmark test to the fund's suite. |
+
+### Round 2 data model notes
+
+| Standard table | Where it lives today | Keys and identifiers | History or vintages | Reshaping in `corvane_store.py` |
+| --- | --- | --- | --- | --- |
+| Security master | The estate's instrument table (Snowflake live, or the estate files in `EstateConnection`) | instrument ticker; a spin-off re-keys it (US0301 to US0302, R1-C11) | the re-key is not kept as history | `Entry` list, `pivot` |
+| Prices | Price and total-return tables per instrument | ticker, date | daily | `pivot` by index name |
+| Returns (by fund, book, strategy, benchmark) | Books' net returns; benchmark `BM_US300` | book, date | daily | `pivot`, one column per book |
+| Holdings or positions | Holdings by book and date; restricted list keyed on ticker | book, ticker, date | by date | `Entry` entries |
+| Measures (analytics) | Computed by the tools, not stored | none | none | none |
+| Reference (calendars, FX) | The calendar is the trading days in the estate; FX is in the warehouse | date, currency | none | `EstateConnection.fetch` |
+
+What a standard set would save: a security master with a ticker history would have kept the spin-off's re-key
+(R1-C11). What does not fit: the restricted list, which is a fund rule keyed on the old ticker, and the administrator's
+workbook, which has its own shape.

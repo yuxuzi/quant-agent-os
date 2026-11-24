@@ -63,3 +63,22 @@ Corvane and Wrenfield have not run round 1 yet.
 
 Round 1 also met two things that work: a 2026-07-28 client gets the same results over both handshakes, and
 `performance-report` reconciles a percent or two-row workbook, exiting 1 on a break (R1-L4, R1-S8).
+
+## Round 2
+
+Round 2 (2026-11-24, on `round2/funds`) checked round 1's fixes and ran one new friction per fund. Each fund's
+`FINDINGS.md` has its own "Round 2" table (`R2-K…` for Kestrel, `R2-L…`, `R2-S…`, `R2-C…`, `R2-W…`), and the data
+model notes. The generic rows:
+
+| # | Finding | Funds | Evidence (round 2) | Generic or own | Severity |
+| --- | --- | --- | --- | --- | --- |
+| R2-G1 | No fund's `DatasetStore` defines `check()`, so readiness depends on each store's `ids()` | All five | `grep "def check"` finds none in the fund stores; Larchmere and Sablecroft `ids()` are static, and the probe passes with the source gone (`test_r2_larchmere_readiness_still_passes...`) | Generic (the protocol is there; the stores do not use it) | friction |
+| R2-G2 | A new dataset or entitlement group needs an edit and a restart | Larchmere, Corvane | `DATASETS = _entries()` at import; access file read at start (inferred from code, not run) | Generic (no reload) | blocker for the mid-month goal (Larchmere) |
+| R2-G3 | A carried-forward closure price moves a risk figure with no warning | Wrenfield | `test_a_risk_figure_as_of_a_carried_forward_closure_moves_and_no_warning_says_why` passes with no warning | Generic | friction |
+| R2-G4 | A performance result carries no currency | Sablecroft | `test_the_view_draws_the_metrics_but_not_the_currency_of_an_eur_manager` passes | Generic (R1-G9 still open) | friction |
+| R2-G5 | A key rotation has a refusal window until the JWKS refresh interval passes | Wrenfield (platform verifier) | `test_an_unknown_kid_fetches_keys_again_but_at_most_once_in_an_interval`, passes | Generic | friction |
+| R2-G6 | Upgrade in place from v0.9.0 not exercised in this round | Kestrel | Not run | Generic | not run |
+
+**Round 2 verification.** Round 1's fixes at each fund were checked by the round-1 tests passing in the round's full
+run: readiness holds at Kestrel, Corvane, and Wrenfield, and does not hold at Larchmere and Sablecroft; Wrenfield's
+service-error fix holds; Wrenfield's stale-price warning does not. The per-book benchmark and periods auto were not verified.
