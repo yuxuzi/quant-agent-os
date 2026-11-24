@@ -11,11 +11,17 @@ is imported only when it is served.
 from __future__ import annotations
 
 import importlib.util
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
+from quant_agent_os.data import (
+    DatasetStore,
+    GuardedDatasetStore,
+    dataset_resources,
+    dataset_tools,
+    readiness_probe,
+)
 from quant_agent_os.registration import FirmApp
 from quant_agent_os.tools import (
     AccessPolicy,
@@ -97,7 +103,13 @@ class Catalog:
     toolsets: dict[str, str] = field(default_factory=dict)
     policy: PermissionPolicy = field(default_factory=PermissionPolicy)
     access: AccessPolicy | None = None
+    # The reads `/readyz` makes of the stores composed in, by name.
+    checks: dict[str, Callable[[], object]] = field(default_factory=dict)
     views: list[ViewSpec] = field(default_factory=list)
+
+
+# A hash no document has, so `has_document` reads the store and finds nothing to report.
+NO_DOCUMENT = "0" * 64
 
 
 def compose(
@@ -126,6 +138,14 @@ def compose(
     `GuardedDatasetStore` too. Raises `DuplicateToolError` when an extra tool reuses a served
     name: it never replaces a platform tool.
     """
+    # Readiness reads the stores themselves, uncached: a guarded view needs a caller, and has none
+    # at /readyz, so its probe reads the store it wraps.
+    checks: dict[str, Callable[[], object]] = {}
+    if research is not None:
+        knowledge = research.store
+        checks["knowledge"] = lambda: knowledge.has_document(NO_DOCUMENT)
+    if datasets is not None:
+        checks["datasets"] = readiness_probe(datasets)
     if (
         access is not None
         and datasets is not None
@@ -181,7 +201,7 @@ def compose(
     for text in [extra_instructions, *(app.instructions for app in apps)]:
         if text:
             instructions = f"{instructions}\n\n{text}"
-    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access, views)
+    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access, checks, views)
 
 
 def _check_extra_names(extra: Sequence[ToolSpec[Any, Any]], served: set[str]) -> None:

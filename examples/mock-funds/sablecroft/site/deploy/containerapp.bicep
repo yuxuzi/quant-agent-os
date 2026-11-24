@@ -76,11 +76,13 @@ resource qaos 'Microsoft.App/containerApps@2024-03-01' = {
             // The platform's own settings (QUANT_AGENT_OS_*): a path for the run store, a URL for the
             // knowledge store, files for access and sign-in.
             { name: 'QUANT_AGENT_OS_STORE', value: 'postgresql://qaos_reader@sablecroft-pg.postgres.database.azure.com:5432/qaos?sslmode=require' }
-            { name: 'PGPASSWORD', secretRef: 'knowledge-password' }
+            // Secrets the platform reads come as files under /run/secrets (NAME_FILE).
+            { name: 'PGPASSWORD_FILE', value: '/run/secrets/knowledge-password' }
             { name: 'QUANT_AGENT_OS_RUNS_FILE', value: '/data/runs/runs.db' }
             { name: 'QUANT_AGENT_OS_ACCESS_FILE', value: '/config/access.toml' }
             { name: 'QUANT_AGENT_OS_SIGN_IN_FILE', value: '/config/sign-in.toml' }
-            { name: 'QAOS_INTROSPECTION_SECRET', secretRef: 'introspection-secret' }
+            { name: 'QAOS_INTROSPECTION_SECRET_FILE', value: '/run/secrets/introspection-secret' }
+            { name: 'QUANT_AGENT_OS_LOG_FORMAT', value: 'json' }
             { name: 'SAB_WAREHOUSE_KIND', value: 'databricks' }
             { name: 'DATABRICKS_SERVER_HOSTNAME', value: 'adb-1234567890123456.7.azuredatabricks.net' }
             { name: 'DATABRICKS_HTTP_PATH', value: '/sql/1.0/warehouses/sablecroft-serving' }
@@ -90,9 +92,12 @@ resource qaos 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           probes: [
             { type: 'Liveness', httpGet: { path: '/healthz', port: 8000 } }
-            { type: 'Readiness', httpGet: { path: '/healthz', port: 8000 } }
+            { type: 'Readiness', httpGet: { path: '/readyz', port: 8000 } }
           ]
-          volumeMounts: [{ volumeName: 'runs', mountPath: '/data/runs' }]
+          volumeMounts: [
+            { volumeName: 'runs', mountPath: '/data/runs' }
+            { volumeName: 'secrets', mountPath: '/run/secrets' }
+          ]
         }
         {
           name: 'entra-introspection'
@@ -106,7 +111,17 @@ resource qaos 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: { minReplicas: 1, maxReplicas: 1 } // one replica: the run store is a SQLite file
-      volumes: [{ name: 'runs', storageType: 'AzureFile', storageName: runsShare.name }]
+      volumes: [
+        { name: 'runs', storageType: 'AzureFile', storageName: runsShare.name }
+        {
+          name: 'secrets'
+          storageType: 'Secret'
+          secrets: [
+            { secretRef: 'knowledge-password', path: 'knowledge-password' }
+            { secretRef: 'introspection-secret', path: 'introspection-secret' }
+          ]
+        }
+      ]
     }
   }
 }

@@ -37,6 +37,7 @@ out of scope: it trusts the user who started it.
 | `GET`/`POST /approve/{id}` | Anyone with the link; deciding needs an approver key | `quant_platform/identity/approval_page.py`, `approval_desk.py` |
 | `/.well-known/oauth-protected-resource/mcp` | Anyone (public metadata), with sign-in on | MCP SDK |
 | `/healthz` | Anyone; returns `{"status": "ok"}` only | — |
+| `/readyz` | Anyone; returns `{"status": "ready"}`, or `503` with the names of the stores that failed to answer, and nothing else | — |
 
 Every tool call, from any route, then passes the executor's checks in order: registered tool,
 permission policy, input validation, plan limits, approval, timeout, and output size.

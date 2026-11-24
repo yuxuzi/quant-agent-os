@@ -1,0 +1,37 @@
+# The firm's image recipe: the platform's image plus the packages the firm's datasets need, such as
+# database drivers. Copy this file and the firm's firm-requirements.txt into the firm's repository,
+# then build from there:
+#
+#   docker build -f Dockerfile.firm -t firm-qaos:1 .
+#
+# uv installs the requirements into the platform's own environment (/opt/venv), in a stage of its
+# own. Any failed install fails the build; no step is allowed to fail quietly.
+# The final image is the platform's, with that environment in place of its own, and it carries no
+# uv. docs/deployment.md, "Drivers in your image", shows a requirements file with one example per
+# driver family.
+#
+# Base images are pinned by digest, as in deploy/Dockerfile. PLATFORM_IMAGE is the platform's image,
+# built by `docker compose -f deploy/compose.yaml build`, or a pinned release image.
+
+ARG PLATFORM_IMAGE=quant-agent-os:local
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
+ARG FIRM_REQUIREMENTS=firm-requirements.txt
+
+FROM ${UV_IMAGE} AS uv
+
+FROM ${PLATFORM_IMAGE} AS firm-packages
+ARG FIRM_REQUIREMENTS
+USER root
+ENV UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+COPY --from=uv /uv /usr/local/bin/uv
+# unixodbc is the ODBC driver manager that pyodbc loads. A SQL Server driver is a separate install.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends unixodbc \
+    && rm -rf /var/lib/apt/lists/*
+COPY ${FIRM_REQUIREMENTS} /tmp/firm-requirements.txt
+RUN uv pip install --no-cache --python /opt/venv/bin/python --requirement /tmp/firm-requirements.txt
+
+FROM ${PLATFORM_IMAGE}
+COPY --from=firm-packages /opt/venv /opt/venv
+USER app

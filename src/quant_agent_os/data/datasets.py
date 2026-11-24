@@ -22,11 +22,12 @@ import io
 import math
 import re
 import statistics
+from collections.abc import Callable
 from datetime import date, datetime
 from functools import cached_property
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -242,6 +243,26 @@ class DatasetStore(Protocol):
         ...
 
 
+@runtime_checkable
+class CheckableDatasetStore(Protocol):
+    """A dataset store that can prove it is readable now: `/readyz` calls ``check``.
+
+    A store should define it. Without it, readiness calls ``ids``, which a store may answer from a
+    list it declared or cached, so it can stay ready after its files or database are gone.
+    """
+
+    def check(self) -> None:
+        """Read the store's source once, without a cache, and raise if it cannot be read."""
+        ...
+
+
+def readiness_probe(store: DatasetStore) -> Callable[[], object]:
+    """Return the read `/readyz` makes of ``store``: its ``check`` when it has one, else ``ids``."""
+    if isinstance(store, CheckableDatasetStore):
+        return store.check
+    return store.ids
+
+
 class DirectoryDatasetStore:
     """Datasets as ``<id>.csv`` files in one directory."""
 
@@ -303,6 +324,12 @@ class DirectoryDatasetStore:
             path.stem for path in self.root.glob("*.csv") if DATASET_ID.fullmatch(path.stem)
         )
 
+    def check(self) -> None:
+        """Raise `OSError` unless the directory exists and can be listed. It reads no dataset."""
+        if not self.root.is_dir():
+            raise FileNotFoundError(f"{self.root} is not a directory")
+        next(self.root.iterdir(), None)
+
     def _index_marker(self, dataset_id: str) -> Path:
         return self.root / f"{dataset_id}.index"
 
@@ -345,6 +372,11 @@ class MemoryDatasetStore:
         below = self.base.ids() if self.base is not None else []
         return sorted({*self._datasets, *below})
 
+    def check(self) -> None:
+        """Check the base store, if there is one: the datasets kept here need no read."""
+        if self.base is not None:
+            readiness_probe(self.base)()
+
 
 class GuardedDatasetStore:
     """A store that shows the current caller only what an access policy allows (decision 0021).
@@ -371,6 +403,10 @@ class GuardedDatasetStore:
     def ids(self) -> list[str]:
         """Return the dataset ids the current caller may read, sorted."""
         return [item for item in self.store.ids() if permits(self.access, "dataset.read", item)]
+
+    def check(self) -> None:
+        """Check the wrapped store. Readiness has no caller, so the access policy does not apply."""
+        readiness_probe(self.store)()
 
 
 def _unknown_dataset(dataset_id: str, known: list[str]) -> UnknownDatasetError:

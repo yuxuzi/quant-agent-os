@@ -676,7 +676,7 @@ refused: Send an API key as 'Authorization: Bearer <key>'.
 refused: Unknown or revoked API key.
 ```
 
-Every route except `/healthz` needs a key, over MCP and REST alike. Now give an intern a key that can
+Every route except `/healthz` and `/readyz` needs a key, over MCP and REST alike. Now give an intern a key that can
 list tools but not call them, and that expires in 30 days:
 
 ```bash

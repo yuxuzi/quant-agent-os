@@ -164,7 +164,7 @@ def test_a_missing_or_short_secret_refuses_the_call(
     short = _call(_app(url), PM)
 
     assert missing.status == short.status == "error"
-    assert f"Set {SECRET_ENV} to the secret" in (missing.error_detail or "")
+    assert f"Set {SECRET_ENV} (or {SECRET_ENV}_FILE) to the secret" in (missing.error_detail or "")
     assert f"{SECRET_ENV} must hold at least 32 bytes" in (short.error_detail or "")
     assert "too-short" not in (short.error_detail or "") + (short.error or "")
     assert seen.assertions == []

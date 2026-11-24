@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Readiness.** `GET /readyz` answers `{"status": "ready"}` when the server's run store, knowledge store, and
+  datasets each answer a read, and otherwise `503` with `"failed"` naming the stores that did not. It is on every
+  REST app, including a firm's server from `serve_apps` and `build_server_app`, needs no key, and calls no
+  identity provider or embedder. Its errors are never sent to the caller. `/healthz` is unchanged.
+- **JSON logs.** `QUANT_AGENT_OS_LOG_FORMAT=json` writes one JSON object per log line (`time`, `level`, `logger`,
+  `message`, and `exception` when there is one), for a log service. The default stays `text`, and any other value
+  stops start-up. Secrets are redacted from the exception text too, in both formats. A server started with
+  `serve_http` or `serve_apps`, which a firm's own server uses, now follows the log format and level settings.
+- **Secrets from files.** Each secret the platform reads (the hosted embedders' keys, `RAGFLOW_API_KEY`, the
+  sign-in client secret, `PGPASSWORD`, the `call_service` token and caller secret, and the App Factory connection
+  variables) can come from `NAME_FILE`, a file whose content is the secret, as container platforms mount them.
+  Setting both `NAME` and `NAME_FILE` is refused, naming both, so nothing is guessed. The convention is in the
+  configuration guide.
+- **A cloud section.** `docs/deployment.md` section 11 covers Azure Container Apps and Amazon ECS on Fargate: one
+  replica, the probes (`/healthz` for liveness, `/readyz` for readiness), JSON logs, secrets as `NAME_FILE` files,
+  TLS and rate limits at the ingress, and sign-in. The mock funds' descriptors use `/readyz`, JSON logs, and file
+  secrets. They are examples the tests check against the code, and no test deploys them.
+- **A firm's image recipe.** `deploy/Dockerfile.firm` adds the packages a firm's datasets read, such as database
+  drivers and SQLAlchemy, to the platform's image. uv installs them in a stage the final image does not keep, and
+  a failed install fails the build. `docs/deployment.md` section 8, "Drivers in your image", shows a requirements
+  file with one example per driver family.
+
+### Changed
+
+- **Research settings are built, not read.** `EmbeddingSettings` and `RagflowSettings` are plain models now, built
+  by `embedding_settings()` and `ragflow_settings()`, which read the keys through the secrets convention. Nothing
+  else changes for a caller who uses `make_embedder` or `make_ragflow_loader`.
 - **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
   `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
   text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
@@ -41,6 +68,24 @@ All notable changes to this project are documented here. The format follows
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.
+- **Datasets in readiness.** `/readyz` calls a dataset store's `check()` when it has one, and its `ids()` only when
+  it does not. `DirectoryDatasetStore.check()` fails when its folder is missing or cannot be listed, so a datasets
+  folder that does not exist is not ready. `SqlDatasetStore.check()` runs `SELECT 1` on each source, uncached, with
+  a 5-second limit. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap. A firm's store should
+  define `check()`; see the store notes in `docs/deployment.md` section 8.
+- **A listing scope gap is a warning.** A sign-in file whose `scope_map` grants `tools:call` and never `tools:list`
+  is warned about by `qaos doctor` and at `qaos serve` start-up, naming the provider. The listing needs `tools:list`, and
+  `docs/deployment.md` section 10 now says so. The file is still accepted.
+
+### Fixed
+
+- **Readiness that reads.** A `/readyz` probe of the datasets no longer passes after the store's files or database
+  are deleted: its `ids()` answered from a declared list. The run and knowledge stores were already read by a query.
+- **Mock-fund images install with uv, and fail on error.** Sablecroft's `Dockerfile.firm` installed its driver with
+  `pip ... || true`, which hid a failed install. Corvane's and Wrenfield's images ran `uv` or installed DuckDB and
+  pyarrow where the platform's final image has no uv. Each now installs in a build stage with uv, which the final
+  image does not keep. `tests/contract/test_deploy_files.py` now fails on `|| true`, on a bare pip install in any
+  Dockerfile, and on a uv install in a stage without uv.
 
 ## [0.9.0] - 2026-11-19
 

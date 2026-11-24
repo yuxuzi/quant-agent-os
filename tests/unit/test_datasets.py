@@ -12,8 +12,10 @@ import pytest
 from typer.testing import CliRunner
 
 from quant_agent_os.data import (
+    CheckableDatasetStore,
     DatasetError,
     DirectoryDatasetStore,
+    GuardedDatasetStore,
     MemoryDatasetStore,
     UnknownColumnError,
     UnknownDatasetError,
@@ -22,6 +24,7 @@ from quant_agent_os.data import (
     infer_periods_per_year,
     parse_dataset,
     parse_date,
+    readiness_probe,
 )
 from quant_agent_os.mcp import read_resource
 from quant_agent_os.runtime import ToolExecutor
@@ -490,3 +493,49 @@ def test_memory_store_sits_in_front_of_its_base(tmp_path: Path) -> None:
     assert base.get("fund").column("fund")[0] == 0.5
     with pytest.raises(UnknownDatasetError, match="fund, kept, session"):
         store.get("absent")
+
+
+class _NoCallerMayRead:
+    """An access policy that refuses every dataset, as a caller with no groups would."""
+
+    def allows(self, caller: object, action: object, resource: str) -> bool:
+        return False
+
+
+def test_a_directory_store_checks_its_folder_without_reading_a_dataset(tmp_path: Path) -> None:
+    store = DirectoryDatasetStore(tmp_path / "datasets")
+    assert isinstance(store, CheckableDatasetStore)
+    with pytest.raises(FileNotFoundError):
+        store.check()  # a missing folder is a missing store, not an empty one
+
+    (tmp_path / "datasets").mkdir()
+    store.check()  # an empty folder is readable
+    assert store.ids() == []
+
+
+def test_readiness_uses_check_when_a_store_has_it_and_ids_otherwise(tmp_path: Path) -> None:
+    class DeclaredOnly:
+        def get(self, dataset_id: str) -> object:
+            raise KeyError(dataset_id)
+
+        def ids(self) -> list[str]:
+            return ["declared"]
+
+    declared = DeclaredOnly()
+    assert readiness_probe(declared) == declared.ids  # type: ignore[arg-type]
+    folder = DirectoryDatasetStore(tmp_path / "datasets")
+    assert readiness_probe(folder) == folder.check
+
+
+def test_guarded_and_memory_stores_check_the_store_they_wrap(tmp_path: Path) -> None:
+    folder = DirectoryDatasetStore(tmp_path / "datasets")
+    guarded = GuardedDatasetStore(folder, _NoCallerMayRead())  # type: ignore[arg-type]
+    with pytest.raises(FileNotFoundError):
+        guarded.check()  # readiness has no caller, so refusals do not hide a missing store
+    (tmp_path / "datasets").mkdir()
+    guarded.check()
+
+    wrapped = MemoryDatasetStore(DirectoryDatasetStore(tmp_path / "gone"))
+    with pytest.raises(FileNotFoundError):
+        wrapped.check()
+    MemoryDatasetStore().check()  # nothing underneath to read

@@ -15,7 +15,7 @@ from pydantic import SecretStr
 
 from quant_agent_os.tools import Permission
 from quant_research import ResearchQuery, open_research, research_tools
-from quant_research.config import EmbeddingSettings, make_embedder
+from quant_research.config import EmbeddingSettings, embedding_settings, make_embedder
 from quant_research.domain.vocabulary import EntityMatcher, load_vocabulary
 from quant_research.infrastructure.local_embedding import LocalEmbedder
 from quant_research.infrastructure.remote_embedding import (
@@ -208,12 +208,32 @@ def test_settings_read_the_conventional_keys(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("VOYAGE_API_KEY", "v-key")
     monkeypatch.setenv("OPENAI_API_KEY", "o-key")
 
-    settings = EmbeddingSettings(_env_file=None)  # type: ignore[call-arg]
+    settings = embedding_settings()
 
     assert settings.voyage_api_key is not None
     assert settings.voyage_api_key.get_secret_value() == "v-key"
     assert settings.openai_api_key is not None
     assert "o-key" not in repr(settings)
+
+
+def test_a_key_file_is_read_and_a_key_given_twice_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key_file = tmp_path / "voyage.key"
+    key_file.write_text("v-file-key\n", "utf-8")
+    monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
+    monkeypatch.setenv("VOYAGE_API_KEY_FILE", str(key_file))
+
+    settings = embedding_settings()
+    assert settings.voyage_api_key is not None
+    assert settings.voyage_api_key.get_secret_value() == "v-file-key"  # one newline is dropped
+
+    monkeypatch.setenv("VOYAGE_API_KEY", "v-env-key")
+    with pytest.raises(
+        EmbeddingServiceError, match="VOYAGE_API_KEY or VOYAGE_API_KEY_FILE"
+    ) as found:
+        make_embedder("voyage")
+    assert "v-file-key" not in str(found.value) and "v-env-key" not in str(found.value)
 
 
 def test_factory_builds_each_embedder_and_fails_fast_without_keys() -> None:
