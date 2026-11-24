@@ -24,20 +24,23 @@ does not protect against.
 demonstration, which runs one fictional firm's portfolio research and risk analysis, end to end, with no model or network.
 
 > Quant-Agent-OS is a working name that has not been checked for availability. This project is
-> alpha research software (0.4.0), not investment advice.
+> research software before 1.0, not investment advice.
 
 ## Start
 
 [uv](https://docs.astral.sh/uv/) is the only prerequisite. From nothing to a first answer:
 
 ```bash
-uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0"
+uv tool install --python 3.13 "quant-agent-os[analytics,server,factory] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; `qaos doctor` explains anything missing
 ```
 
 Then ask your client: "What does my research say about short-term reversal? Cite the passages."
+
+Or start from an application that already works: `qaos app new performance-report my-report --defaults` generates a
+tested project that turns a returns file into horizon tables and reconciles them with your administrator's figures.
 
 **Read next:** [getting started](docs/getting-started.md) covers the skills, your own data, other
 clients, and notebooks. After that, the [tutorial](docs/tutorial.md) is a set of short labs to play
