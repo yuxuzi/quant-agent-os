@@ -142,6 +142,51 @@ def test_a_long_description_wraps_and_the_project_still_lints(tmp_path: Path) ->
         assert done.returncode == 0, done.stdout + done.stderr
 
 
+def test_source_names_where_the_project_installs_quant_agent_os_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    checkout = _folder(tmp_path / "quant-agent-os")
+    mirror = "git+https://mirror.example.com/fund/quant-agent-os@v9.9.9"
+
+    local = CliRunner().invoke(
+        factory_cli.app,
+        ["new", "performance-report", "local-app", "--defaults", "--source", str(checkout)],
+        input="n\n",
+    )
+    remote = CliRunner().invoke(
+        factory_cli.app,
+        ["new", "performance-report", "mirror-app", "--defaults", "--source", mirror],
+        input="n\n",
+    )
+
+    assert (
+        f'quant_agent_os_source = "{checkout.as_posix()}"'
+        in (tmp_path / "local-app.toml").read_text()
+    ), local.output
+    assert f'quant_agent_os_source = "{mirror}"' in (tmp_path / "mirror-app.toml").read_text(), (
+        remote.output
+    )
+
+
+def test_source_is_refused_where_the_template_installs_no_quant_agent_os(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    done = CliRunner().invoke(
+        factory_cli.app,
+        ["new", "bundled/python", "plain-lib", "--defaults", "--source", str(tmp_path)],
+        input="n\n",
+    )
+
+    assert done.exit_code == 1
+    assert "--source does not apply" in done.output
+    assert not (tmp_path / "plain-lib.toml").exists()
+
+
 # One copy of the numbers: Quant Toolbox (decision 0026)
 
 PACKS = [QUANT_APPS_PACK, BUILT_IN_PACKS["quant-baseline"]]

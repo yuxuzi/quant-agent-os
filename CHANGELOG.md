@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`qaos app new --source`** sets where a generated project installs quant-agent-os (Quant Toolbox) from, a git+https URL with `@tag` or a local path, with `--defaults` as well. A template that installs no quant-agent-os refuses it. Before, `--defaults` always pinned the release on GitHub.
+
 ### Changed
 
 - **A long description no longer breaks a `performance-report` project's checks.** The description is wrapped in the package docstring, so a description of 101 characters or more passes `ruff check`.

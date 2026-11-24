@@ -130,6 +130,17 @@ uv run qaos app template list                     # every template, as pack/prof
 uv run qaos app template add gh:org/packs --name firm --ref v1.0.0 --commit SHA --digest HASH
 ```
 
+By default a project installs Quant Toolbox from the release that generated it, from GitHub. A firm
+installing from its own mirror, or testing a candidate, passes `--source` (the same forms as
+`quant_agent_os_source` in the spec: a git+https URL with an `@tag`, or a local path):
+
+```bash
+uv run qaos app new performance-report my-report --defaults --source ../quant-agent-os
+uv run qaos app new performance-report my-report --defaults --source git+https://mirror.example.com/fund/quant-agent-os@v0.9.0
+```
+
+A template that installs no quant-agent-os refuses `--source`, rather than ignoring it.
+
 A small spec, which `app plan` previews and `app create` builds:
 
 ```bash

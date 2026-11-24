@@ -390,6 +390,13 @@ def new(
     yes: Annotated[
         bool, typer.Option("--yes", "-y", help="With --defaults, create without asking.")
     ] = False,
+    source: Annotated[
+        str | None,
+        typer.Option(
+            help="Where the project installs quant-agent-os (Quant Toolbox) from: a git+https "
+            "URL with @tag, or a local path. Default: this release, from GitHub."
+        ),
+    ] = None,
 ) -> None:
     """Answer the template's questions (or take its defaults), write the spec, and create it.
 
@@ -453,6 +460,12 @@ def new(
         "output_dir": output_dir.as_posix(),
         "components": components,
     }
+    if source is not None:
+        if "quant_agent_os_source" not in {question.name for question in described.questions}:
+            raise _fail(
+                f"{template}/{profile} installs no quant-agent-os, so --source does not apply."
+            )
+        spec["quant_agent_os_source"] = source
     answers: dict[str, str] = {}
     effective: dict[str, str] = {}
     connection_name = ""
@@ -470,6 +483,9 @@ def new(
         if question.name in IDENTITY_QUESTIONS:
             continue
         if connection_name and question.name.startswith("db_") and question.name != "db_query":
+            continue
+        if question.name == "quant_agent_os_source" and source is not None:
+            effective[question.name] = source  # given on the command line, not asked again
             continue
         if not _applies(question.when, selected, effective):
             continue
