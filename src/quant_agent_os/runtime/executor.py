@@ -21,7 +21,7 @@ from quant_agent_os.runtime.quotas import UsageGate
 from quant_agent_os.runtime.telemetry import call_span
 from quant_agent_os.tenancy import DEFAULT_TENANT
 from quant_agent_os.tools.access import AccessPolicy, collecting_refusals, note_refusal, permits
-from quant_agent_os.tools.permissions import PermissionDeniedError, PermissionPolicy
+from quant_agent_os.tools.permissions import PermissionDeniedError, PermissionPolicy, Refused
 from quant_agent_os.tools.registry import ToolRegistry, UnknownToolError
 
 CallStatus = Literal[
@@ -149,7 +149,8 @@ class ToolExecutor:
     not perform unbounded work; tools that run programs use `runner.run_command`, which kills
     them. A tool that raises a `ValueError` or `LookupError` returns its message to the caller;
     any other exception returns a generic message with the call id, and its text is kept in
-    ``error_detail``. A tool with a consequential permission (decision 0005) runs only with a
+    ``error_detail``. A tool that raises `Refused` is recorded as ``denied`` with its message.
+    A tool with a consequential permission (decision 0005) runs only with a
     matching, unused approval from ``approvals`` for this run, tool, and input hash, or when the
     policy pre-approves those permissions for this tool or for every tool; otherwise the call
     records ``approval_required``.
@@ -317,6 +318,12 @@ class ToolExecutor:
                 "timeout",
                 tool_version=spec.version,
                 error=f"Tool '{spec.name}' exceeded {spec.timeout_seconds}s.",
+            )
+        except Refused as error:  # a firm's tool refused this caller, with a message for them
+            return record(
+                "denied",
+                tool_version=spec.version,
+                error=str(error) or f"Tool '{spec.name}' refused this call.",
             )
         except Exception as error:
             detail = f"{type(error).__name__}: {error}"

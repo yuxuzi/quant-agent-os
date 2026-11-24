@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from quant_agent_os.runtime import ToolCall, ToolCallError, ToolExecutor, failure_details
 from quant_agent_os.runtime.executor import BUSY_RETRY_SECONDS, FAILURE_HINTS, CallStatus
 from quant_agent_os.runtime.quotas import Refusal
-from quant_agent_os.tools import Permission, PermissionPolicy, ToolRegistry, tool
+from quant_agent_os.tools import Permission, PermissionPolicy, Refused, ToolRegistry, tool
 
 
 class Value(BaseModel):
@@ -62,8 +62,21 @@ def fetch(params: Value) -> Value:
     return params
 
 
+@tool(name="refuse", description="Refuse the caller, with a message or without one.")
+def refuse(params: Value) -> Value:
+    if params.value == 0:
+        raise Refused("Your desk may not see this P&L.")
+    raise Refused()
+
+
+@tool(name="plain_permission", description="Raise a PermissionError, which is not a refusal.")
+def plain_permission(params: Value) -> Value:
+    raise PermissionError("/srv/keys/desk.pem is unreadable")
+
+
 EXECUTOR = ToolExecutor(
-    ToolRegistry([double, slow, huge, broken, raising, fetch]), PermissionPolicy()
+    ToolRegistry([double, slow, huge, broken, raising, fetch, refuse, plain_permission]),
+    PermissionPolicy(),
 )
 
 
@@ -110,6 +123,32 @@ def test_an_internal_error_returns_a_generic_message_and_keeps_the_detail(index:
     )
     assert str(raised) not in record.error and "/srv" not in record.error
     assert record.error_detail == f"{type(raised).__name__}: {raised}"
+
+
+def test_a_refusal_is_denied_with_the_tools_message_and_not_retried() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="refuse", arguments={"value": 0}))
+
+    assert record.status == "denied"
+    assert record.error == "Your desk may not see this P&L."
+    assert record.error_detail is None and record.output is None
+    details = failure_details(record, [])
+    assert details["status"] == "denied" and details["retryable"] is False
+    assert details["hint"] == FAILURE_HINTS["denied"][0]
+
+
+def test_a_refusal_without_a_message_still_says_the_tool_refused() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="refuse", arguments={"value": 1}))
+
+    assert record.status == "denied"
+    assert record.error == "Tool 'refuse' refused this call."
+
+
+def test_a_plain_permission_error_is_still_an_internal_error() -> None:
+    record = EXECUTOR.execute(ToolCall(tool="plain_permission", arguments={"value": 1}))
+
+    assert record.status == "error"
+    assert record.error_detail == "PermissionError: /srv/keys/desk.pem is unreadable"
+    assert "/srv" not in (record.error or "")
 
 
 def test_records_carry_provenance_ids_and_a_stable_input_hash() -> None:

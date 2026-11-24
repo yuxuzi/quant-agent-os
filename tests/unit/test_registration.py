@@ -12,7 +12,15 @@ import pytest
 from pydantic import BaseModel
 
 from quant_agent_os.data import Dataset, UnknownDatasetError, parse_dataset
-from quant_agent_os.registration import FirmApp, Frame, Prices, Series, _code_version, _Docstring
+from quant_agent_os.registration import (
+    FirmApp,
+    Frame,
+    Prices,
+    Refused,
+    Series,
+    _code_version,
+    _Docstring,
+)
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.testing import check_app, check_tool
@@ -195,6 +203,44 @@ def test_a_failing_function_is_recorded_on_the_call_not_raised(store: Store) -> 
 
     assert failed.status == "error" and "No good." in (failed.error or "")
     assert missing.status == "error" and "nothing" in (missing.error or "")
+
+
+def test_a_firm_tool_refuses_a_caller_with_refused_and_the_call_is_denied(store: Store) -> None:
+    def desk_pnl(desk: str) -> float:
+        """A desk's P&L."""
+        if desk != GROWTH:
+            raise Refused(f"Your access does not include desk '{desk}'.")
+        return 1.5
+
+    app = FirmApp("risk")
+    app.expose(desk_pnl)
+    spec = _tools(app, store)["desk_pnl"]
+
+    refused = _run(spec, {"desk": "value"})
+    allowed = _run(spec, {"desk": GROWTH})
+
+    assert issubclass(Refused, PermissionError)
+    assert refused.status == "denied"
+    assert refused.error == "Your access does not include desk 'value'."
+    assert refused.output is None and refused.error_detail is None
+    assert allowed.status == "ok" and allowed.output is not None
+    assert allowed.output["result"] == 1.5
+
+
+def test_a_plain_permission_error_from_a_firm_tool_stays_an_internal_error(store: Store) -> None:
+    def locked(desk: str) -> float:
+        """A locked figure."""
+        raise PermissionError("/srv/keys/desk.pem is unreadable")
+
+    app = FirmApp("risk")
+    app.expose(locked)
+    spec = _tools(app, store)["locked"]
+
+    record = _run(spec, {"desk": "growth"})
+
+    assert record.status == "error"
+    assert record.error_detail == "PermissionError: /srv/keys/desk.pem is unreadable"
+    assert "/srv" not in (record.error or "")
 
 
 # What may come back

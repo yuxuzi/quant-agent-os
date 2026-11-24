@@ -35,6 +35,15 @@ class PermissionDeniedError(PermissionError):
     """Raised when policy forbids a tool call."""
 
 
+class Refused(PermissionError):  # noqa: N818 (the firm-facing name, as FirmApp documents it)
+    """Raised by a firm's own tool to refuse this caller, with a message the caller may see.
+
+    The executor records the call as ``denied``, with the message, and not as an internal error,
+    so a caller is told not to retry. A plain `PermissionError` still becomes an internal error.
+    Refuse what the firm's own code decides, such as a desk the caller does not see (decision 0021).
+    """
+
+
 @dataclass(frozen=True)
 class PermissionPolicy:
     """Which permissions are granted, which tools may run, and what is pre-approved.

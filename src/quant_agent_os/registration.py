@@ -49,6 +49,7 @@ from quant_agent_os.evidence import Evidence, SourceRef
 from quant_agent_os.tools.access import current_caller
 from quant_agent_os.tools.contracts import ToolContractError, ToolSpec
 from quant_agent_os.tools.permissions import Permission
+from quant_agent_os.tools.permissions import Refused as Refused  # a firm's tool refuses a caller
 from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry
 
 BY_REFERENCE = "Pass data as dataset references from list_datasets, not as values."
@@ -173,7 +174,8 @@ class FirmApp:
         says how the figure is defined, and is added to the description and every result.
         Declare every permission the function needs beyond reading data: the platform cannot
         detect a function that writes files or calls out. Raises `ToolContractError` naming
-        what to change when the function cannot be exposed as it is.
+        what to change when the function cannot be exposed as it is. To refuse a caller, raise
+        `Refused` with a message: the call is recorded as ``denied``, not as an error.
         """
         self._add(
             function,

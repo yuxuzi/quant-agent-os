@@ -182,6 +182,10 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
   declares `read_local_data`. **Declare any other permission yourself**, as in
   `expose(..., permissions=[Permission.NETWORK])`: the platform cannot tell that a function writes files
   or calls out.
+- **Refusing a caller.** A tool that your own code shuts a caller out of raises `Refused("message")`, from
+  `quant_agent_os.registration`, for example a desk the caller does not see. The call is recorded as `denied`
+  with that message, and the caller is told not to retry. A plain `PermissionError` is still an internal error,
+  so its text stays out of the caller's view.
 - **No replacing.** A tool with a name the server already serves stops the server at start-up. Give an
   app `prefix=True` to start its tools' names with its own.
 - **Your data.** Give `serve_apps` your own `DatasetStore`, which needs only `get` and `ids`. The analytics

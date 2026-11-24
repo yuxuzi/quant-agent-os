@@ -27,6 +27,7 @@ from quant_agent_os.tools.permissions import (
     Permission,
     PermissionDeniedError,
     PermissionPolicy,
+    Refused,
 )
 from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry, UnknownToolError
 
@@ -45,6 +46,7 @@ __all__ = [
     "PromptArgument",
     "PromptArgumentError",
     "PromptSpec",
+    "Refused",
     "ResourceSpec",
     "ToolContractError",
     "ToolRegistry",

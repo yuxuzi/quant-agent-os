@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`Refused`, for a firm's tool that refuses a caller.** Raising `quant_agent_os.registration.Refused("message")`
+  from a `FirmApp` tool records the call as `denied` with that message, not retryable. A plain exception,
+  including `PermissionError`, is still an internal error. Documented in the deployment guide, section 8.
+
 ### Changed
 
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
