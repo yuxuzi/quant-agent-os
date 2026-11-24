@@ -156,3 +156,40 @@ The performance view against the investment committee's need for the equity tran
 equity series' return statistics, and the warnings and conventions behind them. It draws no money-weighted return,
 which is what an equity investor asks (R1-L16). The horizon table is not in the page either; it is in
 `performance-report`, and it was wrong at the generated default (R1-L6).
+
+## Round 2 (2026-11-24)
+
+Baseline before the round, measured: `tests/mock_funds -k larchmere` passed in this run. Round-1 fixes verified by
+their tests in this run: #98 (`[reference]` reconciliation) by `test_larchmere_round1.py`; #101 (`/readyz`, JSON
+logs, `_FILE` secrets) by the same file. The readiness fix did not hold at this fund (below).
+
+**Round-1 fixes, status:**
+- Fixed in #98, verified round 2: the `[reference]` table reads the percent workbook (R1-L4), by the round-1 test file.
+- Fixed in #101, verified round 2 for the probe's run-store and JSON-log parts only.
+- Did not hold: R1-L12 (readiness). Measured this round: with the SQL database gone, `readiness_probe` still returns
+  READY, because `ids()` returns the static `DATASETS` list (`test_r2_larchmere_readiness_still_passes_with_the_sql_source_gone`).
+  The "every fund's DatasetStore gains check()" change was not made in this fund's store.
+- Not verified: R1-L6 (`periods_per_year` auto). The auto default is in the platform's Unreleased changelog; no test here
+  asserts the auto result for this fund, and I did not generate the report app this round.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R2-L1 | `larchmere_store.py` `ids()` and `/readyz` | Fixed in round 2: `LarchmereDatasetStore.check()` opens `clo.db` read-only and reads the catalog, uncached. With the SQL file gone, `/readyz` answers 503 naming `datasets` (`test_readyz_is_503_naming_datasets_when_the_sql_source_is_gone`; `test_r2_larchmere_readiness_fails_with_the_sql_source_gone`). Before the fix it answered 200. | Measured (tests pass) | The fund's own store | friction | Closed; R1-L12 is now fixed in round 2. |
+| R2-L2 | New CLO deal mid-month | A new deal needs a code edit: `DATASETS = _entries()` runs at import (`larchmere_store.py`), so the server must restart to see it. The entitlement group for the deal is an edit to the access file, also read at start. Not run in this round: the code path says the answer is no without restart. | Inferred (code read; pinned by `test_r2_larchmere_deal_list_is_fixed_at_import`) | Generic (no reload of a store's datasets or access file) | blocker for the mid-month goal | A reload action or a file-watched entry list in the platform, or a restart window for a deal. |
+| R2-L3 | Trustee and performance reads | Not changed in this round. The round-1 trustee workbook reader is in place. | Not run | Fund's own | cosmetic | None this round |
+| R2-L4 | AI-use report and the new deal | Not run; the report reads the run store, so a new deal's calls would appear with its dataset ids once served. | Inferred | Generic | cosmetic | Check after the deal is served. |
+
+### Round 2 data model notes
+
+| Standard table | Where it lives today | Keys and identifiers | History or vintages | Reshaping in `larchmere_store.py` |
+| --- | --- | --- | --- | --- |
+| Security master (loans and deals) | `clo.v_loan_static` in SQLite (`clo.db`) | `loan_id` (LN####), deal id | a static view, no history | `_entries` list, `_pivot` |
+| Prices | `loan_prices` in the lake catalog | `price_date`, `loan_id` | daily, no vintages | `"long"` entries, `_pivot` |
+| Returns (by deal, fund) | `loan_return_daily`, equity cash flows (`_equity_cashflows`) | date by deal | daily | `_equity_cashflows` |
+| Holdings or positions | `clo.v_loan_rating_factor` by report date; par per loan | `report_date`, `loan_id` | by report date | `"long"` entry |
+| Measures (what-ifs, tests) | Trustee OC test restated in the trustee workbook (round 1); served as `trustee_numbers_<deal>` | deal, test, date | restated values are a second vintage | `larchmere_store.py` two-line entry |
+| Reference (calendars, rates) | `sofr` in the lake (`rate_date`, `sofr_pct`) | rate date | daily | `"long"` entry |
+
+What a standard set would save: a standard "by loan, by report date" long table would take the rating factors and the
+loan static view with no reshape. What does not fit: the trustee's restated values, which are a second vintage of the same
+test, and the equity cash flows, which the fund derives.

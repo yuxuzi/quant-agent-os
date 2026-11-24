@@ -359,13 +359,10 @@ def test_readyz_is_503_and_names_the_run_store_when_it_breaks(
     assert "unreachable" not in text  # the error itself is never sent to the caller
 
 
-def test_readyz_still_says_ready_when_the_sql_source_is_gone(
+def test_readyz_is_503_naming_datasets_when_the_sql_source_is_gone(
     built: Path, tmp_path: Path, home: Path
 ) -> None:
-    """Measured gap: the datasets check reads `ids()`, a static list, so a missing database passes.
-
-    A deal's figures then fail one call at a time, after the server has said it is ready.
-    """
+    """R2-L1, fixed in round 2: `check()` reads the deal database uncached, so `/readyz` fails."""
     copy = tmp_path / "estate"
     shutil.copytree(built, copy)
     (copy / "sql" / "clo.db").unlink()
@@ -375,14 +372,16 @@ def test_readyz_still_says_ready_when_the_sql_source_is_gone(
         runs=MemoryRunStore(),
     ) as app:  # fmt: skip
 
-        async def probe() -> int:
+        async def probe() -> tuple[int, str]:
             async with (
                 app.router.lifespan_context(app),
                 httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=BASE) as http,
             ):
-                return (await http.get("/readyz")).status_code
+                response = await http.get("/readyz")
+                return response.status_code, response.text
 
-        assert anyio.run(probe) == 200
+        status, text = anyio.run(probe)
+    assert status == 503 and '"datasets"' in text and "missing" not in text
 
 
 # ---- 4. JSON logs -----------------------------------------------------------------------------

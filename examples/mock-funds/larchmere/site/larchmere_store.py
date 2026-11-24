@@ -229,6 +229,21 @@ class LarchmereDatasetStore:
         """Return every dataset id, sorted."""
         return sorted(DATASETS)
 
+    def check(self) -> None:
+        """Read both sources once, uncached, for `/readyz`: the SQL file and the lake catalog.
+
+        `ids()` is a static list, so it cannot tell that the files are gone; this can.
+        """
+        if not self.sql_path.is_file():
+            raise UnknownDatasetError(f"The deal database {self.sql_path} is missing.")
+        with closing(
+            sqlite3.connect(f"{self.sql_path.resolve().as_uri()}?mode=ro", uri=True)
+        ) as db:
+            db.execute("SELECT 1").fetchone()
+        if not self.catalog.is_file():
+            raise UnknownDatasetError(f"The lake catalog {self.catalog} is missing.")
+        json.loads(self.catalog.read_text())
+
     def get(self, dataset_id: str) -> Dataset:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
         entry = DATASETS.get(dataset_id)

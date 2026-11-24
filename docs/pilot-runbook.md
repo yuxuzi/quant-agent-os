@@ -184,12 +184,14 @@ uv run qaos runs export > audit.jsonl
 ```
 
 **Back up** with the server stopped: copy the home's `runs.db` (the only copy of the audit trail),
-`api-keys.toml`, and `knowledge.db`, and keep the fund's repository (site code, `uv.lock`, access and sign-in
-files). The warehouse is the fund's own and is backed up as it already is.
+`api-keys.toml`, and `knowledge.db`, and keep the fund's repository (site code, `pyproject.toml` and `uv.lock`,
+access and sign-in files). The warehouse is the fund's own and is backed up as it already is.
 
 **Upgrade** by building the new wheels, replacing them with `uv add`, and reviewing the `uv.lock` change. Then
 run `qaos doctor`, the agreed cases, and the legacy draft's `test_tools.py` before restarting. To roll back,
-restore the previous `uv.lock` and run `uv sync`. Read the [changelog](../CHANGELOG.md) for tool version
+restore the previous `pyproject.toml` and `uv.lock` together, since `uv add` writes the new wheels' sources into
+`pyproject.toml`, and run `uv sync --locked`. The stores need no change: 0.9.0 reads a run store a later 1.x
+release has written. Read the [changelog](../CHANGELOG.md) for tool version
 changes first; the stores' upgrade rules are in [operations](operations.md#upgrade).
 
 ## The drill

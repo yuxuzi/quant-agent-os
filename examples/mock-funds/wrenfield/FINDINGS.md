@@ -116,3 +116,35 @@ performance-report app generated in scratch and reconciled. Closed by the adopti
 | R1-W13 | Generated project from a long description | As R1-C14 in Corvane: the description was copied unwrapped into the docstring, and the project's `ruff check` stopped `app create`. Fixed by shortening it. | Measured (the first `qaos app create`) | Generic (the template) | Cosmetic | Wrap the description in the template. |
 | R1-W14 | `site/deploy/Dockerfile` header | Its build comment names `deploy/Dockerfile.wrenfield`; the file is `deploy/Dockerfile`. | Read | The fund's | Cosmetic | Correct the comment. |
 
+
+## Round 2 (2026-11-24)
+
+Baseline before the round: the full fund suite passed in this run (245 passed, 1 skipped, the Postgres test without
+`WRENFIELD_TEST_POSTGRES_URL`).
+
+**Round-1 fixes, status:**
+- Service errors (R1-W6, the vendor down): verified round 2. `test_a_vendor_service_that_is_down_fails_at_once_with_an_error` passes.
+- Stale-price warnings (R1-W9, a carried-forward closure price): did not hold. `test_a_risk_figure_as_of_a_carried_forward_closure_moves_and_no_warning_says_why`
+  passes and asserts no warning. The risk figure moves with the carried price and nothing says why.
+- `/readyz` (R1-W3): held. `test_readyz_fails_naming_the_datasets_when_the_lake_cannot_be_read` and the order-database test pass.
+- Not verified: `performance-report` auto periods and the holiday calendar fix (R1-W8). Not run this round.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity | Next step |
+| --- | --- | --- | --- | --- | --- |
+| R2-W1 | Key rotation (new kid in the JWKS) | The platform's verifier behaves as tested: a token with a new kid is refused until the refresh interval (30 s in the test) has passed since the last fetch, then accepted with no restart; tokens with the old kid keep verifying until they expire. The fund's descriptor uses `verify = "jwks"`, so the same rule applies. The first tokens in that window get a refusal, not an error. | Measured on the platform's verifier (`tests/server/test_jwks_sign_in.py::test_an_unknown_kid_fetches_keys_again_but_at_most_once_in_an_interval`, passes); not run through the fund's descriptor | Generic (the verifier's interval) | friction | Document the window for an operator, or refetch on the first unknown kid after a short delay. |
+| R2-W2 | Stale-price warning (R1-W9) | Fixed in round 2 for `spread_duration_dts`: it takes the bond total returns (`returns=`, wired in `wrenfield_server.py`) and calls the platform's `carried_forward` (Quant Toolbox) over the 60 rows up to the as-of day; the warning names the closed days and the bonds (`carried_warnings` in `wrenfield_credit.py`; `tests/mock_funds/test_wrenfield_round2.py`, on a closure frame). Not yet on `spread_shock_stress`, `cs01_dv01_by_tenor`, or the other tools. | Measured (2 tests pass) | Generic | friction | Extend the same warning to the remaining risk tools. |
+| R2-W3 | Lake holiday calendar (R1-W8) | Not run this round. | Not run | Fund's own | cosmetic | Re-check after a calendar change. |
+
+### Round 2 data model notes
+
+| Standard table | Where it lives today | Keys and identifiers | History or vintages | Reshaping in `wrenfield_store.py` |
+| --- | --- | --- | --- | --- |
+| Security master | Bond master in the lake's curated partition; OMS for orders | CUSIP-like bond id, issuer | static | `_specs`, `Spec` |
+| Prices | Bond OAS and prices, `_px` by column | bond id, date | daily, a carried-forward price on closures (R1-W9) | `_px`, `_pivot` |
+| Returns (by book, strategy, benchmark) | Book returns, `hy_ls`, `ig_ls` by book | book, date | daily | `_custom` per series |
+| Holdings or positions | OMS (Postgres in the cloud, SQLite locally): orders and positions | book, bond id, date | by date | `_rows`, `_named` |
+| Measures (risk, analytics) | Computed by the tools; the DTS is a computed column | date | none | none |
+| Reference (calendars, CDS, rates) | `_calendar` from the lake's weekdays; CDS by tenor (`_cds`), rates by prefix (`_rates`) | date, tenor | the calendar is the weekday rows (R1-W8) | `_calendar`, `_cds`, `_rates` |
+
+What a standard set would save: a calendar table would have removed the closure rows (R1-W8) and the carried-forward
+prices. What does not fit: the score tables by issuer (`_score_table`), which are monthly and keyed by issuer, not by date.

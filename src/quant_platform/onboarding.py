@@ -139,7 +139,12 @@ def init(
 def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: bool) -> None:
     """Add the sign-in rows: the file, and each provider's settings. It contacts no provider."""
     from quant_agent_os.config import SecretConfigError, secret_sources
-    from quant_platform.identity.sign_in import SignInError, load_sign_in_file, scope_gap
+    from quant_platform.identity.sign_in import (
+        SignInError,
+        kind_gap,
+        load_sign_in_file,
+        scope_gap,
+    )
 
     try:
         sign_in = load_sign_in_file(path)
@@ -164,6 +169,8 @@ def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: 
             )
             if gap := scope_gap(server.scope_map):
                 add(f"sign-in scopes: {server.issuer}", "warn", gap)
+            if gap := kind_gap(server.client_ids, server.token_use):
+                add(f"sign-in tokens: {server.issuer}", "warn", gap)
         elif server.client_secret_env in missing:
             add(
                 f"sign-in: {server.issuer}",

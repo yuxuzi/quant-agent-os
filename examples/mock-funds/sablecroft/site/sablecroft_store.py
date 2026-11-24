@@ -132,6 +132,10 @@ class SablecroftStore:
         """Return every dataset id, sorted."""
         return sorted(ENTRIES)
 
+    def check(self) -> None:
+        """Read the warehouse once, uncached, for `/readyz`; `ids()` is static and cannot fail."""
+        self.warehouse.check()
+
     def get(self, dataset_id: str) -> Dataset:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
         if dataset_id not in ENTRIES:
