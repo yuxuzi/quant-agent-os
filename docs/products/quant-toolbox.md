@@ -9,7 +9,7 @@ version and [changelog](../../packages/quant-toolbox/CHANGELOG.md)
 ([decision 0027](../decisions/0027-quant-toolbox-package.md)):
 
 ```bash
-uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0#subdirectory=packages/quant-toolbox"
+uv add "quant-toolbox[charts] @ git+https://github.com/yuxuzi/quant-agent-os@v1.0.0#subdirectory=packages/quant-toolbox"
 ```
 
 The platform's `toolbox` extra installs the same package, so `quant-agent-os[toolbox]` still works.

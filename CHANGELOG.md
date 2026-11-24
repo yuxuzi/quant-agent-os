@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-24
+
+1.0 is the release a fund can rely on ([plan](docs/plans/release-1.0.md)). It speaks MCP 2026-07-28 as well as the
+earlier handshake, keeps a record of AI use for compliance staff, draws a performance result in clients that show
+MCP Apps, and runs in a fund's cloud with readiness, JSON logs, and file secrets. Five mock funds adopted it over two
+rounds, and what they found is fixed or written down. From this release the public surfaces follow semantic
+versioning ([decision 0035](docs/decisions/0035-what-1.0-promises.md)), and Quant Toolbox reaches 1.0.0 with it.
+
 ### Security
 
 - **Third security review, for 1.0** (`docs/security-review.md`): JWKS sign-in, the caller assertion, standing
@@ -16,46 +24,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **Standard data tables and stub adapters (decision 0037, pre-1.0 part).** Quant Toolbox's `quant_toolbox.data.model`
-  describes the six standard tables (`securities`, `prices`, `returns`, `holdings`, `measures`, `reference`), validates
-  them, applies the as-of vintage rule, and pivots long tables wide. `qaos data adapter new NAME --table TABLE` writes a
-  stub adapter and a test that fails until the adapter is filled in; `--force` overwrites. The mapping file and
-  `MappedDatasetStore` are not yet built. Documented in the deployment guide, section "Map your data to the standard tables".
-
 - **What 1.0 promises** (decision 0035). From 1.0 the platform follows semver over its served tools, a firm's
   Python (`__all__` of `quant_platform`, `quant_agent_os.registration`, `quant_agent_os.testing`,
   `quant_agent_os.tools`, and `quant_agent_os.data`), the files and settings a firm writes, the `qaos`
   commands, the HTTP routes, and the run records. `tests/contract/public_api.lock.json` locks the Python
   names and signatures, and `quant_agent_os.registration` and `quant_agent_os.testing` now state theirs. The
   deprecation rule of decision 0015 returns: 90 days and one minor release before a removal, which is major.
-
-### Added
-
-- **`Refused`, for a firm's tool that refuses a caller.** Raising `quant_agent_os.registration.Refused("message")`
-  from a `FirmApp` tool records the call as `denied` with that message, not retryable. A plain exception,
-  including `PermissionError`, is still an internal error. Documented in the deployment guide, section 8.
-- **`performance-report`'s `reconcile` leaves a dated record.** Each run writes `reconcile.json` to a new run folder under `reports/`: the reference file's name and SHA-256, the tolerance, the comparisons and periods, every break (book, month, ours, reference, and bps), and provenance. A restatement after a report went out is then visible beside the report's own folder.
-- **`performance-report` takes one benchmark per book.** `benchmark` may be a table of `book = "column"` under `[benchmark]`, besides the single column name. Each benchmark-relative figure uses that book's benchmark, and the risk table names it in a Benchmark column. A book the table leaves out shows n/a and is noted; a table key that is not a book is refused.
-- **`performance-report` notes a stale last date.** When the file's last date is more than two of its periods before the as-of date (`--as-of`, or today), the data notes name the last date and the gap, in days and periods. Daily data counts weekdays, so a Friday's file is current on the Monday.
-- **`performance-report` shows n/a for a horizon shorter than the data's period, and counts in the data's periods.** On quarterly data MTD is n/a (it was the quarter's return under a month's name); on annual data MTD and QTD are. The reconciliation counts quarter-ends or year-ends for such data, not months, e.g. "4 comparisons: 4 quarter-ends of 1 book".
-- **`performance-report` reads the periods a year from the dates.** `periods_per_year` now defaults to `"auto"`: the median spacing of the dates gives daily (252), weekly (52), monthly (12), quarterly (4), or annual (1), and every report states the count and how it was chosen. Before, `--defaults` annualised monthly returns as daily (ITD 33.16% against 10.02% for the same file), with no warning. A set number that disagrees with the dates by more than 1.5 times is refused, naming what the dates look like; the `frequency` question is not asked for this application, and `periods_per_year` replaces it.
-- **`qaos app new --source`** sets where a generated project installs quant-agent-os (Quant Toolbox) from, a git+https URL with `@tag` or a local path, with `--defaults` as well. A template that installs no quant-agent-os refuses it. Before, `--defaults` always pinned the release on GitHub.
-
-### Changed
-
-- **A long description no longer breaks a `performance-report` project's checks.** The description is wrapped in the package docstring, so a description of 101 characters or more passes `ruff check`.
-- **A `header_row` that holds no data says what it read.** A wrong `[excel] header_row` (or `[reference]`)
-  now names the row read as the column names, its cells, and the row below it, with the first date's row,
-  in place of "no rows of data below row N".
-- **`performance-report` reconciles an administrator's own file as it comes.** A `[reference]` table in
-  `config.toml` names the reference file and, when they differ from the returns file's, its unit
-  (`percent`) and where its table starts in a workbook (`sheet`, `header_row`); `reconcile` then needs no
-  argument. The benchmark column is no longer reported as missing from the reference. Before, a percent
-  workbook with title rows could not be reconciled against a returns file in fractions without editing it.
+- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
+  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
+  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
+  [operations](docs/operations.md#show-how-ai-was-used).
+- **`qaos runs report` gives each principal's first and last call (UTC), and counts per-call approvals by the operator who granted them.** Groups and the documents a research call read are not in the report: the run record does not hold the groups, and the documents are only in the call's output.
+- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
+  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
+  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
+  beside the tool, and every other client gets the same text result as before. Contract tests cover the
+  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
+  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
+- **The performance view leads with four figures** (annualised return, volatility, Sharpe ratio, maximum drawdown), then groups the other metrics, adds the basis the output states, and names the benchmark only when the output does. The window's dates, the benchmark's name, and the risk-free rate's value are not in the tool's output, so the page does not show them.
 - **Readiness.** `GET /readyz` answers `{"status": "ready"}` when the server's run store, knowledge store, and
   datasets each answer a read, and otherwise `503` with `"failed"` naming the stores that did not. It is on every
   REST app, including a firm's server from `serve_apps` and `build_server_app`, needs no key, and calls no
   identity provider or embedder. Its errors are never sent to the caller. `/healthz` is unchanged.
+- **Datasets in readiness.** `/readyz` calls a dataset store's `check()` when it has one, and its `ids()` only when
+  it does not. `DirectoryDatasetStore.check()` fails when its folder is missing or cannot be listed, so a datasets
+  folder that does not exist is not ready. `SqlDatasetStore.check()` runs `SELECT 1` on each source, uncached, with
+  a 5-second limit. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap. A firm's store should
+  define `check()`; see the store notes in `docs/deployment.md` section 8.
 - **JSON logs.** `QUANT_AGENT_OS_LOG_FORMAT=json` writes one JSON object per log line (`time`, `level`, `logger`,
   `message`, and `exception` when there is one), for a log service. The default stays `text`, and any other value
   stops start-up. Secrets are redacted from the exception text too, in both formats. A server started with
@@ -73,66 +68,56 @@ All notable changes to this project are documented here. The format follows
   drivers and SQLAlchemy, to the platform's image. uv installs them in a stage the final image does not keep, and
   a failed install fails the build. `docs/deployment.md` section 8, "Drivers in your image", shows a requirements
   file with one example per driver family.
+- **A listing scope gap is a warning.** A sign-in file whose `scope_map` grants `tools:call` and never `tools:list`
+  is warned about by `qaos doctor` and at `qaos serve` start-up, naming the provider. The listing needs `tools:list`, and
+  `docs/deployment.md` section 10 now says so. The file is still accepted.
+- **Standard data tables and stub adapters (decision 0037, pre-1.0 part).** Quant Toolbox's `quant_toolbox.data.model`
+  describes the six standard tables (`securities`, `prices`, `returns`, `holdings`, `measures`, `reference`), validates
+  them, applies the as-of vintage rule, and pivots long tables wide. `qaos data adapter new NAME --table TABLE` writes a
+  stub adapter and a test that fails until the adapter is filled in; `--force` overwrites. The mapping file and
+  `MappedDatasetStore` are not yet built. Documented in the deployment guide, section "Map your data to the standard tables".
+- **`Refused`, for a firm's tool that refuses a caller.** Raising `quant_agent_os.registration.Refused("message")`
+  from a `FirmApp` tool records the call as `denied` with that message, not retryable. A plain exception,
+  including `PermissionError`, is still an internal error. Documented in the deployment guide, section 8.
+- **`qaos app new --source`** sets where a generated project installs quant-agent-os (Quant Toolbox) from, a git+https URL with `@tag` or a local path, with `--defaults` as well. A template that installs no quant-agent-os refuses it. Before, `--defaults` always pinned the release on GitHub.
+- **`performance-report`'s `reconcile` leaves a dated record.** Each run writes `reconcile.json` to a new run folder under `reports/`: the reference file's name and SHA-256, the tolerance, the comparisons and periods, every break (book, month, ours, reference, and bps), and provenance. A restatement after a report went out is then visible beside the report's own folder.
+- **`performance-report` reconciles an administrator's own file as it comes.** A `[reference]` table in
+  `config.toml` names the reference file and, when they differ from the returns file's, its unit
+  (`percent`) and where its table starts in a workbook (`sheet`, `header_row`); `reconcile` then needs no
+  argument. The benchmark column is no longer reported as missing from the reference. Before, a percent
+  workbook with title rows could not be reconciled against a returns file in fractions without editing it.
+- **`performance-report` takes one benchmark per book.** `benchmark` may be a table of `book = "column"` under `[benchmark]`, besides the single column name. Each benchmark-relative figure uses that book's benchmark, and the risk table names it in a Benchmark column. A book the table leaves out shows n/a and is noted; a table key that is not a book is refused.
+- **`performance-report` notes a stale last date.** When the file's last date is more than two of its periods before the as-of date (`--as-of`, or today), the data notes name the last date and the gap, in days and periods. Daily data counts weekdays, so a Friday's file is current on the Monday.
 
 ### Changed
 
-- **Research settings are built, not read.** `EmbeddingSettings` and `RagflowSettings` are plain models now, built
-  by `embedding_settings()` and `ragflow_settings()`, which read the keys through the secrets convention. Nothing
-  else changes for a caller who uses `make_embedder` or `make_ragflow_loader`.
-- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
-  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
-  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
-  beside the tool, and every other client gets the same text result as before. Contract tests cover the
-  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
-  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
-- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
-  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
-  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
-  [operations](docs/operations.md#show-how-ai-was-used).
-
-### Changed
-
-- **`qaos runs report` gives each principal's first and last call (UTC), and counts per-call approvals by the operator who granted them.** Groups and the documents a research call read are not in the report: the run record does not hold the groups, and the documents are only in the call's output.
-### Fixed
-
-- **A server's first metric call no longer races its time limit.** The first call imported the metrics
-  backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
-  than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
-  serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
-
-### Changed
-
-- **The performance view leads with four figures** (annualised return, volatility, Sharpe ratio, maximum drawdown), then groups the other metrics, adds the basis the output states, and names the benchmark only when the output does. The window's dates, the benchmark's name, and the risk-free rate's value are not in the tool's output, so the page does not show them.
 - **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
   MCP Python SDK 2 (`mcp>=2.3,<3`): a client that speaks the stateless 2026-07-28 revision gets it, over
   HTTP and stdio, and older clients keep the `initialize` handshake, from the same endpoint. Tools,
   results, and refusals are the same in both, and the contract tests run in both. The sign-in code moves
   from `httpx` to `httpx2`, which SDK 2 brings. A firm's own code that imported the SDK directly follows
   the SDK's migration guide.
-- **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
-  `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
-  the published mirrors carry these versions.
-- **Datasets in readiness.** `/readyz` calls a dataset store's `check()` when it has one, and its `ids()` only when
-  it does not. `DirectoryDatasetStore.check()` fails when its folder is missing or cannot be listed, so a datasets
-  folder that does not exist is not ready. `SqlDatasetStore.check()` runs `SELECT 1` on each source, uncached, with
-  a 5-second limit. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap. A firm's store should
-  define `check()`; see the store notes in `docs/deployment.md` section 8.
-- **A listing scope gap is a warning.** A sign-in file whose `scope_map` grants `tools:call` and never `tools:list`
-  is warned about by `qaos doctor` and at `qaos serve` start-up, naming the provider. The listing needs `tools:list`, and
-  `docs/deployment.md` section 10 now says so. The file is still accepted.
+- **Quant Toolbox 1.0.0.** Frequency inference, carried-forward and stale-date checks, and horizons by the data's
+  own frequency are in its public API, shared by the template packs and Quant Analytics; independent known-answer
+  tests hold annualisation, horizons, and drawdowns under both backends; seven internal names left its public API
+  before the freeze; its README states its semver promise. Its changelog has the details.
+- **`performance-report` reads the periods a year from the dates.** `periods_per_year` now defaults to `"auto"`: the median spacing of the dates gives daily (252), weekly (52), monthly (12), quarterly (4), or annual (1), and every report states the count and how it was chosen. Before, `--defaults` annualised monthly returns as daily (ITD 33.16% against 10.02% for the same file), with no warning. A set number that disagrees with the dates by more than 1.5 times is refused, naming what the dates look like; the `frequency` question is not asked for this application, and `periods_per_year` replaces it.
+- **`performance-report` shows n/a for a horizon shorter than the data's period, and counts in the data's periods.** On quarterly data MTD is n/a (it was the quarter's return under a month's name); on annual data MTD and QTD are. The reconciliation counts quarter-ends or year-ends for such data, not months, e.g. "4 comparisons: 4 quarter-ends of 1 book".
+- **Research settings are built, not read.** `EmbeddingSettings` and `RagflowSettings` are plain models now, built
+  by `embedding_settings()` and `ragflow_settings()`, which read the keys through the secrets convention. Nothing
+  else changes for a caller who uses `make_embedder` or `make_ragflow_loader`.
+- **The template packs install Quant-Agent-OS 1.0.0 by default** (`quant-apps` 2.3.0, `quant-baseline` 4.1.2,
+  `agent-tool` 1.0.3), so a generated application gets Quant Toolbox 1.0.0. `quant-apps` changes its
+  `performance-report` as listed above; the other two change only the pin.
 
 ### Fixed
 
+- **A server's first metric call no longer races its time limit.** The first call imported the metrics
+  backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
+  than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
+  serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
 - **Readiness that reads.** A `/readyz` probe of the datasets no longer passes after the store's files or database
   are deleted: its `ids()` answered from a declared list. The run and knowledge stores were already read by a query.
-- **Mock-fund images install with uv, and fail on error.** Sablecroft's `Dockerfile.firm` installed its driver with
-  `pip ... || true`, which hid a failed install. Corvane's and Wrenfield's images ran `uv` or installed DuckDB and
-  pyarrow where the platform's final image has no uv. Each now installs in a build stage with uv, which the final
-  image does not keep. `tests/contract/test_deploy_files.py` now fails on `|| true`, on a bare pip install in any
-  Dockerfile, and on a uv install in a stage without uv.
-
-### Fixed
-
 - **A service outage reaches the caller as a message.** A `FirmApp.call_service` tool whose service is
   unreachable, does not answer in time, or fails with a 5xx status now says so ("The desk_limits service is
   not reachable."), without the service's address, instead of "failed with an internal error". Its HTTP timeout
@@ -146,6 +131,15 @@ All notable changes to this project are documented here. The format follows
   5% of a window with at least two, are named by asset and count, and a weekday on which every asset's return is
   exactly zero is noted as a closure carried forward (dates are known for a dataset). These are warnings only: the
   figures are unchanged, and the tool's schema and version are too.
+- **Mock-fund images install with uv, and fail on error.** Sablecroft's `Dockerfile.firm` installed its driver with
+  `pip ... || true`, which hid a failed install. Corvane's and Wrenfield's images ran `uv` or installed DuckDB and
+  pyarrow where the platform's final image has no uv. Each now installs in a build stage with uv, which the final
+  image does not keep. `tests/contract/test_deploy_files.py` now fails on `|| true`, on a bare pip install in any
+  Dockerfile, and on a uv install in a stage without uv.
+- **A long description no longer breaks a `performance-report` project's checks.** The description is wrapped in the package docstring, so a description of 101 characters or more passes `ruff check`.
+- **A `header_row` that holds no data says what it read.** A wrong `[excel] header_row` (or `[reference]`)
+  now names the row read as the column names, its cells, and the row below it, with the first date's row,
+  in place of "no rows of data below row N".
 
 ## [0.9.0] - 2026-11-19
 

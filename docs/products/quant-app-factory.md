@@ -90,7 +90,7 @@ from [Quant Toolbox](quant-toolbox.md), the library Quant Analytics uses too
 
 ```toml
 [tool.uv.sources]
-quant-toolbox = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v0.9.0", subdirectory = "packages/quant-toolbox" }
+quant-toolbox = { git = "https://github.com/yuxuzi/quant-agent-os", rev = "v1.0.0", subdirectory = "packages/quant-toolbox" }
 ```
 
 So its numbers change only when you move that tag. To take a later fix to a formula or a report, edit `rev`,
@@ -136,7 +136,7 @@ installing from its own mirror, or testing a candidate, passes `--source` (the s
 
 ```bash
 uv run qaos app new performance-report my-report --defaults --source ../quant-agent-os
-uv run qaos app new performance-report my-report --defaults --source git+https://mirror.example.com/fund/quant-agent-os@v0.9.0
+uv run qaos app new performance-report my-report --defaults --source git+https://mirror.example.com/fund/quant-agent-os@v1.0.0
 ```
 
 A template that installs no quant-agent-os refuses `--source`, rather than ignoring it.
