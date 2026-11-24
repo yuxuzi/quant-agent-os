@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
+  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
+  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
+  beside the tool, and every other client gets the same text result as before. Contract tests cover the
+  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
+  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
+
 ### Changed
 
 - **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
