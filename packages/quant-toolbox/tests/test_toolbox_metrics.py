@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pytest
 
+from quant_toolbox._hac import newey_west_t_stat  # not public; tested here
 from quant_toolbox.performance import (
     annualized_return,
     annualized_volatility,
@@ -19,7 +20,6 @@ from quant_toolbox.performance import (
 from quant_toolbox.research import (
     information_coefficient,
     newey_west_lags,
-    newey_west_t_stat,
     ranks,
 )
 

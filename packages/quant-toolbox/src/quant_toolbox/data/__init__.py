@@ -22,7 +22,7 @@ A series' frequency is `infer_frequency` from its dates, or `check_frequency` fo
 reports the returns that suggest carried-forward prices: zero runs, and closed weekdays.
 """
 
-from quant_toolbox._types import BoolArray, FloatArray
+from quant_toolbox._types import FloatArray
 from quant_toolbox.data import sql
 from quant_toolbox.data._calendar import (
     Calendar,
@@ -86,7 +86,6 @@ __all__ = [
     "OUTLIER",
     "PERCENT_LIKE",
     "STALE_PERIODS",
-    "BoolArray",
     "Calendar",
     "CalendarError",
     "CarriedForward",

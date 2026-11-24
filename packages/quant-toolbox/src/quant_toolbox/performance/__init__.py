@@ -10,7 +10,7 @@ as values, parametric value at risk, the standard error, probabilistic and defla
 ratios and minimum track record, and single-period Brinson attribution.
 """
 
-from quant_toolbox._types import BoolArray, FloatArray
+from quant_toolbox._types import FloatArray
 from quant_toolbox.performance._analysis import HORIZONS, Analysis, MetricsFunction, analyze
 from quant_toolbox.performance._attribution import Attribution, GroupAttribution, brinson
 from quant_toolbox.performance._backend import (
@@ -38,7 +38,6 @@ from quant_toolbox.performance._horizons import (
     horizon_start,
     is_horizon,
     monthly_returns,
-    months_before,
     shorter_than_period,
     underwater,
     wealth,
@@ -91,7 +90,6 @@ __all__ = [
     "VAR_METHODS",
     "Analysis",
     "Attribution",
-    "BoolArray",
     "Distribution",
     "Drawdown",
     "FloatArray",
@@ -126,7 +124,6 @@ __all__ = [
     "max_drawdown",
     "minimum_track_record",
     "monthly_returns",
-    "months_before",
     "omega_ratio",
     "parametric_expected_shortfall",
     "parametric_var",
