@@ -385,7 +385,7 @@ def test_the_descriptors_follow_section_11(monkeypatch: pytest.MonkeyPatch) -> N
     )  # the fund's own: stays an environment variable
     assert "PGPASSWORD" in secrets and env["PGPASSWORD_FILE"] == "/run/secrets/pg-reader"
     dockerfile = (DEPLOY / "Dockerfile.corvane").read_text()
-    assert "COPY --from=uv" in dockerfile and "rm /usr/local/bin/uv" in dockerfile
+    assert "COPY --from=uv" in dockerfile  # the final image keeps no uv: test_deploy_files
 
 
 # ---- the performance report: the administrator's file reconciled to the books ------------------

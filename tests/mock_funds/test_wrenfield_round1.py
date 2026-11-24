@@ -393,8 +393,8 @@ def test_the_descriptors_follow_section_11() -> None:
     assert "HealthCheckPath: /readyz" in infra  # readiness on the load balancer
     assert '"3600"' in infra and "idle_timeout.timeout_seconds" in infra  # MCP's idle timeout
     dockerfile = (DEPLOY / "Dockerfile").read_text()
-    assert "COPY --from=uv" in dockerfile and "duckdb pyarrow" in dockerfile
-    assert "rm /usr/local/bin/uv" in dockerfile and "introspection" not in dockerfile
+    assert "COPY --from=uv" in dockerfile and '"duckdb>=2,<3" "pyarrow>=26,<27"' in dockerfile
+    assert "introspection" not in dockerfile  # the final image keeps no uv: test_deploy_files
 
 
 # ---- the candidate: the AI-use report over a test day ------------------------------------------
@@ -541,13 +541,13 @@ def test_the_vendor_call_is_denied_until_the_operator_grants_the_network(
     assert reply["status"] == "denied"  # the default: no network for a read-only server
 
 
-def test_a_vendor_answering_after_the_limit_gets_error_or_timeout_by_a_race(
+def test_a_vendor_answering_after_the_limit_is_named_to_the_caller(
     tmp_path: Path, pool: cognito.RunningPool, store: WrenfieldDatasetStore
 ) -> None:
-    """Measured in round 1: the service's socket timeout and the tool's clock are both one second,
-    and they start at different moments. Whichever fires first decides the status the caller
-    sees: `error` (with no reason, in the caller's view) or `timeout`. Both runs of the probe
-    differed (finding R1-W7)."""
+    """Round 1 measured a race: the service's socket timeout and the tool's clock were both one
+    second, so the caller saw `error` with no reason, or `timeout` (finding R1-W7). Since #104 the
+    service's timeout is shorter than the tool's limit, so the caller is told the service did not
+    answer, every time."""
     runs = MemoryRunStore()
     with _vendor(delay=3.0) as url:
         app = _pricing_app(url, timeout=1.0)
@@ -560,14 +560,13 @@ def test_a_vendor_answering_after_the_limit_gets_error_or_timeout_by_a_race(
                 client, pool, "pm-hy", "wrenfield_pricing_vendor_marks", {"bond_id": "MARL_28A"}
             )
         took = time.monotonic() - started
-    assert reply["status"] in ("error", "timeout")
-    assert "did not answer" not in reply["error"]  # the reason is never in the caller's view
-    assert 0.9 < took < 2.5  # held to the one-second limit, not the vendor's three seconds
+    assert reply["status"] == "error"
+    assert "service did not answer within" in reply["error"]
+    assert "127.0.0.1" not in reply["error"]  # the service's address stays private
+    assert took < 2.5  # held to the one-second limit, not the vendor's three seconds
     (run,) = runs.list_runs(5)
     stored = runs.get_run(run.run_id)
-    assert stored is not None and [c.status for c in stored.calls] == [reply["status"]]
-    if reply["status"] == "error":
-        assert "did not answer within 1 s" in (stored.calls[0].error_detail or "")
+    assert stored is not None and [c.status for c in stored.calls] == ["error"]
 
 
 def test_a_vendor_that_trickles_past_the_limit_is_a_timeout_with_a_retry_hint(
@@ -608,8 +607,9 @@ def test_a_vendor_service_that_is_down_fails_at_once_with_an_error(
         reply = _post_tool(
             client, pool, "pm-hy", "wrenfield_pricing_vendor_marks", {"bond_id": "MARL_28A"}
         )
-    assert reply["status"] == "error" and "internal error" in reply["error"]
-    assert "Cannot reach" not in reply["error"]  # the caller is not told it was the vendor
+    # Round 1 measured "internal error" here (R1-W6); since #104 the caller is told what failed.
+    assert reply["status"] == "error" and "service is not reachable" in reply["error"]
+    assert str(closed) not in reply["error"]  # the service's address stays private
     assert time.monotonic() - started < 1.0  # refused at once, not held to the time limit
 
 
