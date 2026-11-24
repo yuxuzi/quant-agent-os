@@ -17,7 +17,7 @@ from quant_toolbox.report.excel import write_workbook
 from . import __version__
 from .context import Context
 from .firm.loaders import LOADERS
-from .frequency import resolve
+from .frequency import STALE_PERIODS, Periods, periods_behind, resolve
 from .sections import available
 from .settings import Settings
 
@@ -91,9 +91,22 @@ def build_context(table: Table, settings: Settings, as_of: dt.date | None = None
         settings=settings,
         benchmark=benchmark,
         benchmark_name=settings.benchmark,
-        data_notes=check_data(chosen.select(books)),
+        data_notes=check_data(chosen.select(books))
+        + staleness_notes(chosen.dates[-1], as_of or dt.date.today(), periods),
         periods=periods,
     )
+
+
+def staleness_notes(last: dt.date, as_of: dt.date, periods: Periods) -> list[str]:
+    """A note when the last date is more than two periods before ``as_of``, naming both."""
+    behind = periods_behind(last, as_of, periods)
+    if behind <= STALE_PERIODS:
+        return []
+    unit = "business days" if periods.name == "daily" else "periods"
+    return [
+        f"The last date is {last}, {(as_of - last).days} days ({behind:.1f} {unit}) before the "
+        f"as-of date {as_of}. The figures stop at {last}."
+    ]
 
 
 def check_data(table: Table) -> list[str]:

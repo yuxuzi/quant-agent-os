@@ -127,3 +127,24 @@ def shorter_than_period(label: str, periods_per_year: int) -> bool:
 def period_noun(count: int) -> str:
     """The name of one period, as a report says it: "quarterly", or "3-month" for another count."""
     return NAMES.get(count) or f"{12 / count:g}-month"
+
+
+STALE_PERIODS = 2  # a last date more than this many periods before the as-of date is noted
+
+
+def periods_behind(last: dt.date, as_of: dt.date, periods: Periods) -> float:
+    """How many of the data's periods lie after ``last``, up to ``as_of``.
+
+    Daily data counts weekdays, so that a Friday's data is current on the Monday; other data counts
+    calendar days in periods of the average length.
+    """
+    if as_of <= last:
+        return 0.0
+    if periods.name == "daily":
+        return float(
+            sum(
+                (last + dt.timedelta(days=day)).weekday() < 5
+                for day in range(1, (as_of - last).days + 1)
+            )
+        )
+    return (as_of - last).days / (DAYS_PER_YEAR / periods.count)

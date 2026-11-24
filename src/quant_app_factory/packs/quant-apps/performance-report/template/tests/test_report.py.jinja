@@ -314,6 +314,42 @@ def test_reconcile_counts_are_in_the_data_periods() -> None:
     )
 
 
+# Freshness
+
+
+def test_a_last_date_more_than_two_periods_before_the_as_of_date_is_noted() -> None:
+    context = build_context(_returns(_period_ends(12, 1)), Settings(), dt.date(2025, 5, 31))
+
+    assert context.data_notes == [
+        "The last date is 2024-12-31, 151 days (5.0 periods) before the as-of date 2025-05-31. "
+        "The figures stop at 2024-12-31."
+    ]
+
+
+def test_two_periods_or_fewer_are_not_noted() -> None:
+    context = build_context(_returns(_period_ends(12, 1)), Settings(), dt.date(2025, 1, 31))
+
+    assert not any("last date" in note for note in context.data_notes)
+
+
+def test_daily_data_counts_business_days_so_a_weekend_is_not_stale() -> None:
+    friday = dt.date(2024, 11, 29)
+    weekdays = [
+        day
+        for day in (dt.date(2024, 10, 1) + dt.timedelta(days=n) for n in range(60))
+        if day.weekday() < 5 and day <= friday
+    ]
+
+    monday = build_context(_returns(weekdays), Settings(), dt.date(2024, 12, 2))
+    thursday = build_context(_returns(weekdays), Settings(), dt.date(2024, 12, 5))
+
+    assert not any("last date" in note for note in monday.data_notes)
+    assert thursday.data_notes[-1] == (
+        "The last date is 2024-11-29, 6 days (4.0 business days) before the as-of date 2024-12-05. "
+        "The figures stop at 2024-11-29."
+    )
+
+
 # Reconciliation
 
 
