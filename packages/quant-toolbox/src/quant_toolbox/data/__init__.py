@@ -18,7 +18,8 @@ another for one block, and `align_to_calendar` and `session_gaps` use it when gi
 `business_days` is weekdays only, for synthetic data.
 
 A series' frequency is `infer_frequency` from its dates, or `check_frequency` for a stated count;
-`periods_behind` counts how many periods a last date lies before an as-of date.
+`periods_behind` counts how many periods a last date lies before an as-of date. `carried_forward`
+reports the returns that suggest carried-forward prices: zero runs, and closed weekdays.
 """
 
 from quant_toolbox._types import BoolArray, FloatArray
@@ -38,6 +39,7 @@ from quant_toolbox.data._calendar import (
     set_default_calendar,
     using_calendar,
 )
+from quant_toolbox.data._carried import CarriedForward, ZeroRuns, carried_forward
 from quant_toolbox.data._checks import (
     MIN_OBSERVATIONS,
     OUTLIER,
@@ -87,6 +89,7 @@ __all__ = [
     "BoolArray",
     "Calendar",
     "CalendarError",
+    "CarriedForward",
     "ConfigError",
     "FloatArray",
     "Frequency",
@@ -98,10 +101,12 @@ __all__ = [
     "SqlError",
     "Table",
     "TableError",
+    "ZeroRuns",
     "align_to_calendar",
     "aligned",
     "as_calendar",
     "business_days",
+    "carried_forward",
     "check_frequency",
     "configured_calendar",
     "default_calendar",

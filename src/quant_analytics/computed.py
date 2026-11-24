@@ -27,8 +27,6 @@ PERCENT_LIKE = data.PERCENT_LIKE
 RISK_CONVENTIONS = risk.CONVENTIONS
 FACTOR_CONVENTIONS = risk.FACTOR_CONVENTIONS
 TAIL_CUTOFF = 0.05  # parametric value at risk and expected shortfall at 95%
-CARRIED_RUN = 3  # this many exact zero returns in a row suggest a carried-forward price
-CARRIED_SHARE = 0.05  # or more than this share of a window, if there are at least two of them
 LISTED = 5  # items named in a warning before "and N more"
 # Conventions this package states itself, for measures the toolbox names differently.
 EXTRA_CONVENTIONS = {
@@ -253,18 +251,15 @@ def carried_forward_warnings(
 ) -> list[str]:
     """Warn where exact zero returns suggest carried-forward prices, and where a weekday closes.
 
-    A run of exact zero returns, or more than `CARRIED_SHARE` of a window, suggests prices carried
-    over a day without trading. A weekday on which every asset's return is exactly zero is a
-    closure carried forward; it is checked only when ``dates`` (one per return) are known. These
-    are warnings: the figures are computed on the returns as given.
+    The toolbox finds the facts (`data.carried_forward`); this words them. These are warnings:
+    the figures are computed on the returns as given.
     """
-    flagged: list[str] = []
-    for asset, values in assets.items():
-        count, longest = _zero_runs(values)
-        run_found = longest >= CARRIED_RUN
-        share_found = count >= 2 and count > CARRIED_SHARE * len(values)
-        if values and (run_found or share_found):
-            flagged.append(f"{asset} ({count} of {len(values)} exact zero, longest run {longest})")
+    found = data.carried_forward(assets, dates)
+    flagged = [
+        f"{item.asset} ({item.zero_returns} of {item.window} exact zero, "
+        f"longest run {item.longest_run})"
+        for item in found.assets
+    ]
     warnings: list[str] = []
     if flagged:
         noun = "asset" if len(flagged) == 1 else "assets"
@@ -272,33 +267,14 @@ def carried_forward_warnings(
             f"Exact zero returns suggest carried-forward prices in {len(flagged)} {noun}: "
             f"{_listed(flagged)}. The figures use the returns as given."
         )
-    columns = list(assets.values())
-    if dates is not None and columns and all(len(values) == len(dates) for values in columns):
-        closed = [
-            day.isoformat()
-            for index, day in enumerate(dates)
-            if day.weekday() < 5 and all(values[index] == 0.0 for values in columns)
-        ]
-        if closed:
-            warnings.append(
-                f"{len(closed)} weekday(s) have an exact zero return for every asset "
-                f"({_listed(closed)}): a market closure carried forward, or no new prices. The "
-                "figures count them as trading days."
-            )
+    if found.closed_days:
+        closed = [day.isoformat() for day in found.closed_days]
+        warnings.append(
+            f"{len(closed)} weekday(s) have an exact zero return for every asset "
+            f"({_listed(closed)}): a market closure carried forward, or no new prices. The "
+            "figures count them as trading days."
+        )
     return warnings
-
-
-def _zero_runs(values: list[float]) -> tuple[int, int]:
-    """Return the count of exact zero returns and the longest run of them in a row."""
-    count, longest, run = 0, 0, 0
-    for value in values:
-        if value == 0.0:
-            count += 1
-            run += 1
-            longest = max(longest, run)
-        else:
-            run = 0
-    return count, longest
 
 
 def _listed(items: list[str]) -> str:

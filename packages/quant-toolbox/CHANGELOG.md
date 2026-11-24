@@ -15,6 +15,9 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
   `data.STALE_PERIODS` count how far a last date lies behind an as-of date.
 - `performance.shorter_than_period(label, periods_per_year)` says whether a horizon is shorter than the
   data's period (MTD on quarterly data, MTD or QTD on annual data), so the template can show n/a.
+- `data.carried_forward(assets, dates)` returns the facts behind carried-forward warnings: assets with
+  exact zero runs (`ZeroRuns`), and weekdays on which every asset is exactly zero. Quant Analytics words
+  its warnings from these; the thresholds moved here with the detection.
 
 ### Changed
 
