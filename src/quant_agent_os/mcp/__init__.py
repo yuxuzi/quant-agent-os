@@ -12,9 +12,12 @@ from quant_agent_os.mcp.adapters import (
     get_prompt,
     prompt_definitions,
     read_resource,
+    read_view,
     resource_templates,
     served_resources,
+    served_views,
     tool_definitions,
+    view_resources,
 )
 from quant_agent_os.mcp.server import (
     AccessDeniedError,
@@ -35,9 +38,12 @@ __all__ = [
     "get_prompt",
     "prompt_definitions",
     "read_resource",
+    "read_view",
     "resource_templates",
     "run_stdio",
     "serve_stdio",
     "served_resources",
+    "served_views",
     "tool_definitions",
+    "view_resources",
 ]

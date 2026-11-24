@@ -93,7 +93,13 @@ restart is needed.
 ```bash
 docker compose -f deploy/compose.yaml up -d server
 curl http://127.0.0.1:8000/healthz      # {"status":"ok"}
+curl http://127.0.0.1:8000/readyz       # {"status":"ready"}
 ```
+
+`/healthz` says the process is up. `/readyz` says the server can answer: its run store, knowledge store, and
+datasets each answer a read. Otherwise it returns `503` with the names of the stores that failed, such as
+`{"status": "not ready", "failed": ["runs"]}`, and nothing else. Neither route needs a key, and neither calls an
+identity provider or an embedder.
 
 The container runs as an unprivileged user (uid 10001):
 - the root filesystem is read-only, all capabilities are dropped, and privilege escalation is
@@ -189,7 +195,10 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
 - **No replacing.** A tool with a name the server already serves stops the server at start-up. Give an
   app `prefix=True` to start its tools' names with its own.
 - **Your data.** Give `serve_apps` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
-  tools and `list_datasets` then read it by reference, and no connector is needed.
+  tools and `list_datasets` then read it by reference, and no connector is needed. Define `check()` as well: it
+  is what `/readyz` calls for datasets. It reads your source once, without a cache, and raises when the source
+  cannot be read. Without it, readiness calls `ids()`, which can answer from a list you declared, so the probe
+  passes after the source is gone. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap.
 - **Test it.** In your CI, call `check_app(risk, {"desk_var": {...}}, datasets=store)` from
   `quant_agent_os.testing`. With `lock=Path("tools.lock.json")` it also fails when a tool's schemas
   change without a big enough version bump; create the lock with `update_lock=True`.
@@ -219,7 +228,8 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
   serves, such as the research corpus, open around the block as well.
 - **Deploy it.** Build an image from the platform's, as the example's `Dockerfile` does, then run the
   compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
-  Mount anything your tools read in a compose override. Every other step above stays the same.
+  Mount anything your tools read in a compose override. Every other step above stays the same. A database driver
+  goes in the image too, as [Drivers in your image](#drivers-in-your-image) shows.
 
 **Internal services.** A read-only service your firm already runs, such as a limits or pricing API,
 becomes a tool from a typed stub whose body never runs:
@@ -380,7 +390,7 @@ serve_apps([risk], datasets=store)
 | PostgreSQL, RDS | `postgresql+psycopg://user@host:5432/db` | `psycopg[binary]` |
 | SQL Server, Azure SQL | `mssql+pyodbc://user@host/db?driver=ODBC+Driver+18+for+SQL+Server` | `pyodbc` |
 | Snowflake | `snowflake://user@account/database/schema?warehouse=WH&role=READER` | `snowflake-sqlalchemy` |
-| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sql-connector` |
+| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sqlalchemy` (with `databricks-sql-connector`) |
 | DuckDB (a file, or Parquet through `read_parquet(..., hive_partitioning=true)`) | `duckdb:///lake.duckdb` | `duckdb-engine` |
 
 - **SQL is written once.** Binds are always `:name`, whatever the driver's own style, and a list binds as an
@@ -402,8 +412,53 @@ serve_apps([risk], datasets=store)
   naming the dataset, the missing columns, and the columns the result has. If the database refuses the query, the
   error names the dataset only, never its SQL. A failed read is not cached, and a dataset the caller may not read
   still looks missing.
+- **Readiness.** `check()`, which `/readyz` calls, runs `SELECT 1` on each source, uncached. Each probe first
+  drops a source's idle connections, so it opens a new one, and a deleted SQLite file or a restarted server
+  fails the next probe. A source that does not answer within 5 seconds fails it too. Set the driver's own
+  connect timeout in `connect_args` of `sql.connect` (`connect_timeout` for psycopg, `timeout` for pyodbc) so
+  that a hung connection fails sooner.
 - **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
   is where fund-specific logic stays visible.
+
+### Drivers in your image
+
+The platform's image has no database driver, and no SQLAlchemy either: its `sql` extra is not in the image. A
+firm's image adds what its datasets read, with [`deploy/Dockerfile.firm`](../deploy/Dockerfile.firm). Copy that file,
+and a `firm-requirements.txt` beside it, into your repository, and build there:
+
+```bash
+docker build -f Dockerfile.firm -t firm-qaos:1 .
+```
+
+uv installs the file's packages into the platform's own environment, in a build stage the final image does not keep,
+so uv is not in the server image. Each line is installed or the build fails: there is no `|| true`, and no pip. The
+recipe takes the platform's image as `PLATFORM_IMAGE` (default `quant-agent-os:local`), so pin a release tag in your
+own build.
+
+A requirements file with one example per driver family. Keep the families your datasets read, and pin each one you
+test (`name==version`): an unpinned name installs the newest release at build time.
+
+```text
+# firm-requirements.txt
+sqlalchemy>=2.0,<3          # SQLAlchemy, which SqlDatasetStore reads through (the sql extra); always needed
+psycopg[binary]             # PostgreSQL and RDS; the postgres extra already has it, so this only pins it
+pyodbc                      # SQL Server and Azure SQL; needs unixodbc (the recipe installs it) and Microsoft's driver
+snowflake-sqlalchemy        # Snowflake; pulls in snowflake-connector-python
+databricks-sqlalchemy       # Databricks, the databricks:// dialect; pulls in databricks-sql-connector
+duckdb-engine               # DuckDB files, and Parquet read through DuckDB; pulls in duckdb
+```
+
+| Family | Requirement | System library | Notes |
+| --- | --- | --- | --- |
+| PostgreSQL, RDS | `psycopg[binary]` | none (the binary build bundles libpq) | RDS IAM tokens go through `credential=` |
+| SQL Server, Azure SQL | `pyodbc` | `unixodbc`, in the recipe | The SQL Server driver is Microsoft's `msodbcsql18`, from Microsoft's own Linux repository, not Debian's; add its install steps to the recipe for your base image, and test the build |
+| Snowflake | `snowflake-sqlalchemy` | none (pure Python) | |
+| Databricks | `databricks-sqlalchemy` | none (pure Python) | |
+| DuckDB | `duckdb-engine` | none | Read-only for a file; a lake of Parquet reads through `read_parquet` |
+
+The recipe is checked by `tests/contract/test_deploy_files.py`, which reads it and every other Dockerfile in the
+repository for a `|| true` and for a pip install, and checks that a stage running `uv pip install` has uv. The build
+itself needs Docker, so run it in your own CI.
 
 ## 9. Decide who reaches what
 
@@ -446,6 +501,8 @@ because a tool holding the unguarded store can read anything in it.
   and `research_report` reads it too. If two groups must not share research, run a server per corpus.
 - **`runs:read` sees every caller's runs,** including what they retrieved and computed. Give it only to auditors.
 - **Prompts and server instructions go to every caller.** Keep anything confidential out of `extra_instructions`.
+- **Readiness is not a caller.** `/readyz` has no caller, so a guarded store is checked as the store it wraps, and
+  refusals do not hide a missing source.
 - **Local use is not covered.** stdio and the SDK have no authenticated caller and trust whoever started them,
   so `serve_stdio` refuses a catalog with an access policy.
 
@@ -493,14 +550,15 @@ groups_claim = "groups"    # the claim that lists the user's groups
 ```
 
 ```bash
-export QAOS_INTROSPECTION_SECRET=...        # or put it in the home's .env
+export QAOS_INTROSPECTION_SECRET=...        # or put it in the home's .env, or set QAOS_INTROSPECTION_SECRET_FILE
 qaos doctor                                  # checks the file and the secret, contacts nothing
 qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_AGENT_OS_SIGN_IN_FILE
 ```
 
 A firm's own server with `serve_apps` reads the same settings; the [pilot runbook](pilot-runbook.md#6-sign-in-and-entitlements)
 shows one behind a mock gateway. In Docker, mount the file read-only in a compose
-override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment.
+override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment or as a
+file, [`NAME_FILE`](configuration.md#secrets-from-files).
 
 ### With signed JWTs (Entra ID, Amazon Cognito)
 
@@ -555,6 +613,12 @@ groups_claims = ["cognito:groups"]
 "qaos/tools.call" = "tools:call"
 ```
 
+Grant both scopes. The server maps each one you name, so the listing needs `tools:list` and each call needs
+`tools:call`, and most MCP clients list the tools before they call one. A token with `tools:call` alone is
+accepted, but its user is refused at the listing, and the client fails there. A scope map that grants
+`tools:call` and never `tools:list` is warned about, not refused: `qaos doctor` and `qaos serve` say so
+and name the provider.
+
 What each setting does, with its default (a setting that the other mode would ignore is refused):
 
 | Setting | Default | Meaning |
@@ -600,7 +664,8 @@ qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_A
 - **The principal is the token's subject** (`sub`) unless `principal_claim` says otherwise, recorded on every run
   as a key's principal is.
 - **Scopes map one to one,** after `scope_map`. A token never carries `runs:approve`: approving needs an approver
-  key.
+  key. A client that calls tools needs both `tools:list` (the listing) and `tools:call` (each call); a scope map
+  that grants only `tools:call` draws a warning from `qaos doctor` and `qaos serve`.
 - **Clients find the provider** from the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`, which
   every 401 names. Some providers, Entra among them, do not publish OAuth authorization-server metadata, so check that your
   connector can sign in, or set it up with the provider's addresses by hand.
@@ -613,6 +678,43 @@ qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_A
   can still be accepted for that long. Each provider is asked at most 600 times a minute and 8 at once; keep the
   proxy's limit on unauthenticated requests, which is the first defence. A signed JWT cannot be revoked: it is
   accepted until its own expiry, so ask your provider for short-lived access tokens (an hour or less).
+
+## 11. Run it in a cloud container service
+
+Azure Container Apps and Amazon ECS on Fargate run the server's image with no host to manage. The mock funds'
+descriptors are examples of both: [Larchmere](../examples/mock-funds/larchmere/site/deploy/containerapp.bicep) and
+[Sablecroft](../examples/mock-funds/sablecroft/site/deploy/containerapp.bicep) use Container Apps, and
+[Corvane](../examples/mock-funds/corvane/site/deploy/ecs-task-definition.json) and
+[Wrenfield](../examples/mock-funds/wrenfield/site/deploy/ecs-task-definition.json) use ECS. The tests check them
+against the code, but nothing deploys them, so check every name and value against your own account.
+
+- **One replica.** The run store is a SQLite file, so it lives on a volume the container mounts (Azure Files for
+  Container Apps, Amazon EFS for Fargate), and one server writes to it. Set the replica count to one, minimum and
+  maximum, or the ECS desired count to one. This holds until a PostgreSQL run store exists.
+- **Probes.** Liveness is `/healthz`: the process is up. Readiness is `/readyz`, and each store is read again on
+  every probe, not answered from a cache. The run store and the knowledge store run a query. The datasets check
+  calls each store's `check()` ([section 8](#8-add-your-own-tools)): the platform's directory store needs its
+  folder to exist and be listable, so a datasets folder that does not exist is not ready (create it with
+  `qaos init`, or mount the volume), and the SQL store runs `SELECT 1` on each source. A store with no `check()`
+  is probed by `ids()`, which is weaker. Point the readiness probe, or the load balancer's health check, at
+  `/readyz`, and keep `/healthz` for the container's own check. A server that cannot read its stores then leaves
+  the rotation, and is not restarted for it. Probe every 10 to 30 seconds: the SQL check reconnects to each source
+  on each probe.
+- **Logs.** Set `QUANT_AGENT_OS_LOG_FORMAT=json`. Each line is one JSON object (`time`, `level`, `logger`,
+  `message`, and `exception` when there is one), for the platform's log service to parse. Logs go to standard
+  error, which Container Apps sends to Log Analytics and ECS to CloudWatch Logs.
+- **Secrets as files.** Give each secret the platform reads as `NAME_FILE`, a path, and not as `NAME`. The
+  [convention](configuration.md#secrets-from-files) says what the server does with each. The examples mount Key
+  Vault references as a secret volume at `/run/secrets`. Fargate does not mount a Secrets Manager secret as a file,
+  so an init container receives the secret as an environment variable, writes it into a task volume, and exits;
+  the server mounts that volume read-only. A fund's own secrets, such as a warehouse login that the fund's code
+  reads from the environment, stay environment variables.
+- **TLS and rate limits.** The ingress terminates TLS: Container Apps ingress, or the load balancer's HTTPS
+  listener. Rate-limit unauthenticated requests there too, with Azure Front Door or Application Gateway's WAF, or AWS
+  WAF on the load balancer, because the server has none of its own ([the proxy section](#7-expose-it-to-your-team)).
+  MCP holds responses open, so raise the load balancer's idle timeout above its 60-second default.
+- **Sign-in.** Use Entra ID or Amazon Cognito, as in [section 10](#10-sign-in-through-your-identity-provider). With
+  `verify = "jwks"`, which both need, the server holds no client secret at all.
 
 ## Telemetry and service levels (decision 0015)
 

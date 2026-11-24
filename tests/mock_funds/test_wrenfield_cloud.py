@@ -448,8 +448,12 @@ def test_the_deployment_descriptors_are_consistent_with_the_server(
     qaos = next(c for c in task["containerDefinitions"] if c["name"] == "qaos")
     assert task["requiresCompatibilities"] == ["FARGATE"] and qaos["readonlyRootFilesystem"] is True
     assert all(s["valueFrom"].startswith("arn:aws:secretsmanager:") for s in qaos["secrets"])
-    secret_names = {s["name"] for s in qaos["secrets"]}
+    # The server reads its sign-in secret and its password as files, which an init container writes.
+    secret_names = {s["name"] for c in task["containerDefinitions"] for s in c.get("secrets", [])}
     assert "WRENFIELD_INTROSPECTION_SECRET" in secret_names  # the name the sign-in file reads
+    env = {item["name"]: item.get("value") for item in qaos["environment"]}
+    assert env["WRENFIELD_INTROSPECTION_SECRET_FILE"] == "/run/secrets/introspection"
+    assert env["PGPASSWORD_FILE"] == "/run/secrets/pg-reader"
     sign_in = (WRENFIELD / "site" / "wrenfield_sign_in.toml").read_text()
     assert 'client_secret_env = "WRENFIELD_INTROSPECTION_SECRET"' in sign_in
     assert qaos["logConfiguration"]["logDriver"] == "awslogs"

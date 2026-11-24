@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 from firm_data import SAMPLE_RETURNS, SqliteDatasetStore, create_sample_database
 from firm_server import main, risk
@@ -76,8 +76,8 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
     async def calls(app: Any) -> tuple[Any, Any, Any, Any]:
         async with (
             app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url=BASE,
                 headers={"Authorization": f"Bearer {key}"},
             ) as client,
@@ -90,7 +90,7 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
                 )
             ).json()
             async with (
-                streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+                streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write),
                 ClientSession(read, write) as session,
             ):
                 initialised = await session.initialize()
@@ -104,7 +104,7 @@ def test_the_firms_tool_is_the_same_over_mcp_and_rest_and_is_recorded(
         rest, analytics, initialised, mcp = anyio.run(calls, app)
     assert rest["status"] == "ok"
     assert rest["output"]["var"] == pytest.approx(0.022)
-    assert mcp.structuredContent == rest["output"]
+    assert mcp.structured_content == rest["output"]
     assert rest["data_versions"] == rest["output"]["data_versions"]
     assert analytics["status"] == "ok"  # the platform's analytics read the firm's data too
     assert "desk_var" in (initialised.instructions or "")

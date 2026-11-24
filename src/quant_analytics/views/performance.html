@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance</title>
+<style>
+/* Colours come from the host's variables when it gives them, and from these fallbacks when not. */
+:root {
+  color-scheme: light dark;
+  --qaos-bg: var(--color-background-primary, #ffffff);
+  --qaos-fg: var(--color-text-primary, #1d1d22);
+  --qaos-muted: var(--color-text-secondary, #5d616b);
+  --qaos-rule: var(--color-border-primary, #dcdfe4);
+  --qaos-warn-bg: #fbf1d9;
+  --qaos-warn-fg: #5c4300;
+  --qaos-error: #b42318;
+  --qaos-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --qaos-bg: var(--color-background-primary, #16171b);
+    --qaos-fg: var(--color-text-primary, #ececf1);
+    --qaos-muted: var(--color-text-secondary, #a3a7b1);
+    --qaos-rule: var(--color-border-primary, #33363d);
+    --qaos-warn-bg: #3a2e10;
+    --qaos-warn-fg: #f3d98b;
+    --qaos-error: #ff8a80;
+  }
+}
+:root[data-theme="dark"] {
+  --qaos-bg: var(--color-background-primary, #16171b);
+  --qaos-fg: var(--color-text-primary, #ececf1);
+  --qaos-muted: var(--color-text-secondary, #a3a7b1);
+  --qaos-rule: var(--color-border-primary, #33363d);
+  --qaos-warn-bg: #3a2e10;
+  --qaos-warn-fg: #f3d98b;
+  --qaos-error: #ff8a80;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--qaos-bg);
+  color: var(--qaos-fg);
+  font: 14px/1.45 var(--qaos-font);
+}
+.kicker { margin: 0; color: var(--qaos-muted); font-size: 12px; text-transform: uppercase; }
+h1 { margin: 2px 0 4px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+h2 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
+.meta { margin: 0 0 4px; color: var(--qaos-muted); overflow-wrap: anywhere; }
+.headline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+.tile { min-width: 0; padding: 8px 10px; border: 1px solid var(--qaos-rule); border-radius: 6px; }
+.tile .label { color: var(--qaos-muted); font-size: 12px; overflow-wrap: anywhere; }
+.tile .figure { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (min-width: 560px) { .headline { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 4px; border-bottom: 1px solid var(--qaos-rule); text-align: left; vertical-align: top; }
+th { color: var(--qaos-muted); font-weight: 500; font-size: 12px; }
+.value { text-align: right; white-space: nowrap; }
+ul, ol { margin: 0; padding-left: 20px; }
+li { margin: 0 0 6px; overflow-wrap: anywhere; }
+.source { color: var(--qaos-muted); font-size: 12px; }
+.note { margin: 6px 0 0; color: var(--qaos-muted); font-size: 12px; }
+.warnings { padding: 8px 12px 8px 28px; border-radius: 6px; background: var(--qaos-warn-bg); color: var(--qaos-warn-fg); }
+details { margin-top: 16px; }
+summary { cursor: pointer; font-weight: 600; }
+dl { margin: 8px 0 0; }
+dt { font-weight: 600; margin-top: 8px; }
+dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
+.status { color: var(--qaos-muted); }
+.error h1 { color: var(--qaos-error); }
+.error p { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main id="root" aria-live="polite"><p class="status">Waiting for the analysis result.</p></main>
+<script>
+(function () {
+  "use strict";
+
+  // Metric kinds, as quant_toolbox.report shows them; a test holds these to the server's kinds.
+  var PERCENT = ["annualized_return", "annualized_volatility", "max_drawdown", "value_at_risk", "hit_rate", "alpha", "active_return", "tracking_error", "volatility", "best_period", "worst_period", "probabilistic_sharpe_ratio", "deflated_sharpe_ratio"];
+  var COUNT = ["minimum_track_record"];
+  // The four figures a reader sees first, in this order.
+  var HEADLINE = ["annualized_return", "annualized_volatility", "sharpe_ratio", "max_drawdown"];
+  // The other metrics, in groups; any metric no group names is shown under Other.
+  var GROUPS = [
+    ["Returns", ["best_period", "worst_period", "hit_rate"]],
+    ["Risk", ["value_at_risk", "skewness", "excess_kurtosis"]],
+    ["Ratios", ["sortino_ratio", "calmar_ratio", "omega_ratio", "tail_ratio", "stability"]],
+    ["Against the benchmark", ["alpha", "beta", "correlation", "up_capture", "down_capture", "active_return", "tracking_error", "information_ratio"]],
+    ["Statistical confidence", ["sharpe_standard_error", "probabilistic_sharpe_ratio", "minimum_track_record"]]
+  ];
+  // The conventions behind the figures, shown when the output states them.
+  var BASIS = [["Source", "source"], ["Returns", "returns"], ["Periods per year", "periods_per_year"], ["Value at risk", "value_at_risk"], ["Sharpe ratio and risk-free rate", "sharpe_ratio"]];
+
+  var root = document.getElementById("root");
+  var INITIALIZE_ID = 1;
+  var ready = false; // size reports wait for the handshake to complete
+
+  function post(message) { window.parent.postMessage(message, "*"); }
+  function notify(method, params) { post({ jsonrpc: "2.0", method: method, params: params || {} }); }
+
+  function el(tag, text, className) {
+    var node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    if (className) node.className = className;
+    return node;
+  }
+
+  function label(name) {
+    var words = name.replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
+  }
+
+  function format(name, value) {
+    if (typeof value !== "number" || !isFinite(value)) return "n/a";
+    if (COUNT.indexOf(name) >= 0) return value.toFixed(0);
+    if (PERCENT.indexOf(name) >= 0) return (value * 100).toFixed(2) + "%";
+    return value.toFixed(2);
+  }
+
+  function firstText(result) {
+    var items = Array.isArray(result.content) ? result.content : [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i].type === "text" && typeof items[i].text === "string") return items[i].text;
+    }
+    return "";
+  }
+
+  function output(result) {
+    if (result.structuredContent && typeof result.structuredContent === "object") return result.structuredContent;
+    try { return JSON.parse(firstText(result)); } catch (error) { return null; }
+  }
+
+  function present(metrics, name) { return Object.prototype.hasOwnProperty.call(metrics, name); }
+
+  function warningsBlock(warnings) {
+    if (!Array.isArray(warnings) || warnings.length === 0) return null;
+    var box = el("section");
+    box.appendChild(el("h2", "Warnings"));
+    var list = el("ul", null, "warnings");
+    warnings.forEach(function (text) { list.appendChild(el("li", text)); });
+    box.appendChild(list);
+    return box;
+  }
+
+  function headlineRow(metrics) {
+    var row = el("div", null, "headline");
+    HEADLINE.forEach(function (name) {
+      var tile = el("div", null, "tile");
+      tile.appendChild(el("div", label(name), "label"));
+      tile.appendChild(el("div", format(name, metrics[name]), "figure"));
+      row.appendChild(tile);
+    });
+    return row;
+  }
+
+  function metricsTable(conventions, names, metrics) {
+    var table = el("table");
+    var head = el("tr");
+    head.appendChild(el("th", "Metric"));
+    head.appendChild(el("th", "Value", "value"));
+    table.appendChild(el("thead")).appendChild(head);
+    var body = el("tbody");
+    names.forEach(function (name) {
+      var row = el("tr");
+      var title = el("td", label(name));
+      if (typeof conventions[name] === "string") title.setAttribute("title", conventions[name]);
+      row.appendChild(title);
+      row.appendChild(el("td", format(name, metrics[name]), "value"));
+      body.appendChild(row);
+    });
+    table.appendChild(body);
+    return table;
+  }
+
+  function groupNodes(conventions, metrics) {
+    var listed = HEADLINE.slice();
+    GROUPS.forEach(function (group) { listed = listed.concat(group[1]); });
+    var other = Object.keys(metrics).filter(function (name) { return listed.indexOf(name) < 0; }).sort();
+    var nodes = [];
+    GROUPS.concat([["Other", other]]).forEach(function (group) {
+      var names = group[1].filter(function (name) { return present(metrics, name); });
+      if (names.length === 0) return; // a group with no benchmark metrics is left out
+      nodes.push(el("h2", group[0]));
+      nodes.push(metricsTable(conventions, names, metrics));
+      // data_versions names datasets, not which one is the benchmark.
+      if (group[0] === "Against the benchmark") nodes.push(el("p", "The output does not name the benchmark.", "note"));
+    });
+    return nodes;
+  }
+
+  function basisBlock(conventions) {
+    var pairs = BASIS.filter(function (item) { return typeof conventions[item[1]] === "string"; });
+    if (pairs.length === 0) return null;
+    var box = el("section");
+    box.appendChild(el("h2", "Basis"));
+    var list = el("dl");
+    pairs.forEach(function (item) {
+      list.appendChild(el("dt", item[0]));
+      list.appendChild(el("dd", conventions[item[1]]));
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function evidenceBlock(evidence) {
+    if (!Array.isArray(evidence) || evidence.length === 0) return null;
+    var box = el("details");
+    box.appendChild(el("summary", "Evidence (" + evidence.length + ")"));
+    var list = el("ol");
+    evidence.forEach(function (item) {
+      var entry = el("li", item.statement);
+      var sources = Array.isArray(item.sources) ? item.sources : [];
+      sources.forEach(function (source) {
+        if (source.location) entry.appendChild(el("span", " (" + source.location + ")", "source"));
+      });
+      list.appendChild(entry);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function detailsBlock(title, pairs) {
+    var keys = Object.keys(pairs || {});
+    if (keys.length === 0) return null;
+    var box = el("details");
+    box.appendChild(el("summary", title + " (" + keys.length + ")"));
+    var list = el("dl");
+    keys.forEach(function (key) {
+      list.appendChild(el("dt", key));
+      list.appendChild(el("dd", pairs[key]));
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function performance(data) {
+    var conventions = data.conventions || {};
+    var metrics = data.metrics || {};
+    var nodes = [];
+    var header = el("header");
+    header.appendChild(el("p", "Performance", "kicker"));
+    header.appendChild(el("h1", data.series_id));
+    header.appendChild(el("p", data.periods + " periods, " + data.periods_per_year + " a year", "meta"));
+    nodes.push(header);
+    nodes.push(headlineRow(metrics));
+    nodes.push(warningsBlock(data.warnings));
+    nodes = nodes.concat(groupNodes(conventions, metrics));
+    nodes.push(basisBlock(conventions));
+    nodes.push(evidenceBlock(data.evidence));
+    nodes.push(detailsBlock("Conventions", conventions));
+    nodes.push(detailsBlock("Data versions", data.data_versions));
+    return nodes.filter(Boolean);
+  }
+
+  function errorNodes(text) {
+    var box = el("section", null, "error");
+    box.appendChild(el("h1", "The analysis did not run"));
+    box.appendChild(el("p", text || "The host returned no message."));
+    return [box];
+  }
+
+  function reportSize() {
+    if (!ready) return;
+    var rect = document.body.getBoundingClientRect();
+    notify("ui/notifications/size-changed", { width: Math.ceil(rect.width), height: Math.ceil(rect.height) });
+  }
+
+  function render(result) {
+    if (!result || typeof result !== "object") return;
+    var nodes;
+    if (result.isError) {
+      nodes = errorNodes(firstText(result));
+    } else {
+      var data = output(result);
+      nodes = data && typeof data.metrics === "object" ? performance(data) : errorNodes("The result is not a performance analysis.");
+    }
+    root.replaceChildren.apply(root, nodes);
+    reportSize();
+  }
+
+  function applyContext(context) {
+    if (!context || typeof context !== "object") return;
+    var html = document.documentElement;
+    if (context.theme === "light" || context.theme === "dark") html.setAttribute("data-theme", context.theme);
+    var variables = context.styles && context.styles.variables;
+    if (!variables || typeof variables !== "object") return;
+    Object.keys(variables).forEach(function (name) {
+      var value = variables[name];
+      // Only custom properties with plain values: colours and fonts, nothing that opens a URL.
+      if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && /^[\w\s#%.,()"'+-]{1,120}$/.test(value)) {
+        html.style.setProperty(name, value);
+      }
+    });
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window.parent) return;
+    var message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.method === undefined) {
+      if (message.id === INITIALIZE_ID && !message.error) {
+        applyContext(message.result && message.result.hostContext);
+        ready = true;
+        notify("ui/notifications/initialized", {});
+        reportSize();
+      }
+      return;
+    }
+    switch (message.method) {
+      case "ui/notifications/tool-input":
+        break; // the arguments are not needed to draw the result
+      case "ui/notifications/tool-result":
+        render(message.params);
+        break;
+      case "ui/notifications/host-context-changed":
+        applyContext(message.params && message.params.hostContext ? message.params.hostContext : message.params);
+        break;
+      case "ui/resource-teardown":
+        if (message.id !== undefined) post({ jsonrpc: "2.0", id: message.id, result: {} });
+        break;
+      default:
+        if (message.id !== undefined) {
+          post({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } });
+        }
+    }
+  });
+
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(reportSize).observe(document.body);
+  }
+  post({
+    jsonrpc: "2.0",
+    id: INITIALIZE_ID,
+    method: "ui/initialize",
+    params: { protocolVersion: "2026-01-26", appCapabilities: {}, appInfo: { name: "qaos-performance", version: "1" } }
+  });
+})();
+</script>
+</body>
+</html>

@@ -12,8 +12,9 @@ This application is a tested starting point, not a finished reporting system.
   past describes the future. Current exposures need positions: see the risk-monitor template.
 - **One series per column.** It does not handle share classes, fee schedules, or capital flows.
   Compute time-weighted returns before this step.
-- **Bars per year are fixed.** Volatility and Sharpe use `periods_per_year`, so a file with
-  irregular dates gives approximate annualised figures.
+- **Periods per year come from the dates.** By default they are read from the dates' spacing and
+  stated in every report. A file with irregular dates gives approximate annualised figures, and a
+  set number that disagrees with the dates by more than 1.5 times is refused.
 - **Partial periods.** A first or last month or year may be partial; check the dates shown.
 - **Excel charts.** The workbook holds tables; charts are in the HTML report.
 - **Later fixes.** Formulas, tables, and reports come from Quant Toolbox at the tag

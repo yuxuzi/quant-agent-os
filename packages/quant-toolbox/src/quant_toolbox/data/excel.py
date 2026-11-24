@@ -53,8 +53,6 @@ def read_workbook(path: Path, *, sheet: str = "", header_row: int = 1) -> Table:
     values: list[list[float]] = []
     for offset, row in enumerate(rows[1:], header_row + 1):
         if not row or not _looks_like_date(row[0]):
-            if not dates and row and row[0] is not None:
-                parse_date(row[0])  # the first row must be a date: say what is wrong with it
             later = [item for item in rows[offset - header_row :] if item]
             if dates and any(_looks_like_date(item[0]) for item in later):
                 raise TableError(
@@ -67,8 +65,42 @@ def read_workbook(path: Path, *, sheet: str = "", header_row: int = 1) -> Table:
             [_number(row[i] if i < len(row) else None, path, offset) for i in range(1, len(header))]
         )
     if not dates:
-        raise TableError(f"{path.name}: no rows of data below row {header_row}.")
+        raise TableError(_no_rows_message(path, header_row, rows))
     return Table(dates, columns, np.array(values, dtype=np.float64))
+
+
+def _no_rows_message(path: Path, header_row: int, rows: list[tuple[Any, ...]]) -> str:
+    """Say which row was read as the header, what it holds, and what the row below it holds."""
+    header = list(rows[0])
+    while header and header[-1] is None:
+        header.pop()
+    cells = ["empty" if cell is None else repr(cell) for cell in header[:6]]
+    shown = ", ".join(cells) + (", ..." if len(header) > 6 else "")
+    below = rows[1] if len(rows) > 1 else ()
+    if all(cell is None for cell in below):
+        seen = f"row {header_row + 1} is empty, which ends the table"
+    elif below[0] is None:
+        seen = f"row {header_row + 1} has no date in its first cell"
+    else:
+        try:
+            parse_date(below[0])
+        except TableError as error:  # parse_date says how to write the date
+            seen = f"row {header_row + 1} starts with {below[0]!r}: {str(error).rstrip('.')}"
+        else:
+            seen = f"row {header_row + 1} starts with {below[0]!r}"
+    dated = next(
+        (
+            offset
+            for offset, row in enumerate(rows[1:], header_row + 1)
+            if row and _looks_like_date(row[0])
+        ),
+        None,
+    )
+    where = f"The first date is in row {dated}." if dated else "No row below it starts with a date."
+    return (
+        f"{path.name}, row {header_row}: read as the column names ({shown}), but {seen}. {where} "
+        "Set header_row under [excel] in config.toml to the row that names the columns."
+    )
 
 
 def _looks_like_date(value: Any) -> bool:

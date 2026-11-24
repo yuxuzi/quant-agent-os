@@ -7,10 +7,18 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from quant_toolbox.data import TableError
 from quant_toolbox.report import Document, render_markdown
 
 from .reconcile import as_block, reconcile
-from .reporting import build_context, build_document, load_returns, open_returns, write_report
+from .reporting import (
+    build_context,
+    build_document,
+    load_returns,
+    open_returns,
+    write_reconciliation,
+    write_report,
+)
 from .sections import available, describe
 from .settings import Settings, load_settings
 
@@ -74,15 +82,22 @@ def report(
 @app.command("reconcile")
 def reconcile_command(
     reference: Annotated[
-        Path, typer.Argument(help="Reference returns, such as your administrator's.")
-    ],
+        Path | None,
+        typer.Argument(
+            help="Reference returns, such as your administrator's (default: [reference] file)."
+        ),
+    ] = None,
     tolerance_bps: Annotated[
         float, typer.Option(help="Largest difference to accept per month, in basis points.")
     ] = 1.0,
     returns: ReturnsOption = None,
+    out: Annotated[Path, typer.Option(help="Where run folders go.")] = Path("reports"),
     config: ConfigOption = Path("config.toml"),
 ) -> None:
-    """Compare monthly returns with reference figures. Exits 1 if anything fails to agree."""
+    """Compare monthly returns with reference figures. Exits 1 if anything fails to agree.
+
+    Each run writes its result to reconcile.json in a new run folder under ``out``.
+    """
     settings = _settings(config)
     try:
         ours = (
@@ -90,14 +105,26 @@ def reconcile_command(
             if returns
             else open_returns(settings, config.resolve().parent)
         )
-        result = reconcile(ours, load_returns(reference, settings), tolerance_bps)
-    except ValueError as error:
+        if reference is None:
+            if not settings.reference.file:
+                raise TableError("Name a reference file, or set file under [reference].")
+            reference = config.resolve().parent / settings.reference.file
+        theirs = load_returns(reference, settings, reference=True)
+        benchmarks = settings.benchmark_columns()
+        books = [name for name in ours.columns if name not in benchmarks]
+        result = reconcile(ours.select(books), theirs, tolerance_bps)
+        source = str(returns) if returns else settings.returns
+        folder = write_reconciliation(
+            result, ours.select(books), reference, settings, out, source=source
+        )
+    except (ValueError, OSError) as error:
         raise _fail(error) from error
     typer.echo(render_markdown(Document("Reconciliation", blocks=[as_block(result)])))
     for note in result.only_ours:
         typer.echo(f"Ours only: {note}")
     for note in result.only_reference:
         typer.echo(f"Reference only: {note}")
+    typer.echo(f"Wrote {folder}")
     if not result.clean:
         typer.secho(
             f"{len(result.breaks)} breaks; {len(result.only_reference)} reference items unmatched.",
@@ -105,7 +132,7 @@ def reconcile_command(
             err=True,
         )
         raise typer.Exit(code=1)
-    typer.echo(f"Clean: {len(result.compared)} months agree within {tolerance_bps:g} bps.")
+    typer.echo(f"Clean: {result.summary}")
 
 
 @app.command()

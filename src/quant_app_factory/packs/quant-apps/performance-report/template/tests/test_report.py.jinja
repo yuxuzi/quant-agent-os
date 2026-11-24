@@ -1,6 +1,8 @@
 """The report end to end: sections, tear sheets, formats, reconciliation, and escaping."""
 
+import calendar
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -15,9 +17,17 @@ from {{ package_name }} import sections as section_module
 from {{ package_name }}.cli import app
 from {{ package_name }}.context import Context
 from {{ package_name }}.firm.sections import SECTIONS as FIRM_SECTIONS
+from {{ package_name }}.frequency import resolve
 from {{ package_name }}.reconcile import reconcile
 from {{ package_name }}.reporting import build_context, build_document, check_data, load_returns
-from {{ package_name }}.settings import ExcelSource, Settings, SettingsError, Tearsheet, load_settings
+from {{ package_name }}.settings import (
+    ExcelSource,
+    ReferenceSource,
+    Settings,
+    SettingsError,
+    Tearsheet,
+    load_settings,
+)
 
 runner = CliRunner()
 DATES = [dt.date(2024, 1, 31), dt.date(2024, 2, 29), dt.date(2024, 3, 31)]
@@ -175,6 +185,244 @@ def test_settings_read_tear_sheets_and_excel_position(tmp_path: Path) -> None:
     assert settings.excel == ExcelSource("R", 3)
 
 
+# Periods a year
+
+
+def _period_ends(count: int, step: int) -> list[dt.date]:
+    """Month ends ``step`` months apart, the last one in December 2024."""
+    dates = []
+    for back in range(count - 1, -1, -1):
+        index = 2024 * 12 + 11 - step * back
+        year, month = divmod(index, 12)
+        dates.append(dt.date(year, month + 1, calendar.monthrange(year, month + 1)[1]))
+    return dates
+
+
+def _business_days(count: int) -> list[dt.date]:
+    days: list[dt.date] = []
+    day = dt.date(2024, 1, 1)
+    while len(days) < count:
+        if day.weekday() < 5:
+            days.append(day)
+        day += dt.timedelta(days=1)
+    return days
+
+
+def _returns(dates: list[dt.date], value: float = 0.01) -> Table:
+    return Table(dates, ["A"], np.full((len(dates), 1), value))
+
+
+@pytest.mark.parametrize(
+    ("dates", "periods", "name"),
+    [
+        (_business_days(60), 252, "daily"),
+        ([dt.date(2024, 1, 5) + dt.timedelta(weeks=week) for week in range(30)], 52, "weekly"),
+        (_period_ends(24, 1), 12, "monthly"),
+        (_period_ends(12, 3), 4, "quarterly"),
+        (_period_ends(12, 12), 1, "annual"),
+    ],
+)
+def test_the_periods_are_inferred_from_the_dates(
+    dates: list[dt.date], periods: int, name: str
+) -> None:
+    resolved = resolve(dates, "auto")
+
+    assert (resolved.count, resolved.name) == (periods, name)
+    assert Settings().periods_per_year == "auto"
+
+
+def test_a_monthly_file_annualises_by_twelve_without_being_told() -> None:
+    """Known answer: 1% a month for two years is 1.01 ** 12 - 1 a year, from the dates alone."""
+    context = build_context(_returns(_period_ends(24, 1)), Settings())
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+
+    itd = table.rows[0][1 + context.settings.horizons.index("ITD")]
+
+    assert itd == pytest.approx(1.01**12 - 1)
+    subtitle = build_document(context).subtitle
+    assert "12 periods a year (monthly, inferred from the dates)" in subtitle
+
+
+def test_a_set_number_that_agrees_with_the_dates_is_used_and_stated() -> None:
+    context = build_context(_returns(_period_ends(24, 1)), Settings(periods_per_year=12))
+
+    assert context.settings.periods_per_year == 12
+    assert "12 periods a year (monthly, set in config.toml)" in build_document(context).subtitle
+
+
+def test_a_set_number_that_disagrees_is_refused_and_says_what_the_dates_are() -> None:
+    pattern = r"periods_per_year is 252.*median \d+ days apart"
+    with pytest.raises(TableError, match=pattern) as found:
+        build_context(_returns(_period_ends(24, 1)), Settings(periods_per_year=252))
+
+    assert "Set periods_per_year = 12 (monthly), or auto to infer it." in str(found.value)
+
+
+def test_dates_that_match_no_frequency_ask_for_a_number() -> None:
+    every_three_days = [dt.date(2024, 1, 1) + dt.timedelta(days=3 * n) for n in range(20)]
+
+    with pytest.raises(TableError, match="matches no frequency"):
+        resolve(every_three_days, "auto")
+
+
+def test_periods_per_year_is_auto_or_a_whole_number(tmp_path: Path) -> None:
+    assert load_settings(tmp_path / "missing.toml").periods_per_year == "auto"
+    path = _write_csv(tmp_path / "c.toml", "periods_per_year = 12\n")
+    assert load_settings(path).periods_per_year == 12
+    for text in ('periods_per_year = "monthly"\n', "periods_per_year = 12.0\n"):
+        with pytest.raises(SettingsError, match="periods_per_year must be"):
+            load_settings(_write_csv(tmp_path / "d.toml", text))
+    with pytest.raises(SettingsError, match="periods_per_year must be"):
+        Settings(periods_per_year=0)
+
+
+# Horizons on coarser data
+
+
+def test_a_horizon_shorter_than_the_period_is_n_a_not_the_period_under_its_name() -> None:
+    context = build_context(
+        _returns(_period_ends(12, 3), 0.02), Settings(horizons=["MTD", "QTD", "YTD", "ITD"])
+    )
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+    labels = context.settings.horizons
+
+    cells = {label: table.rows[0][1 + labels.index(label)] for label in labels}
+
+    assert cells["MTD"] is None  # a quarter's return is not a month-to-date figure
+    assert cells["QTD"] == pytest.approx(0.02)  # the quarter, as of a quarter end
+    assert cells["YTD"] == pytest.approx(1.02**4 - 1)
+    assert "n/a: MTD, shorter than the data's quarterly period" in table.note
+
+
+def test_an_annual_fund_shows_no_month_or_quarter_to_date() -> None:
+    context = build_context(
+        _returns(_period_ends(6, 12), 0.02), Settings(horizons=["MTD", "QTD", "YTD"])
+    )
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+
+    assert table.rows[0][1:] == [None, None, pytest.approx(0.02)]
+    assert "n/a: MTD, QTD, shorter than the data's annual period" in table.note
+
+
+def test_reconcile_counts_are_in_the_data_periods() -> None:
+    quarter_ends = _returns(_period_ends(4, 3), 0.01)
+
+    assert reconcile(quarter_ends, quarter_ends, 1.0).summary == (
+        "4 comparisons: 4 quarter-ends of 1 book, at 1 bps tolerance."
+    )
+
+
+# Freshness
+
+
+def test_a_last_date_more_than_two_periods_before_the_as_of_date_is_noted() -> None:
+    context = build_context(_returns(_period_ends(12, 1)), Settings(), dt.date(2025, 5, 31))
+
+    assert context.data_notes == [
+        "The last date is 2024-12-31, 151 days (5.0 periods) before the as-of date 2025-05-31. "
+        "The figures stop at 2024-12-31."
+    ]
+
+
+def test_two_periods_or_fewer_are_not_noted() -> None:
+    context = build_context(_returns(_period_ends(12, 1)), Settings(), dt.date(2025, 1, 31))
+
+    assert not any("last date" in note for note in context.data_notes)
+
+
+def test_daily_data_counts_business_days_so_a_weekend_is_not_stale() -> None:
+    friday = dt.date(2024, 11, 29)
+    weekdays = [
+        day
+        for day in (dt.date(2024, 10, 1) + dt.timedelta(days=n) for n in range(60))
+        if day.weekday() < 5 and day <= friday
+    ]
+
+    monday = build_context(_returns(weekdays), Settings(), dt.date(2024, 12, 2))
+    thursday = build_context(_returns(weekdays), Settings(), dt.date(2024, 12, 5))
+
+    assert not any("last date" in note for note in monday.data_notes)
+    assert thursday.data_notes[-1] == (
+        "The last date is 2024-11-29, 6 days (4.0 business days) before the as-of date 2024-12-05. "
+        "The figures stop at 2024-11-29."
+    )
+
+
+# Benchmarks per book
+
+
+def _with_benchmarks() -> Table:
+    gq_bench = np.array([0.01 * ((n % 5) - 2) for n in range(24)])
+    us_bench = np.array([0.02 * ((n % 3) - 1) for n in range(24)])
+    macro = 0.5 * us_bench + 0.001  # its beta to BM_US300 is exactly one half
+    return Table(
+        _period_ends(24, 1),
+        ["GQ", "Macro", "BM_GQ", "BM_US300"],
+        np.column_stack([gq_bench, macro, gq_bench, us_bench]),
+    )
+
+
+def _risk_rows(context: Context) -> tuple[list[str], dict[str, list[Any]]]:
+    table = section_module.risk(context)[0]
+    assert isinstance(table, TableBlock)
+    return [column.name for column in table.columns], {str(row[0]): row for row in table.rows}
+
+
+def test_each_book_is_measured_against_its_own_benchmark_and_names_it() -> None:
+    context = build_context(
+        _with_benchmarks(), Settings(benchmark={"GQ": "BM_GQ", "Macro": "BM_US300"})
+    )
+    names, rows = _risk_rows(context)
+
+    assert context.books.columns == ["GQ", "Macro"]
+    assert rows["GQ"][names.index("Benchmark")] == "BM_GQ"
+    assert rows["GQ"][names.index("Beta")] == pytest.approx(1.0)
+    assert rows["GQ"][names.index("Tracking error")] == pytest.approx(0.0, abs=1e-12)
+    assert rows["Macro"][names.index("Benchmark")] == "BM_US300"
+    assert rows["Macro"][names.index("Beta")] == pytest.approx(0.5)
+    horizons = section_module.horizons(context)[0]
+    assert isinstance(horizons, TableBlock)
+    assert [row[0] for row in horizons.rows] == ["GQ", "Macro", "BM_GQ", "BM_US300"]
+
+
+def test_a_book_the_table_leaves_out_is_n_a_and_noted() -> None:
+    context = build_context(_with_benchmarks(), Settings(benchmark={"GQ": "BM_GQ"}))
+    names, rows = _risk_rows(context)
+
+    assert context.benchmark_of("Macro") is None
+    assert rows["Macro"][names.index("Benchmark")] == "none"
+    assert rows["Macro"][names.index("Beta")] is None
+    assert any("No benchmark is set for Macro" in note for note in context.data_notes)
+
+
+def test_a_benchmark_table_names_only_books_in_the_file() -> None:
+    with pytest.raises(TableError, match="names Nope, which is not a book"):
+        build_context(_with_benchmarks(), Settings(benchmark={"Nope": "BM_GQ"}))
+
+
+def test_the_benchmark_is_a_column_or_a_table_of_books(tmp_path: Path) -> None:
+    table = _write_csv(tmp_path / "t.toml", '[benchmark]\nGQ = "BM_GQ"\n')
+    assert load_settings(table).benchmark == {"GQ": "BM_GQ"}
+    single = _write_csv(tmp_path / "s.toml", 'benchmark = "Index"\n')
+    assert load_settings(single).benchmark == "Index"
+    with pytest.raises(SettingsError, match="benchmark must be a column name"):
+        load_settings(_write_csv(tmp_path / "n.toml", "benchmark = 3\n"))
+
+
+def test_reconcile_compares_no_benchmark_column_of_a_table(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "ours.csv", "date,GQ,BM_GQ\n2024-01-31,0.01,0.05\n2024-02-29,0.02,0.05\n")
+    theirs = _write_csv(tmp_path / "theirs.csv", "date,GQ\n2024-01-31,0.01\n2024-02-29,0.02\n")
+    _write_csv(tmp_path / "config.toml", 'returns = "ours.csv"\n[benchmark]\nGQ = "BM_GQ"\n')
+
+    done = runner.invoke(app, ["reconcile", str(theirs)])
+
+    assert done.exit_code == 0, done.output
+    assert "BM_GQ" not in done.output
+
+
 # Reconciliation
 
 
@@ -283,11 +531,111 @@ def test_reconcile_exits_clean_or_with_breaks(tmp_path: Path) -> None:
 
     clean = runner.invoke(app, ["reconcile", str(same), "--returns", str(ours)])
     assert clean.exit_code == 0, clean.output
-    assert "2 months agree" in clean.output
+    assert "2 comparisons: 2 months of 1 book" in clean.output
 
     broken = runner.invoke(app, ["reconcile", str(off), "--returns", str(ours)])
     assert broken.exit_code == 1
     assert "2024-02" in broken.output
+
+
+def test_reconcile_leaves_its_result_and_the_reference_fingerprint_in_a_run_folder(
+    tmp_path: Path,
+) -> None:
+    ours = _write_csv(tmp_path / "ours.csv", "date,A\n2024-01-31,0.01\n2024-02-29,0.02\n")
+    off = _write_csv(tmp_path / "off.csv", "date,A\n2024-01-31,0.01\n2024-02-29,0.03\n")
+
+    done = runner.invoke(app, ["reconcile", str(off), "--returns", str(ours)])
+
+    assert done.exit_code == 1, done.output
+    folder = next((tmp_path / "reports").iterdir())
+    assert f"Wrote {folder.relative_to(tmp_path)}" in done.output
+    record = json.loads((folder / "reconcile.json").read_text())
+    assert record["reference"] == {
+        "file": "off.csv",
+        "fingerprint": "sha256:" + hashlib.sha256(off.read_bytes()).hexdigest(),
+        "unit": "fraction",
+    }
+    result = record["reconciliation"]
+    assert result["clean"] is False and result["tolerance_bps"] == 1.0
+    assert result["comparisons"] == 2 and result["periods"] == 2 and result["books"] == 1
+    assert [(item["book"], item["month"]) for item in result["breaks"]] == [("A", "2024-02")]
+    assert result["breaks"][0]["bps"] == pytest.approx(-100.0)  # 2.00% less 3.00%
+    assert record["provenance"]["data_fingerprint"].startswith("sha256:")
+
+
+def test_a_restatement_leaves_a_second_dated_record_beside_the_first(tmp_path: Path) -> None:
+    ours = _write_csv(tmp_path / "ours.csv", "date,A\n2024-01-31,0.01\n2024-02-29,0.02\n")
+    before = _write_csv(tmp_path / "before.csv", "date,A\n2024-01-15,0.01\n2024-02-15,0.02\n")
+    restated = _write_csv(tmp_path / "restated.csv", "date,A\n2024-01-15,0.01\n2024-02-15,0.0205\n")
+
+    assert runner.invoke(app, ["reconcile", str(before), "--returns", str(ours)]).exit_code == 0
+    assert runner.invoke(app, ["reconcile", str(restated), "--returns", str(ours)]).exit_code == 1
+
+    first, second = (
+        json.loads((folder / "reconcile.json").read_text())
+        for folder in sorted((tmp_path / "reports").iterdir())
+    )
+    assert first["reconciliation"]["clean"] is True
+    assert second["reconciliation"]["breaks"][0]["bps"] == pytest.approx(-5.0)
+    assert first["reference"]["fingerprint"] != second["reference"]["fingerprint"]
+
+
+def test_an_administrators_percent_workbook_reconciles_against_fractions(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    _write_csv(
+        tmp_path / "ours.csv",
+        "date,A,Index\n2024-01-31,0.0123,0.02\n2024-02-29,-0.0045,0.01\n",
+    )
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Performance"
+    for row in (["Fund administrator: monthly net returns (%)"], [], ["Month end", "A"]):
+        sheet.append(row)
+    sheet.append([dt.date(2024, 1, 31), 1.23])
+    sheet.append([dt.date(2024, 2, 29), -0.57])  # differs by 12 bps
+    workbook.save(tmp_path / "admin.xlsx")
+    _write_csv(
+        tmp_path / "config.toml",
+        'returns = "ours.csv"\nbenchmark = "Index"\n'
+        '[reference]\nfile = "admin.xlsx"\nunit = "percent"\nsheet = "Performance"\n'
+        "header_row = 3\n",
+    )
+
+    done = runner.invoke(app, ["reconcile"])
+
+    assert done.exit_code == 1, done.output
+    assert "2024-02" in done.output and "12.00" in done.output
+    assert "Index" not in done.output  # the benchmark is not compared
+
+
+def test_the_reference_settings_follow_the_returns_file_unless_stated(tmp_path: Path) -> None:
+    path = _write_csv(tmp_path / "c.toml", '[reference]\nunit = "percent"\nheader_row = 2\n')
+
+    settings = load_settings(path)
+
+    assert settings.reference == ReferenceSource(unit="percent", excel=ExcelSource("", 2))
+    assert Settings().reference == ReferenceSource()
+    with pytest.raises(SettingsError, match="reference.unit must be"):
+        load_settings(_write_csv(tmp_path / "d.toml", '[reference]\nunit = "bps"\n'))
+    with pytest.raises(SettingsError, match="reference takes only"):
+        load_settings(_write_csv(tmp_path / "e.toml", '[reference]\nfiles = "a.csv"\n'))
+
+
+def test_a_percent_reference_without_its_unit_says_where_to_set_it(tmp_path: Path) -> None:
+    ours = _write_csv(tmp_path / "ours.csv", "date,A\n2024-01-31,0.01\n")
+    theirs = _write_csv(tmp_path / "theirs.csv", "date,A\n2024-01-31,-150\n")
+
+    done = runner.invoke(app, ["reconcile", str(theirs), "--returns", str(ours)])
+
+    assert done.exit_code == 1
+    assert "under [reference]" in done.output
+
+
+def test_reconcile_needs_a_reference_file(tmp_path: Path) -> None:
+    done = runner.invoke(app, ["reconcile"])
+
+    assert done.exit_code == 1
+    assert "set file under [reference]" in done.output
 
 
 def test_errors_are_messages_not_tracebacks(tmp_path: Path) -> None:

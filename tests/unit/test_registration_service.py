@@ -9,6 +9,7 @@ import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Literal
 
 import pytest
@@ -163,6 +164,23 @@ def test_data_references_are_read_and_sent_as_values(service: tuple[str, Exchang
     assert [source["source_id"] for source in evidence["sources"]] == ["desks.growth", f"{url}/var"]
 
 
+def test_the_token_can_come_from_a_file(
+    service: tuple[str, Exchange], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    url, exchange = service
+    exchange.status, exchange.answer = 403, b'{"detail": "no"}'
+    token = tmp_path / "risk.token"
+    token.write_text("file-token\n", "utf-8")
+    monkeypatch.delenv("RISK_TOKEN", raising=False)
+    monkeypatch.setenv("RISK_TOKEN_FILE", str(token))
+    app = FirmApp("risk")
+    app.call_service(desk_var, url=f"{url}/var", token_env="RISK_TOKEN", returns=Series)
+
+    _run(app, {"returns": GROWTH})
+
+    assert exchange.requests[-1]["headers"]["Authorization"] == "Bearer file-token"
+
+
 def test_the_token_comes_from_the_environment_and_is_never_shown(
     service: tuple[str, Exchange], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -175,7 +193,9 @@ def test_the_token_comes_from_the_environment_and_is_never_shown(
     monkeypatch.setenv("RISK_TOKEN", "s3cret-value")
     refused = _run(app, {"returns": GROWTH})
 
-    assert missing.error_detail == f"ServiceError: Set RISK_TOKEN to the token for {url}/var."
+    assert missing.error_detail == (
+        f"ServiceError: Set RISK_TOKEN (or RISK_TOKEN_FILE) to the token for {url}/var."
+    )
     assert exchange.requests[0]["headers"]["Authorization"] == "Bearer s3cret-value"
     assert refused.error_detail == (
         f"ServiceError: The service at {url}/var answered 403 Forbidden."

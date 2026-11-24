@@ -14,6 +14,11 @@ from quant_toolbox.data import Table, TableError
 from quant_toolbox.performance import monthly_returns
 from quant_toolbox.report import Column, TableBlock
 
+from .frequency import inferred_name
+
+# What a comparison of one period is called, by the data's frequency; months otherwise.
+NOUNS = {"quarterly": "quarter-ends", "annual": "year-ends"}
+
 
 @dataclass(frozen=True)
 class Difference:
@@ -39,11 +44,23 @@ class Reconciliation:
     only_ours: list[str]
     only_reference: list[str]
     tolerance_bps: float
+    noun: str = "months"  # what one compared period is called, for the data's frequency
 
     @property
     def clean(self) -> bool:
         """Whether every compared month agrees, and nothing in the reference went uncompared."""
         return not self.breaks and not self.only_reference
+
+    @property
+    def summary(self) -> str:
+        """The counts in the data's own periods: comparisons, periods, and books."""
+        books = len({item.book for item in self.compared})
+        periods = len({item.month for item in self.compared})
+        book_word = "book" if books == 1 else "books"
+        return (
+            f"{len(self.compared)} comparisons: {periods} {self.noun} of {books} {book_word}, "
+            f"at {self.tolerance_bps:g} bps tolerance."
+        )
 
 
 def reconcile(ours: Table, reference: Table, tolerance_bps: float) -> Reconciliation:
@@ -73,11 +90,12 @@ def reconcile(ours: Table, reference: Table, tolerance_bps: float) -> Reconcilia
             else:
                 compared.append(Difference(book, month, mine[key], theirs[key]))
     breaks = [item for item in compared if abs(item.bps) > tolerance_bps]
-    return Reconciliation(compared, breaks, only_ours, only_reference, tolerance_bps)
+    noun = NOUNS.get(inferred_name(ours.dates), "months")
+    return Reconciliation(compared, breaks, only_ours, only_reference, tolerance_bps, noun)
 
 
 def as_block(result: Reconciliation) -> TableBlock:
-    """The breaks as a table for a report, or every compared month count when clean."""
+    """The breaks as a table for a report, with the counts in the data's own periods."""
     return TableBlock(
         title="Reconciliation breaks",
         columns=[
@@ -88,5 +106,5 @@ def as_block(result: Reconciliation) -> TableBlock:
             Column("Difference (bps)", "ratio"),
         ],
         rows=[[d.book, d.month, d.ours, d.reference, d.bps] for d in result.breaks],
-        note=f"{len(result.compared)} months compared at {result.tolerance_bps:g} bps tolerance.",
+        note=result.summary,
     )

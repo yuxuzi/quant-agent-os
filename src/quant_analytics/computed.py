@@ -573,3 +573,35 @@ def model_risk(
     return result, [
         Evidence(kind="computed", statement=statement, sources=[source]) for statement in statements
     ]
+
+
+# Twelve fixed monthly returns: enough for every metric the tools compute, and no data of anyone's.
+_WARM_UP_RETURNS = (
+    0.012,
+    -0.004,
+    0.008,
+    0.015,
+    -0.011,
+    0.006,
+    0.002,
+    -0.007,
+    0.010,
+    0.004,
+    -0.002,
+    0.009,
+)
+
+
+def warm_up() -> None:
+    """Load the metrics backend now, before a caller waits on it.
+
+    The first metric call imports the backend (empyrical, pandas, and SciPy when installed). On a
+    fresh install that compiles them, which can take longer than a tool call's time limit, so a
+    server calls this once before it serves. It computes on fixed numbers and keeps nothing.
+    """
+    returns = list(_WARM_UP_RETURNS)
+    performance(
+        PerformanceInput(
+            series_id="warm-up", returns=returns, benchmark=returns[::-1], periods_per_year=12
+        )
+    )
