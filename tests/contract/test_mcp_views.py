@@ -5,6 +5,7 @@ Every in-process check runs over the 2025-11-25 handshake and over 2026-07-28, a
 the same answer (decision 0034).
 """
 
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,13 +21,19 @@ from mcp.shared.exceptions import MCPError
 from portfolio_tools import build_registry
 
 from quant_agent_os.api import KeyRing, add_key, build_app, load_keys
+from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server, served_views, tool_definitions
 from quant_agent_os.mcp.http import KeyVerifier, add_mcp_route
 from quant_agent_os.mcp.server import Served
 from quant_agent_os.runs import MemoryRunStore, RunRecorder
-from quant_agent_os.runtime import ToolExecutor
+from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import PermissionPolicy, ToolContractError, ToolRegistry, ViewSpec
+from quant_analytics.computed import METRIC_KINDS as ANALYTICS_KINDS
+from quant_analytics.tools import analytics_tools
+from quant_analytics.views import PERFORMANCE_VIEW
+from quant_platform import compose
+from quant_toolbox.report import metric_kind
 
 ERAS = ("legacy", "2026-07-28")
 BASE = "http://127.0.0.1:8000"
@@ -44,11 +51,11 @@ VIEW = ViewSpec(
 EXECUTOR = ToolExecutor(ToolRegistry(build_registry().specs()), PermissionPolicy())
 
 
-def _session(check: Any, **kwargs: Any) -> Any:
+def _session(check: Any, *, executor: ToolExecutor = EXECUTOR, **kwargs: Any) -> Any:
     """Run ``check`` against a fresh server in each era; both must answer the same."""
 
     async def run(mode: str) -> Any:
-        server = build_server(EXECUTOR, name="test", instructions="Use the tools.", **kwargs)
+        server = build_server(executor, name="test", instructions="Use the tools.", **kwargs)
         async with Client(server, mode=mode, cache=None) as client:
             return await check(client)
 
@@ -305,3 +312,84 @@ def test_a_tool_named_by_two_views_links_the_first() -> None:
 
     assert links["annualized_return"] == {"resourceUri": VIEW.uri}
     assert links["max_drawdown"] is None
+
+
+def test_the_platform_offers_the_performance_view_with_analyze_performance(tmp_path: Path) -> None:
+    catalog = compose(policy=PermissionPolicy(), datasets=DirectoryDatasetStore(tmp_path))
+    executor = ToolExecutor(ToolRegistry(catalog.tools), catalog.policy)
+
+    async def check(session: Client) -> Any:
+        tools = {item.name: item.meta or {} for item in (await session.list_tools()).tools}
+        resources = [str(item.uri) for item in (await session.list_resources()).resources]
+        page = await session.read_resource(PERFORMANCE_VIEW.uri)  # type: ignore[arg-type]
+        called = await session.call_tool("analyze_performance", ARGUMENTS)
+        return (
+            tools["analyze_performance"]["ui"],
+            resources,
+            page.contents[0].text,
+            called.is_error,
+        )
+
+    ui, resources, page, is_error = _session(check, executor=executor, views=catalog.views)
+
+    assert ui == {"resourceUri": PERFORMANCE_VIEW.uri}
+    assert resources == [PERFORMANCE_VIEW.uri]
+    assert page == PERFORMANCE_VIEW.html
+    assert is_error is False
+    assert compose(policy=PermissionPolicy()).views == []  # no datasets, no analytics toolset
+
+
+# The page is one static file: its protocol, its safety, and its formatting, checked as text.
+PAGE_METHODS = (
+    "ui/initialize",
+    "ui/notifications/initialized",
+    "ui/notifications/tool-result",
+    "ui/notifications/host-context-changed",
+    "ui/notifications/size-changed",
+    "ui/resource-teardown",
+)
+
+
+def test_the_page_speaks_the_apps_protocol() -> None:
+    html = PERFORMANCE_VIEW.html
+
+    for method in PAGE_METHODS:
+        assert method in html, method
+    assert '"2026-01-26"' in html
+    assert "window.parent.postMessage" in html
+    assert "event.source !== window.parent" in html
+
+
+def test_the_page_loads_nothing_and_renders_text_as_text() -> None:
+    html = PERFORMANCE_VIEW.html
+
+    assert "http://" not in html and "https://" not in html
+    assert "fetch(" not in html and "XMLHttpRequest" not in html
+    assert "<link" not in html and "@import" not in html and "url(" not in html
+    assert "innerHTML" not in html and "insertAdjacentHTML" not in html and "eval(" not in html
+    assert "textContent" in html
+    assert len(html.encode("utf-8")) <= 12 * 1024
+
+
+def test_the_page_formats_each_metric_as_the_toolbox_does() -> None:
+    html = PERFORMANCE_VIEW.html
+
+    def listed(name: str) -> set[str]:
+        match = re.search(rf"var {name} = \[(.*?)\];", html, re.DOTALL)
+        assert match is not None, name
+        return set(re.findall(r'"([a-z_]+)"', match.group(1)))
+
+    # Every metric analyze_performance returns, with a benchmark, so each kind is exercised.
+    executor = ToolExecutor(ToolRegistry(analytics_tools(None).specs()), PermissionPolicy())
+    output = executor.execute(
+        ToolCall(
+            tool="analyze_performance",
+            arguments={**ARGUMENTS, "benchmark": [0.005, -0.01, 0.002]},
+        )
+    ).output
+    metrics = set(output["metrics"])  # type: ignore[index]
+    kinds = {name: metric_kind(name, ANALYTICS_KINDS) for name in metrics}
+
+    assert {n for n, k in kinds.items() if k == "percent"} == listed("PERCENT") & metrics
+    assert {n for n, k in kinds.items() if k == "count"} == listed("COUNT") & metrics
+    assert "minimum_track_record" in metrics and "best_period" in metrics
