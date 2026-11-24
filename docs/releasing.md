@@ -61,11 +61,9 @@ platform's wheel; changing the workflow needs the owner's approval.
 
 ## Compatibility promises
 
-- **Tools** follow semver, and each change is in the [tools changelog](tools-changelog.md). For
-  now, a tool may change or be removed in any release; decision 0015's deprecation window is
-  suspended until the project is mature enough.
-- **Before 1.0**, a minor platform release may change Python APIs, configuration, and storage.
-  The run store and knowledge store upgrade in place, and an older binary refuses a newer
-  store.
-- **Skills** state the platform major they were written for, and warn the user when the
-  server's `qaos://server/info` reports a different one.
+From 1.0, [decision 0035](decisions/0035-what-1.0-promises.md) sets them: served tools, a firm's Python names,
+the files and settings a firm writes, `qaos` commands, HTTP routes, and run records follow semantic versioning,
+and decision 0015's deprecation rule applies (90 days and one minor release before a removal, which is major).
+`tests/contract/public_api.lock.json`, the tool lock, and Quant Toolbox's API lock hold them. The run store and
+knowledge store upgrade in place, and an older binary refuses a newer store. **Skills** state the platform
+major they were written for, and warn the user when `qaos://server/info` reports a different one.

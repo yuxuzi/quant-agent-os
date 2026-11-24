@@ -4,16 +4,27 @@
 and data, on a server the firm runs. It decides who reaches what, bounds every call, and records it. It is not a chatbot
 and calls no model: your client does the conversation, and the tools reach it over MCP, REST, and a Python SDK.
 
-- **Your own tools.** [Serve your Python functions](docs/deployment.md#8-add-your-own-tools) beside the platform's, with
-  the same validation, limits, and recording.
-- **Your own research.** Cited keyword search with entity linking and a small graph of extracted facts, plus optional
-  semantic search, over your notes and papers.
+- **Your numbers, from your code.** [Serve your Python functions](docs/deployment.md#8-add-your-own-tools) beside the
+  platform's performance, risk, signal, and backtest tools. Every figure states its convention and data version, and
+  inputs pass by reference, so series do not travel through the model.
+- **Your data, mapped once.** Read your warehouse in place over SQL, or files, and
+  [map it to six standard tables](docs/deployment.md#map-your-data-to-the-standard-tables) (securities, prices,
+  returns, holdings, measures, reference); a source too complicated for today gets a stub adapter to finish later.
+- **Your research, cited.** Keyword search with entity linking and a small graph of extracted facts, plus optional
+  semantic search, over your notes and papers; a search that finds nothing says so.
   [What it measures on real papers](docs/products/quant-research.md#how-well-it-works).
-- **Your own data, by reference.** Performance and risk metrics with stated conventions, computed on your datasets, so
-  input series do not travel through the model.
-- **Under your control.** [Per-caller access](docs/deployment.md#9-decide-who-reaches-what) to tools and datasets, read-only
-  by default, an audit trail you can [export](docs/operations.md#retention-and-export), and
-  [agreed test cases](docs/operations.md#check-it-against-agreed-cases) to accept a deployment against.
+- **Applications you own.** Generate a tested application for one job, such as a performance report that
+  reconciles with your administrator's figures, then let a coding assistant change it while its tests guard the
+  numbers. [Your existing Python becomes tools](docs/products/quant-app-factory.md#legacy-code-as-tools) the same way.
+- **Under your control.** [Per-caller access](docs/deployment.md#9-decide-who-reaches-what) through your identity
+  provider, read-only by default, approvals for anything consequential, and
+  [a record of every AI use](docs/operations.md#show-how-ai-was-used) your compliance staff can keep, with no content
+  in it.
+- **Current with your AI clients.** MCP 2026-07-28 and the earlier handshake from one server, so Claude, Copilot,
+  Cursor, and others connect. Clients that show MCP Apps draw a performance result
+  [as a page in the chat](docs/products/quant-analytics.md#see-the-result-in-your-client).
+- **Stable from 1.0.** [What 1.0 promises](docs/decisions/0035-what-1.0-promises.md): tools, Python names, files,
+  settings, commands, and routes follow semantic versioning, and checks hold them.
 
 **What you operate.** You run the server, in Docker, with TLS and rate limits in your own proxy. You decide who holds a key,
 keep the backups, and apply upgrades, and [operations](docs/operations.md) covers how. Results go to the client you connect,
