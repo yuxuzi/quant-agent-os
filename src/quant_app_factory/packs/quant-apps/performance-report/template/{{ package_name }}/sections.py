@@ -39,6 +39,7 @@ from quant_toolbox.report import (
 
 from .context import Context
 from .firm.sections import SECTIONS as FIRM_SECTIONS
+from .frequency import period_noun, shorter_than_period
 
 Section = Callable[[Context], list[Block]]
 MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
@@ -47,21 +48,32 @@ MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
 def horizons(context: Context) -> list[Block]:
     """Returns by horizon, one row per book, plus the benchmark."""
     labels = context.settings.horizons
-    rate = context.settings.periods_per_year
+    rate = context.periods_per_year
+    short = [label for label in labels if shorter_than_period(label, rate)]
 
     def row(name: str, values: np.ndarray) -> list[float | str | None]:
-        return [name, *(horizon_return(context.dates, values, label, rate) for label in labels)]
+        return [
+            name,
+            *(
+                None if label in short else horizon_return(context.dates, values, label, rate)
+                for label in labels
+            ),
+        ]
 
     rows = [row(book, context.returns(book)) for book in context.books.columns]
-    if context.benchmark is not None:
-        rows.append(row(context.benchmark_name, context.benchmark))
+    rows += [row(name, context.benchmark_returns[name]) for name in context.benchmark_names]
+    note = (
+        f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: "
+        "annualised. ITD: annualised once it covers a full year."
+    )
+    if short:
+        note += f" n/a: {', '.join(short)}, shorter than the data's {period_noun(rate)} period."
     return [
         TableBlock(
             title="Returns by horizon",
             columns=[Column("Book", "text"), *(Column(label) for label in labels)],
             rows=rows,
-            note=f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: "
-            "annualised. ITD: annualised once it covers a full year.",
+            note=note,
         )
     ]
 
@@ -110,7 +122,7 @@ def monthly(context: Context) -> list[Block]:
 def risk(context: Context) -> list[Block]:
     """Return, volatility, ratios, drawdown, and tail risk for each book."""
     settings = context.settings
-    rate, cutoff = settings.periods_per_year, settings.var_cutoff
+    rate, cutoff = context.periods_per_year, settings.var_cutoff
     columns = [
         Column("Book", "text"),
         Column("Ann. return"),
@@ -123,8 +135,10 @@ def risk(context: Context) -> list[Block]:
         Column(f"ES {cutoff:.0%}"),
         Column("Hit rate"),
     ]
-    if context.benchmark is not None:
+    benchmarked = bool(context.benchmark_names)
+    if benchmarked:
         columns += [
+            Column("Benchmark", "text"),
             Column("Beta", "ratio"),
             Column("Active return"),
             Column("Tracking error"),
@@ -145,18 +159,30 @@ def risk(context: Context) -> list[Block]:
             expected_shortfall(values, cutoff),
             hit_rate(values),
         ]
-        if context.benchmark is not None:
-            active = active_metrics(values, context.benchmark, rate)
-            row += [
-                beta(values, context.benchmark),
-                active["active_return"],
-                active["tracking_error"],
-                active["information_ratio"],
-            ]
+        if benchmarked:
+            found = context.benchmark_of(book)
+            if found is None:
+                row += ["none", None, None, None, None]
+            else:
+                label, bench = found
+                active = active_metrics(values, bench, rate)
+                row += [
+                    label,
+                    beta(values, bench),
+                    active["active_return"],
+                    active["tracking_error"],
+                    active["information_ratio"],
+                ]
         rows.append(row)
     note = f"{rate} bars a year; risk-free {settings.risk_free:.2%} a year. VaR and ES are per bar."
-    if context.benchmark is not None:
-        note += f" Against {context.benchmark_name}."
+    if benchmarked:
+        names = context.benchmark_names
+        shared = len(names) == 1 and len(context.benchmarks) == len(context.books.columns)
+        note += (
+            f" Against {names[0]}."
+            if shared
+            else " Each book is measured against the benchmark named in its row."
+        )
     return [TableBlock(title="Risk and ratios", columns=columns, rows=rows, note=note)]
 
 
@@ -218,8 +244,8 @@ def _books(context: Context) -> dict[str, np.ndarray]:
 def equity(context: Context) -> list[Block]:
     """Growth of 1, per book and for the benchmark."""
     series = _books(context)
-    if context.benchmark is not None:
-        series[context.benchmark_name] = context.benchmark
+    for name in context.benchmark_names:
+        series[name] = context.benchmark_returns[name]
     return [equity_curve(context.dates, series)]
 
 
@@ -233,7 +259,7 @@ def rolling_sharpe(context: Context) -> list[Block]:
     settings = context.settings
     return [
         rolling_sharpe_chart(
-            context.dates, _books(context), settings.periods_per_year, risk_free=settings.risk_free
+            context.dates, _books(context), context.periods_per_year, risk_free=settings.risk_free
         )
     ]
 

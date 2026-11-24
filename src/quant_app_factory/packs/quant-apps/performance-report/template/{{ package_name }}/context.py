@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from quant_toolbox.data import FloatArray, Table
 
+from .frequency import Periods
 from .settings import Settings
 
 
@@ -16,14 +17,46 @@ class Context:
 
     books: Table
     settings: Settings
-    benchmark: FloatArray | None = None
-    benchmark_name: str = ""
+    benchmarks: dict[str, str] = field(default_factory=dict)  # a book -> its benchmark's column
+    benchmark_returns: dict[str, FloatArray] = field(default_factory=dict)  # a column -> returns
     data_notes: list[str] = field(default_factory=list)
+    periods: Periods | None = None  # how many periods a year, and how that was chosen
+
+    def benchmark_of(self, book: str) -> tuple[str, FloatArray] | None:
+        """The name and returns of ``book``'s benchmark, or None when it has none."""
+        name = self.benchmarks.get(book, "")
+        return (name, self.benchmark_returns[name]) if name else None
+
+    @property
+    def benchmark_names(self) -> list[str]:
+        """Every benchmark the books use, each once, in the books' order."""
+        return list(dict.fromkeys(name for name in self.benchmarks.values() if name))
+
+    @property
+    def benchmark(self) -> FloatArray | None:
+        """The benchmark, when the books use just one; a table of several gives None."""
+        names = self.benchmark_names
+        return self.benchmark_returns[names[0]] if len(names) == 1 else None
+
+    @property
+    def benchmark_name(self) -> str:
+        """The benchmark's column, when the books use just one; otherwise empty."""
+        names = self.benchmark_names
+        return names[0] if len(names) == 1 else ""
 
     @property
     def as_of(self) -> dt.date:
         """The last date in the report."""
         return self.books.dates[-1]
+
+    @property
+    def periods_per_year(self) -> int:
+        """The periods a year the figures annualise with: the count resolved from the dates."""
+        if self.periods is not None:
+            return self.periods.count
+        if isinstance(self.settings.periods_per_year, int):
+            return self.settings.periods_per_year
+        raise ValueError("periods_per_year is auto and unresolved; use build_context.")
 
     @property
     def dates(self) -> list[dt.date]:

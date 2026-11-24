@@ -24,7 +24,10 @@ date,Equity L/S,Macro,Index
 ```
 
 Set `returns_unit` if your figures are percentages, `benchmark` to the column to compare against,
-and `basis` to say whether they are net or gross.
+and `basis` to say whether they are net or gross. A book with its own benchmark goes in a
+`[benchmark]` table instead, such as `GQ = "BM_GQ"`; each figure against a benchmark names it. The
+periods a year (`periods_per_year`) are read from the dates by default, and every report states
+them; a number you set must agree with the dates.
 
 ## Check it against your administrator
 
@@ -33,6 +36,12 @@ uv run {{ project_name }} reconcile admin_returns.xlsx --tolerance-bps 1
 ```
 
 It compares each book month by month, lists every break, and exits 1 if anything fails to agree.
+Each run also writes `reconcile.json` to a new folder under `reports/`: the reference's name and
+SHA-256, the tolerance, every break, and the reconciled figures, so a restatement after a report
+went out leaves a dated record.
+The benchmark is not compared. If the administrator's file is in percent, or its table starts below
+title rows, say so under `[reference]` in `config.toml`; name the file there too, and
+`{{ project_name }} reconcile` needs no argument.
 
 ## Make it yours
 
