@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A server's first metric call no longer races its time limit.** The first call imported the metrics
+  backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
+  than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
+  serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
+
 ### Changed
 
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
