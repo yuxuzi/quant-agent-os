@@ -78,6 +78,7 @@ def _surface() -> dict[str, dict[str, str]]:
     for leaf in (
         "data.excel",
         "data.frames",
+        "data.model",
         "data.sql",
         "report.svg",
         "report.interactive",
