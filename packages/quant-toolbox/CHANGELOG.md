@@ -6,7 +6,30 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Removed
+
+- **Six internal names leave the public API before 1.0 freezes it:** `audit.json_safe`, `data.BoolArray`,
+  `performance.BoolArray`, `performance.months_before`, `report.COLOURS`, `report.format_cell`, and
+  `research.newey_west_t_stat` (use `research.hac_t_stat`). Nothing outside the toolbox used them; the
+  functions remain inside it.
+
+### Added
+
+- `data.infer_frequency(dates)` returns a `Frequency` (name and periods a year) from the median spacing
+  of the dates, and `data.check_frequency(dates, periods_per_year)` checks a stated count against
+  them. The performance-report template used to carry this logic in its own `frequency.py`; it now
+  calls these. `data.period_noun` names one period for a count, and `data.periods_behind` and
+  `data.STALE_PERIODS` count how far a last date lies behind an as-of date.
+- `performance.shorter_than_period(label, periods_per_year)` says whether a horizon is shorter than the
+  data's period (MTD on quarterly data, MTD or QTD on annual data), so the template can show n/a.
+- `data.carried_forward(assets, dates)` returns the facts behind carried-forward warnings: assets with
+  exact zero runs (`ZeroRuns`), and weekdays on which every asset is exactly zero. Quant Analytics words
+  its warnings from these; the thresholds moved here with the detection.
+
 ### Changed
+
+- `performance.horizon_return` returns None (n/a) for a horizon shorter than the data's period: MTD on
+  quarterly data, and MTD or QTD on annual data. The performance-report template used to do this itself.
 
 - `data.excel.read_workbook` says what it read when no data follows the header row: the row it read as
   the names, its cells, the row below it, and the first date's row. It said "no rows of data below row

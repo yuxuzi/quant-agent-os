@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from quant_toolbox._hac import newey_west_t_stat  # not public; tested here
 from quant_toolbox.data import random_walk_panel
 from quant_toolbox.research import (
     TRADE_LAG,
@@ -10,7 +11,6 @@ from quant_toolbox.research import (
     hac_t_stat,
     ic_decay,
     ic_summary,
-    newey_west_t_stat,
     quantile_spread,
     reversal,
     signal_autocorrelation,
