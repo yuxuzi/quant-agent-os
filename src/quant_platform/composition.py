@@ -17,7 +17,14 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
 from quant_agent_os.registration import FirmApp
-from quant_agent_os.tools import AccessPolicy, PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
+from quant_agent_os.tools import (
+    AccessPolicy,
+    PermissionPolicy,
+    PromptSpec,
+    ResourceSpec,
+    ToolSpec,
+    ViewSpec,
+)
 from quant_agent_os.tools.registry import DuplicateToolError
 from quant_agent_os.tools.server_info import (
     SERVER_INFO_TOOL,
@@ -77,7 +84,7 @@ def available_toolsets() -> list[Toolset]:
 
 @dataclass(frozen=True)
 class Catalog:
-    """Everything one server offers: tools, resources, prompts, and its instructions.
+    """Everything one server offers: tools, resources, prompts, views, and its instructions.
 
     ``toolsets`` names the toolset that serves each tool, for usage events (decision 0015), and
     ``policy`` and ``access`` are what it was composed under, which serving it applies.
@@ -92,6 +99,7 @@ class Catalog:
     access: AccessPolicy | None = None
     # The reads `/readyz` makes of the stores composed in, by name.
     checks: dict[str, Callable[[], object]] = field(default_factory=dict)
+    views: list[ViewSpec] = field(default_factory=list)
 
 
 # A hash no document has, so `has_document` reads the store and finds nothing to report.
@@ -112,9 +120,9 @@ def compose(
     """Return the catalog for the given products; each one given is a toolset served.
 
     ``research`` serves the research toolset and `research_report`, whose strategy step is not
-    served on its own; ``datasets`` serves
-    analytics (series by reference) and `list_datasets`; ``factory`` serves the App Factory's
-    guiding tools. ``policy`` is the server's, which `research_report` applies to its steps.
+    served on its own; ``datasets`` serves analytics (series by reference), its performance view,
+    and `list_datasets`; ``factory`` serves the App Factory's guiding tools. ``policy`` is the
+    server's, which `research_report` applies to its steps.
     ``extra_tools`` are a firm's own, served as the toolset ``firm`` under the same executor
     checks, and ``extra_instructions`` tells clients about them. ``apps`` are a firm's
     registered functions (decision 0024), served the same way over ``datasets``, with their
@@ -157,12 +165,15 @@ def compose(
         resources += [spec for spec in research_resources() if spec.tool != STRATEGY_STEP]
         prompts.append(RESEARCH_SIGNAL)
         served.append("research")
+    views: list[ViewSpec] = []
     if datasets is not None:
         from quant_analytics.tools import analytics_tools
+        from quant_analytics.views import PERFORMANCE_VIEW
 
         add("analytics", [*analytics_tools(datasets).specs(), *dataset_tools(datasets)])
         resources += dataset_resources()
         prompts.append(ANALYZE_RETURNS)
+        views.append(PERFORMANCE_VIEW)
         served.append("analytics")
     if research is not None:
         add("research", [research_report_tool([*tools, *internal], policy)])
@@ -183,7 +194,9 @@ def compose(
     for text in [extra_instructions, *(app.instructions for app in apps)]:
         if text:
             instructions = f"{instructions}\n\n{text}"
-    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access, checks)
+    return Catalog(
+        tools, resources, prompts, instructions, toolsets, policy, access, checks, views
+    )
 
 
 def _check_extra_names(extra: Sequence[ToolSpec[Any, Any]], served: set[str]) -> None:

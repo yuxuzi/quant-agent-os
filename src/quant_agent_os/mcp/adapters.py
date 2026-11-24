@@ -4,12 +4,14 @@ The adapter calls tools through the same `ToolExecutor` as every interface, so M
 identical validation, permissions, limits, and outputs. A server transport only forwards
 ``tools/list`` to `tool_definitions`, ``tools/call`` to `call_tool`, the resource requests to
 `resource_templates` and `read_resource` (which call the resource's tool), and the prompt
-requests to `prompt_definitions` and `get_prompt`.
+requests to `prompt_definitions` and `get_prompt`. A view (`ViewSpec`) is a static resource: its
+tools' metadata links to it, and reading it returns its page without a call (`read_view`).
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from quant_agent_os.runs.recorder import RunRecorder
@@ -19,6 +21,7 @@ from quant_agent_os.tools.catalog import (
     PromptArgumentError,
     PromptSpec,
     ResourceSpec,
+    ViewSpec,
     find_resource,
 )
 from quant_agent_os.tools.contracts import ToolContractError
@@ -28,6 +31,10 @@ _WRITES = frozenset(
     {Permission.WRITE_LOCAL_DATA, Permission.EXECUTE_CODE, Permission.EXTERNAL_ACTION}
 )
 _OUTSIDE = frozenset({Permission.NETWORK, Permission.EXTERNAL_ACTION})
+# The MCP Apps extension (decision 0036): a view is a ui:// page of this MIME type, linked from
+# the tool's `_meta.ui.resourceUri`.
+UI_EXTENSION = "io.modelcontextprotocol/ui"
+APP_MIME_TYPE = "text/html;profile=mcp-app"
 
 
 class ResourceReadError(RuntimeError):
@@ -38,15 +45,20 @@ class ResourceReadError(RuntimeError):
 _NAMED_SUBSCHEMAS = frozenset({"properties", "$defs", "definitions", "patternProperties"})
 
 
-def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
+def tool_definitions(
+    executor: ToolExecutor, views: Sequence[ViewSpec] = ()
+) -> list[dict[str, Any]]:
     """Return MCP ``tools/list`` entries for every tool served to the current caller.
 
     ``outputSchema`` describes ``structuredContent`` on success, so clients can validate and
     rely on typed results. ``annotations`` are MCP behaviour hints derived from the declared
     contract: read-only unless the tool may write, run code, or act externally; open-world when
     it reaches outside the machine (network access or external actions). ``_meta`` carries the
-    tool's version and, for a deprecated tool, its replacement and removal date.
+    tool's version and, for a deprecated tool, its replacement and removal date. ``views`` (the
+    served ones, see `served_views`) add ``_meta.ui.resourceUri`` to each served tool they name;
+    a tool named by several views links the first.
     """
+    links = _view_links(executor, views)
     return [
         {
             "name": spec.name,
@@ -60,11 +72,60 @@ def tool_definitions(executor: ToolExecutor) -> list[dict[str, Any]]:
                 "openWorldHint": bool(spec.permissions & _OUTSIDE),
             },
             "_meta": {"qaos/version": spec.version}
-            | ({"qaos/deprecated": spec.descriptor()["deprecated"]} if spec.deprecated else {}),
+            | ({"qaos/deprecated": spec.descriptor()["deprecated"]} if spec.deprecated else {})
+            | ({"ui": {"resourceUri": links[spec.name]}} if spec.name in links else {}),
         }
         for spec in executor.registry.specs()
         if executor.serves(spec.name)
     ]
+
+
+def _served(executor: ToolExecutor, name: str) -> bool:
+    """Whether the tool ``name`` is registered and served to the current caller."""
+    return name in executor.registry and executor.serves(name)
+
+
+def _view_links(executor: ToolExecutor, views: Sequence[ViewSpec]) -> dict[str, str]:
+    """Return the URI of the first view that names each served tool."""
+    links: dict[str, str] = {}
+    for view in views:
+        for name in view.tools:
+            if _served(executor, name):
+                links.setdefault(name, view.uri)
+    return links
+
+
+def served_views(executor: ToolExecutor, views: Sequence[ViewSpec]) -> list[ViewSpec]:
+    """Return the views with at least one tool served to the current caller.
+
+    A view is served only while a tool it renders is, as a resource is served only while its tool
+    is (`served_resources`).
+    """
+    return [view for view in views if any(_served(executor, name) for name in view.tools)]
+
+
+def view_resources(views: Sequence[ViewSpec]) -> list[dict[str, Any]]:
+    """Return MCP ``resources/list`` entries for the served ``views``."""
+    return [
+        {
+            "uri": view.uri,
+            "name": view.name,
+            "description": view.description,
+            "mimeType": APP_MIME_TYPE,
+        }
+        for view in views
+    ]
+
+
+def read_view(views: Sequence[ViewSpec], uri: str) -> dict[str, Any] | None:
+    """Return the MCP ``resources/read`` contents of the view at ``uri``, or None if none has it.
+
+    A view's page is static: reading it calls no tool and records no run.
+    """
+    view = next((item for item in views if item.uri == uri), None)
+    if view is None:
+        return None
+    return {"uri": uri, "mimeType": APP_MIME_TYPE, "text": view.html}
 
 
 def compact_schema(schema: Any) -> Any:

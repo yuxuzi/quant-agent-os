@@ -18,6 +18,14 @@ All notable changes to this project are documented here. The format follows
   and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
   and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
   [operations](docs/operations.md#show-how-ai-was-used).
+### Added
+
+- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
+  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
+  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
+  beside the tool, and every other client gets the same text result as before. Contract tests cover the
+  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
+  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
 
 ### Changed
 

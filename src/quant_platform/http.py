@@ -31,7 +31,8 @@ def single_tenant(catalog: Catalog, run_store: RunStore, policy: PermissionPolic
             catalog.prompts,
             run_store,
             catalog.toolsets,
-            catalog.checks,
+            views=catalog.views,
+            checks=catalog.checks,
         )
     )
 

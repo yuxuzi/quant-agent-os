@@ -15,18 +15,19 @@ from typing import Protocol
 from quant_agent_os.runs.store import RunStore
 from quant_agent_os.runtime.executor import ToolExecutor
 from quant_agent_os.tenancy import DEFAULT_TENANT
-from quant_agent_os.tools.catalog import PromptSpec, ResourceSpec
+from quant_agent_os.tools.catalog import PromptSpec, ResourceSpec, ViewSpec
 
 
 @dataclass(frozen=True)
 class Surface:
-    """One tenant's tools (through its executor), resources, prompts, and run store."""
+    """One tenant's tools (through its executor), resources, prompts, views, and run store."""
 
     executor: ToolExecutor
     resources: list[ResourceSpec] = field(default_factory=list)
     prompts: list[PromptSpec] = field(default_factory=list)
     run_store: RunStore | None = None
     toolsets: Mapping[str, str] = field(default_factory=dict)
+    views: list[ViewSpec] = field(default_factory=list)
     # Named reads of the stores this surface was composed with, such as its knowledge store and
     # its datasets. Each must return normally when its store can be read (see `readiness`).
     checks: Mapping[str, Callable[[], object]] = field(default_factory=dict)

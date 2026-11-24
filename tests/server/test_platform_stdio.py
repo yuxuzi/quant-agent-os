@@ -66,7 +66,11 @@ def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: 
 
     assert initialised.server_info.name == "quant-agent-os"
     assert initialised.server_info.version == version("quant-agent-os")
-    assert [str(resource.uri) for resource in fixed] == ["qaos://server/info"]
+    # The performance view is a ui:// page, served beside the fixed resources (decision 0036).
+    assert [str(resource.uri) for resource in fixed] == [
+        "qaos://server/info",
+        "ui://quant-agent-os/performance.html",
+    ]
     assert json.loads(info.contents[0].text)["platform_version"] == initialised.server_info.version
     assert {"research_report", "analyze_performance"} <= {t.name for t in tools}
     assert "check_spec" not in {t.name for t in tools}  # App Factory is asked for by name
