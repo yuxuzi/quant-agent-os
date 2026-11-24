@@ -6,6 +6,7 @@ checks, and locked install run in the opt-in smoke test, and in `test_factory_sm
 
 from __future__ import annotations
 
+import calendar
 import filecmp
 import os
 import subprocess
@@ -185,6 +186,42 @@ def test_source_is_refused_where_the_template_installs_no_quant_agent_os(
     assert done.exit_code == 1
     assert "--source does not apply" in done.output
     assert not (tmp_path / "plain-lib.toml").exists()
+
+
+def test_a_monthly_file_gets_its_periods_from_its_dates_by_default(tmp_path: Path) -> None:
+    """The round-1 finding: --defaults annualised monthly returns as daily, with no warning."""
+    pytest.importorskip("openpyxl")
+    project = _render(_folder(tmp_path / "app"), "performance-report")
+    work = _folder(tmp_path / "work")
+    rows = ["date,Fund"]
+    for year in (2023, 2024):
+        for month in range(1, 13):
+            last = calendar.monthrange(year, month)[1]
+            rows.append(f"{year}-{month:02d}-{last},0.01")
+    returns = work / "monthly.csv"
+    returns.write_text("\n".join(rows) + "\n", "utf-8")
+
+    done = _app(project, "report", "--returns", str(returns), cwd=work)
+
+    assert done.returncode == 0, done.stderr
+    written = next(work.glob("reports/*/report.md")).read_text()
+    assert "12 periods a year (monthly, inferred from the dates)" in written
+    assert "12.68%" in written  # 1.01 ** 12 - 1, the ITD of 1% a month over two years
+
+    (work / "config.toml").write_text("periods_per_year = 252\n", "utf-8")
+    refused = _app(project, "report", "--returns", str(returns), cwd=work)
+    assert refused.returncode == 1
+    assert "periods_per_year is 252" in refused.stderr
+
+
+def test_the_periods_question_writes_auto_or_the_number_answered(tmp_path: Path) -> None:
+    default = _render(_folder(tmp_path / "auto"), "performance-report")
+    quarterly = _render(
+        _folder(tmp_path / "quarterly"), "performance-report", answers={"periods_per_year": "4"}
+    )
+
+    assert 'periods_per_year = "auto"' in (default / "config.toml").read_text()
+    assert "periods_per_year = 4\n" in (quarterly / "config.toml").read_text()
 
 
 # One copy of the numbers: Quant Toolbox (decision 0026)

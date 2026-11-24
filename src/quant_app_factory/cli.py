@@ -467,7 +467,7 @@ def new(
             )
         spec["quant_agent_os_source"] = source
     answers: dict[str, str] = {}
-    effective: dict[str, str] = {}
+    effective: dict[str, str] = {"profile": profile}  # so a question's `when` can name it
     connection_name = ""
     saved = load_settings().connections
     if DATABASE_COMPONENT in selected and saved:

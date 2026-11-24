@@ -11,6 +11,8 @@ from typing import Any
 from quant_toolbox.performance import is_horizon
 from quant_toolbox.report import CHART_MODES
 
+from .frequency import AUTO
+
 
 class SettingsError(ValueError):
     """Raised when settings are invalid; the message says which and why."""
@@ -62,7 +64,7 @@ class Settings:
     benchmark: str = ""  # a column of the returns file to compare against, not shown as a book
     basis: str = "not stated"  # what the returns are, on every report: net, gross, or your words
     returns_unit: str = "fraction"  # fraction (0.01 is 1%) or percent (1.0 is 1%)
-    periods_per_year: int = 252
+    periods_per_year: int | str = AUTO  # auto reads the dates; or a number such as 12
     risk_free: float = 0.0  # annual, in the same unit as a fraction
     var_cutoff: float = 0.05
     top_drawdowns: int = 5
@@ -88,7 +90,11 @@ class Settings:
                     self.reference.unit not in {"", "fraction", "percent"},
                     "reference.unit must be fraction or percent",
                 ),
-                (self.periods_per_year < 1, "periods_per_year must be at least 1"),
+                (
+                    self.periods_per_year != AUTO
+                    and not (isinstance(self.periods_per_year, int) and self.periods_per_year >= 1),
+                    'periods_per_year must be "auto" or a whole number of periods a year',
+                ),
                 (not 0.0 < self.var_cutoff < 0.5, "var_cutoff must be between 0 and 0.5"),
                 (self.top_drawdowns < 1, "top_drawdowns must be at least 1"),
                 (not self.horizons, "horizons must name at least one horizon"),
@@ -117,7 +123,6 @@ _FLAT = {
     "benchmark": str,
     "basis": str,
     "returns_unit": str,
-    "periods_per_year": int,
     "risk_free": float,
     "var_cutoff": float,
     "top_drawdowns": int,
@@ -135,7 +140,7 @@ def load_settings(path: Path) -> Settings:
         data = tomllib.loads(path.read_text("utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise SettingsError(f"Cannot read {path}: {error}") from error
-    known = {*_FLAT, "horizons", "tearsheets", "excel", "reference"}
+    known = {*_FLAT, "periods_per_year", "horizons", "tearsheets", "excel", "reference"}
     unknown = sorted(set(data) - known)
     if unknown:
         raise SettingsError(f"{path}: unknown keys {', '.join(unknown)}; use {', '.join(known)}.")
@@ -147,6 +152,8 @@ def load_settings(path: Path) -> Settings:
             if not valid or isinstance(value, bool):
                 raise SettingsError(f"{path}: {key} must be {kind.__name__}, not {value!r}.")
             chosen[key] = float(value) if kind is float else value
+    if "periods_per_year" in data:
+        chosen["periods_per_year"] = _periods(path, data["periods_per_year"])
     if "horizons" in data:
         chosen["horizons"] = _strings(data["horizons"], f"{path}: horizons")
     if "tearsheets" in data:
@@ -158,6 +165,17 @@ def load_settings(path: Path) -> Settings:
     if "reference" in data:
         chosen["reference"] = _reference(path, data["reference"])
     return dataclasses.replace(Settings(), **chosen)
+
+
+def _periods(path: Path, value: Any) -> int | str:
+    if isinstance(value, str) and value == AUTO:
+        return AUTO
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    raise SettingsError(
+        f'{path}: periods_per_year must be "auto" or a whole number of periods a year, '
+        f"not {value!r}."
+    )
 
 
 def _tearsheet(path: Path, name: str, entry: Any) -> Tearsheet:

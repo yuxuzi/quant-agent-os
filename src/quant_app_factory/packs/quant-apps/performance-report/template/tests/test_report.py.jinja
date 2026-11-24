@@ -1,5 +1,6 @@
 """The report end to end: sections, tear sheets, formats, reconciliation, and escaping."""
 
+import calendar
 import datetime as dt
 import json
 from pathlib import Path
@@ -15,6 +16,7 @@ from {{ package_name }} import sections as section_module
 from {{ package_name }}.cli import app
 from {{ package_name }}.context import Context
 from {{ package_name }}.firm.sections import SECTIONS as FIRM_SECTIONS
+from {{ package_name }}.frequency import resolve
 from {{ package_name }}.reconcile import reconcile
 from {{ package_name }}.reporting import build_context, build_document, check_data, load_returns
 from {{ package_name }}.settings import (
@@ -180,6 +182,98 @@ def test_settings_read_tear_sheets_and_excel_position(tmp_path: Path) -> None:
 
     assert settings.tearsheets["a"].sections == ["risk"]
     assert settings.excel == ExcelSource("R", 3)
+
+
+# Periods a year
+
+
+def _period_ends(count: int, step: int) -> list[dt.date]:
+    """Month ends ``step`` months apart, the last one in December 2024."""
+    dates = []
+    for back in range(count - 1, -1, -1):
+        index = 2024 * 12 + 11 - step * back
+        year, month = divmod(index, 12)
+        dates.append(dt.date(year, month + 1, calendar.monthrange(year, month + 1)[1]))
+    return dates
+
+
+def _business_days(count: int) -> list[dt.date]:
+    days: list[dt.date] = []
+    day = dt.date(2024, 1, 1)
+    while len(days) < count:
+        if day.weekday() < 5:
+            days.append(day)
+        day += dt.timedelta(days=1)
+    return days
+
+
+def _returns(dates: list[dt.date], value: float = 0.01) -> Table:
+    return Table(dates, ["A"], np.full((len(dates), 1), value))
+
+
+@pytest.mark.parametrize(
+    ("dates", "periods", "name"),
+    [
+        (_business_days(60), 252, "daily"),
+        ([dt.date(2024, 1, 5) + dt.timedelta(weeks=week) for week in range(30)], 52, "weekly"),
+        (_period_ends(24, 1), 12, "monthly"),
+        (_period_ends(12, 3), 4, "quarterly"),
+        (_period_ends(12, 12), 1, "annual"),
+    ],
+)
+def test_the_periods_are_inferred_from_the_dates(
+    dates: list[dt.date], periods: int, name: str
+) -> None:
+    resolved = resolve(dates, "auto")
+
+    assert (resolved.count, resolved.name) == (periods, name)
+    assert Settings().periods_per_year == "auto"
+
+
+def test_a_monthly_file_annualises_by_twelve_without_being_told() -> None:
+    """Known answer: 1% a month for two years is 1.01 ** 12 - 1 a year, from the dates alone."""
+    context = build_context(_returns(_period_ends(24, 1)), Settings())
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+
+    itd = table.rows[0][1 + context.settings.horizons.index("ITD")]
+
+    assert itd == pytest.approx(1.01**12 - 1)
+    subtitle = build_document(context).subtitle
+    assert "12 periods a year (monthly, inferred from the dates)" in subtitle
+
+
+def test_a_set_number_that_agrees_with_the_dates_is_used_and_stated() -> None:
+    context = build_context(_returns(_period_ends(24, 1)), Settings(periods_per_year=12))
+
+    assert context.settings.periods_per_year == 12
+    assert "12 periods a year (monthly, set in config.toml)" in build_document(context).subtitle
+
+
+def test_a_set_number_that_disagrees_is_refused_and_says_what_the_dates_are() -> None:
+    pattern = r"periods_per_year is 252.*median \d+ days apart"
+    with pytest.raises(TableError, match=pattern) as found:
+        build_context(_returns(_period_ends(24, 1)), Settings(periods_per_year=252))
+
+    assert "Set periods_per_year = 12 (monthly), or auto to infer it." in str(found.value)
+
+
+def test_dates_that_match_no_frequency_ask_for_a_number() -> None:
+    every_three_days = [dt.date(2024, 1, 1) + dt.timedelta(days=3 * n) for n in range(20)]
+
+    with pytest.raises(TableError, match="matches no frequency"):
+        resolve(every_three_days, "auto")
+
+
+def test_periods_per_year_is_auto_or_a_whole_number(tmp_path: Path) -> None:
+    assert load_settings(tmp_path / "missing.toml").periods_per_year == "auto"
+    path = _write_csv(tmp_path / "c.toml", "periods_per_year = 12\n")
+    assert load_settings(path).periods_per_year == 12
+    for text in ('periods_per_year = "monthly"\n', "periods_per_year = 12.0\n"):
+        with pytest.raises(SettingsError, match="periods_per_year must be"):
+            load_settings(_write_csv(tmp_path / "d.toml", text))
+    with pytest.raises(SettingsError, match="periods_per_year must be"):
+        Settings(periods_per_year=0)
 
 
 # Reconciliation

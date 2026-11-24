@@ -10,7 +10,7 @@ in a tear sheet in ``config.toml``. For example::
 
     def ytd_by_book(context: Context) -> list[Block]:
         \"\"\"Year to date, one row per book.\"\"\"
-        rate = context.settings.periods_per_year
+        rate = context.periods_per_year
         rows = [
             [book, horizon_return(context.dates, context.returns(book), "YTD", rate)]
             for book in context.books.columns

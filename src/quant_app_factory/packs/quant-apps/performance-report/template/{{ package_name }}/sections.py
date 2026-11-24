@@ -47,7 +47,7 @@ MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
 def horizons(context: Context) -> list[Block]:
     """Returns by horizon, one row per book, plus the benchmark."""
     labels = context.settings.horizons
-    rate = context.settings.periods_per_year
+    rate = context.periods_per_year
 
     def row(name: str, values: np.ndarray) -> list[float | str | None]:
         return [name, *(horizon_return(context.dates, values, label, rate) for label in labels)]
@@ -110,7 +110,7 @@ def monthly(context: Context) -> list[Block]:
 def risk(context: Context) -> list[Block]:
     """Return, volatility, ratios, drawdown, and tail risk for each book."""
     settings = context.settings
-    rate, cutoff = settings.periods_per_year, settings.var_cutoff
+    rate, cutoff = context.periods_per_year, settings.var_cutoff
     columns = [
         Column("Book", "text"),
         Column("Ann. return"),
@@ -233,7 +233,7 @@ def rolling_sharpe(context: Context) -> list[Block]:
     settings = context.settings
     return [
         rolling_sharpe_chart(
-            context.dates, _books(context), settings.periods_per_year, risk_free=settings.risk_free
+            context.dates, _books(context), context.periods_per_year, risk_free=settings.risk_free
         )
     ]
 

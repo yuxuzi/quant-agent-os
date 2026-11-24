@@ -84,6 +84,17 @@ frequency:
     - daily
     - weekly
     - monthly
+  when: "{{ profile != 'performance-report' }}"
+
+periods_per_year:
+  type: str
+  help: Periods a year, or auto to read them from the dates (252 daily, 52 weekly, 12 monthly, 4 quarterly, 1 annual)
+  default: auto
+  when: "{{ profile == 'performance-report' }}"
+  validator: >-
+    {% if not (periods_per_year | regex_search('^(auto|[1-9][0-9]{0,2})$')) %}
+    Use auto, or a whole number of periods a year such as 12.
+    {% endif %}
 
 cost_bps:
   type: str

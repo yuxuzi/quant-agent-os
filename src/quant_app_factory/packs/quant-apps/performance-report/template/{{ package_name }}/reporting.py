@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from quant_toolbox.report.excel import write_workbook
 from . import __version__
 from .context import Context
 from .firm.loaders import LOADERS
+from .frequency import resolve
 from .sections import available
 from .settings import Settings
 
@@ -68,7 +70,13 @@ def load_returns(path: Path, settings: Settings, *, reference: bool = False) -> 
 
 
 def build_context(table: Table, settings: Settings, as_of: dt.date | None = None) -> Context:
-    """Split the benchmark from the books, cut at ``as_of``, and note anything unusual."""
+    """Split the benchmark from the books, cut at ``as_of``, and note anything unusual.
+
+    The periods a year come from the whole file's dates, or the settings' number, which must agree
+    with them; the context's settings then hold that count.
+    """
+    periods = resolve(table.dates, settings.periods_per_year)
+    settings = dataclasses.replace(settings, periods_per_year=periods.count)
     chosen = table.until(as_of) if as_of else table
     books = [name for name in chosen.columns if name != settings.benchmark]
     if settings.benchmark and settings.benchmark not in chosen.columns:
@@ -84,6 +92,7 @@ def build_context(table: Table, settings: Settings, as_of: dt.date | None = None
         benchmark=benchmark,
         benchmark_name=settings.benchmark,
         data_notes=check_data(chosen.select(books)),
+        periods=periods,
     )
 
 
@@ -114,9 +123,12 @@ def build_document(context: Context, tearsheet: str | None = None) -> Document:
     blocks.append(TextBlock(title="Conventions", lines=CONVENTIONS))
     who = f"{settings.firm_name}: " if settings.firm_name else ""
     span = f"{context.dates[0]} to {context.as_of}"
+    periods = (
+        context.periods.statement() if context.periods else f"{context.periods_per_year} periods"
+    )
     return Document(
         title=f"{who}{sheet.title or name}",
-        subtitle=f"{span}. Basis: {settings.basis}. Computed figures only.",
+        subtitle=f"{span}. Basis: {settings.basis}. {periods}. Computed figures only.",
         blocks=blocks,
     )
 
