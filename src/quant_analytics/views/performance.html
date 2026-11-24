@@ -45,10 +45,15 @@ body {
   color: var(--qaos-fg);
   font: 14px/1.45 var(--qaos-font);
 }
-.kicker { margin: 0; color: var(--qaos-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.kicker { margin: 0; color: var(--qaos-muted); font-size: 12px; text-transform: uppercase; }
 h1 { margin: 2px 0 4px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
 h2 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
 .meta { margin: 0 0 4px; color: var(--qaos-muted); overflow-wrap: anywhere; }
+.headline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+.tile { min-width: 0; padding: 8px 10px; border: 1px solid var(--qaos-rule); border-radius: 6px; }
+.tile .label { color: var(--qaos-muted); font-size: 12px; overflow-wrap: anywhere; }
+.tile .figure { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (min-width: 560px) { .headline { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 4px; border-bottom: 1px solid var(--qaos-rule); text-align: left; vertical-align: top; }
 th { color: var(--qaos-muted); font-weight: 500; font-size: 12px; }
@@ -56,6 +61,7 @@ th { color: var(--qaos-muted); font-weight: 500; font-size: 12px; }
 ul, ol { margin: 0; padding-left: 20px; }
 li { margin: 0 0 6px; overflow-wrap: anywhere; }
 .source { color: var(--qaos-muted); font-size: 12px; }
+.note { margin: 6px 0 0; color: var(--qaos-muted); font-size: 12px; }
 .warnings { padding: 8px 12px 8px 28px; border-radius: 6px; background: var(--qaos-warn-bg); color: var(--qaos-warn-fg); }
 details { margin-top: 16px; }
 summary { cursor: pointer; font-weight: 600; }
@@ -73,12 +79,21 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
 (function () {
   "use strict";
 
-  // Metric names, as quant_toolbox.report shows them: percentages, counts, and ratios (the rest).
-  // A test holds these lists to the server's own kinds.
+  // Metric kinds, as quant_toolbox.report shows them; a test holds these to the server's kinds.
   var PERCENT = ["annualized_return", "annualized_volatility", "max_drawdown", "value_at_risk", "hit_rate", "alpha", "active_return", "tracking_error", "volatility", "best_period", "worst_period", "probabilistic_sharpe_ratio", "deflated_sharpe_ratio"];
   var COUNT = ["minimum_track_record"];
-  // Rows come in this order; any other metric follows, in name order.
-  var ORDER = ["annualized_return", "annualized_volatility", "max_drawdown", "value_at_risk", "sharpe_ratio", "sortino_ratio", "calmar_ratio", "omega_ratio", "tail_ratio", "stability", "hit_rate", "best_period", "worst_period", "skewness", "excess_kurtosis", "sharpe_standard_error", "probabilistic_sharpe_ratio", "minimum_track_record", "beta", "alpha", "correlation", "up_capture", "down_capture", "active_return", "tracking_error", "information_ratio"];
+  // The four figures a reader sees first, in this order.
+  var HEADLINE = ["annualized_return", "annualized_volatility", "sharpe_ratio", "max_drawdown"];
+  // The other metrics, in groups; any metric no group names is shown under Other.
+  var GROUPS = [
+    ["Returns", ["best_period", "worst_period", "hit_rate"]],
+    ["Risk", ["value_at_risk", "skewness", "excess_kurtosis"]],
+    ["Ratios", ["sortino_ratio", "calmar_ratio", "omega_ratio", "tail_ratio", "stability"]],
+    ["Against the benchmark", ["alpha", "beta", "correlation", "up_capture", "down_capture", "active_return", "tracking_error", "information_ratio"]],
+    ["Statistical confidence", ["sharpe_standard_error", "probabilistic_sharpe_ratio", "minimum_track_record"]]
+  ];
+  // The conventions behind the figures, shown when the output states them.
+  var BASIS = [["Source", "source"], ["Returns", "returns"], ["Periods per year", "periods_per_year"], ["Value at risk", "value_at_risk"], ["Sharpe ratio and risk-free rate", "sharpe_ratio"]];
 
   var root = document.getElementById("root");
   var INITIALIZE_ID = 1;
@@ -119,6 +134,8 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     try { return JSON.parse(firstText(result)); } catch (error) { return null; }
   }
 
+  function present(metrics, name) { return Object.prototype.hasOwnProperty.call(metrics, name); }
+
   function warningsBlock(warnings) {
     if (!Array.isArray(warnings) || warnings.length === 0) return null;
     var box = el("section");
@@ -129,9 +146,18 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     return box;
   }
 
-  function metricsTable(conventions, metrics) {
-    var names = ORDER.filter(function (name) { return Object.prototype.hasOwnProperty.call(metrics, name); });
-    Object.keys(metrics).sort().forEach(function (name) { if (names.indexOf(name) < 0) names.push(name); });
+  function headlineRow(metrics) {
+    var row = el("div", null, "headline");
+    HEADLINE.forEach(function (name) {
+      var tile = el("div", null, "tile");
+      tile.appendChild(el("div", label(name), "label"));
+      tile.appendChild(el("div", format(name, metrics[name]), "figure"));
+      row.appendChild(tile);
+    });
+    return row;
+  }
+
+  function metricsTable(conventions, names, metrics) {
     var table = el("table");
     var head = el("tr");
     head.appendChild(el("th", "Metric"));
@@ -141,7 +167,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     names.forEach(function (name) {
       var row = el("tr");
       var title = el("td", label(name));
-      if (conventions && typeof conventions[name] === "string") title.setAttribute("title", conventions[name]);
+      if (typeof conventions[name] === "string") title.setAttribute("title", conventions[name]);
       row.appendChild(title);
       row.appendChild(el("td", format(name, metrics[name]), "value"));
       body.appendChild(row);
@@ -150,10 +176,40 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     return table;
   }
 
+  function groupNodes(conventions, metrics) {
+    var listed = HEADLINE.slice();
+    GROUPS.forEach(function (group) { listed = listed.concat(group[1]); });
+    var other = Object.keys(metrics).filter(function (name) { return listed.indexOf(name) < 0; }).sort();
+    var nodes = [];
+    GROUPS.concat([["Other", other]]).forEach(function (group) {
+      var names = group[1].filter(function (name) { return present(metrics, name); });
+      if (names.length === 0) return; // a group with no benchmark metrics is left out
+      nodes.push(el("h2", group[0]));
+      nodes.push(metricsTable(conventions, names, metrics));
+      // data_versions names datasets, not which one is the benchmark.
+      if (group[0] === "Against the benchmark") nodes.push(el("p", "The output does not name the benchmark.", "note"));
+    });
+    return nodes;
+  }
+
+  function basisBlock(conventions) {
+    var pairs = BASIS.filter(function (item) { return typeof conventions[item[1]] === "string"; });
+    if (pairs.length === 0) return null;
+    var box = el("section");
+    box.appendChild(el("h2", "Basis"));
+    var list = el("dl");
+    pairs.forEach(function (item) {
+      list.appendChild(el("dt", item[0]));
+      list.appendChild(el("dd", conventions[item[1]]));
+    });
+    box.appendChild(list);
+    return box;
+  }
+
   function evidenceBlock(evidence) {
     if (!Array.isArray(evidence) || evidence.length === 0) return null;
-    var box = el("section");
-    box.appendChild(el("h2", "Evidence"));
+    var box = el("details");
+    box.appendChild(el("summary", "Evidence (" + evidence.length + ")"));
     var list = el("ol");
     evidence.forEach(function (item) {
       var entry = el("li", item.statement);
@@ -183,17 +239,17 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
 
   function performance(data) {
     var conventions = data.conventions || {};
+    var metrics = data.metrics || {};
     var nodes = [];
     var header = el("header");
     header.appendChild(el("p", "Performance", "kicker"));
     header.appendChild(el("h1", data.series_id));
     header.appendChild(el("p", data.periods + " periods, " + data.periods_per_year + " a year", "meta"));
-    if (conventions.source) header.appendChild(el("p", "Source: " + conventions.source, "meta"));
-    if (conventions.returns) header.appendChild(el("p", "Returns: " + conventions.returns, "meta"));
     nodes.push(header);
+    nodes.push(headlineRow(metrics));
     nodes.push(warningsBlock(data.warnings));
-    nodes.push(el("h2", "Metrics"));
-    nodes.push(metricsTable(conventions, data.metrics || {}));
+    nodes = nodes.concat(groupNodes(conventions, metrics));
+    nodes.push(basisBlock(conventions));
     nodes.push(evidenceBlock(data.evidence));
     nodes.push(detailsBlock("Conventions", conventions));
     nodes.push(detailsBlock("Data versions", data.data_versions));
@@ -234,7 +290,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     if (!variables || typeof variables !== "object") return;
     Object.keys(variables).forEach(function (name) {
       var value = variables[name];
-      // Only custom properties, and only plain values: a host's colours and fonts, nothing that can open a URL.
+      // Only custom properties with plain values: colours and fonts, nothing that opens a URL.
       if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && /^[\w\s#%.,()"'+-]{1,120}$/.test(value)) {
         html.style.setProperty(name, value);
       }

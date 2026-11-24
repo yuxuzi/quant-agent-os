@@ -368,7 +368,7 @@ def test_the_page_loads_nothing_and_renders_text_as_text() -> None:
     assert "<link" not in html and "@import" not in html and "url(" not in html
     assert "innerHTML" not in html and "insertAdjacentHTML" not in html and "eval(" not in html
     assert "textContent" in html
-    assert len(html.encode("utf-8")) <= 12 * 1024
+    assert len(html.encode("utf-8")) <= 14 * 1024
 
 
 def test_the_page_formats_each_metric_as_the_toolbox_does() -> None:
@@ -393,3 +393,91 @@ def test_the_page_formats_each_metric_as_the_toolbox_does() -> None:
     assert {n for n, k in kinds.items() if k == "percent"} == listed("PERCENT") & metrics
     assert {n for n, k in kinds.items() if k == "count"} == listed("COUNT") & metrics
     assert "minimum_track_record" in metrics and "best_period" in metrics
+
+
+BENCHMARK = [0.005, -0.01, 0.002]
+HEADLINE = ["annualized_return", "annualized_volatility", "sharpe_ratio", "max_drawdown"]
+
+
+def _analysis(arguments: dict[str, Any]) -> dict[str, Any]:
+    """The structured result analyze_performance gives for ``arguments``, from the platform."""
+    executor = ToolExecutor(ToolRegistry(analytics_tools(None).specs()), PermissionPolicy())
+    record = executor.execute(ToolCall(tool="analyze_performance", arguments=arguments))
+    assert record.status == "ok", record.error
+    return record.output  # type: ignore[return-value]
+
+
+def _groups(html: str) -> list[tuple[str, list[str]]]:
+    """The page's metric groups: each title with the metric names it lists, in order."""
+    body = re.search(r"var GROUPS = \[(.*?)\];\n", html, re.DOTALL)
+    assert body is not None, "GROUPS"
+    return [
+        (title, re.findall(r'"([a-z_]+)"', names))
+        for title, names in re.findall(r'\["([^"]+)", \[([^\]]*)\]\]', body.group(1))
+    ]
+
+
+def test_the_page_shows_four_figures_first_then_groups_each_metric_once() -> None:
+    html = PERFORMANCE_VIEW.html
+    headline = re.search(r"var HEADLINE = \[(.*?)\];", html)
+    assert headline is not None
+    assert re.findall(r'"([a-z_]+)"', headline.group(1)) == HEADLINE
+
+    groups = _groups(html)
+    assert [title for title, _ in groups] == [
+        "Returns",
+        "Risk",
+        "Ratios",
+        "Against the benchmark",
+        "Statistical confidence",
+    ]
+    grouped = [name for _, names in groups for name in names]
+    assert len(grouped) == len(set(grouped)), "a metric is in two groups"
+    assert set(grouped).isdisjoint(HEADLINE)
+    # Every metric the tool returns with a benchmark is a figure or in a group, and no other is.
+    returned = set(_analysis({**ARGUMENTS, "benchmark": BENCHMARK})["metrics"])
+    assert set(grouped) | set(HEADLINE) == returned
+
+
+def test_the_benchmark_group_holds_exactly_the_metrics_only_a_benchmark_adds() -> None:
+    plain = set(_analysis(ARGUMENTS)["metrics"])
+    with_benchmark = set(_analysis({**ARGUMENTS, "benchmark": BENCHMARK})["metrics"])
+    group = dict(_groups(PERFORMANCE_VIEW.html))["Against the benchmark"]
+
+    assert set(group) == with_benchmark - plain
+    assert set(group) == {
+        "active_return",
+        "alpha",
+        "beta",
+        "correlation",
+        "down_capture",
+        "information_ratio",
+        "tracking_error",
+        "up_capture",
+    }
+
+
+def test_the_basis_names_only_conventions_the_tool_states() -> None:
+    html = PERFORMANCE_VIEW.html
+    match = re.search(r"var BASIS = (\[.*\]);", html)
+    assert match is not None
+    pairs = re.findall(r'\["([^"]+)", "([a-z_]+)"\]', match.group(1))
+    conventions = _analysis(ARGUMENTS)["conventions"]
+
+    assert [title for title, _ in pairs] == [
+        "Source",
+        "Returns",
+        "Periods per year",
+        "Value at risk",
+        "Sharpe ratio and risk-free rate",
+    ]
+    for _, key in pairs:
+        assert key in conventions, key
+    assert "Basis" in html and "Against the benchmark" in html
+
+
+def test_the_page_titles_the_result_with_its_series_and_names_its_window() -> None:
+    html = PERFORMANCE_VIEW.html
+
+    assert 'el("h1", data.series_id)' in html
+    assert "data.periods" in html and "data.periods_per_year" in html

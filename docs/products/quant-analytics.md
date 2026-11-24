@@ -53,9 +53,12 @@ generated report compute the same way ([decision 0026](../decisions/0026-quant-t
 ## See the result in your client
 
 `analyze_performance` links a page, `ui://quant-agent-os/performance.html`, which a client that shows
-MCP Apps draws in place of the result's text: the series and its periods, the conventions, a metrics
-table with each value formatted as its kind (percentages, counts, and ratios), the warnings, the
-evidence, and the data versions. The page is served beside the tool, by `qaos serve`, the stdio
+MCP Apps draws in place of the result's text: the series and its periods, four headline figures
+(annualised return, volatility, Sharpe ratio, and maximum drawdown), the other metrics in groups
+(returns, risk, ratios, against a benchmark when one is given, and statistical confidence), the
+basis the output states (returns, periods per year, value at risk, and the risk-free rate's use), the
+warnings, and the evidence and conventions below. The output does not give the window's dates, the
+benchmark's name, or the risk-free rate's value, so the page does not show them. The page is served beside the tool, by `qaos serve`, the stdio
 server, and `serve_apps`, and only where `analyze_performance` is served to the caller
 ([decision 0036](../decisions/0036-views-for-mcp-apps.md)). It makes no request and loads nothing,
 and it draws only what the tool returned.

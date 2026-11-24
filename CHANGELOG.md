@@ -17,6 +17,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The performance view leads with four figures** (annualised return, volatility, Sharpe ratio, maximum drawdown), then groups the other metrics, adds the basis the output states, and names the benchmark only when the output does. The window's dates, the benchmark's name, and the risk-free rate's value are not in the tool's output, so the page does not show them.
 - **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
   MCP Python SDK 2 (`mcp>=2.3,<3`): a client that speaks the stateless 2026-07-28 revision gets it, over
   HTTP and stdio, and older clients keep the `initialize` handshake, from the same endpoint. Tools,
