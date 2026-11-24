@@ -101,11 +101,12 @@ def warn_about_open_access(catalog: Catalog, ring: KeyRing, sign_in: SignIn | No
 
 def warn_about_scopes(sign_in: SignIn | None) -> None:
     """Warn about a provider whose scope map grants ``tools:call`` and never ``tools:list``."""
-    from quant_platform.identity.sign_in import scope_gap
+    from quant_platform.identity.sign_in import kind_gap, scope_gap
 
     for server in sign_in.jwks_servers if sign_in is not None else []:
-        if gap := scope_gap(server.scope_map):
-            errors.print(f"[yellow]warning:[/yellow] {server.issuer}: {gap}")
+        for gap in (scope_gap(server.scope_map), kind_gap(server.client_ids, server.token_use)):
+            if gap:
+                errors.print(f"[yellow]warning:[/yellow] {server.issuer}: {gap}")
 
 
 def _applies(access: AccessPolicy, path: Path) -> bool:

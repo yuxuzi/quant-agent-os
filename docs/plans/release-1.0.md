@@ -46,6 +46,7 @@ commands before handing back, and its result is reviewed before the pull request
 | W7 | **Security re-review** | `docs/security-review-3` | A third review of C7's scope, with real servers in the configurations most likely to fail open | Findings fixed or accepted in writing |
 | W8 | **Promise and docs** | `docs/1.0` | Decision 0035; README, getting started, the demo guide, and the product pages for 1.0 | Docs stay true; a quality claim cites a measurement |
 | W10 | **Quant Toolbox 1.0** | `feat/toolbox-1.0` | Frequency inference (now in the `performance-report` template) and carried-forward and staleness checks (now in Quant Analytics) move into the toolbox's public API, and the template and analytics use them; horizons by the data's own frequency; known-answer tests against hand-computed references for annualisation, horizons, and drawdowns; a review of every public name before the lock is frozen; a stated semver promise | Toolbox imports nothing of the platform; its API changes only with the lock and its changelog |
+| W11 | **A standard data model** | `feat/data-model` | Decision 0037: six standard tables defined in Quant Toolbox, a mapping file, built-in file and SQL adapters, generated stub adapters for sources finished later, and a `MappedDatasetStore`; the toolbox part before 1.0, the mapping proved at two funds in round 3 | Funds keep their systems; the platform maps, it does not replace |
 | W9 | **Release** | `release/1.0.0` | Version, changelogs, pack pins, mirrors | Only on the owner's word |
 
 ## 3. Mock-fund rounds
