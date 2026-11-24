@@ -153,6 +153,35 @@ def test_a_workbook_with_title_rows_and_totals_reads_correctly(tmp_path: Path) -
         read_workbook(path)
 
 
+def test_a_header_row_that_is_not_the_names_says_what_it_read(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    from quant_toolbox.data.excel import read_workbook
+
+    def workbook(name: str, layout: list[list[object]]) -> Path:
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.title = "Returns"
+        for row in layout:
+            sheet.append(row)
+        sheet.append([dt.date(2024, 1, 31), 0.01, 0.02])
+        book.save(tmp_path / name)
+        return tmp_path / name
+
+    group = [None, "Group A", "Group A"]
+    blank = workbook("blank.xlsx", [[], [], group, [], ["Date", "A", "B"]])
+    with pytest.raises(TableError) as blank_error:
+        read_workbook(blank, sheet="Returns", header_row=3)
+    message = str(blank_error.value)
+    assert "row 3: read as the column names (empty, 'Group A', 'Group A')" in message
+    assert "row 4 is empty, which ends the table" in message
+    assert "The first date is in row 6." in message
+    assert read_workbook(blank, sheet="Returns", header_row=5).columns == ["A", "B"]
+
+    text = workbook("text.xlsx", [[], [], group, ["Date", "A", "B"]])
+    with pytest.raises(TableError, match=r"row 4 starts with 'Date': 'Date' is not an ISO date"):
+        read_workbook(text, sheet="Returns", header_row=3)
+
+
 def test_written_workbooks_hold_numbers_and_never_formulas(tmp_path: Path) -> None:
     openpyxl = pytest.importorskip("openpyxl")
     from quant_toolbox.report.excel import write_workbook

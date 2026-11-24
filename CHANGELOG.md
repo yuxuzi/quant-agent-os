@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **A `header_row` that holds no data says what it read.** A wrong `[excel] header_row` (or `[reference]`)
+  now names the row read as the column names, its cells, and the row below it, with the first date's row,
+  in place of "no rows of data below row N".
 - **`performance-report` reconciles an administrator's own file as it comes.** A `[reference]` table in
   `config.toml` names the reference file and, when they differ from the returns file's, its unit
   (`percent`) and where its table starts in a workbook (`sheet`, `header_row`); `reconcile` then needs no

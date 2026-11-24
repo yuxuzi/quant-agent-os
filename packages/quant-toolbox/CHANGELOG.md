@@ -6,6 +6,12 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Changed
+
+- `data.excel.read_workbook` says what it read when no data follows the header row: the row it read as
+  the names, its cells, the row below it, and the first date's row. It said "no rows of data below row
+  N", which did not show a blank row or a text row as the cause.
+
 ## [0.8.0] - 2026-11-19
 
 Released with Quant-Agent-OS 0.9.0.
