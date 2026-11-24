@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A server's first metric call no longer races its time limit.** The first call imported the metrics
+  backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
+  than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
+  serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
+
 ### Changed
 
 - **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
