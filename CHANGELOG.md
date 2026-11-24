@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
   replica, the probes (`/healthz` for liveness, `/readyz` for readiness), JSON logs, secrets as `NAME_FILE` files,
   TLS and rate limits at the ingress, and sign-in. The mock funds' descriptors use `/readyz`, JSON logs, and file
   secrets. They are examples the tests check against the code, and no test deploys them.
+- **A firm's image recipe.** `deploy/Dockerfile.firm` adds the packages a firm's datasets read, such as database
+  drivers and SQLAlchemy, to the platform's image. uv installs them in a stage the final image does not keep, and
+  a failed install fails the build. `docs/deployment.md` section 8, "Drivers in your image", shows a requirements
+  file with one example per driver family.
 
 ### Changed
 
@@ -44,6 +48,11 @@ All notable changes to this project are documented here. The format follows
 
 - **Readiness that reads.** A `/readyz` probe of the datasets no longer passes after the store's files or database
   are deleted: its `ids()` answered from a declared list. The run and knowledge stores were already read by a query.
+- **Mock-fund images install with uv, and fail on error.** Sablecroft's `Dockerfile.firm` installed its driver with
+  `pip ... || true`, which hid a failed install. Corvane's and Wrenfield's images ran `uv` or installed DuckDB and
+  pyarrow where the platform's final image has no uv. Each now installs in a build stage with uv, which the final
+  image does not keep. `tests/contract/test_deploy_files.py` now fails on `|| true`, on a bare pip install in any
+  Dockerfile, and on a uv install in a stage without uv.
 
 ## [0.9.0] - 2026-11-19
 

@@ -1,10 +1,18 @@
 # The fund's image: the platform's team-server image plus the fund's own code. Not built in tests.
-# Base: built from the platform's deploy/Dockerfile (docs/deployment.md section 1).
+# Base: built from the platform's deploy/Dockerfile (docs/deployment.md section 1). The driver is
+# installed the way deploy/Dockerfile.firm does it: uv, in a stage the image does not keep, and any
+# failure fails the build (docs/deployment.md, "Drivers in your image").
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
+FROM ${UV_IMAGE} AS uv
+
+FROM quant-agent-os:local AS drivers
+USER root
+COPY --from=uv /uv /usr/local/bin/uv
+RUN uv pip install --no-cache --python /opt/venv/bin/python databricks-sql-connector
+
 FROM quant-agent-os:local
 USER root
-# The platform's image has no databricks-sql-connector and no way to add an extra at build time that
-# the fund's site code needs; the fund installs it into the image's venv. (FINDINGS: driver extra.)
-RUN /opt/venv/bin/python -m pip install --no-cache-dir databricks-sql-connector || true
+COPY --from=drivers /opt/venv /opt/venv
 COPY examples/mock-funds/sablecroft/site /app/site
 COPY examples/mock-funds/sablecroft/facility/access.toml /config/access.toml
 COPY examples/mock-funds/sablecroft/site/deploy/sign-in.toml /config/sign-in.toml

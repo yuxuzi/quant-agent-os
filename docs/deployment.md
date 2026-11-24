@@ -224,7 +224,8 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
   serves, such as the research corpus, open around the block as well.
 - **Deploy it.** Build an image from the platform's, as the example's `Dockerfile` does, then run the
   compose file with it: `QAOS_IMAGE=firm-qaos:1 docker compose -f deploy/compose.yaml up -d server`.
-  Mount anything your tools read in a compose override. Every other step above stays the same.
+  Mount anything your tools read in a compose override. Every other step above stays the same. A database driver
+  goes in the image too, as [Drivers in your image](#drivers-in-your-image) shows.
 
 **Internal services.** A read-only service your firm already runs, such as a limits or pricing API,
 becomes a tool from a typed stub whose body never runs:
@@ -382,7 +383,7 @@ serve_apps([risk], datasets=store)
 | PostgreSQL, RDS | `postgresql+psycopg://user@host:5432/db` | `psycopg[binary]` |
 | SQL Server, Azure SQL | `mssql+pyodbc://user@host/db?driver=ODBC+Driver+18+for+SQL+Server` | `pyodbc` |
 | Snowflake | `snowflake://user@account/database/schema?warehouse=WH&role=READER` | `snowflake-sqlalchemy` |
-| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sql-connector` |
+| Databricks | `databricks://token@host?http_path=...&catalog=main&schema=serving` | `databricks-sqlalchemy` (with `databricks-sql-connector`) |
 | DuckDB (a file, or Parquet through `read_parquet(..., hive_partitioning=true)`) | `duckdb:///lake.duckdb` | `duckdb-engine` |
 
 - **SQL is written once.** Binds are always `:name`, whatever the driver's own style, and a list binds as an
@@ -406,6 +407,46 @@ serve_apps([risk], datasets=store)
   that a hung connection fails sooner.
 - **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
   is where fund-specific logic stays visible.
+
+### Drivers in your image
+
+The platform's image has no database driver, and no SQLAlchemy either: its `sql` extra is not in the image. A
+firm's image adds what its datasets read, with [`deploy/Dockerfile.firm`](../deploy/Dockerfile.firm). Copy that file,
+and a `firm-requirements.txt` beside it, into your repository, and build there:
+
+```bash
+docker build -f Dockerfile.firm -t firm-qaos:1 .
+```
+
+uv installs the file's packages into the platform's own environment, in a build stage the final image does not keep,
+so uv is not in the server image. Each line is installed or the build fails: there is no `|| true`, and no pip. The
+recipe takes the platform's image as `PLATFORM_IMAGE` (default `quant-agent-os:local`), so pin a release tag in your
+own build.
+
+A requirements file with one example per driver family. Keep the families your datasets read, and pin each one you
+test (`name==version`): an unpinned name installs the newest release at build time.
+
+```text
+# firm-requirements.txt
+sqlalchemy>=2.0,<3          # SQLAlchemy, which SqlDatasetStore reads through (the sql extra); always needed
+psycopg[binary]             # PostgreSQL and RDS; the postgres extra already has it, so this only pins it
+pyodbc                      # SQL Server and Azure SQL; needs unixodbc (the recipe installs it) and Microsoft's driver
+snowflake-sqlalchemy        # Snowflake; pulls in snowflake-connector-python
+databricks-sqlalchemy       # Databricks, the databricks:// dialect; pulls in databricks-sql-connector
+duckdb-engine               # DuckDB files, and Parquet read through DuckDB; pulls in duckdb
+```
+
+| Family | Requirement | System library | Notes |
+| --- | --- | --- | --- |
+| PostgreSQL, RDS | `psycopg[binary]` | none (the binary build bundles libpq) | RDS IAM tokens go through `credential=` |
+| SQL Server, Azure SQL | `pyodbc` | `unixodbc`, in the recipe | The SQL Server driver is Microsoft's `msodbcsql18`, from Microsoft's own Linux repository, not Debian's; add its install steps to the recipe for your base image, and test the build |
+| Snowflake | `snowflake-sqlalchemy` | none (pure Python) | |
+| Databricks | `databricks-sqlalchemy` | none (pure Python) | |
+| DuckDB | `duckdb-engine` | none | Read-only for a file; a lake of Parquet reads through `read_parquet` |
+
+The recipe is checked by `tests/contract/test_deploy_files.py`, which reads it and every other Dockerfile in the
+repository for a `|| true` and for a pip install, and checks that a stage running `uv pip install` has uv. The build
+itself needs Docker, so run it in your own CI.
 
 ## 9. Decide who reaches what
 

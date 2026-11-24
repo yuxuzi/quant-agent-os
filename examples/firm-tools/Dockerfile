@@ -3,7 +3,9 @@
 #
 #   docker build -t firm-qaos:1 examples/firm-tools
 #
-# If your tools need packages, install your own package into /opt/venv in a build stage.
+# If your tools need packages, such as a database driver, use the recipe in deploy/Dockerfile.firm:
+# uv installs them in a stage, and a failed install fails the build (docs/deployment.md, "Drivers in
+# your image").
 FROM quant-agent-os:local
 COPY firm_data.py firm_tools.py firm_server.py /home/app/
 ENV FIRM_HOST=0.0.0.0 \
