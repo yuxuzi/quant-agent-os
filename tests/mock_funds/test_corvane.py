@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from typer.testing import CliRunner
 
@@ -506,14 +506,14 @@ def test_the_platforms_sign_in_cannot_use_cognito_directly_but_can_through_the_s
     secret = ("qaos-resource-server", "s3cret")
     "Basic " + base64.b64encode(b"qaos-resource-server:s3cret").decode()
 
-    def shim(request: httpx.Request) -> httpx.Response:
+    def shim(request: httpx2.Request) -> httpx2.Response:
         form = dict(x.split("=", 1) for x in request.content.decode().split("&"))
         status, body = corvane_introspect.introspect(
             {"token": form["token"]}, request.headers.get("authorization"),
             issuer=pool.issuer, resource=resource, client_ids=frozenset({pool.client_id}),
             fetch_jwks=pool.jwks, basic=secret,
         )  # fmt: skip
-        return httpx.Response(status, json=body)
+        return httpx2.Response(status, json=body)
 
     def server(url: str) -> AuthorizationServer:
         return AuthorizationServer.model_validate(
@@ -524,7 +524,7 @@ def test_the_platforms_sign_in_cannot_use_cognito_directly_but_can_through_the_s
         )  # fmt: skip
 
     def verify(url: str, handler: Any, token: str) -> Any:
-        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
         verifier = IntrospectionVerifier(
             [server(url)],
             resource=resource,
@@ -533,8 +533,8 @@ def test_the_platforms_sign_in_cannot_use_cognito_directly_but_can_through_the_s
         )
         return asyncio.run(verifier.verify_token(token))
 
-    def cognito_404(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={"message": "Not Found"})
+    def cognito_404(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, json={"message": "Not Found"})
 
     token = pool.access_token("priya")
     assert verify(f"{pool.issuer}/oauth2/introspect", cognito_404, token) is None  # no endpoint

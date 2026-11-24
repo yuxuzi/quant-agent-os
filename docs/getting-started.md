@@ -4,7 +4,7 @@ Quant-Agent-OS reaches your AI client as one MCP server plus five skills that te
 how to use it. You need [uv](https://docs.astral.sh/uv/). From nothing to a first answer:
 
 ```bash
-uv tool install --python 3.13 "quant-agent-os[analytics,server] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0"
+uv tool install --python 3.13 "quant-agent-os[analytics,server,factory] @ git+https://github.com/yuxuzi/quant-agent-os@v0.9.0"
 qaos ingest ~/research            # or `qaos init --sample` to try it first
 qaos data add returns.csv
 qaos connect claude --write       # or cursor, vscode; restart the client

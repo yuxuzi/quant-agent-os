@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-import httpx
+import httpx2
 import typer
 from book_tools import firm_tools
 from mcp.client.session import ClientSession
@@ -125,8 +125,8 @@ async def client_as(url: str, key: str) -> AsyncIterator[ClientSession]:
     """Yield an initialised MCP session that authenticates with ``key``."""
     headers = {"Authorization": f"Bearer {key}"}
     async with (
-        httpx.AsyncClient(headers=headers, timeout=60) as client,
-        streamable_http_client(f"{url}/mcp", http_client=client) as (read, write, _),
+        httpx2.AsyncClient(headers=headers, timeout=60) as client,
+        streamable_http_client(f"{url}/mcp", http_client=client) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -136,7 +136,7 @@ async def client_as(url: str, key: str) -> AsyncIterator[ClientSession]:
 async def _call(session: ClientSession, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Return a tool's structured result, which on failure holds its status and hint."""
     result = await session.call_tool(tool, arguments)
-    return dict(result.structuredContent or {}) | {"is_error": bool(result.isError)}
+    return dict(result.structured_content or {}) | {"is_error": bool(result.is_error)}
 
 
 async def drive(url: str, keys: Keys, say: Say = print) -> dict[str, Any]:
@@ -147,7 +147,7 @@ async def drive(url: str, keys: Keys, say: Say = print) -> dict[str, Any]:
         say(f"\n[{number}/{STEPS}] {title}")
 
     step(1, "Authenticate: no key, no service")
-    async with httpx.AsyncClient(timeout=60) as anonymous:
+    async with httpx2.AsyncClient(timeout=60) as anonymous:
         seen["no_key"] = (await anonymous.get(f"{url}/v1/tools")).status_code
     say(f"  A request without a key gets HTTP {seen['no_key']}.")
 
@@ -244,7 +244,7 @@ async def drive(url: str, keys: Keys, say: Say = print) -> dict[str, Any]:
 async def _audit(url: str, key: str) -> list[dict[str, Any]]:
     """Return the recorded calls, oldest first, as the auditor reads them over REST."""
     headers = {"Authorization": f"Bearer {key}"}
-    async with httpx.AsyncClient(base_url=url, headers=headers, timeout=60) as client:
+    async with httpx2.AsyncClient(base_url=url, headers=headers, timeout=60) as client:
         runs = (await client.get("/v1/runs", params={"limit": 100})).raise_for_status().json()
         stored = [
             (await client.get(f"/v1/runs/{run['run_id']}")).raise_for_status().json()
@@ -273,9 +273,9 @@ def _wait_until_healthy(url: str, server: subprocess.Popen[bytes], log: Path) ->
         if server.poll() is not None:
             break
         try:
-            if httpx.get(f"{url}/healthz", timeout=2).status_code == 200:
+            if httpx2.get(f"{url}/healthz", timeout=2).status_code == 200:
                 return
-        except httpx.TransportError:
+        except httpx2.TransportError:
             pass
         time.sleep(0.1)
     raise RuntimeError(f"The demonstration's server did not start:\n{log.read_text('utf-8')}")

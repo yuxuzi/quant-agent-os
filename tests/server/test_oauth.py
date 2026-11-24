@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -50,11 +50,11 @@ class FakeProvider:
         self.tokens: dict[str, dict[str, Any]] = {}
         self.asked: list[tuple[str, str]] = []
 
-    def handler(self, request: httpx.Request) -> httpx.Response:
+    def handler(self, request: httpx2.Request) -> httpx2.Response:
         assert request.headers["authorization"].startswith("Basic ")
-        token = dict(httpx.QueryParams(request.content.decode()))["token"]
+        token = dict(httpx2.QueryParams(request.content.decode()))["token"]
         self.asked.append((request.url.host, token))
-        return httpx.Response(200, json=self.tokens.get(token, {"active": False}))
+        return httpx2.Response(200, json=self.tokens.get(token, {"active": False}))
 
     def claims(self, issuer: str, tenant: str, **overrides: Any) -> dict[str, Any]:
         return {
@@ -89,7 +89,7 @@ def _verifier(provider: FakeProvider, *issuers: str) -> IntrospectionVerifier:
         [_server(issuer) for issuer in issuers],
         resource=RESOURCE,
         tenants_by_issuer={ACME: {"acme"}, GLOBEX: {"globex"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(provider.handler)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(provider.handler)),
     )
 
 
@@ -151,14 +151,14 @@ def test_a_token_is_never_sent_to_a_provider_that_cannot_have_issued_it(
 def test_a_provider_failure_refuses_the_token_without_logging_it(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    def down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("down", request=request)
+    def down(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("down", request=request)
 
     verifier = IntrospectionVerifier(
         [_server(ACME)],
         resource=RESOURCE,
         tenants_by_issuer={ACME: {"acme"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(down)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(down)),
     )
     token = _jwt(ACME, "secret-token-value")
 
@@ -179,15 +179,15 @@ def test_a_refusal_is_cached_but_a_provider_failure_is_not(provider: FakeProvide
 
     calls: list[str] = []
 
-    def down(request: httpx.Request) -> httpx.Response:
+    def down(request: httpx2.Request) -> httpx2.Response:
         calls.append("asked")
-        raise httpx.ConnectError("down", request=request)
+        raise httpx2.ConnectError("down", request=request)
 
     flaky = IntrospectionVerifier(
         [_server(ACME)],
         resource=RESOURCE,
         tenants_by_issuer={ACME: {"acme"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(down)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(down)),
     )
     _verify(flaky, refused)
     _verify(flaky, refused)
@@ -201,7 +201,7 @@ def test_each_provider_is_asked_at_most_its_budget_and_a_flood_warns_once(
         [_server(ACME), _server(GLOBEX)],
         resource=RESOURCE,
         tenants_by_issuer={ACME: {"acme"}, GLOBEX: {"globex"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(provider.handler)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(provider.handler)),
         introspections_per_minute=3,
     )
     valid = _jwt(GLOBEX, "valid")
@@ -219,16 +219,16 @@ def test_introspections_in_flight_per_provider_are_bounded(provider: FakeProvide
     release = anyio.Event()
     asked: list[str] = []
 
-    async def slow(request: httpx.Request) -> httpx.Response:
+    async def slow(request: httpx2.Request) -> httpx2.Response:
         asked.append("asked")
         await release.wait()
-        return httpx.Response(200, json={"active": False})
+        return httpx2.Response(200, json={"active": False})
 
     verifier = IntrospectionVerifier(
         [_server(ACME)],
         resource=RESOURCE,
         tenants_by_issuer={ACME: {"acme"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(slow)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(slow)),
         max_concurrent=1,
     )
     results: list[Any] = []
@@ -278,8 +278,8 @@ def test_mcp_clients_use_tokens_or_keys_and_401s_point_to_the_metadata(
     async def main() -> Any:
         async with (
             app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8000"
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app), base_url="http://127.0.0.1:8000"
             ) as anonymous,
         ):
             refused = await anonymous.post("/mcp", json={})
@@ -287,15 +287,14 @@ def test_mcp_clients_use_tokens_or_keys_and_401s_point_to_the_metadata(
             results = []
             for credential in (token, key):
                 async with (
-                    httpx.AsyncClient(
-                        transport=httpx.ASGITransport(app=app),
+                    httpx2.AsyncClient(
+                        transport=httpx2.ASGITransport(app=app),
                         base_url="http://127.0.0.1:8000",
                         headers={"Authorization": f"Bearer {credential}"},
                     ) as client,
                     streamable_http_client("http://127.0.0.1:8000/mcp", http_client=client) as (
                         read,
                         write,
-                        _,
                     ),
                     ClientSession(read, write) as session,
                 ):
@@ -309,8 +308,8 @@ def test_mcp_clients_use_tokens_or_keys_and_401s_point_to_the_metadata(
     assert metadata_url in refused.headers["www-authenticate"]
     assert metadata.json()["authorization_servers"] == [f"{ACME}/"]
     assert metadata.json()["resource"] == RESOURCE
-    assert by_token.isError is False
-    assert by_key.isError and "lacks the 'tools:call' scope" in by_key.content[0].text
+    assert by_token.is_error is False
+    assert by_key.is_error and "lacks the 'tools:call' scope" in by_key.content[0].text
     (run,) = store.list_runs(5)
     assert (run.principal, run.tenant, run.actor) == ("user-7", "acme", "mcp-http")
 
