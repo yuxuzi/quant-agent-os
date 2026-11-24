@@ -38,10 +38,21 @@ Resources:
       UserPoolId: !Ref UserPool
       Identifier: qaos
       Name: qaos
-      Scopes: [{ScopeName: tools.call, ScopeDescription: Call tools}]
+      Scopes:  # section 10: the listing and the call are separate scopes
+        - {ScopeName: tools.list, ScopeDescription: List tools}
+        - {ScopeName: tools.call, ScopeDescription: Call tools}
   Groups:
     Type: AWS::Cognito::UserPoolGroup   # one per access.toml group; shown once
     Properties: {UserPoolId: !Ref UserPool, GroupName: pm-hy-ls}
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Subnets: [subnet-0a1b2c3d4e5f60001, subnet-0a1b2c3d4e5f60002]   # placeholders
+      SecurityGroups: [sg-0wrenfieldqaos01]                           # placeholder
+      LoadBalancerAttributes:
+        # MCP over streamable HTTP holds responses open; the 60 s default cuts them (section 11).
+        - {Key: idle_timeout.timeout_seconds, Value: "3600"}
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:

@@ -306,11 +306,17 @@ class CorvaneDatasetStore:
         self._lock = threading.Lock()
         self._cache: dict[str, tuple[float, Dataset]] = {}
         self._ids: list[str] | None = None
+        self._ids_at = 0.0
 
     def ids(self) -> list[str]:
-        """Return every dataset id, sorted."""
+        """Return every dataset id, sorted, read again once ``ttl_seconds`` have passed.
+
+        `/readyz` reads this method. A list cached for good would keep answering after the
+        warehouse stopped, so the readiness check reads the warehouse at least once per TTL.
+        """
         with self._lock:
-            if self._ids is None:
+            now = time.monotonic()
+            if self._ids is None or now - self._ids_at >= self.ttl_seconds:
                 found: list[str] = []
                 for entry in ENTRIES:
                     if entry.bind is None:
@@ -319,6 +325,7 @@ class CorvaneDatasetStore:
                         values = self.connection.fetch(BINDINGS[entry.bind])
                         found += [f"{entry.prefix}{str(v[0]).lower()}" for v in values]
                 self._ids = sorted(found)
+                self._ids_at = now
             return list(self._ids)
 
     def get(self, dataset_id: str) -> Dataset:

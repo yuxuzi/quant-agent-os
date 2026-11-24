@@ -22,7 +22,6 @@
         {"name": "QUANT_AGENT_OS_LOG_LEVEL", "value": "INFO"},
         {"name": "QUANT_AGENT_OS_LOG_FORMAT", "value": "json"},
         {"name": "PGPASSWORD_FILE", "value": "/run/secrets/pg-reader"},
-        {"name": "WRENFIELD_INTROSPECTION_SECRET_FILE", "value": "/run/secrets/introspection"},
         {"name": "AWS_REGION", "value": "us-east-1"}
       ],
       "secrets": [
@@ -50,11 +49,10 @@
       "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/wrenfield-qaos:1",
       "essential": false,
       "readonlyRootFilesystem": true,
-      "entryPoint": ["python", "-c", "import os, pathlib; root = pathlib.Path('/run/secrets'); [(root / name).write_text(os.environ[var]) for name, var in (('introspection', 'WRENFIELD_INTROSPECTION_SECRET'), ('pg-reader', 'PGPASSWORD'))]"],
+      "entryPoint": ["python", "-c", "import os, pathlib; root = pathlib.Path('/run/secrets'); [(root / name).write_text(os.environ[var]) for name, var in (('pg-reader', 'PGPASSWORD'),)]"],
       "mountPoints": [{"sourceVolume": "secrets", "containerPath": "/run/secrets"}],
       "secrets": [
-        {"name": "PGPASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/kb-reader:password::"},
-        {"name": "WRENFIELD_INTROSPECTION_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/introspection:secret::"}
+        {"name": "PGPASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/kb-reader:password::"}
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
@@ -64,26 +62,8 @@
           "awslogs-stream-prefix": "init"
         }
       }
-    },
-    {
-      "name": "introspection-shim",
-      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/wrenfield-qaos:1",
-      "essential": true,
-      "readonlyRootFilesystem": true,
-      "entryPoint": ["python", "/home/app/wrenfield_introspection_shim.py"],
-      "portMappings": [{"containerPort": 9600, "protocol": "tcp"}],
-      "secrets": [
-        {"name": "WRENFIELD_INTROSPECTION_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrenfield/introspection:secret::"}
-      ],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/wrenfield-qaos",
-          "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "shim"
-        }
-      }
     }
+
   ],
   "volumes": [
     {

@@ -1,15 +1,19 @@
-# Wrenfield Credit Opportunities (fictional): sign-in through Amazon Cognito (decision 0028).
-# Cognito has no introspection endpoint, so the platform asks the fund's introspection shim
-# (site/wrenfield_introspection_shim.py, a sidecar in the same ECS task) about each token.
-# The issuer is exactly the token's `iss`. The shim's client secret stays in the environment
-# (WRENFIELD_INTROSPECTION_SECRET, injected from Secrets Manager).
+# Wrenfield Credit Opportunities (fictional): sign-in through Amazon Cognito (decisions 0028 and 0031).
+# The pool's signed access tokens are checked against its published keys, so there is no introspection
+# shim, no sidecar, and no client secret. Machine tokens (client credentials) have no username: their
+# principal is their sub, the app client's id.
 resource = "https://qaos.wrenfield.example.com/mcp"
 
 [[authorization_servers]]
 issuer = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_WrnFld001"
-introspection_url = "http://127.0.0.1:9600/introspect"
-client_id = "qaos-server"
-client_secret_env = "WRENFIELD_INTROSPECTION_SECRET"
-tenant_claim = "qaos_tenant"
-tenant_claim_value = "wrenfield"
-groups_claim = "cognito:groups"
+verify = "jwks"
+client_ids = ["wf-cli", "wf-batch"]          # the app clients; these tokens have no aud
+token_use = "access"
+tenant_claim = ""                            # the pool sends no tenant claim: one tenant, local
+groups_claims = ["cognito:groups"]
+principal_claim = "username"                 # audit rows name pm-hy, not a UUID
+scope_claims = ["scope"]
+
+[authorization_servers.scope_map]
+"qaos/tools.list" = "tools:list"
+"qaos/tools.call" = "tools:call"

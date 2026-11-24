@@ -42,6 +42,10 @@ multi-period linked by Carino), currency effect for Global Quality in USD, days 
 a mandate restriction check. Datasets come from `site/corvane_store.py`: one declarative SQL entry per
 dataset id. `site/corvane_acceptance.toml` holds the agreed cases.
 
+Round 1 adds `site/corvane_returns_export.py` (the composites' net returns and the US300 benchmark, for the
+performance report) and `facility/administrator/halvorsen_workbook.py` (the administrator's monthly workbook).
+The sign-in checks Cognito's signed tokens (`verify = "jwks"`), so no introspection shim runs.
+
 ```
 uv run python examples/mock-funds/corvane/facility/warehouse/build_corvane.py ./corvane-estate
 CORVANE_SQL_URL=estate://$PWD/corvane-estate uv run python examples/mock-funds/corvane/site/corvane_server.py

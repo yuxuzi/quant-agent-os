@@ -30,7 +30,8 @@ The facility is built as an AWS estate, with local stand-ins that keep the real 
 - **RDS PostgreSQL** for positions, trades, repo, and the compliance list (`site/sql/wrenfield_oms_postgres.sql`).
   SQLite stands in offline; a Postgres path in the store runs when `WRENFIELD_TEST_POSTGRES_URL` is set.
 - **Cognito** user pool with `cognito:groups`, mocked in `facility/gateway/wrenfield_cognito_idp.py` (RS256, JWKS, no
-  introspection). The platform cannot sign in against it directly, so `site/wrenfield_introspection_shim.py` fronts it.
+  introspection). The platform checks its signed tokens against the pool's keys (`verify = "jwks"`, round 1), so no
+  shim runs beside the server.
 - **ECS Fargate**, Secrets Manager, CloudWatch Logs, EFS for the run store: descriptors in `site/deploy/` (not run).
 - **Research** documents in `s3://wrenfield-research/credit/`, ingested by an operator (`site/deploy/ingest-research.sh`).
 
@@ -40,10 +41,13 @@ The facility is built as an AWS estate, with local stand-ins that keep the real 
   which writes the estate and `known_answers.json`.
 - `facility/legacy/wrenfield_quant/`: the desk's untyped pandas scripts, with a slow stateful hazard-curve cache.
 - `facility/research/`: seven documents, one of them with an injected instruction.
+- `facility/administrator/tallis_workbook.py`: the administrator's monthly book-return workbook (round 1), which
+  values each book on its open days only, as the bond market's calendar does.
 - `facility/access.toml`: entitlements by Cognito group.
 - `site/`: the adoption code, strictly typed: `wrenfield_store.py` (lake through DuckDB, OMS through SQL, as wide
   datasets), `wrenfield_credit.py` (seven credit tools), `wrenfield_server.py`, `wrenfield_acceptance.toml`.
-- `tests/mock_funds/test_wrenfield.py` and `test_wrenfield_cloud.py`: offline, about 11 seconds together.
+- `site/wrenfield_returns_export.py`: the books' net daily returns, as the fund's performance report reads them.
+- `tests/mock_funds/test_wrenfield.py`, `test_wrenfield_cloud.py`, and `test_wrenfield_round1.py` (round 1): offline.
 
 ## Tools the fund serves (prefix `wrenfield_`)
 
