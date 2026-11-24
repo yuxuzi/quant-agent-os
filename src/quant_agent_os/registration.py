@@ -223,6 +223,12 @@ class FirmApp:
         names an environment variable whose value is sent as a bearer token; it is read at
         each call and never shown.
 
+        The service's HTTP timeout is ``timeout_seconds`` less a fifth of it (`service_timeout`),
+        so it fires before the tool's own limit. An outage (unreachable, no answer in time, or a
+        5xx status) reaches the caller as a message naming the tool and not the address
+        (`ServiceUnavailableError`); other failures stay internal, with their details in the
+        run record.
+
         With ``forward_caller=True``, each call also sends who is calling: a signed assertion
         of the caller's principal, tenant, and groups, and the tool's name, valid for 60 s, in
         the ``X-QAOS-Caller`` header (decision 0030). It is signed with HMAC-SHA256 under the
@@ -458,7 +464,30 @@ QUERY_TYPES = (str, int, float, bool)
 
 
 class ServiceError(RuntimeError):
-    """Raised when an internal service cannot be reached or answers with an error."""
+    """Raised when an internal service cannot be reached or answers with an error.
+
+    The executor reports it as an internal failure, and its text, which holds the service's
+    address, stays in the run record for the operator. Only `ServiceUnavailableError` reaches
+    a caller.
+    """
+
+
+class ServiceUnavailableError(ServiceError, LookupError):
+    """A service that is down, unreachable, too slow, or failing with a 5xx status.
+
+    Its message names the tool and not the service's address. It is a `LookupError`, so the
+    executor passes the message to the caller (security finding F-5), and a caller can tell an
+    outage from a bug.
+    """
+
+
+def service_timeout(limit: float) -> float:
+    """Return the HTTP timeout of a service call under a tool's ``limit``.
+
+    It is the limit less a fifth of it, at most 2 s: 8 s under the default 10 s, 0.8 s under 1 s.
+    The service's timeout then fires before the tool's own, so the caller hears about the service.
+    """
+    return limit - min(2.0, limit / 5)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -490,7 +519,7 @@ class _Service:
     token_env: str | None
     caller_secret_env: str | None  # set only when the caller is forwarded
     path_names: tuple[str, ...]
-    timeout_seconds: float
+    timeout_seconds: float  # the HTTP timeout, under the tool's own limit (`service_timeout`)
     max_bytes: int
 
     @classmethod
@@ -551,7 +580,7 @@ class _Service:
             token_env,
             secret_env,
             tuple(fields),
-            timeout_seconds,
+            service_timeout(timeout_seconds),
             max_bytes,
         )
 
@@ -585,17 +614,26 @@ class _Service:
                 answer = response.read(self.max_bytes + 1)
         except urllib.error.HTTPError as error:
             error.close()
+            if 500 <= error.code < 600:
+                raise ServiceUnavailableError(
+                    f"The {self.tool_name} service failed (HTTP {error.code})."
+                ) from None
             raise ServiceError(
                 f"The service at {self.url} answered {error.code} {error.reason}"
                 + ("; redirects are not followed." if 300 <= error.code < 400 else ".")
             ) from None
         except TimeoutError:
-            raise ServiceError(
-                f"The service at {self.url} did not answer within {self.timeout_seconds:g} s."
-            ) from None
-        except (urllib.error.URLError, OSError) as error:
-            reason = getattr(error, "reason", error)
-            raise ServiceError(f"Cannot reach the service at {self.url}: {reason}.") from None
+            raise self._timed_out() from None
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):  # the connection was not made in time
+                raise self._timed_out() from None
+            raise ServiceUnavailableError(
+                f"The {self.tool_name} service is not reachable."
+            ) from error
+        except OSError as error:
+            raise ServiceUnavailableError(
+                f"The {self.tool_name} service is not reachable."
+            ) from error
         if len(answer) > self.max_bytes:
             raise ServiceError(
                 f"The service at {self.url} answered with more than {self.max_bytes} bytes."
@@ -604,6 +642,11 @@ class _Service:
             return json.loads(answer)
         except ValueError:
             raise ServiceError(f"The service at {self.url} did not answer with JSON.") from None
+
+    def _timed_out(self) -> ServiceUnavailableError:
+        return ServiceUnavailableError(
+            f"The {self.tool_name} service did not answer within {self.timeout_seconds:g} s."
+        )
 
     def _assertion(self, secret_env: str) -> str:
         """Sign who is calling, or refuse the call: never an assertion without a caller."""

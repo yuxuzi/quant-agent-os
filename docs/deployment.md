@@ -247,8 +247,11 @@ risk.call_service(
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'` approves `network` for every tool the server
   serves, and draws a warning at start-up. Register only services that change nothing, or declare
   `external_action` too.
-- A failure such as an unreachable service or an error status reaches the caller as an internal error
-  with the call id; the reason is in the run record.
+- **Outages are named.** A service that is unreachable, does not answer in time, or fails with a 5xx status
+  reaches the caller as a message naming the tool and not the address: "The desk_limits service is not
+  reachable.", "did not answer within 8 s.", or "failed (HTTP 503).". The service's own timeout is the tool's
+  `timeout_seconds` less a fifth of it (at most 2 s), so it fires before the tool's limit. Other failures, such
+  as a 4xx status, reach the caller as an internal error with the call id; the reason is in the run record.
 
 **Telling the service who called.** A service that scopes its answer to the caller, such as a PM's own
 desk's VaR, can receive a signed statement of who is calling. It is off by default; turn it on per tool:

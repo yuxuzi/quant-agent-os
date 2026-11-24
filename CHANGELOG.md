@@ -12,6 +12,14 @@ All notable changes to this project are documented here. The format follows
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.
 
+### Fixed
+
+- **A service outage reaches the caller as a message.** A `FirmApp.call_service` tool whose service is
+  unreachable, does not answer in time, or fails with a 5xx status now says so ("The desk_limits service is
+  not reachable."), without the service's address, instead of "failed with an internal error". Its HTTP timeout
+  is the tool's `timeout_seconds` less a fifth of it (at most 2 s), so the service's timeout fires before the
+  tool's own limit and the caller is not left to a race between the two. A 4xx status is unchanged.
+
 ## [0.9.0] - 2026-11-19
 
 A Quant Toolbox release: it carries Quant Toolbox 0.8.0, and no served tool or skill changed. The
