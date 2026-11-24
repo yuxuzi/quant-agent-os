@@ -82,6 +82,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
 
   var root = document.getElementById("root");
   var INITIALIZE_ID = 1;
+  var ready = false; // size reports wait for the handshake to complete
 
   function post(message) { window.parent.postMessage(message, "*"); }
   function notify(method, params) { post({ jsonrpc: "2.0", method: method, params: params || {} }); }
@@ -158,8 +159,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
       var entry = el("li", item.statement);
       var sources = Array.isArray(item.sources) ? item.sources : [];
       sources.forEach(function (source) {
-        var line = [source.source_id, source.location].filter(Boolean).join(", ");
-        if (line) entry.appendChild(el("div", line, "source"));
+        if (source.location) entry.appendChild(el("span", " (" + source.location + ")", "source"));
       });
       list.appendChild(entry);
     });
@@ -189,6 +189,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     header.appendChild(el("h1", data.series_id));
     header.appendChild(el("p", data.periods + " periods, " + data.periods_per_year + " a year", "meta"));
     if (conventions.source) header.appendChild(el("p", "Source: " + conventions.source, "meta"));
+    if (conventions.returns) header.appendChild(el("p", "Returns: " + conventions.returns, "meta"));
     nodes.push(header);
     nodes.push(warningsBlock(data.warnings));
     nodes.push(el("h2", "Metrics"));
@@ -207,6 +208,7 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
   }
 
   function reportSize() {
+    if (!ready) return;
     var rect = document.body.getBoundingClientRect();
     notify("ui/notifications/size-changed", { width: Math.ceil(rect.width), height: Math.ceil(rect.height) });
   }
@@ -246,7 +248,9 @@ dd { margin: 2px 0 0; color: var(--qaos-muted); overflow-wrap: anywhere; }
     if (message.method === undefined) {
       if (message.id === INITIALIZE_ID && !message.error) {
         applyContext(message.result && message.result.hostContext);
+        ready = true;
         notify("ui/notifications/initialized", {});
+        reportSize();
       }
       return;
     }
