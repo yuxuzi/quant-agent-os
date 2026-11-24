@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
+  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
+  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
+  [operations](docs/operations.md#show-how-ai-was-used).
+
+### Changed
+
+- **`qaos runs report` gives each principal's first and last call (UTC), and counts per-call approvals by the operator who granted them.** Groups and the documents a research call read are not in the report: the run record does not hold the groups, and the documents are only in the call's output.
 ### Fixed
 
 - **A server's first metric call no longer races its time limit.** The first call imported the metrics
