@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from quant_toolbox.data import TableError
 from quant_toolbox.report import Document, render_markdown
 
 from .reconcile import as_block, reconcile
@@ -74,8 +75,11 @@ def report(
 @app.command("reconcile")
 def reconcile_command(
     reference: Annotated[
-        Path, typer.Argument(help="Reference returns, such as your administrator's.")
-    ],
+        Path | None,
+        typer.Argument(
+            help="Reference returns, such as your administrator's (default: [reference] file)."
+        ),
+    ] = None,
     tolerance_bps: Annotated[
         float, typer.Option(help="Largest difference to accept per month, in basis points.")
     ] = 1.0,
@@ -90,7 +94,13 @@ def reconcile_command(
             if returns
             else open_returns(settings, config.resolve().parent)
         )
-        result = reconcile(ours, load_returns(reference, settings), tolerance_bps)
+        if reference is None:
+            if not settings.reference.file:
+                raise TableError("Name a reference file, or set file under [reference].")
+            reference = config.resolve().parent / settings.reference.file
+        theirs = load_returns(reference, settings, reference=True)
+        books = [name for name in ours.columns if name != settings.benchmark]
+        result = reconcile(ours.select(books), theirs, tolerance_bps)
     except ValueError as error:
         raise _fail(error) from error
     typer.echo(render_markdown(Document("Reconciliation", blocks=[as_block(result)])))

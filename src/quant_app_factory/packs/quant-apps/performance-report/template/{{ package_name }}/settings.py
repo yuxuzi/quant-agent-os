@@ -32,6 +32,20 @@ class ExcelSource:
     header_row: int = 1
 
 
+@dataclass(frozen=True)
+class ReferenceSource:
+    """Reference figures to reconcile against, such as an administrator's monthly returns.
+
+    Unset fields follow the returns file: an empty ``unit`` is ``returns_unit``, and no ``excel``
+    is the ``[excel]`` settings. Administrators often send percent in a workbook with title rows,
+    while the returns file is fractions in CSV, so each can be stated here.
+    """
+
+    file: str = ""  # relative to config.toml; `reconcile` without a file argument reads it
+    unit: str = ""  # fraction or percent; empty follows returns_unit
+    excel: ExcelSource | None = None
+
+
 DEFAULT_TEARSHEETS = {
     "pm": Tearsheet(
         title="Portfolio manager review",
@@ -59,6 +73,7 @@ class Settings:
     default_tearsheet: str = "pm"
     tearsheets: dict[str, Tearsheet] = field(default_factory=lambda: dict(DEFAULT_TEARSHEETS))
     excel: ExcelSource = field(default_factory=ExcelSource)
+    reference: ReferenceSource = field(default_factory=ReferenceSource)
     charts: str = "static"  # static SVG; interactive or interactive-cdn need plotly
 
     def __post_init__(self) -> None:
@@ -68,6 +83,10 @@ class Settings:
                 (
                     self.returns_unit not in {"fraction", "percent"},
                     "returns_unit must be fraction or percent",
+                ),
+                (
+                    self.reference.unit not in {"", "fraction", "percent"},
+                    "reference.unit must be fraction or percent",
                 ),
                 (self.periods_per_year < 1, "periods_per_year must be at least 1"),
                 (not 0.0 < self.var_cutoff < 0.5, "var_cutoff must be between 0 and 0.5"),
@@ -116,7 +135,7 @@ def load_settings(path: Path) -> Settings:
         data = tomllib.loads(path.read_text("utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise SettingsError(f"Cannot read {path}: {error}") from error
-    known = {*_FLAT, "horizons", "tearsheets", "excel"}
+    known = {*_FLAT, "horizons", "tearsheets", "excel", "reference"}
     unknown = sorted(set(data) - known)
     if unknown:
         raise SettingsError(f"{path}: unknown keys {', '.join(unknown)}; use {', '.join(known)}.")
@@ -136,6 +155,8 @@ def load_settings(path: Path) -> Settings:
         }
     if "excel" in data:
         chosen["excel"] = _excel(path, data["excel"])
+    if "reference" in data:
+        chosen["reference"] = _reference(path, data["reference"])
     return dataclasses.replace(Settings(), **chosen)
 
 
@@ -158,6 +179,19 @@ def _excel(path: Path, entry: Any) -> ExcelSource:
     if not isinstance(sheet, str) or not isinstance(header, int) or header < 1:
         raise SettingsError(f"{path}: excel needs a text sheet and a header_row of 1 or more.")
     return ExcelSource(sheet=sheet, header_row=header)
+
+
+def _reference(path: Path, entry: Any) -> ReferenceSource:
+    keys = {"file", "unit", "sheet", "header_row"}
+    if not isinstance(entry, dict) or set(entry) - keys:
+        raise SettingsError(f"{path}: reference takes only {', '.join(sorted(keys))}.")
+    file, unit = entry.get("file", ""), entry.get("unit", "")
+    if not isinstance(file, str) or not isinstance(unit, str):
+        raise SettingsError(f"{path}: reference file and unit must be text.")
+    excel = None
+    if "sheet" in entry or "header_row" in entry:
+        excel = _excel(path, {k: entry[k] for k in ("sheet", "header_row") if k in entry})
+    return ReferenceSource(file=file, unit=unit, excel=excel)
 
 
 def _strings(value: Any, where: str) -> list[str]:

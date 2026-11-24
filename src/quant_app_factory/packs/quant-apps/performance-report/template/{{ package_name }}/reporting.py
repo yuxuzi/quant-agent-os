@@ -35,23 +35,34 @@ def open_returns(settings: Settings, base: Path = Path()) -> Table:
     return load_returns(path, settings)
 
 
-def load_returns(path: Path, settings: Settings) -> Table:
-    """Load ``path``: a firm's loader, a workbook, or CSV; converted to fractions."""
+def load_returns(path: Path, settings: Settings, *, reference: bool = False) -> Table:
+    """Load ``path``: a firm's loader, a workbook, or CSV; converted to fractions.
+
+    With ``reference``, the ``[reference]`` settings give the unit and the workbook layout, and
+    fall back to the returns file's own.
+    """
+    excel = (settings.reference.excel if reference else None) or settings.excel
+    unit = (settings.reference.unit if reference else "") or settings.returns_unit
     if path.suffix.lower() in LOADERS:
         table = load_table(path, LOADERS)
     elif path.suffix.lower() in {".xlsx", ".xlsm"}:
         if not path.is_file():
             raise TableError(f"No file at {path}.")
-        table = read_workbook(
-            path, sheet=settings.excel.sheet, header_row=settings.excel.header_row
-        )
+        try:
+            table = read_workbook(path, sheet=excel.sheet, header_row=excel.header_row)
+        except TableError as error:
+            if not reference:
+                raise
+            # The reference file has its own layout, so point at its own settings.
+            raise TableError(str(error).replace("[excel]", "[reference]")) from error
     else:
         table = load_table(path)
-    if settings.returns_unit == "percent":
+    if unit == "percent":
         table = Table(table.dates, table.columns, table.values / 100.0)
     finite = table.values[np.isfinite(table.values)]
     if finite.size and float(finite.min()) < -1.0:
-        hint = "" if settings.returns_unit == "percent" else '; set returns_unit = "percent"'
+        setting = 'unit = "percent" under [reference]' if reference else 'returns_unit = "percent"'
+        hint = "" if unit == "percent" else f"; set {setting}"
         raise TableError(f"{path.name} has a return below -100%{hint}.")
     return table
 

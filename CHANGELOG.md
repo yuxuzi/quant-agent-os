@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **`performance-report` reconciles an administrator's own file as it comes.** A `[reference]` table in
+  `config.toml` names the reference file and, when they differ from the returns file's, its unit
+  (`percent`) and where its table starts in a workbook (`sheet`, `header_row`); `reconcile` then needs no
+  argument. The benchmark column is no longer reported as missing from the reference. Before, a percent
+  workbook with title rows could not be reconciled against a returns file in fractions without editing it.
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.
