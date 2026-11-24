@@ -16,9 +16,17 @@ All notable changes to this project are documented here. The format follows
   `message`, and `exception` when there is one), for a log service. The default stays `text`, and any other value
   stops start-up. Secrets are redacted from the exception text too, in both formats. A server started with
   `serve_http` or `serve_apps`, which a firm's own server uses, now follows the log format and level settings.
+- **Secrets from files.** Each secret the platform reads (the hosted embedders' keys, `RAGFLOW_API_KEY`, the
+  sign-in client secret, `PGPASSWORD`, the `call_service` token and caller secret, and the App Factory connection
+  variables) can come from `NAME_FILE`, a file whose content is the secret, as container platforms mount them.
+  Setting both `NAME` and `NAME_FILE` is refused, naming both, so nothing is guessed. The convention is in the
+  configuration guide.
 
 ### Changed
 
+- **Research settings are built, not read.** `EmbeddingSettings` and `RagflowSettings` are plain models now, built
+  by `embedding_settings()` and `ragflow_settings()`, which read the keys through the secrets convention. Nothing
+  else changes for a caller who uses `make_embedder` or `make_ragflow_loader`.
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.

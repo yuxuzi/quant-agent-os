@@ -80,6 +80,37 @@ QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["risk_desk_var", "risk_stress"]}'
   approves the permission for every tool the server serves, including ones added later. The server warns
   about it at start-up, and `qaos doctor` shows both.
 
+## Secrets from files
+
+A secret the platform reads can come from a variable or from a file, as container platforms mount them
+(Docker and Kubernetes secrets, Key Vault and Secrets Manager mounts, Azure Container Apps secret volumes):
+
+| Set | Meaning |
+| --- | --- |
+| `NAME` | The secret's value. |
+| `NAME_FILE` | The path of a file whose content is the secret. |
+
+- **The file's content is the secret.** It is read as UTF-8, and one trailing line break (LF or CRLF) is
+  dropped, as an editor or `echo` adds one. Other characters stay.
+- **Both is refused.** With `NAME` and `NAME_FILE` both set, the command or the server that reads the secret
+  stops with a message naming both variables, because the platform cannot tell which one holds it. Nothing is
+  guessed.
+- **Empty counts as unset.** A variable set to nothing does not count, so `NAME_FILE` can be used beside an
+  empty `NAME`.
+- **Errors name the variable and the path,** never the content. An unreadable file, an empty one, and one that
+  is not UTF-8 text are each refused.
+- **Never shown or logged.** Logs and `qaos doctor` say whether a secret is set, never its value.
+
+The secrets that take this form are `VOYAGE_API_KEY`, `OPENAI_API_KEY` (the hosted embedders), `RAGFLOW_API_KEY`
+(the RAGFlow PDF parser), `PGPASSWORD` (the PostgreSQL knowledge store), the variable a sign-in file names in
+`client_secret_env`, the variables that `call_service` names in `token_env` and `caller_secret_env`, and the
+connection variables that an App Factory check reads, `password_env` and `url_env`. The provider keys and the
+sign-in secret are also read from the home's `.env`; the others are read from the environment only.
+
+```bash
+export QAOS_INTROSPECTION_SECRET_FILE=/run/secrets/qaos-introspection   # in place of QAOS_INTROSPECTION_SECRET
+```
+
 ## Bring your own
 
 - **Models:** the platform calls no model. Your client plans, or your own code does, with its
@@ -108,8 +139,8 @@ and audit trail with `qaos runs RUN_ID`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `VOYAGE_API_KEY` | unset | Voyage AI key for `--embedder voyage`; a secret. |
-| `OPENAI_API_KEY` | unset | OpenAI key for `--embedder openai`; a secret. |
+| `VOYAGE_API_KEY` | unset | Voyage AI key for `--embedder voyage`; a secret. Or `VOYAGE_API_KEY_FILE`, [see secrets from files](#secrets-from-files). |
+| `OPENAI_API_KEY` | unset | OpenAI key for `--embedder openai`; a secret. Or `OPENAI_API_KEY_FILE`, [see secrets from files](#secrets-from-files). |
 | `QUANT_AGENT_OS_EMBEDDING_TIMEOUT` | `30` | Seconds per embedding request (at most 300). |
 
 Pick the model with `--embedding-model`, for example `voyage-4`, `voyage-4-large`, or

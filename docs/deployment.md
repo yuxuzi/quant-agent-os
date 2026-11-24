@@ -487,14 +487,15 @@ groups_claim = "groups"    # the claim that lists the user's groups
 ```
 
 ```bash
-export QAOS_INTROSPECTION_SECRET=...        # or put it in the home's .env
+export QAOS_INTROSPECTION_SECRET=...        # or put it in the home's .env, or set QAOS_INTROSPECTION_SECRET_FILE
 qaos doctor                                  # checks the file and the secret, contacts nothing
 qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_AGENT_OS_SIGN_IN_FILE
 ```
 
 A firm's own server with `serve_apps` reads the same settings; the [pilot runbook](pilot-runbook.md#6-sign-in-and-entitlements)
 shows one behind a mock gateway. In Docker, mount the file read-only in a compose
-override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment.
+override, set `QUANT_AGENT_OS_SIGN_IN_FILE`, and pass the secret through the service's environment or as a
+file, [`NAME_FILE`](configuration.md#secrets-from-files).
 
 ### With signed JWTs (Entra ID, Amazon Cognito)
 

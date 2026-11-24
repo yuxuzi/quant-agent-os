@@ -70,7 +70,8 @@ def open_research(
     goes on using them, and serving matches queries as ingestion matched the corpus.
 
     ``store_path`` is a SQLite file, or a ``postgresql://`` URL for the PostgreSQL store (the
-    ``postgres`` extra); give the password through ``PGPASSWORD`` or ``.pgpass``, not the URL.
+    ``postgres`` extra); give the password through ``PGPASSWORD`` (or ``PGPASSWORD_FILE``) or
+    ``.pgpass``, not the URL.
     ``schema`` names the PostgreSQL schema that holds the store, so one database can hold
     several corpora.
 

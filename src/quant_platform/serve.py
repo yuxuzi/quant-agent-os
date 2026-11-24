@@ -7,16 +7,16 @@ can test its server in process with Starlette's `TestClient`; `serve_apps` serve
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from rich.console import Console
 
 from quant_agent_os.api import ApiKeyError, KeyRing
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
-from quant_agent_os.config import get_settings
+from quant_agent_os.config import SecretConfigError, get_settings, read_secret
 from quant_agent_os.data import DatasetStore
 from quant_agent_os.mcp import run_stdio
 from quant_agent_os.observability import configure_logging
@@ -44,16 +44,23 @@ errors = Console(stderr=True, soft_wrap=True)
 
 
 def known_secrets() -> list[str]:
-    """Return the secret values this installation holds, for the log filter to redact."""
-    from quant_agent_os.config import home_env_file
-    from quant_research.config import EmbeddingSettings
+    """Return the secret values this installation holds, for the log filter to redact.
 
-    try:
-        embedding = EmbeddingSettings(_env_file=home_env_file())
-    except ValidationError:
-        return []  # `qaos research` reports a bad setting where it is used
-    keys = (embedding.voyage_api_key, embedding.openai_api_key)
-    return [key.get_secret_value() for key in keys if key is not None]
+    A secret that cannot be read yields nothing here: the command that needs it reports why.
+    """
+    from quant_research.config import embedding_settings, ragflow_settings
+
+    values: list[SecretStr | None] = []
+    with suppress(SecretConfigError, ValidationError):
+        embedding = embedding_settings()
+        values += [embedding.voyage_api_key, embedding.openai_api_key]
+    with suppress(SecretConfigError, ValidationError):
+        values.append(ragflow_settings().api_key)
+    with suppress(SecretConfigError):
+        password = read_secret("PGPASSWORD")
+        if password:
+            values.append(SecretStr(password))
+    return [value.get_secret_value() for value in values if value is not None]
 
 
 def warn_about_open_access(catalog: Catalog, ring: KeyRing, sign_in: SignIn | None = None) -> None:

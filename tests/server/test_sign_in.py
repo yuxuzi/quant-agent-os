@@ -5,6 +5,7 @@ tests run offline. Off by default, nothing changes; on, tokens and keys both rea
 the token's groups decide access, and anything uncertain is refused.
 """
 
+import base64
 import logging
 import time
 from collections.abc import Callable, Iterator
@@ -501,6 +502,29 @@ def test_the_secret_can_come_from_the_homes_env_file(
     (server,) = load_sign_in(sign_in_file).servers
     assert server.client_secret.get_secret_value() == SECRET
     assert SECRET not in repr(server) and SECRET not in str(load_sign_in(sign_in_file))
+
+
+def test_a_provider_secret_given_as_a_file_signs_users_in(
+    catalog: Catalog,
+    sign_in_file: Path,
+    provider: Provider,
+    start: Callable[..., Started],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret_file = tmp_path / "introspection.secret"
+    secret_file.write_text(SECRET + "\n", "utf-8")  # an editor or `echo` ends it with a newline
+    monkeypatch.delenv(SECRET_ENV)
+    monkeypatch.setenv(f"{SECRET_ENV}_FILE", str(secret_file))
+    token = provider.issue("tok-file")
+
+    started = start(
+        catalog, during=lambda app: _call(app, token, "equity-book"), sign_in=sign_in_file
+    )
+
+    assert started.result.status_code == 200
+    expected = "Basic " + base64.b64encode(f"qaos:{SECRET}".encode()).decode()
+    assert provider.authorizations[0] == expected  # the file's secret, without its newline
 
 
 def test_the_secret_never_reaches_the_logs(

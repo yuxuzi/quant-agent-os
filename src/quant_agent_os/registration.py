@@ -22,7 +22,6 @@ import importlib.metadata
 import inspect
 import json
 import math
-import os
 import re
 import string
 import types
@@ -44,6 +43,7 @@ from quant_agent_os.caller_assertion import VerifiedCaller as VerifiedCaller
 from quant_agent_os.caller_assertion import WeakSecretError
 from quant_agent_os.caller_assertion import sign_caller as sign_caller
 from quant_agent_os.caller_assertion import verify_caller as verify_caller
+from quant_agent_os.config import SecretConfigError, read_secret
 from quant_agent_os.data.datasets import Dataset, DatasetStore
 from quant_agent_os.evidence import Evidence, SourceRef
 from quant_agent_os.tools.access import current_caller
@@ -562,9 +562,11 @@ class _Service:
         )
         headers = {"Accept": "application/json"}
         if self.token_env:
-            token = os.environ.get(self.token_env)
+            token = _read(self.token_env)
             if not token:
-                raise ServiceError(f"Set {self.token_env} to the token for {self.url}.")
+                raise ServiceError(
+                    f"Set {self.token_env} (or {self.token_env}_FILE) to the token for {self.url}."
+                )
             headers["Authorization"] = f"Bearer {token}"
         if self.caller_secret_env:
             headers[CALLER_HEADER] = self._assertion(self.caller_secret_env)
@@ -613,9 +615,11 @@ class _Service:
                 f"{self.tool_name} sends its caller to {self.url}, and this call has no "
                 "authenticated caller; it runs only when served over HTTP."
             )
-        secret = os.environ.get(secret_env)
+        secret = _read(secret_env)
         if not secret:
-            raise ServiceError(f"Set {secret_env} to the secret shared with {self.url}.")
+            raise ServiceError(
+                f"Set {secret_env} (or {secret_env}_FILE) to the secret shared with {self.url}."
+            )
         try:
             return sign_caller(
                 secret,
@@ -626,6 +630,14 @@ class _Service:
             )
         except WeakSecretError:
             raise ServiceError(f"{secret_env} must hold at least 32 bytes.") from None
+
+
+def _read(name: str) -> str | None:
+    """Read a secret the service call names, or refuse the call when it is given twice."""
+    try:
+        return read_secret(name)
+    except SecretConfigError as error:
+        raise ServiceError(str(error)) from None
 
 
 def _caller_secret_env(tool_name: str, endpoint: _Endpoint, off_loopback: bool) -> str | None:

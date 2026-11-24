@@ -44,8 +44,8 @@ StoreOption = Annotated[
         "--store",
         "-s",
         help="SQLite knowledge store file, or a postgresql:// URL (give the password through "
-        "PGPASSWORD or ~/.pgpass, not the URL). Default: knowledge.db in the home, or "
-        "QUANT_AGENT_OS_STORE.",
+        "PGPASSWORD, PGPASSWORD_FILE, or ~/.pgpass, not the URL). Default: knowledge.db in the "
+        "home, or QUANT_AGENT_OS_STORE.",
     ),
 ]
 

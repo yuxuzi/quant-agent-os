@@ -27,6 +27,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, TypeGuard
 from urllib.parse import urlsplit, urlunsplit
 
+from quant_agent_os.config import SecretConfigError, read_secret
 from quant_research.domain.models import (
     Chunk,
     CorpusSnapshot,
@@ -232,8 +233,16 @@ class PostgresKnowledgeStore(StoreLifecycle):
         self._lock = threading.RLock()
         self._idle = psycopg.pq.TransactionStatus.IDLE
         try:
+            password = read_secret("PGPASSWORD")
+        except SecretConfigError as error:
+            raise StoreError(str(error)) from None
+        # The password goes in unless the URL carries one, which libpq would already use.
+        options: dict[str, Any] = {}
+        if password is not None and urlsplit(url).password is None:
+            options["password"] = password
+        try:
             self._db: psycopg.Connection[dict[str, Any]] = psycopg.connect(
-                url, autocommit=True, row_factory=dict_row
+                url, autocommit=True, row_factory=dict_row, **options
             )
         except psycopg.Error as error:
             raise StoreError(f"Cannot connect to PostgreSQL at {self.location}: {error}") from None

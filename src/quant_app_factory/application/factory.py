@@ -13,6 +13,7 @@ from urllib.parse import quote, quote_plus
 
 from pydantic import BaseModel, Field, ValidationError
 
+from quant_agent_os.config import SecretConfigError, read_secret
 from quant_agent_os.runtime.runner import CommandResult, run_command
 from quant_app_factory.domain.connections import DATABASE_COMPONENT, Connection, apply_connection
 from quant_app_factory.domain.planner import (
@@ -286,8 +287,13 @@ class AppFactory:
                 extra[name] = value
                 continue
             variable = value.removeprefix("env:")
-            if variable in self._environ:
-                extra[name] = self._environ[variable]
+            try:
+                secret = read_secret(variable, self._environ)
+            except SecretConfigError as error:
+                notes.append(f"{error} So {name} was not passed to the check.")
+                continue
+            if secret is not None:
+                extra[name] = secret
             else:
                 notes.append(f"{variable} is not set, so {name} was not passed to the check.")
         command = ["uv", "run", spec.name, "check-connection"]
