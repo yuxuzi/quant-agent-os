@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Third security review, for 1.0** (`docs/security-review.md`): JWKS sign-in, the caller assertion, standing
+  approvals, MCP on SDK 2, views, `/readyz`, file secrets, service errors, and the AI-use report. Three low
+  findings: F-16 (a JWKS provider with `client_ids` and no `token_use` also accepts ID tokens; `qaos serve` and
+  `qaos doctor` now warn), F-17 (a JWT is valid until it expires), and F-18 (`/readyz` reads the stores without a
+  credential).
+
 ### Added
 
 - **What 1.0 promises** (decision 0035). From 1.0 the platform follows semver over its served tools, a firm's

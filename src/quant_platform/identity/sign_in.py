@@ -388,3 +388,19 @@ def scope_gap(scope_map: Mapping[str, str]) -> str | None:
             'name to "tools:list" too.'
         )
     return None
+
+
+def kind_gap(client_ids: list[str], token_use: str | None) -> str | None:
+    """Return a warning when a provider accepts tokens by client id and names no ``token_use``.
+
+    Otherwise return None. Cognito puts the app client's id in an ID token's ``aud`` and in an
+    access token's ``client_id``, so a file that lists ``client_ids`` without ``token_use =
+    "access"`` also accepts that client's ID tokens. The server does not refuse such a file: it
+    warns, at start-up and in `qaos doctor` (security review F-16).
+    """
+    if client_ids and token_use is None:
+        return (
+            "it accepts tokens by client_ids and sets no token_use, so an ID token for that client "
+            'is accepted as well as an access token; for Cognito, set token_use = "access".'
+        )
+    return None
