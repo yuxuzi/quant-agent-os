@@ -34,8 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-from mcp.client.session import ClientSession
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client as MCPClient
 
 from quant_agent_os.data import DirectoryDatasetStore
 from quant_agent_os.mcp import build_server
@@ -97,7 +96,7 @@ class Client:
     `WORKDIR_PLACEHOLDER`, so byte counts do not depend on where the temporary directory is.
     """
 
-    def __init__(self, session: ClientSession, result: TaskResult, workdir: str) -> None:
+    def __init__(self, session: MCPClient, result: TaskResult, workdir: str) -> None:
         self.session = session
         self.result = result
         self.workdir = workdir
@@ -111,10 +110,10 @@ class Client:
         self.result.result_bytes += sum(
             self._metered(item.text) for item in reply.content if item.type == "text"
         )
-        if reply.isError:
+        if reply.is_error:
             self.result.errors.append(f"{tool}: {reply.content[0].text}")  # type: ignore[union-attr]
             return {}
-        return reply.structuredContent or {}
+        return reply.structured_content or {}
 
     def _metered(self, text: str) -> int:
         # JSON escapes the backslashes of a Windows path, so replace the escaped form first.
@@ -271,9 +270,9 @@ async def _definitions(catalog: Catalog) -> dict[str, int]:
         resources=catalog.resources,
         prompts=catalog.prompts,
     )
-    async with create_connected_server_and_client_session(server) as session:
+    async with MCPClient(server, mode="legacy", cache=None) as session:
         listed = [
-            tool.model_dump(mode="json", exclude_none=True)
+            tool.model_dump(mode="json", by_alias=True, exclude_none=True)
             for tool in (await session.list_tools()).tools
         ]
     return {
@@ -300,7 +299,7 @@ async def _evaluate(default: Catalog, everything: Catalog, workdir: str) -> dict
         prompts=everything.prompts,
     )
     tasks: dict[str, dict[str, Any]] = {}
-    async with create_connected_server_and_client_session(server) as session:
+    async with MCPClient(server, mode="legacy", cache=None) as session:
         skills = skill_metrics()
         for task_name, task in TASKS.items():
             result = TaskResult()

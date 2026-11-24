@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.shared.exceptions import McpError
+from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, build_app, load_keys
@@ -102,11 +102,11 @@ def server(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore, Approva
 
 
 @asynccontextmanager
-async def _http(app: Any, headers: dict[str, str]) -> AsyncIterator[httpx.AsyncClient]:
+async def _http(app: Any, headers: dict[str, str]) -> AsyncIterator[httpx2.AsyncClient]:
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url=BASE, headers=headers
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url=BASE, headers=headers
         ) as client,
     ):
         yield client
@@ -118,7 +118,7 @@ def _call(app: Any, key: str, text: str = "hello") -> Any:
     async def main() -> Any:
         async with (
             _http(app, {"Authorization": f"Bearer {key}"}) as client,
-            streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+            streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write),
             ClientSession(read, write) as session,
         ):
             await session.initialize()
@@ -126,14 +126,14 @@ def _call(app: Any, key: str, text: str = "hello") -> Any:
                 return await session.call_tool(
                     "save_note", {"text": text, "api_token": "s3cret-value"}
                 )
-            except McpError as error:
+            except MCPError as error:
                 return error.error
 
     return anyio.run(main)
 
 
-def _page(app: Any, url: str, form: dict[str, str] | None = None) -> httpx.Response:
-    async def main() -> httpx.Response:
+def _page(app: Any, url: str, form: dict[str, str] | None = None) -> httpx2.Response:
+    async def main() -> httpx2.Response:
         async with _http(app, {}) as client:
             if form is None:
                 return await client.get(url)
@@ -142,7 +142,7 @@ def _page(app: Any, url: str, form: dict[str, str] | None = None) -> httpx.Respo
     return anyio.run(main)
 
 
-def _token(page: httpx.Response) -> str:
+def _token(page: httpx2.Response) -> str:
     found = re.search(r"name=token value=([0-9a-f]+)", page.text)
     assert found is not None
     return found.group(1)
@@ -171,7 +171,7 @@ def test_a_waiting_call_is_approved_on_the_page_and_runs_once_in_its_run(server:
     ran = _call(app, issued["agent"])
     again = _call(app, issued["agent"])
 
-    assert ran.isError is False and WRITES == ["hello"]
+    assert ran.is_error is False and WRITES == ["hello"]
     assert again.code == types.URL_ELICITATION_REQUIRED  # an approval is used once
     request = store.get_request(elicitation["elicitationId"])
     assert request is not None and request.status == "used" and request.decided_by == "bo"
@@ -188,7 +188,7 @@ def test_only_an_approver_of_the_same_tenant_and_not_the_requester_can_approve(
     url = _call(app, issued["agent"]).data["elicitations"][0]["url"]
     token = _token(_page(app, url))
 
-    def decide(key: str, form_token: str = token) -> httpx.Response:
+    def decide(key: str, form_token: str = token) -> httpx2.Response:
         return _page(app, url, {"token": form_token, "key": key, "decision": "approve"})
 
     assert decide(issued["agent"]).status_code == 403  # the agent's own key
@@ -236,8 +236,8 @@ def test_an_approved_call_refused_by_its_plan_keeps_its_approval(server: Any) ->
     GATE.refusing = False
     retried = _call(app, issued["agent"])
 
-    assert refused.isError and refused.structuredContent["status"] == "quota_exceeded"
-    assert retried.isError is False and WRITES == ["hello"]
+    assert refused.is_error and refused.structured_content["status"] == "quota_exceeded"
+    assert retried.is_error is False and WRITES == ["hello"]
 
 
 def test_the_page_limits_submissions_per_client_address(server: Any) -> None:
@@ -260,7 +260,7 @@ def test_the_local_tenant_may_approve_its_own_request(server: Any) -> None:
     decided = _page(app, url, {"token": token, "key": issued["local-self"], "decision": "approve"})
 
     assert decided.status_code == 200
-    assert _call(app, issued["local-agent"]).isError is False
+    assert _call(app, issued["local-agent"]).is_error is False
 
 
 def test_denied_changed_or_expired_calls_do_not_run(server: Any) -> None:
