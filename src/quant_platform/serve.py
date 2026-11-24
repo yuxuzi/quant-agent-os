@@ -8,17 +8,19 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pydantic import SecretStr, ValidationError
 from rich.console import Console
 
 from quant_agent_os.api import ApiKeyError, KeyRing
 from quant_agent_os.api.server import DEFAULT_HOST, DEFAULT_PORT, is_loopback, run_http
-from quant_agent_os.config import get_settings
+from quant_agent_os.config import SecretConfigError, get_settings, read_secret
 from quant_agent_os.data import DatasetStore
 from quant_agent_os.mcp import run_stdio
+from quant_agent_os.observability import configure_logging
 from quant_agent_os.registration import FirmApp
 from quant_agent_os.runs import RunRecorder, RunStore, RunStoreError, SqliteRunStore
 from quant_agent_os.runtime import ToolExecutor
@@ -41,6 +43,26 @@ if TYPE_CHECKING:
 
 errors = Console(stderr=True, soft_wrap=True)
 log = logging.getLogger(__name__)
+
+
+def known_secrets() -> list[str]:
+    """Return the secret values this installation holds, for the log filter to redact.
+
+    A secret that cannot be read yields nothing here: the command that needs it reports why.
+    """
+    from quant_research.config import embedding_settings, ragflow_settings
+
+    values: list[SecretStr | None] = []
+    with suppress(SecretConfigError, ValidationError):
+        embedding = embedding_settings()
+        values += [embedding.voyage_api_key, embedding.openai_api_key]
+    with suppress(SecretConfigError, ValidationError):
+        values.append(ragflow_settings().api_key)
+    with suppress(SecretConfigError):
+        password = read_secret("PGPASSWORD")
+        if password:
+            values.append(SecretStr(password))
+    return [value.get_secret_value() for value in values if value is not None]
 
 
 def warn_about_open_access(catalog: Catalog, ring: KeyRing, sign_in: SignIn | None = None) -> None:
@@ -278,11 +300,14 @@ def serve_http(
     provider, and is recorded with its principal. ``keys``, ``runs``, and ``sign_in`` default to
     the configured files, and ``allowed_hosts`` are public names clients use; with sign-in, the
     resource URL's host is one. Binds loopback by default; put TLS and rate limiting in a reverse
-    proxy before binding anything else. Raises `ApiKeyError` without an enabled key (unless
-    sign-in is on), `SignInError` for a sign-in file that is invalid or names an unset secret,
-    `RunStoreError` without a run store, and `ApiUnavailableError` or `MCPUnavailableError`
-    without the ``server`` extra.
+    proxy before binding anything else. Logs follow ``QUANT_AGENT_OS_LOG_FORMAT`` and
+    ``QUANT_AGENT_OS_LOG_LEVEL``, redacted of the known secrets. Raises `ApiKeyError` without an
+    enabled key (unless sign-in is on), `SignInError` for a sign-in file that is invalid or names
+    an unset secret, `RunStoreError` without a run store, and `ApiUnavailableError` or
+    `MCPUnavailableError` without the ``server`` extra.
     """
+    settings = get_settings()
+    configure_logging(settings.log_level, secrets=known_secrets(), log_format=settings.log_format)
     with _http_app(catalog, keys=keys, runs=runs, allowed_hosts=allowed_hosts, sign_in=sign_in) as (
         http_app,
         audience,

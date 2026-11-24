@@ -166,7 +166,7 @@ in memory unless it is given a run store. What each part of a record holds:
 
 [Decision 0011](decisions/0011-rest-api-and-api-keys.md). `qaos serve --http --toolsets research` serves the
 same tools as `qaos serve` over HTTP, which other machines may reach, so:
-- **Every route but `/healthz` needs an API key**, or with [sign-in](#oauth) on, a token. Send it
+- **Every route but `/healthz` and `/readyz` needs an API key**, or with [sign-in](#oauth) on, a token. Send it
   as `Authorization: Bearer <key>`.
   `qaos keys new` prints a key once. The keys file
   (`~/.quant-agent-os/api-keys.toml` or `QUANT_AGENT_OS_API_KEYS_FILE`) holds only SHA-256

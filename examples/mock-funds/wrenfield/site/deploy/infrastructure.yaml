@@ -48,5 +48,5 @@ Resources:
       TargetType: ip
       Protocol: HTTP
       Port: 8000
-      HealthCheckPath: /healthz        # liveness only: it does not show the lake or database are reachable
+      HealthCheckPath: /readyz         # readiness: the run store, knowledge store, and datasets answer
       VpcId: vpc-0123abcd
