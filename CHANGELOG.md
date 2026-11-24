@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Standard data tables and stub adapters (decision 0037, pre-1.0 part).** Quant Toolbox's `quant_toolbox.data.model`
+  describes the six standard tables (`securities`, `prices`, `returns`, `holdings`, `measures`, `reference`), validates
+  them, applies the as-of vintage rule, and pivots long tables wide. `qaos data adapter new NAME --table TABLE` writes a
+  stub adapter and a test that fails until the adapter is filled in; `--force` overwrites. The mapping file and
+  `MappedDatasetStore` are not yet built. Documented in the deployment guide, section "Map your data to the standard tables".
+
 - **What 1.0 promises** (decision 0035). From 1.0 the platform follows semver over its served tools, a firm's
   Python (`__all__` of `quant_platform`, `quant_agent_os.registration`, `quant_agent_os.testing`,
   `quant_agent_os.tools`, and `quant_agent_os.data`), the files and settings a firm writes, the `qaos`

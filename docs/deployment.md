@@ -420,6 +420,29 @@ serve_apps([risk], datasets=store)
 - **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
   is where fund-specific logic stays visible.
 
+### Map your data to the standard tables
+
+Decision 0037 proposes one standard shape for a fund's data: six long tables defined in Quant Toolbox
+(`quant_toolbox.data.model`). They are `securities`, `prices`, `returns`, `holdings`, `measures`, and
+`reference`, each with a key, typed columns, and a one-line description. Here is what exists now, and what
+does not yet.
+
+- **Exists now: the tables and their checks.** `TABLES` gives each table's columns and key. `validate(table,
+  columns)` names every problem in a column-oriented dict: a missing required column, a value of the wrong
+  type with its row, an empty required cell, and a repeated key. `as_of(rows, date, vintage=None)` keeps each
+  key's latest vintage on or before a date, or the exact vintage you ask for, so a restatement replaces the
+  original only from the day it was restated. `to_wide` pivots a long table to the wide table the tools read.
+- **Exists now: stub adapters.** `qaos data adapter new NAME --table returns` writes `NAME_adapter.py`, a
+  typed class whose `read(start, end)` raises `NotImplementedError` with a TODO naming the table's required
+  columns, and `test_NAME_adapter.py`, which calls it and validates the result. The test fails until `read` is
+  filled in. Use a stub for a source that is too awkward to finish now, such as a vendor API or a trustee's
+  workbook. Existing files are not overwritten unless you pass `--force`.
+- **Later: the mapping file and `MappedDatasetStore`.** Decision 0037 plans a mapping file that names, per
+  standard table, where the data comes from and what its columns are called there, and a `MappedDatasetStore`
+  that serves ids such as `returns:book=GQ` from it. Neither exists yet, and no release has shipped them.
+  Until then, a stub adapter's output is not served to the tools by itself. Keep your own `DatasetStore`
+  for the datasets the platform should read, and the standard tables as the shape you map them into.
+
 ### Drivers in your image
 
 The platform's image has no database driver, and no SQLAlchemy either: its `sql` extra is not in the image. A
