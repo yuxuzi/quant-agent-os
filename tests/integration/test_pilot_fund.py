@@ -8,11 +8,13 @@ through ASGI. Nothing leaves the machine. drill.sh tells the same story from a b
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import os
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,12 +29,18 @@ uvicorn = pytest.importorskip("uvicorn")
 
 from build_warehouse import build  # noqa: E402
 from idp import DEFAULT_CONFIG, RunningIdp, start  # noqa: E402
+from mcp import Client  # noqa: E402
 from mcp.client.session import ClientSession  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
+from typer.testing import CliRunner  # noqa: E402
 
 from quant_agent_os.api import add_key  # noqa: E402
+from quant_agent_os.caller_assertion import CALLER_HEADER, sign_caller  # noqa: E402
 from quant_agent_os.config import get_settings  # noqa: E402
+from quant_agent_os.config.secrets import read_secret  # noqa: E402
 from quant_agent_os.runs import SqliteRunStore  # noqa: E402
+from quant_platform.cli import app as qaos  # noqa: E402
+from quant_platform.identity import oauth  # noqa: E402
 from quant_research import open_research  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +49,8 @@ SITE = PILOT / "site"
 FACILITY = PILOT / "facility"
 RESOURCE = "http://127.0.0.1:8000"
 SECRET = "kpc-introspection-fixture"
+# The risk service's caller secret, named by a file the test writes (decision 0030).
+CALLER_SECRET_VALUE = "kpc-risk-caller-secret-fixture-0123456789"
 # The tools that call the risk service, the only ones given a standing approval for network.
 RISK_TOOLS = [
     "risk_desks",
@@ -62,6 +72,7 @@ class Day:
     answers: dict[str, Any]
     kestrel: Any  # the site's kestrel_server module
     output: str
+    runs: list[SqliteRunStore]  # the run stores the server answers from, in the order opened
 
 
 @pytest.fixture(scope="module")
@@ -85,22 +96,35 @@ def site_modules() -> Iterator[Any]:
 
 
 @pytest.fixture(scope="module")
-def risk_service(site_modules: Any, warehouse: Path) -> Iterator[str]:
-    """Serve the drafted, finished risk-engine service on a free loopback port."""
+def risk_service(
+    site_modules: Any, warehouse: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[str]:
+    """Serve the drafted, finished risk-engine service on a free loopback port.
+
+    Its caller secret comes from a file, as the fund's deployment gives it, and the server reads
+    the same file: nothing names the secret's value in the environment.
+    """
     from kestrel_quant.config import CONFIG
     from service.app import app
 
-    CONFIG["risk"]["load_delay_s"] = 0  # the vendor download, which the drill keeps
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 30
-    while not server.started:
-        assert thread.is_alive() and time.monotonic() < deadline, "the risk service did not start"
-        time.sleep(0.05)
-    yield f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
-    server.should_exit = True
-    thread.join(timeout=10)
+    secret = tmp_path_factory.mktemp("risk-caller") / "caller.secret"
+    secret.write_text(CALLER_SECRET_VALUE, "utf-8")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("KPC_RISK_CALLER_SECRET", raising=False)
+        patch.setenv("KPC_RISK_CALLER_SECRET_FILE", str(secret))
+        CONFIG["risk"]["load_delay_s"] = 0  # the vendor download, which the drill keeps
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 30
+        while not server.started:
+            assert thread.is_alive() and time.monotonic() < deadline, (
+                "the risk service did not start"
+            )
+            time.sleep(0.05)
+        yield f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+        server.should_exit = True
+        thread.join(timeout=10)
 
 
 @pytest.fixture(scope="module")
@@ -148,6 +172,7 @@ def day(
         "KESTREL_INTROSPECTION_SECRET": SECRET,
         "QUANT_AGENT_OS_GRANTED_PERMISSIONS": '["read_local_data", "network"]',
         "QUANT_AGENT_OS_PREAPPROVED_TOOLS": json.dumps({"network": RISK_TOOLS}),
+        "QUANT_AGENT_OS_LOG_FORMAT": "json",
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
@@ -178,7 +203,7 @@ def day(
     site_modules.serve()
     answers = json.loads((warehouse.parent / "known_answers.json").read_text())
     output = " ".join(capsys.readouterr().err.split())
-    return Day(served[-1], gateway, home, answers, site_modules, output)
+    return Day(served[-1], gateway, home, answers, site_modules, output, stores)
 
 
 def _token(day: Day, user: str) -> str:
@@ -215,6 +240,91 @@ def _call(day: Day, credential: str, tool: str, **arguments: Any) -> dict[str, A
     body: dict[str, Any] = answer.json()
     body["http_status"] = answer.status_code
     return body
+
+
+def _get(day: Day, path: str, credential: str | None = None) -> httpx2.Response:
+    """Make one GET as ``credential`` (or with none), in one server lifespan."""
+    headers = {"Authorization": f"Bearer {credential}"} if credential else {}
+
+    async def main() -> httpx2.Response:
+        async with (
+            day.app.router.lifespan_context(day.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=day.app), base_url=RESOURCE, headers=headers
+            ) as client,
+        ):
+            return await client.get(path)
+
+    return anyio.run(main)
+
+
+def _over_mcp(
+    day: Day,
+    credential: str,
+    check: Callable[[Any], Awaitable[Any]],
+    *,
+    newest: bool,
+) -> tuple[str, Any]:
+    """Run ``check`` on an MCP session as ``credential``; return the revision and its answer.
+
+    ``newest`` negotiates the newest revision the client can (2026-07-28); otherwise the client
+    sends the 2025-11-25 ``initialize`` handshake, as the older clients do.
+    """
+
+    async def main() -> tuple[str, Any]:
+        async with (
+            day.app.router.lifespan_context(day.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=day.app),
+                base_url=RESOURCE,
+                headers={"Authorization": f"Bearer {credential}"},
+            ) as http,
+        ):
+            if newest:
+                async with Client(
+                    streamable_http_client(f"{RESOURCE}/mcp", http_client=http),
+                    mode="auto",
+                    cache=None,
+                ) as client:
+                    return client.protocol_version, await check(client)
+            async with (
+                streamable_http_client(f"{RESOURCE}/mcp", http_client=http) as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                initialized = await session.initialize()
+                return initialized.protocol_version, await check(session)
+
+    return anyio.run(main)
+
+
+def _usage(day: Day, principal: str | None = None) -> dict[str, Any]:
+    """Run ``qaos runs report`` over the period around this test, as JSON, against the test's store.
+
+    The period runs from yesterday to the day after tomorrow, so a run near midnight UTC is counted.
+    """
+    today = dt.datetime.now(dt.UTC).date()
+    result = CliRunner().invoke(
+        qaos,
+        [
+            "runs",
+            "report",
+            "--from",
+            str(today - dt.timedelta(days=1)),
+            "--to",
+            str(today + dt.timedelta(days=2)),
+            "--runs",
+            str(get_settings().runs_file),
+            "--format",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    report: dict[str, Any] = json.loads(result.stdout)
+    if principal is not None:
+        rows = [row for row in report["by_principal"] if row["principal"] == principal]
+        assert len(rows) <= 1
+        return rows[0] if rows else {}
+    return report
 
 
 def _latest_weights(warehouse: Path, desk: str) -> dict[str, float]:
@@ -455,3 +565,181 @@ def test_the_agreed_cases_pass(day: Day, capsys: pytest.CaptureFixture[str]) -> 
     report = capsys.readouterr().out
     assert code == 0, report
     assert report.startswith("# Acceptance: PASS")
+
+
+# MCP 2026-07-28 (decision 0034): a client that negotiates the newest revision gets the same answers
+
+
+def test_a_2026_07_28_client_gets_the_fund_tools_and_the_same_refusal(day: Day) -> None:
+    pm = _token(day, "pm-equities")
+
+    async def listed(session: Any) -> list[str]:
+        return sorted(tool.name for tool in (await session.list_tools()).tools)
+
+    async def refused(session: Any) -> tuple[bool | None, str]:
+        called = await session.call_tool("kpc_desk_pnl", {"desk": "macro"})
+        return called.is_error, called.content[0].text
+
+    newest_version, newest_tools = _over_mcp(day, pm, listed, newest=True)
+    older_version, older_tools = _over_mcp(day, pm, listed, newest=False)
+    assert (newest_version, older_version) == ("2026-07-28", "2025-11-25")
+    assert newest_tools == older_tools
+    assert "kpc_desk_pnl" in newest_tools
+    assert not [name for name in newest_tools if name.startswith("risk_")]
+
+    _, newest_refusal = _over_mcp(day, pm, refused, newest=True)
+    _, older_refusal = _over_mcp(day, pm, refused, newest=False)
+    assert newest_refusal == older_refusal
+    assert newest_refusal[0] is True and "No desk 'macro'" in newest_refusal[1]
+
+
+# The AI-use report (qaos runs report), for the fund's compliance file
+
+
+def test_the_ai_use_report_names_each_user_their_refusals_and_approvals(day: Day) -> None:
+    pm_equities = _token(day, "pm-equities")
+    researcher = _token(day, "researcher")
+    risk = _token(day, "risk-manager")
+    _call(day, pm_equities, "list_datasets")
+    _call(day, pm_equities, "kpc_desk_pnl", desk="eq_ls")
+    _call(day, pm_equities, "kpc_desk_pnl", desk="macro")  # a refused desk
+    _call(
+        day,
+        pm_equities,
+        "analyze_performance",
+        returns={"dataset": "desk_returns_macro", "column": "gross_return"},
+    )  # a refused dataset read
+    _call(
+        day,
+        researcher,
+        "analyze_performance",
+        returns={"dataset": "desk_returns_eq_ls", "column": "gross_return"},
+    )
+    _call(day, researcher, "kpc_desk_pnl", desk="eq_ls")  # denied outright
+    _call(day, risk, "risk_desk_var", desk="macro", method="factor")  # approved in standing
+    _call(day, _token(day, "pm-macro"), "kpc_desk_pnl", desk="macro")
+    _call(day, _token(day, "operator"), "list_datasets")
+
+    report = _usage(day)
+    rows = {row["principal"]: row for row in report["by_principal"]}
+    assert set(rows) == {"pm-equities", "pm-macro", "researcher", "risk-manager", "operator"}
+    assert report["header"]["calls"] == 9
+    assert "desk_returns_macro" in rows["pm-equities"]["datasets_refused"]
+    assert "desk_returns_eq_ls" in rows["researcher"]["datasets_refused"]
+    assert rows["risk-manager"]["approved_standing"] == 1
+    assert rows["risk-manager"]["approved_per_call"] == 0
+    refused_reads = {row["dataset"]: row["refused_reads"] for row in report["by_dataset"]}
+    assert refused_reads["desk_returns_macro"] == 1
+    assert refused_reads["desk_returns_eq_ls"] == 1
+    assert any("does not say whether" in note for note in report["notes"])
+    # The desk refusals are not counted as refusals: the report's status columns show them as
+    # errors, or as denied, which is what the run store recorded for each call.
+    assert rows["pm-equities"]["errors"] + rows["pm-equities"]["refused"] >= 2
+
+
+# Readiness, JSON logs, and the risk service's caller secret, as the fund's deployment sets them
+
+
+def test_readiness_answers_ready_then_names_the_run_store_once_it_is_closed(
+    day: Day, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ready = _get(day, "/readyz")
+    assert ready.status_code == 200 and ready.json() == {"status": "ready"}
+    capsys.readouterr()
+    SqliteRunStore.close(day.runs[-1])  # the store the server answers from
+    down = _get(day, "/readyz")
+    assert down.status_code == 503
+    assert down.json() == {"status": "not ready", "failed": ["runs"]}
+    logged = [
+        json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")
+    ]
+    warning = next(item for item in logged if item["message"] == "Readiness check failed: runs")
+    assert warning["level"] == "WARNING"
+    assert {"time", "level", "logger", "message"} <= warning.keys()
+
+
+def test_the_risk_service_checks_every_caller_with_the_secret_its_file_holds(
+    day: Day, risk_service: str
+) -> None:
+    assert "KPC_RISK_CALLER_SECRET" not in os.environ  # the secret is named by its file alone
+    assert read_secret("KPC_RISK_CALLER_SECRET") == CALLER_SECRET_VALUE
+    url = f"{risk_service}/risk_desks"
+
+    def assertion(
+        principal: str, groups: set[str], *, tool: str = "risk_desks", key: str = ""
+    ) -> str:
+        return sign_caller(
+            key or CALLER_SECRET_VALUE,
+            principal=principal,
+            tenant="local",
+            groups=groups,
+            tool=tool,
+        )
+
+    assert httpx2.post(url, json={}).status_code == 401  # no assertion: the platform did not call
+    pm = assertion("pm-macro", {"desk-macro"})
+    assert httpx2.post(url, json={}, headers={CALLER_HEADER: pm}).status_code == 403
+    forged = assertion("risk-manager", {"risk"}, key="x" * 40)
+    assert httpx2.post(url, json={}, headers={CALLER_HEADER: forged}).status_code == 401
+    other_tool = assertion("risk-manager", {"risk"}, tool="risk_desk_var")
+    assert httpx2.post(url, json={}, headers={CALLER_HEADER: other_tool}).status_code == 401
+    risk = httpx2.post(url, json={}, headers={CALLER_HEADER: assertion("risk-manager", {"risk"})})
+    assert risk.status_code == 200 and risk.json()
+
+
+# The performance view (decision 0036), on a Kestrel book
+
+
+def test_analyze_performance_links_a_view_and_its_result_carries_what_the_page_reads(
+    day: Day,
+) -> None:
+    pm = _token(day, "pm-equities")
+    arguments = {"returns": {"dataset": "desk_returns_eq_ls", "column": "gross_return"}}
+
+    async def check(session: Any) -> Any:
+        tools = {tool.name: tool for tool in (await session.list_tools()).tools}
+        called = await session.call_tool("analyze_performance", arguments)
+        view = await session.read_resource("ui://quant-agent-os/performance.html")
+        item = view.contents[0]
+        return tools["analyze_performance"].meta, called, item.mime_type, item.text
+
+    _, (meta, called, mime, page) = _over_mcp(day, pm, check, newest=True)
+    assert meta["ui"]["resourceUri"] == "ui://quant-agent-os/performance.html"
+    assert mime == "text/html;profile=mcp-app" and "ui/initialize" in page
+    assert called.is_error is False
+    data = called.structured_content
+    assert data["series_id"].startswith("desk_returns_eq_ls")  # the page's heading shows this id
+    for key in ("periods", "periods_per_year", "conventions", "warnings", "evidence"):
+        assert key in data, key
+    assert {"annualized_return", "annualized_volatility", "sharpe_ratio"} <= set(data["metrics"])
+    # A client without MCP Apps gets the same result; it draws no page.
+    _, older = _over_mcp(day, pm, check, newest=False)
+    assert older[1].structured_content == data
+
+
+# Round 1 friction: a PM who leaves mid-day, whom the identity provider disables
+
+
+def test_a_pm_who_leaves_mid_day_keeps_a_cached_token_for_a_minute_and_a_new_one_is_refused(
+    day: Day,
+) -> None:
+    # No other test signs this user in, so disabling them leaves the shared provider usable.
+    leaver = "pm-commodities"
+    cached = _token(day, leaver)
+    assert _call(day, cached, "list_datasets")["status"] == "ok"  # the server now holds the answer
+    unused = _token(day, leaver)  # issued before the disable; the server has never seen it
+    day.idp.provider.disable_user(leaver)  # the drill's provider needs a restart to do this
+    assert _call(day, cached, "list_datasets")["status"] == "ok"  # still accepted, from the cache
+    assert _call(day, unused, "list_datasets")["http_status"] == 401  # refused at once
+    issued = httpx2.post(
+        f"{day.idp.base_url}/token",
+        data={"grant_type": "password", "username": leaver, "password": f"kpc-{leaver}"},
+    )
+    assert issued.status_code == 400
+    assert _get(day, "/v1/tools", credential=unused).status_code == 401
+    assert oauth.CACHE_SECONDS == 60.0  # the most a disabled user's cached token can last
+    # The report shows the calls that got through, under the leaver's name. The two refused
+    # attempts, with no credential or an unused token, reached no tool and left no row.
+    assert _get(day, "/v1/tools").status_code == 401
+    row = _usage(day, leaver)
+    assert row["calls"] == 2 and row["ok"] == 2

@@ -7,7 +7,9 @@ records what that takes ([plan](../../docs/plans/proposals-0.8.md)). All its dat
 - [`facility/`](facility/README.md): what the fund already has, written as its own code: a warehouse, a
   legacy Python package, research documents, an identity provider, and desk entitlements.
 - [`site/`](site/kestrel_server.py): what the fund writes to adopt the platform: its server
-  (`kestrel_server.py`), the warehouse adapter (`warehouse_store.py`), the legacy tools the converter
+  (`kestrel_server.py`), the warehouse adapter (`warehouse_store.py`), the two files the desk
+  reconciliation reads (`admin_fixture.py`, which makes the administrator's workbook with a restatement
+  where asked), the legacy tools the converter
   drafted and a developer finished (`legacy.toml`, `legacy_tools/`), its sign-in file, its settings
   (`kestrel.env`), and its agreed cases (`acceptance.toml`).
 - [`drill.sh`](drill.sh): the fund's day, from building the wheels to reading the audit trail, timed,
