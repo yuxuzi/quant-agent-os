@@ -50,6 +50,27 @@ generated report compute the same way ([decision 0026](../decisions/0026-quant-t
   - **Alignment and gaps:** series from different datasets are joined on their dates, and rows
     with a missing value are left out. Both are counted in the warnings; nothing is filled in.
 
+## See the result in your client
+
+`analyze_performance` links a page, `ui://quant-agent-os/performance.html`, which a client that shows
+MCP Apps draws in place of the result's text: the series and its periods, four headline figures
+(annualised return, volatility, Sharpe ratio, and maximum drawdown), the other metrics in groups
+(returns, risk, ratios, against a benchmark when one is given, and statistical confidence), the
+basis the output states (returns, periods per year, value at risk, and the risk-free rate's use), the
+warnings, and the evidence and conventions below. The output does not give the window's dates, the
+benchmark's name, or the risk-free rate's value, so the page does not show them. The page is served beside the tool, by `qaos serve`, the stdio
+server, and `serve_apps`, and only where `analyze_performance` is served to the caller
+([decision 0036](../decisions/0036-views-for-mcp-apps.md)). It makes no request and loads nothing,
+and it draws only what the tool returned.
+
+The MCP site listed these clients as supporting MCP Apps when this was written: Claude, Claude
+Desktop, VS Code GitHub Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam, and Archestra.AI.
+Any other client ignores the page and shows the same text result as before.
+
+This has been tested by protocol tests (`tests/contract/test_mcp_views.py`, which check the metadata,
+the page resource, and the fallback over both MCP eras) and by rendering the page in a headless browser
+with a fake host. It has not yet been seen in a real client, so a first look in one is still to do.
+
 ## The shapes the datasets take
 
 Every dataset is wide: an index column first, then one numeric column per series.

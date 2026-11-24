@@ -6,6 +6,7 @@ can test its server in process with Starlette's `TestClient`; `serve_apps` serve
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from quant_platform.identity.sign_in import SignIn
 
 errors = Console(stderr=True, soft_wrap=True)
+log = logging.getLogger(__name__)
 
 
 def known_secrets() -> list[str]:
@@ -159,6 +161,22 @@ def warn_about_permissions(tools: list[ToolSpec[Any, Any]], policy: PermissionPo
                 )
 
 
+def warm_up(catalog: Catalog) -> None:
+    """Load what the catalog's analytics tools import before serving, so no caller waits on it.
+
+    A first metric call on a fresh install compiles the metrics backend, which can outlast a tool
+    call's time limit. A failure here is left for the first call to report, as it would have.
+    """
+    if "analytics" not in catalog.toolsets.values():
+        return
+    try:
+        from quant_analytics.computed import warm_up as warm_analytics
+
+        warm_analytics()
+    except Exception:
+        log.debug("Analytics warm-up failed", exc_info=True)
+
+
 def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = True) -> None:
     """Serve ``catalog`` over stdio until the client disconnects; raises `MCPUnavailableError`.
 
@@ -181,6 +199,7 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
             except RunStoreError as error:
                 errors.print(f"[yellow]warning:[/yellow] {error} Calls will not be recorded.")
         warn_about_permissions(catalog.tools, catalog.policy)
+        warm_up(catalog)
         run_stdio(
             ToolExecutor(ToolRegistry(catalog.tools), catalog.policy),
             name="quant-agent-os",
@@ -192,6 +211,7 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
             ),
             resources=catalog.resources,
             prompts=catalog.prompts,
+            views=catalog.views,
         )
     finally:
         if run_store is not None:
@@ -245,6 +265,7 @@ def _http_app(
         warn_about_permissions(catalog.tools, catalog.policy)
         warn_about_open_access(catalog, ring, signing_in)
         warn_about_scopes(signing_in)
+        warm_up(catalog)
         tenancy = single_tenant(catalog, run_store, catalog.policy)
         if signing_in is None:
             http_app = build_http_app(

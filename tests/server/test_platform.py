@@ -8,8 +8,7 @@ from typing import Any
 
 import anyio
 import pytest
-from mcp.client.session import ClientSession
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client
 from typer.testing import CliRunner
 
 import quant_platform.cli as platform_cli
@@ -170,9 +169,9 @@ def test_a_client_reads_resources_and_prompts_from_the_composed_server(
         prompts=catalog.prompts,
     )
 
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         found = await session.call_tool("find_related_signals", {"query": "momentum"})
-        chunk_id = found.structuredContent["passages"][0]["chunk_id"]  # type: ignore[index]
+        chunk_id = found.structured_content["passages"][0]["chunk_id"]  # type: ignore[index]
         passage = await session.read_resource(f"qaos://passage/{chunk_id}")  # type: ignore[arg-type]
         dataset = await session.read_resource("qaos://dataset/returns")  # type: ignore[arg-type]
         template = await session.read_resource("qaos://template/quant-baseline")  # type: ignore[arg-type]
@@ -182,7 +181,7 @@ def test_a_client_reads_resources_and_prompts_from_the_composed_server(
         return chunk_id, passage, dataset, template, prompt
 
     async def main() -> Any:
-        async with create_connected_server_and_client_session(server) as session:
+        async with Client(server, mode="legacy", cache=None) as session:
             return await check(session)
 
     chunk_id, passage, dataset, template, prompt = anyio.run(main)

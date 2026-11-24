@@ -54,13 +54,13 @@ def test_claude_style_client_gets_cited_answers(corpus_dir: Path, tmp_path: Path
         found = await session.call_tool(
             "find_related_signals", {"query": "What is related to short-term reversal?"}
         )
-        chunk_id = found.structuredContent["passages"][0]["chunk_id"]
+        chunk_id = found.structured_content["passages"][0]["chunk_id"]
         passage = await session.call_tool("get_source_passage", {"chunk_id": chunk_id})
         return initialised, tools, found, passage
 
     initialised, tools, found, passage = _run(_server(store), check)
 
-    assert initialised.serverInfo.name == "quant-agent-os"
+    assert initialised.server_info.name == "quant-agent-os"
     assert "cite every claim" in (initialised.instructions or "")
     assert sorted(item.name for item in tools) == [
         "find_related_signals",
@@ -68,13 +68,13 @@ def test_claude_style_client_gets_cited_answers(corpus_dir: Path, tmp_path: Path
         "research_report",
         "server_info",
     ]
-    assert all(item.annotations.readOnlyHint for item in tools)
-    packet = found.structuredContent
-    assert found.isError is False
+    assert all(item.annotations.read_only_hint for item in tools)
+    packet = found.structured_content
+    assert found.is_error is False
     assert "signal:order-flow-imbalance" in {entity["id"] for entity in packet["related"]}
     assert all(item["source"]["location"] for item in packet["passages"])
     assert packet["data_versions"]["corpus_snapshot"].startswith("snap:")
-    assert passage.structuredContent["evidence"][0]["kind"] == "retrieved"
+    assert passage.structured_content["evidence"][0]["kind"] == "retrieved"
 
 
 def test_serving_refuses_a_missing_store(tmp_path: Path) -> None:

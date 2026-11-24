@@ -116,6 +116,33 @@ class PromptSpec:
         return self.template.format(**{name: given.get(name, "") for name in declared})
 
 
+@dataclass(frozen=True)
+class ViewSpec:
+    """A static page that the tools named in ``tools`` render, served as a ``ui://`` resource.
+
+    The page computes nothing: a client that shows MCP Apps draws the tool's result in it, and
+    any other client gets the tool's text as before (decision 0036). The view is served when at
+    least one of its tools is served to the caller, and each served tool it names links to it.
+    """
+
+    uri: str
+    name: str
+    description: str
+    html: str
+    tools: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.uri.startswith("ui://") or len(self.uri) <= len("ui://"):
+            raise ToolContractError(
+                f"View '{self.name}' needs a ui:// URI such as 'ui://quant-agent-os/page.html', "
+                f"not '{self.uri}'."
+            )
+        if not self.description.strip():
+            raise ToolContractError(f"View '{self.name}' needs a description.")
+        if not self.tools:
+            raise ToolContractError(f"View '{self.name}' renders no tool.")
+
+
 def find_resource(resources: list[ResourceSpec], uri: str) -> tuple[ResourceSpec, dict[str, str]]:
     """Return the first resource whose template matches ``uri``, with its arguments."""
     for resource in resources:

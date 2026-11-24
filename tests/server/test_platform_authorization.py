@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.shared.exceptions import McpError
-from pydantic import AnyUrl, BaseModel
+from mcp.shared.exceptions import MCPError
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from quant_agent_os.api import ApiKeyError, KeyRing, add_key, load_keys
@@ -135,11 +135,11 @@ def server(research: ResearchApp, store: DirectoryDatasetStore, tmp_path: Path) 
 
 
 @asynccontextmanager
-async def _client(server: Server, who: str) -> AsyncIterator[httpx.AsyncClient]:
+async def _client(server: Server, who: str) -> AsyncIterator[httpx2.AsyncClient]:
     async with (
         server.app.router.lifespan_context(server.app),
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=server.app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=server.app),
             base_url=BASE,
             headers={"Authorization": f"Bearer {server.keys[who]}"},
         ) as client,
@@ -148,9 +148,9 @@ async def _client(server: Server, who: str) -> AsyncIterator[httpx.AsyncClient]:
 
 
 @asynccontextmanager
-async def _session(client: httpx.AsyncClient) -> AsyncIterator[ClientSession]:
+async def _session(client: httpx2.AsyncClient) -> AsyncIterator[ClientSession]:
     async with (
-        streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+        streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -177,11 +177,11 @@ def call(
                 }
             async with _session(client) as session:
                 result = await session.call_tool(name, args)
-            details = result.structuredContent or {}
+            details = result.structured_content or {}
             return {
-                "status": details.get("status", "ok") if result.isError else "ok",
-                "output": None if result.isError else details,
-                "error": details.get("error") if result.isError else None,
+                "status": details.get("status", "ok") if result.is_error else "ok",
+                "output": None if result.is_error else details,
+                "error": details.get("error") if result.is_error else None,
                 "text": result.content[0].text if result.content else "",
             }
 
@@ -346,8 +346,8 @@ def test_a_resource_follows_the_same_rights(server: Server) -> None:
     async def read(who: str, uri: str) -> str:
         async with _client(server, who) as client, _session(client) as session:
             try:
-                return (await session.read_resource(AnyUrl(uri))).contents[0].text
-            except McpError as error:
+                return (await session.read_resource(uri)).contents[0].text
+            except MCPError as error:
                 return f"refused: {error}"
 
     assert "columns" in anyio.run(read, "alice", "qaos://dataset/growth-fund")
@@ -361,7 +361,7 @@ def test_a_resource_follows_the_same_rights(server: Server) -> None:
 def test_resources_are_listed_only_for_tools_the_caller_may_call(server: Server) -> None:
     async def templates(who: str) -> list[str]:
         async with _client(server, who) as client, _session(client) as session:
-            found = (await session.list_resource_templates()).resourceTemplates
+            found = (await session.list_resource_templates()).resource_templates
             return [item.name for item in found]
 
     assert "dataset" in anyio.run(templates, "alice")
@@ -404,7 +404,7 @@ def test_parallel_callers_never_see_each_others_identity_or_data(server: Server)
     """A leaked caller would be a silent cross-user read, so run them interleaved."""
     people = {"alice": "growth-fund", "bob": "value-fund"}
 
-    async def one(who: str, n: int, client: httpx.AsyncClient) -> None:
+    async def one(who: str, n: int, client: httpx2.AsyncClient) -> None:
         interface = "rest" if n % 2 else "mcp"
         if interface == "rest":
             me = (await client.post("/v1/tools/whoami/call", json={"arguments": {}})).json()
@@ -416,20 +416,20 @@ def test_parallel_callers_never_see_each_others_identity_or_data(server: Server)
             return
         async with _session(client) as session:
             me_mcp = await session.call_tool("whoami", {})
-            assert (me_mcp.structuredContent or {})["principal"] == who
+            assert (me_mcp.structured_content or {})["principal"] == who
             tools = [item.name for item in (await session.list_tools()).tools]
             assert ("research_report" in tools) == (who == "alice")
 
     async def main() -> None:
         async with (
             server.app.router.lifespan_context(server.app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=server.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=server.app),
                 base_url=BASE,
                 headers={"Authorization": f"Bearer {server.keys['alice']}"},
             ) as alice,
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=server.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=server.app),
                 base_url=BASE,
                 headers={"Authorization": f"Bearer {server.keys['bob']}"},
             ) as bob,
@@ -657,8 +657,8 @@ def test_qaos_serve_takes_an_access_file(
         async def main() -> Any:
             async with (
                 app.router.lifespan_context(app),
-                httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app),
+                httpx2.AsyncClient(
+                    transport=httpx2.ASGITransport(app=app),
                     base_url=BASE,
                     headers={"Authorization": f"Bearer {key}"},
                 ) as client,

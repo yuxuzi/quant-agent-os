@@ -1,6 +1,6 @@
 """Opt-in OAuth sign-in on a firm's own server (decision 0028), through `serve_http` itself.
 
-A fake identity provider answers RFC 7662 introspection through httpx's mock transport, so the
+A fake identity provider answers RFC 7662 introspection through httpx2's mock transport, so the
 tests run offline. Off by default, nothing changes; on, tokens and keys both reach /mcp and /v1,
 the token's groups decide access, and anything uncertain is refused.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -65,11 +65,11 @@ class Provider:
     asked: list[str] = field(default_factory=list)
     authorizations: list[str] = field(default_factory=list)
 
-    def handler(self, request: httpx.Request) -> httpx.Response:
+    def handler(self, request: httpx2.Request) -> httpx2.Response:
         self.authorizations.append(request.headers.get("authorization", ""))
-        token = dict(httpx.QueryParams(request.content.decode()))["token"]
+        token = dict(httpx2.QueryParams(request.content.decode()))["token"]
         self.asked.append(token)
-        return httpx.Response(200, json=self.tokens.get(token, {"active": False}))
+        return httpx2.Response(200, json=self.tokens.get(token, {"active": False}))
 
     def issue(self, token: str, **overrides: Any) -> str:
         self.tokens[token] = {
@@ -100,8 +100,8 @@ def provider(monkeypatch: pytest.MonkeyPatch) -> Provider:
     fake = Provider()
     real = SignIn.verifier
 
-    def verifier(self: SignIn, http: httpx.AsyncClient | None = None) -> Any:
-        return real(self, httpx.AsyncClient(transport=httpx.MockTransport(fake.handler)))
+    def verifier(self: SignIn, http: httpx2.AsyncClient | None = None) -> Any:
+        return real(self, httpx2.AsyncClient(transport=httpx2.MockTransport(fake.handler)))
 
     monkeypatch.setattr(SignIn, "verifier", verifier)
     return fake
@@ -161,11 +161,11 @@ def start(
 def _rest(app: Any, credential: str | None, method: str, path: str, **kwargs: Any) -> Any:
     headers = {"Authorization": f"Bearer {credential}"} if credential else {}
 
-    async def main() -> httpx.Response:
+    async def main() -> httpx2.Response:
         async with (
             app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url=PUBLIC, headers=headers
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app), base_url=PUBLIC, headers=headers
             ) as client,
         ):
             return await client.request(method, path, **kwargs)
@@ -182,12 +182,12 @@ def _mcp(app: Any, credential: str, dataset: str) -> Any:
     async def main() -> Any:
         async with (
             app.router.lifespan_context(app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url=PUBLIC,  # the resource URL's host is admitted without --allowed-host
                 headers={"Authorization": f"Bearer {credential}"},
             ) as client,
-            streamable_http_client(f"{PUBLIC}/mcp", http_client=client) as (read, write, _),
+            streamable_http_client(f"{PUBLIC}/mcp", http_client=client) as (read, write),
             ClientSession(read, write) as session,
         ):
             await session.initialize()
@@ -250,7 +250,7 @@ def test_a_signed_in_user_reaches_tools_over_rest_and_mcp_and_is_recorded(
     ]
     assert called.status_code == 200 and called.json()["status"] == "ok"
     assert sorted(tools) == ["analyze_performance", "list_datasets"]
-    assert by_mcp.isError is False
+    assert by_mcp.is_error is False
     assert provider.authorizations[0].startswith("Basic ")  # the secret is sent, Basic auth
     assert provider.asked == ["tok-pm"]  # cached afterwards
     assert f"to 0 keys and to users signed in by {ISSUER}" in started.output
@@ -270,7 +270,7 @@ def test_api_keys_keep_working_beside_tokens(
     started = start(catalog, sign_in=sign_in_file)
 
     assert _call(started.app, key, "macro-book").json()["status"] == "ok"
-    assert _mcp(started.app, key, "macro-book")[1].isError is False
+    assert _mcp(started.app, key, "macro-book")[1].is_error is False
     revoked = "qaos_" + "x" * 43
     assert _rest(started.app, revoked, "GET", "/v1/tools").status_code == 401
     assert provider.asked == []  # a key, even an unknown one, is never introspected
@@ -562,8 +562,8 @@ def test_doctor_reports_sign_in_without_contacting_the_provider(
     def no_network(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("doctor must not contact the identity provider")
 
-    monkeypatch.setattr(httpx.AsyncClient, "post", no_network)
-    monkeypatch.setattr(httpx.Client, "post", no_network)
+    monkeypatch.setattr(httpx2.AsyncClient, "post", no_network)
+    monkeypatch.setattr(httpx2.Client, "post", no_network)
 
     code, off = _doctor(monkeypatch, None)
     assert "sign-in" in off and "takes API keys only" in off

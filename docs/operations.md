@@ -259,6 +259,30 @@ version, tool and tool version, input hash, data versions, status, duration, app
 refused. It leaves out arguments, outputs, and internal error text, so your log system learns no content. Export before
 you prune: a pruned call is not exported, though its audit events are.
 
+## Show how AI was used
+
+To give your compliance staff a record of how AI clients used the platform over a period:
+
+```bash
+docker compose -f deploy/compose.yaml run --rm -T runs report --from 2026-11-01 --to 2026-12-01 > ai-use-2026-11.md
+```
+
+- **What it says:** for each principal, the first and last call in the period (UTC), and for each principal, tool,
+  and dataset, the calls, the refusals, the calls that needed an approval, and the approved ones (per call or
+  standing). It names who granted each per-call approval, from the approval's grant record, and counts them per
+  operator. It also lists the platform versions seen, and the datasets a policy refused.
+- **Formats:** `--format markdown` (the default), `csv` (one row per principal and tool, with counts only), or `json`.
+- **What it leaves out:** arguments, outputs, retrieved text, and error text. It holds counts and names only. It does
+  not list the documents a research call read: those ids are only in the call's output, which the report does not
+  read. It does not list groups a caller held, since the run record names the principal and tenant only. A standing
+  approval names no approver.
+- **Pruned runs:** a pruned call is not counted. If a prune ran on or after the start of the period, the report says so.
+- **Period:** `--from` is included, `--to` is not, and both are UTC days.
+
+It is an operator command. No client can run it, and no tool or REST route returns it. It is a record your own
+compliance staff can keep. It does not say that any use complies with a law or a policy. That judgement is the
+firm's.
+
 ## Install with no network
 
 Build on a machine with network, at the release you want, and carry the images across:

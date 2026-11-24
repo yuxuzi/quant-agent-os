@@ -1,7 +1,7 @@
 """Sign-in by JWT, checked against the provider's keys (decision 0031), offline.
 
 Fake Entra ID and Amazon Cognito issuers sign tokens with RSA keys made here and serve their
-JWKS through httpx's mock transport. Tokens reach the platform's HTTP app (`build_server_app`)
+JWKS through httpx2's mock transport. Tokens reach the platform's HTTP app (`build_server_app`)
 as a client would send them, and the access file is keyed by readable aliases of Entra's group
 GUIDs. Every threat the verifier is meant to stop has a case that must be refused.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -147,17 +147,17 @@ class Idp:
             )
         return {"keys": keys}
 
-    def handler(self, request: httpx.Request) -> httpx.Response:
+    def handler(self, request: httpx2.Request) -> httpx2.Response:
         """Answer the key and discovery requests, or fail them while `failing`."""
         if self.failing:
-            return httpx.Response(503)
+            return httpx2.Response(503)
         url = str(request.url)
         if url == self.keys_url:
             self.fetches += 1
-            return httpx.Response(200, json=self.jwks())
+            return httpx2.Response(200, json=self.jwks())
         if self.discovery and url == f"{self.issuer}/.well-known/openid-configuration":
-            return httpx.Response(200, json={"issuer": self.issuer, "jwks_uri": self.keys_url})
-        return httpx.Response(404)
+            return httpx2.Response(200, json={"issuer": self.issuer, "jwks_uri": self.keys_url})
+        return httpx2.Response(404)
 
     def sign(
         self, claims: dict[str, Any], *, kid: str | None = "k1", alg: str = "RS256", key: Any = None
@@ -222,19 +222,19 @@ def idps(monkeypatch: pytest.MonkeyPatch, entra: Idp, cognito: Idp) -> list[Idp]
     """Answer every verifier's key requests from the fake providers."""
     providers = [entra, cognito]
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         for idp in providers:
             response = idp.handler(request)
             if response.status_code != 404:
                 return response
-        return httpx.Response(404)
+        return httpx2.Response(404)
 
     real = SignIn.verifier
     monkeypatch.setattr(
         SignIn,
         "verifier",
         lambda self, http=None: real(
-            self, httpx.AsyncClient(transport=httpx.MockTransport(handler))
+            self, httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
         ),
     )
     return providers
@@ -259,7 +259,7 @@ class Server:
         self.client = client
         self.runs = runs
 
-    def call(self, token: str, dataset: str = "equity-book") -> httpx.Response:
+    def call(self, token: str, dataset: str = "equity-book") -> httpx2.Response:
         """Call analyze_performance on ``dataset`` with ``token``."""
         body = {"arguments": {"returns": {"dataset": dataset, "column": "fund"}}}
         return self.client.post(
@@ -268,7 +268,7 @@ class Server:
             headers={"Authorization": f"Bearer {token}"},
         )
 
-    def listed(self, token: str) -> httpx.Response:
+    def listed(self, token: str) -> httpx2.Response:
         """List the tools ``token`` may see."""
         return self.client.get("/v1/tools", headers={"Authorization": f"Bearer {token}"})
 
@@ -547,7 +547,7 @@ def _verifier(idp: Idp, clock: Callable[[], float], **settings: Any) -> JwksVeri
         [server],
         resource=RESOURCE,
         tenants_by_issuer={ENTRA: {"local"}},
-        http=httpx.AsyncClient(transport=httpx.MockTransport(idp.handler)),
+        http=httpx2.AsyncClient(transport=httpx2.MockTransport(idp.handler)),
         clock=clock,
     )
 
@@ -622,9 +622,9 @@ def test_discovery_must_name_the_configured_issuer(cognito: Idp) -> None:
         [server],
         resource=RESOURCE,
         tenants_by_issuer={POOL: {"local"}},
-        http=httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda request: httpx.Response(
+        http=httpx2.AsyncClient(
+            transport=httpx2.MockTransport(
+                lambda request: httpx2.Response(
                     200,
                     json={"issuer": "https://elsewhere.example", "jwks_uri": f"{POOL}/keys"},
                 )
@@ -640,8 +640,8 @@ def test_a_symmetric_key_in_the_published_set_is_never_used(entra: Idp) -> None:
     forged = jwt.encode(entra_claims(), secret, "HS256", headers={"kid": "h1"})
     published = {"keys": [{"kty": "oct", "kid": "h1", "k": b64(secret)}, *entra.jwks()["keys"]]}
     verifier = _verifier(entra, Clock(), algorithms=["RS256", "ES256"])
-    verifier.http = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=published))
+    verifier.http = httpx2.AsyncClient(
+        transport=httpx2.MockTransport(lambda request: httpx2.Response(200, json=published))
     )
 
     assert anyio.run(verifier.verify_token, forged) is None

@@ -69,7 +69,7 @@ from quant_platform.identity.oauth import (
 )
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from mcp.server.auth.provider import TokenVerifier
     from starlette.routing import Route
 
@@ -314,7 +314,7 @@ class SignIn:
         """Return every tenant a signed-in user may act in."""
         return set().union(*self.tenants_by_issuer.values())
 
-    def verifier(self, http: httpx.AsyncClient | None = None) -> TokenVerifier:
+    def verifier(self, http: httpx2.AsyncClient | None = None) -> TokenVerifier:
         """Return the verifier for these providers' tokens; ``http`` is for tests.
 
         Providers that introspect are asked by `IntrospectionVerifier`, the others checked by

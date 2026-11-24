@@ -35,6 +35,36 @@ All notable changes to this project are documented here. The format follows
 - **Research settings are built, not read.** `EmbeddingSettings` and `RagflowSettings` are plain models now, built
   by `embedding_settings()` and `ragflow_settings()`, which read the keys through the secrets convention. Nothing
   else changes for a caller who uses `make_embedder` or `make_ragflow_loader`.
+- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
+  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
+  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
+  beside the tool, and every other client gets the same text result as before. Contract tests cover the
+  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
+  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
+- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
+  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
+  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
+  [operations](docs/operations.md#show-how-ai-was-used).
+
+### Changed
+
+- **`qaos runs report` gives each principal's first and last call (UTC), and counts per-call approvals by the operator who granted them.** Groups and the documents a research call read are not in the report: the run record does not hold the groups, and the documents are only in the call's output.
+### Fixed
+
+- **A server's first metric call no longer races its time limit.** The first call imported the metrics
+  backend (empyrical, pandas, SciPy), which on a fresh wheel install compiles them and can take longer
+  than a tool call's 10 seconds. `qaos serve`, `serve_apps`, and `build_server_app` now load it before
+  serving when analytics tools are served. Seen as one-off timeouts in three test runs on a busy machine.
+
+### Changed
+
+- **The performance view leads with four figures** (annualised return, volatility, Sharpe ratio, maximum drawdown), then groups the other metrics, adds the basis the output states, and names the benchmark only when the output does. The window's dates, the benchmark's name, and the risk-free rate's value are not in the tool's output, so the page does not show them.
+- **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
+  MCP Python SDK 2 (`mcp>=2.3,<3`): a client that speaks the stateless 2026-07-28 revision gets it, over
+  HTTP and stdio, and older clients keep the `initialize` handshake, from the same endpoint. Tools,
+  results, and refusals are the same in both, and the contract tests run in both. The sign-in code moves
+  from `httpx` to `httpx2`, which SDK 2 brings. A firm's own code that imported the SDK directly follows
+  the SDK's migration guide.
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.
