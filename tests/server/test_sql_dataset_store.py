@@ -442,6 +442,7 @@ def test_check_reads_the_source_again_when_a_cached_dataset_would_still_answer(
     try:
         store.check()
         assert store.get("returns").rows == 3
+        engine.dispose()  # Windows deletes no file a pooled connection holds open
         oms.unlink()
 
         assert store.get("returns").rows == 3  # the dataset is cached for an hour

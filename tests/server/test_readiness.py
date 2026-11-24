@@ -138,6 +138,7 @@ def test_a_sql_source_whose_file_is_deleted_after_start_is_not_ready(tmp_path: P
     try:
         with _app(store, tmp_path) as app, TestClient(app) as client:
             assert client.get("/readyz").status_code == 200
+            engine.dispose()  # Windows deletes no file a pooled connection holds open
             path.unlink()
             response = client.get("/readyz")
     finally:
