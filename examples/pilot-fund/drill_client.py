@@ -97,14 +97,14 @@ def latest_weights(warehouse: Path, desk: str) -> dict[str, float]:
 def mcp_call(server: str, token: str, tool: str, arguments: dict[str, Any]) -> Any:
     """Call one tool over MCP with a bearer token, as Claude or Cursor would."""
     import anyio
-    import httpx
+    import httpx2
     from mcp.client.session import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     async def main() -> Any:
         async with (
-            httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=60) as client,
-            streamable_http_client(f"{server}/mcp", http_client=client) as (read, write, _),
+            httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=60) as client,
+            streamable_http_client(f"{server}/mcp", http_client=client) as (read, write),
             ClientSession(read, write) as session,
         ):
             await session.initialize()
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         answer = mcp_call(server, macro.token, "kpc_desk_pnl", {"desk": "macro"})
-        check("pm-macro", "own desk P&L over MCP with a token", answer.isError is False)
+        check("pm-macro", "own desk P&L over MCP with a token", answer.is_error is False)
     except Exception as error:  # report it as a failed check, not a traceback
         check("pm-macro", "own desk P&L over MCP with a token", False, repr(error))
 

@@ -15,6 +15,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
+  MCP Python SDK 2 (`mcp>=2.3,<3`): a client that speaks the stateless 2026-07-28 revision gets it, over
+  HTTP and stdio, and older clients keep the `initialize` handshake, from the same endpoint. Tools,
+  results, and refusals are the same in both, and the contract tests run in both. The sign-in code moves
+  from `httpx` to `httpx2`, which SDK 2 brings. A firm's own code that imported the SDK directly follows
+  the SDK's migration guide.
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.

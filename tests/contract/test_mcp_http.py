@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
+from mcp import Client
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server.auth.provider import AccessToken
@@ -76,11 +77,11 @@ def server(tmp_path: Path) -> tuple[Any, dict[str, str], MemoryRunStore]:
 
 
 @asynccontextmanager
-async def _http(app: Any, headers: dict[str, str]) -> AsyncIterator[httpx.AsyncClient]:
+async def _http(app: Any, headers: dict[str, str]) -> AsyncIterator[httpx2.AsyncClient]:
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url=BASE, headers=headers
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url=BASE, headers=headers
         ) as client,
     ):
         yield client
@@ -90,7 +91,7 @@ def _session(app: Any, key: str, check: Any) -> Any:
     async def main() -> Any:
         async with (
             _http(app, {"Authorization": f"Bearer {key}"}) as client,
-            streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+            streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write),
             ClientSession(read, write) as session,
         ):
             await session.initialize()
@@ -99,10 +100,46 @@ def _session(app: Any, key: str, check: Any) -> Any:
     return anyio.run(main)
 
 
-def _post(app: Any, headers: dict[str, str]) -> httpx.Response:
+def _modern(app: Any, key: str, check: Any) -> Any:
+    """Like `_session`, for a client that negotiates the newest revision it can."""
+
+    async def main() -> Any:
+        async with (
+            _http(app, {"Authorization": f"Bearer {key}"}) as http,
+            Client(
+                streamable_http_client(f"{BASE}/mcp", http_client=http), mode="auto", cache=None
+            ) as client,
+        ):
+            return client.protocol_version, await check(client)
+
+    return anyio.run(main)
+
+
+def test_a_2026_07_28_client_gets_the_same_tools_results_and_refusals(server: Any) -> None:
+    app, issued, _ = server
+
+    async def check(session: Any) -> Any:
+        tools = sorted(tool.name for tool in (await session.list_tools()).tools)
+        called = await session.call_tool("annualized_return", ARGUMENTS)
+        return tools, called.structured_content, called.is_error
+
+    async def refused(session: Any) -> Any:
+        called = await session.call_tool("annualized_return", ARGUMENTS)
+        return called.is_error, called.content[0].text
+
+    version, modern = _modern(app, issued["alice"], check)
+    legacy = _session(app, issued["alice"], check)
+    _, (is_error, text) = _modern(app, issued["lister"], refused)
+
+    assert version == "2026-07-28"
+    assert modern == legacy and modern[2] is False
+    assert is_error and "lacks the 'tools:call' scope" in text
+
+
+def _post(app: Any, headers: dict[str, str]) -> httpx2.Response:
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 
-    async def main() -> httpx.Response:
+    async def main() -> httpx2.Response:
         async with _http(app, headers) as client:
             return await client.post(
                 "/mcp",
@@ -125,8 +162,8 @@ def test_http_results_equal_direct_and_stdio_calls_and_name_the_caller(server: A
     direct = EXECUTOR.execute(ToolCall(tool="annualized_return", arguments=ARGUMENTS))
 
     assert sorted(item.name for item in tools) == ["annualized_return", "max_drawdown"]
-    assert result.isError is False
-    assert result.structuredContent == direct.output
+    assert result.is_error is False
+    assert result.structured_content == direct.output
     assert (
         result.content[0].text
         == call_tool(EXECUTOR, "annualized_return", ARGUMENTS)["content"][0]["text"]
@@ -157,7 +194,7 @@ def test_each_method_checks_the_keys_scope(server: Any) -> None:
     listed, called = _session(app, issued["lister"], check)
 
     assert listed
-    assert called.isError and "lacks the 'tools:call' scope" in called.content[0].text
+    assert called.is_error and "lacks the 'tools:call' scope" in called.content[0].text
     assert store.list_runs(5) == []
 
 
@@ -167,7 +204,7 @@ def test_resource_reads_need_tools_call_and_report_failures(server: Any) -> None
     async def check(session: ClientSession) -> Any:
         try:
             await session.read_resource("test://drawdown/s")  # type: ignore[arg-type]
-        except Exception as error:  # McpError, possibly wrapped by the task group
+        except Exception as error:  # MCPError, possibly wrapped by the task group
             return str(error)
         return None
 
@@ -191,7 +228,7 @@ def test_a_foreign_host_or_origin_is_refused(server: Any) -> None:
 def test_rest_still_answers_on_the_same_app(server: Any) -> None:
     app, issued, _ = server
 
-    async def main() -> httpx.Response:
+    async def main() -> httpx2.Response:
         async with _http(app, {"Authorization": f"Bearer {issued['alice']}"}) as client:
             return await client.get("/v1/tools")
 
@@ -217,7 +254,7 @@ def test_each_caller_is_served_its_own_tenant(server: Any) -> None:
 
     async def check(session: ClientSession) -> Any:
         tools = [tool.name for tool in (await session.list_tools()).tools]
-        templates = (await session.list_resource_templates()).resourceTemplates
+        templates = (await session.list_resource_templates()).resource_templates
         hidden = await session.call_tool("max_drawdown", ARGUMENTS)
         shown = await session.call_tool("annualized_return", ARGUMENTS)
         return tools, templates, hidden, shown
@@ -226,8 +263,8 @@ def test_each_caller_is_served_its_own_tenant(server: Any) -> None:
 
     assert tools == ["annualized_return"]
     assert templates == []
-    assert hidden.isError and "denied" in hidden.content[0].text
-    assert shown.isError is False
+    assert hidden.is_error and "denied" in hidden.content[0].text
+    assert shown.is_error is False
     assert [(run.principal, run.tenant) for run in store.list_runs(5)] == [
         ("bo", "acme"),
         ("bo", "acme"),
@@ -240,7 +277,7 @@ def test_a_tenant_not_served_here_reaches_nothing(server: Any) -> None:
     async def check(session: ClientSession) -> Any:
         try:
             await session.list_tools()
-        except Exception as error:  # McpError, possibly wrapped by the task group
+        except Exception as error:  # MCPError, possibly wrapped by the task group
             return str(error)
         return None
 
