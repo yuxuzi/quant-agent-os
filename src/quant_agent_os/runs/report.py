@@ -1,9 +1,10 @@
 """An AI-use report: who called which tool on which datasets over a period, with no content.
 
 `qaos runs report` writes it for a firm's own compliance file. It is computed from the call
-records and audit events the run store already keeps, and those hold ids, hashes, statuses, and
-sizes. The report adds no content: it leaves out arguments, outputs, retrieved text, and error
-text. It records what the platform saw. It does not say whether any use complied with a policy.
+records and audit events the run store already keeps, and those hold ids, hashes, statuses, sizes,
+and the names of the operators who granted approvals. The report adds no content: it leaves out
+arguments, outputs, retrieved text, and error text. It records what the platform saw. It does not
+say whether any use complied with a policy.
 """
 
 from __future__ import annotations
@@ -25,12 +26,15 @@ from quant_agent_os.runtime.executor import ToolCallRecord
 NO_PRINCIPAL = "(none)"
 RUN_NOT_FOUND = "(run not found)"
 PRUNED_EVENT = "runs.pruned"
+GRANTED_EVENT = "approval.granted"  # written by RunRecorder.approve, with the approver's name
+NO_APPROVER = "(not recorded)"  # a per-call approval with no grant event on record
 _DATASET_KEY = "dataset:"  # how an analytics call names a dataset in its data versions
 _REFUSED_READ = "dataset.read "  # how an access refusal names a dataset (note_refusal)
 _STANDING = "standing:"  # the approval of a call the operator pre-approved
 _ERRORS = frozenset({"error", "timeout"})
 _OTHER = frozenset({"invalid_input", "unknown_tool", "quota_exceeded", "busy"})
 _FAR_FUTURE = datetime.max.replace(tzinfo=UTC)
+_EPOCH = datetime.min.replace(tzinfo=UTC)
 
 
 class Counts(BaseModel):
@@ -51,9 +55,11 @@ class Counts(BaseModel):
 
 
 class PrincipalUsage(Counts):
-    """One principal's calls, with the tools and datasets they touched."""
+    """One principal's calls, with the tools and datasets they touched, and when they were made."""
 
     principal: str
+    first_call: datetime | None = Field(default=None, description="The earliest start, in UTC")
+    last_call: datetime | None = Field(default=None, description="The latest start, in UTC")
     tools: list[str] = Field(default_factory=list)
     datasets_read: list[str] = Field(default_factory=list)
     datasets_refused: list[str] = Field(default_factory=list)
@@ -75,6 +81,14 @@ class DatasetUsage(BaseModel):
     refused_reads: int
 
 
+class ApproverUsage(BaseModel):
+    """One operator's per-call approvals: how many calls they allowed, and of which tools."""
+
+    approver: str
+    approved_per_call: int
+    tools: list[str] = Field(default_factory=list)
+
+
 class PrincipalToolUsage(Counts):
     """One principal's calls to one tool. Only the CSV is made from these rows."""
 
@@ -94,12 +108,13 @@ class ReportHeader(BaseModel):
 
 
 class UsageReport(BaseModel):
-    """The whole report. Its JSON form has five keys: the header and four sections."""
+    """The whole report. Its JSON form has six keys: the header and five sections."""
 
     header: ReportHeader
     by_principal: list[PrincipalUsage]
     by_tool: list[ToolUsage]
     by_dataset: list[DatasetUsage]
+    by_approver: list[ApproverUsage]
     notes: list[str]
     by_principal_tool: list[PrincipalToolUsage] = Field(default_factory=list, exclude=True)
 
@@ -116,13 +131,17 @@ def build_usage_report(
     """Return the report for the calls started from ``start`` up to ``end``.
 
     ``runs`` maps each run id to its run, which names the principal and platform version of
-    its calls. ``events`` may cover more than the period: only the prune notes read them. A
-    call whose run is not in ``runs`` counts under `RUN_NOT_FOUND`.
+    its calls. ``events`` may cover more than the period: the prune notes read them, and so do
+    the approvers, since a call may use an approval granted before the period. A call whose run
+    is not in ``runs`` counts under `RUN_NOT_FOUND`.
     """
     window = [call for call in calls if start <= call.started_at < end]
+    audit = list(events)
+    approvers = _approvers(audit)
     by_principal: dict[str, list[ToolCallRecord]] = defaultdict(list)
     by_pair: dict[tuple[str, str], list[ToolCallRecord]] = defaultdict(list)
     by_tool: dict[str, list[ToolCallRecord]] = defaultdict(list)
+    by_approver: dict[str, list[ToolCallRecord]] = defaultdict(list)
     reads: Counter[str] = Counter()
     readers: dict[str, set[str]] = defaultdict(set)
     refusals: Counter[str] = Counter()
@@ -131,21 +150,35 @@ def build_usage_report(
         by_principal[principal].append(call)
         by_pair[(principal, call.tool)].append(call)
         by_tool[call.tool].append(call)
+        if _per_call(call):
+            by_approver[approvers.get(call.approval or "", NO_APPROVER)].append(call)
         for dataset in _datasets_read(call):
             reads[dataset] += 1
             readers[dataset].add(principal)
         for dataset in _refused_reads(call):
             refusals[dataset] += 1
 
-    principals = [
-        PrincipalUsage(
-            principal=name,
-            **_counts(group).model_dump(),
-            tools=sorted({call.tool for call in group}),
-            datasets_read=sorted({d for call in group for d in _datasets_read(call)}),
-            datasets_refused=sorted({d for call in group for d in _refused_reads(call)}),
+    principals = []
+    for name, group in sorted(by_principal.items()):
+        first, last = _span(group)
+        principals.append(
+            PrincipalUsage(
+                principal=name,
+                first_call=first,
+                last_call=last,
+                **_counts(group).model_dump(),
+                tools=sorted({call.tool for call in group}),
+                datasets_read=sorted({d for call in group for d in _datasets_read(call)}),
+                datasets_refused=sorted({d for call in group for d in _refused_reads(call)}),
+            )
         )
-        for name, group in sorted(by_principal.items())
+    approver_rows = [
+        ApproverUsage(
+            approver=name,
+            approved_per_call=len(group),
+            tools=sorted({call.tool for call in group}),
+        )
+        for name, group in sorted(by_approver.items())
     ]
     tools = [
         ToolUsage(
@@ -181,7 +214,8 @@ def build_usage_report(
         by_principal=principals,
         by_tool=tools,
         by_dataset=datasets,
-        notes=_notes(window, events, start=start, end=end),
+        by_approver=approver_rows,
+        notes=_notes(window, audit, start=start, end=end),
         by_principal_tool=pairs,
     )
 
@@ -191,7 +225,7 @@ def read_usage_report(
 ) -> UsageReport:
     """Read the period's calls, audit events, and runs from ``store``, and build the report."""
     calls = store.list_calls(start, end)
-    events = store.list_events(start, _FAR_FUTURE)
+    events = store.list_events(_EPOCH, _FAR_FUTURE)  # every grant, not only this period's
     runs: dict[str, RunRecord] = {}
     for run_id in {call.run_id or "" for call in calls}:
         stored = store.get_run(run_id)
@@ -214,10 +248,20 @@ def render_markdown(report: UsageReport) -> str:
         "## By principal",
         "",
         *_table(
-            ["Principal", *_COUNT_HEADINGS, "Tools", "Datasets read", "Datasets refused"],
+            [
+                "Principal",
+                "First call (UTC)",
+                "Last call (UTC)",
+                *_COUNT_HEADINGS,
+                "Tools",
+                "Datasets read",
+                "Datasets refused",
+            ],
             [
                 [
                     row.principal,
+                    _stamp(row.first_call),
+                    _stamp(row.last_call),
                     *_count_cells(row),
                     _join(row.tools),
                     _join(row.datasets_read),
@@ -250,6 +294,17 @@ def render_markdown(report: UsageReport) -> str:
                 for row in report.by_dataset
             ],
             empty="No datasets read or refused in this period.",
+        ),
+        "",
+        "## By approver",
+        "",
+        *_table(
+            ["Approver", "Per-call approvals", "Tools"],
+            [
+                [row.approver, str(row.approved_per_call), _join(row.tools)]
+                for row in report.by_approver
+            ],
+            empty="No per-call approvals in this period.",
         ),
         "",
         "## Notes",
@@ -307,8 +362,40 @@ def render_csv(report: UsageReport) -> str:
 
 
 def render_json(report: UsageReport) -> str:
-    """Return the report as one JSON object: header, by_principal, by_tool, by_dataset, notes."""
+    """Return the report as one JSON object: header, by_principal, by_tool, by_dataset,
+    by_approver, notes."""
     return report.model_dump_json(indent=2) + "\n"
+
+
+def _approvers(events: Iterable[AuditEvent]) -> dict[str, str]:
+    """Return each granted approval's id, mapped to the operator who granted it."""
+    found: dict[str, str] = {}
+    for event in events:
+        approval_id = event.details.get("approval_id")
+        approver = event.details.get("approved_by")
+        if (
+            event.event == GRANTED_EVENT
+            and isinstance(approval_id, str)
+            and isinstance(approver, str)
+        ):
+            found[approval_id] = approver
+    return found
+
+
+def _per_call(call: ToolCallRecord) -> bool:
+    """Whether an operator approved this call one by one, rather than a standing approval."""
+    approval = call.approval or ""
+    return approval != "" and not approval.startswith(_STANDING)
+
+
+def _span(calls: list[ToolCallRecord]) -> tuple[datetime, datetime]:
+    """Return the earliest and latest start of ``calls``, in UTC."""
+    starts = [call.started_at.astimezone(UTC) for call in calls]
+    return min(starts), max(starts)
+
+
+def _stamp(value: datetime | None) -> str:
+    return "-" if value is None else f"{value:%Y-%m-%d %H:%M:%S}"
 
 
 def _principal(call: ToolCallRecord, runs: Mapping[str, RunRecord]) -> str:
@@ -378,7 +465,7 @@ def _notes(
         )
     notes += [
         "Not in this report: arguments, outputs, retrieved text, and error text. It holds counts, "
-        "names of principals, tools, and datasets, and versions.",
+        "names of principals, tools, datasets, and approvers, versions, and times.",
         "Refused: the platform denied the tool, or an access policy refused a dataset during the "
         "call. Errors: the tool failed or timed out. Other: invalid input, an unknown tool, a "
         "quota, or a busy server.",
@@ -387,6 +474,14 @@ def _notes(
         "A call can be both OK and refused, when a policy refused a dataset it asked for. So the "
         "status columns need not add up to Calls.",
         "Refused dataset names are the ids the caller asked for, as the run store recorded them.",
+        "Approver: the operator who granted a per-call approval, as the run store recorded it. "
+        f"A per-call approval with no grant on record is counted as {NO_APPROVER}. Standing "
+        "approvals name no approver: the operator pre-approved those tools in the policy.",
+        "Groups: the run record holds a caller's principal and tenant, not the groups the caller "
+        "held, so groups are not in this report.",
+        "Documents read: research calls record only the corpus snapshot they searched. The "
+        "documents they retrieved are in the call's output, which this report does not read, so "
+        "documents read are not listed.",
         f"{NO_PRINCIPAL} is a call whose run has no principal. {RUN_NOT_FOUND} is a call whose "
         "run is missing from the store.",
         "This is a record of what the platform saw. It does not say whether any use was allowed "

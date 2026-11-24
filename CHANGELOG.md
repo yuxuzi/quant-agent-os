@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **`qaos runs report` gives each principal's first and last call (UTC), and counts per-call approvals by the operator who granted them.** Groups and the documents a research call read are not in the report: the run record does not hold the groups, and the documents are only in the call's output.
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.

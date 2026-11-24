@@ -5,7 +5,7 @@ import io
 import json
 import re
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ from quant_agent_os.runs import (
     render_json,
     render_markdown,
 )
-from quant_agent_os.runs.report import RUN_NOT_FOUND
+from quant_agent_os.runs.report import NO_APPROVER, RUN_NOT_FOUND, ApproverUsage
 from quant_agent_os.runtime import ToolCall, ToolCallRecord, ToolExecutor
 from quant_agent_os.tools import PermissionPolicy, ToolRegistry, tool
 from quant_agent_os.tools.access import note_refusal
@@ -231,10 +231,14 @@ def test_every_format_has_its_sections(store: RunStore) -> None:
         "## By principal",
         "## By tool",
         "## By dataset",
+        "## By approver",
         "## Notes",
     ):
         assert heading in markdown
-    assert "| alice | 7 | 3 | 1 | 1 | 1 | 0 | 2 | 1 |" in markdown
+    alice_row = next(line for line in markdown.splitlines() if line.startswith("| alice |"))
+    assert alice_row.endswith(
+        f"| 7 | 3 | 1 | 1 | 1 | 0 | 2 | 1 | analyze, archive, broken, compare | {FUND} | {HEDGE} |"
+    )
 
     rows = list(csv.DictReader(io.StringIO(render_csv(report))))
     assert len(rows) == 7  # alice's four tools and bob's three
@@ -247,7 +251,7 @@ def test_every_format_has_its_sections(store: RunStore) -> None:
     assert {row["period_start"] for row in rows} == {report.header.start.strftime("%Y-%m-%d")}
 
     data = json.loads(render_json(report))
-    assert set(data) == {"header", "by_principal", "by_tool", "by_dataset", "notes"}
+    assert set(data) == {"header", "by_principal", "by_tool", "by_dataset", "by_approver", "notes"}
     assert data["header"]["calls"] == 10
     assert [row["principal"] for row in data["by_principal"]] == ["alice", "bob"]
 
@@ -396,3 +400,130 @@ def test_the_report_command_refuses_bad_input(path: Path) -> None:
     assert RUNNER.invoke(app, missing).exit_code == 1
     assert "--from" in _plain(RUNNER.invoke(app, ["runs", "report", "--help"]).output)
     assert "report" in _plain(RUNNER.invoke(app, ["runs", "--help"]).output)
+
+
+def _starts(store: RunStore, principal: str) -> list[datetime]:
+    """The start of every call the store recorded in a run of ``principal``."""
+    everything = datetime.min.replace(tzinfo=UTC), datetime.max.replace(tzinfo=UTC)
+    starts = []
+    for call in store.list_calls(*everything):
+        stored = store.get_run(call.run_id or "")
+        if stored is not None and stored.run.principal == principal:
+            starts.append(call.started_at)
+    return starts
+
+
+def test_each_principal_has_its_first_and_last_call_in_utc(store: RunStore) -> None:
+    _populate(store)
+    rows = {row.principal: row for row in _report(store).by_principal}
+
+    for name, row in rows.items():
+        starts = _starts(store, name)
+        assert row.first_call == min(starts) and row.last_call == max(starts), name
+        assert row.first_call is not None and row.first_call.utcoffset() == timedelta(0)
+        assert row.last_call is not None and row.last_call.utcoffset() == timedelta(0)
+    assert "First call (UTC)" in render_markdown(_report(store))
+
+
+def test_the_times_are_utc_whatever_offset_a_call_was_started_at() -> None:
+    start = datetime(2026, 11, 1, tzinfo=UTC)
+    end = datetime(2026, 12, 1, tzinfo=UTC)
+    local = timezone(timedelta(hours=2))
+    call = ToolCallRecord(
+        tool="analyze",
+        tool_version="2.1.0",
+        arguments={},
+        status="ok",
+        started_at=datetime(2026, 11, 2, 10, 15, tzinfo=local),
+        run_id="unknown-run",
+    )
+
+    report = build_usage_report([call], [], {}, start=start, end=end, generated_at=GENERATED)
+
+    row = report.by_principal[0]
+    assert row.first_call == datetime(2026, 11, 2, 8, 15, tzinfo=UTC)
+    assert row.last_call == row.first_call
+    assert "| 2026-11-02 08:15:00 | 2026-11-02 08:15:00 |" in render_markdown(report)
+
+
+def test_per_call_approvals_are_counted_by_the_operator_who_granted_them(
+    store: RunStore,
+) -> None:
+    _populate(store)
+    report = _report(store)
+
+    # _populate has alice's archive approved per call by "ops"; publish is standing, not per call
+    assert [(row.approver, row.approved_per_call, row.tools) for row in report.by_approver] == [
+        ("ops", 1, ["archive"])
+    ]
+    assert sum(row.approved_per_call for row in report.by_approver) == sum(
+        row.approved_per_call for row in report.by_principal
+    )
+    assert "| ops | 1 | archive |" in render_markdown(report)
+
+
+def test_a_per_call_approval_with_no_grant_on_record_is_not_recorded() -> None:
+    start = datetime(2026, 11, 1, tzinfo=UTC)
+    end = datetime(2026, 12, 1, tzinfo=UTC)
+
+    def call(approval: str) -> ToolCallRecord:
+        return ToolCallRecord(
+            tool="archive",
+            tool_version="1.0.0",
+            arguments={},
+            status="ok",
+            started_at=start + timedelta(days=1),
+            run_id="unknown-run",
+            approval=approval,
+        )
+
+    calls = [call("grant-that-was-pruned"), call("standing:external_action")]
+    report = build_usage_report(calls, [], {}, start=start, end=end, generated_at=GENERATED)
+
+    assert report.by_approver == [
+        ApproverUsage(approver=NO_APPROVER, approved_per_call=1, tools=["archive"])
+    ]
+    assert report.by_principal[0].approved_standing == 1
+
+
+def test_the_approver_is_read_from_the_grant_event() -> None:
+    start = datetime(2026, 11, 1, tzinfo=UTC)
+    end = datetime(2026, 12, 1, tzinfo=UTC)
+    call = ToolCallRecord(
+        tool="archive",
+        tool_version="1.0.0",
+        arguments={},
+        status="ok",
+        started_at=start + timedelta(days=1),
+        run_id="unknown-run",
+        approval="approval-7",
+    )
+    grant = AuditEvent(
+        run_id="unknown-run",
+        actor="rest",
+        event="approval.granted",
+        subject="archive",
+        at=start,
+        details={"approval_id": "approval-7", "approved_by": "risk-head"},
+    )
+
+    report = build_usage_report([call], [grant], {}, start=start, end=end, generated_at=GENERATED)
+
+    assert [(row.approver, row.approved_per_call) for row in report.by_approver] == [
+        ("risk-head", 1)
+    ]
+
+
+def test_the_notes_say_what_the_report_does_not_hold(store: RunStore) -> None:
+    _populate(store)
+    report = _report(store)
+    notes = " ".join(report.notes)
+
+    assert "Groups: the run record holds a caller's principal and tenant" in notes
+    assert "groups are not in this report" in notes
+    assert "Documents read: research calls record only the corpus snapshot" in notes
+    assert "documents read are not listed" in notes
+    assert "Standing approvals name no approver" in notes
+    assert "Groups:" in render_markdown(report)
+    keys = set(json.loads(render_json(report)))
+    assert keys.isdisjoint({"groups", "documents", "documents_read", "sources"})
