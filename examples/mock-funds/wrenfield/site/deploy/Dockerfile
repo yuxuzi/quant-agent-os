@@ -14,7 +14,7 @@ RUN uv pip install --no-cache --python /opt/venv/bin/python "duckdb>=2,<3" "pyar
 
 FROM quant-agent-os:local
 COPY --from=lake /opt/venv /opt/venv
-COPY wrenfield_credit.py wrenfield_store.py wrenfield_server.py wrenfield_introspection_shim.py /home/app/
+COPY wrenfield_credit.py wrenfield_store.py wrenfield_server.py /home/app/
 COPY wrenfield_sign_in.toml /etc/qaos/sign-in.toml
 COPY access.toml /etc/qaos/access.toml  # from facility/
 ENV WRENFIELD_HOST=0.0.0.0 \

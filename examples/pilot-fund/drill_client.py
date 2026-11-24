@@ -4,7 +4,10 @@ Each user gets a token from the gateway and calls the fund's server over REST (a
 as their client would. Every check prints one line; the script exits 1 if any fails.
 
     python drill_client.py --server http://127.0.0.1:8000 --gateway http://127.0.0.1:9400 \
-        --warehouse facility/warehouse/kestrel.db
+        --risk http://127.0.0.1:8100 --warehouse facility/warehouse/kestrel.db
+
+It also checks the server's readiness, and that a client which negotiates MCP 2026-07-28 gets the
+same answers as one that does not.
 """
 
 from __future__ import annotations
@@ -94,6 +97,30 @@ def latest_weights(warehouse: Path, desk: str) -> dict[str, float]:
     return {name: weight for name, weight in rows}
 
 
+def mcp_call_modern(server: str, token: str, tool: str, arguments: dict[str, Any]) -> Any:
+    """Call one tool as a client that negotiates the newest MCP revision it can.
+
+    Returns the revision the server agreed to and the result.
+    """
+    import anyio
+    import httpx2
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+
+    async def main() -> Any:
+        async with (
+            httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=60) as client,
+            Client(
+                streamable_http_client(f"{server}/mcp", http_client=client),
+                mode="auto",
+                cache=None,
+            ) as session,
+        ):
+            return session.protocol_version, await session.call_tool(tool, arguments)
+
+    return anyio.run(main)
+
+
 def mcp_call(server: str, token: str, tool: str, arguments: dict[str, Any]) -> Any:
     """Call one tool over MCP with a bearer token, as Claude or Cursor would."""
     import anyio
@@ -118,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument("--server", default="http://127.0.0.1:8000")
     parser.add_argument("--gateway", default="http://127.0.0.1:9400")
+    parser.add_argument("--risk", default="http://127.0.0.1:8100")
     parser.add_argument("--warehouse", type=Path, required=True)
     args = parser.parse_args(argv)
     server, gateway = args.server, args.gateway
@@ -130,6 +158,20 @@ def main(argv: list[str] | None = None) -> int:
         "no credential is refused, and pointed to sign-in",
         status == 401 and "resource_metadata" in challenge,
         challenge,
+    )
+    status, ready = http("GET", f"{server}/readyz")
+    check(
+        "(nobody)",
+        "readiness answers ready, with no credential",
+        status == 200 and ready == {"status": "ready"},
+        f"HTTP {status}",
+    )
+    status, _ = http("POST", f"{args.risk}/risk_desks", {})
+    check(
+        "(nobody)",
+        "the risk service refuses a call with no caller assertion",
+        status == 401,
+        f"HTTP {status}",
     )
     status, _ = http(
         "POST",
@@ -195,6 +237,16 @@ def main(argv: list[str] | None = None) -> int:
         "macro desk P&L refused",
         refused_pnl["status"] != "ok",
         refused_pnl.get("error") or "",
+    )
+    legacy_refusal = mcp_call(server, pm.token, "kpc_desk_pnl", {"desk": "macro"})
+    revision, modern_refusal = mcp_call_modern(server, pm.token, "kpc_desk_pnl", {"desk": "macro"})
+    check(
+        "pm-equities",
+        "a 2026-07-28 client is refused the macro desk as an older one is",
+        revision == "2026-07-28"
+        and modern_refusal.is_error is True
+        and modern_refusal.content[0].text == legacy_refusal.content[0].text,
+        f"{revision}: {modern_refusal.content[0].text[:60]}",
     )
 
     researcher = Session(server, gateway, "researcher")
@@ -308,6 +360,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         answer = mcp_call(server, macro.token, "kpc_desk_pnl", {"desk": "macro"})
         check("pm-macro", "own desk P&L over MCP with a token", answer.is_error is False)
+        revision, modern = mcp_call_modern(server, macro.token, "kpc_desk_pnl", {"desk": "macro"})
+        check(
+            "pm-macro",
+            "a 2026-07-28 client gets the same own-desk P&L",
+            revision == "2026-07-28"
+            and modern.is_error is False
+            and modern.structured_content == answer.structured_content,
+            revision,
+        )
     except Exception as error:  # report it as a failed check, not a traceback
         check("pm-macro", "own desk P&L over MCP with a token", False, repr(error))
 

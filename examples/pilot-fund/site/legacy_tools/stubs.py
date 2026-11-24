@@ -12,6 +12,11 @@ from pydantic import BaseModel
 
 from quant_agent_os.registration import FirmApp
 
+# The secret the service checks each call with, by name: the server reads it from the
+# environment, or from the file KPC_RISK_CALLER_SECRET_FILE names (decision 0030). The name is
+# repeated in service/app.py.
+CALLER_SECRET = "KPC_RISK_CALLER_SECRET"
+
 Desk = Literal["eq_ls", "macro", "commod"]
 Scenario = Literal[
     "equity_crash_2008", "rates_shock_up_100bp", "usd_rally", "oil_supply_shock", "credit_event"
@@ -128,25 +133,45 @@ ENGINE = (
 
 def register(app: FirmApp, service_url: str) -> None:
     """Register each endpoint of the service at ``service_url`` as a tool."""
-    app.call_service(risk_desks, url=f"{service_url}/risk_desks", convention=ENGINE)
-    app.call_service(risk_exposure, url=f"{service_url}/risk_exposure", convention=ENGINE)
+    app.call_service(
+        risk_desks,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
+        url=f"{service_url}/risk_desks",
+        convention=ENGINE,
+    )
+    app.call_service(
+        risk_exposure,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
+        url=f"{service_url}/risk_exposure",
+        convention=ENGINE,
+    )
     app.call_service(
         risk_desk_var,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
         url=f"{service_url}/risk_desk_var",
         convention=ENGINE + "; VaR a positive loss, square-root-of-time scaling",
     )
     app.call_service(
         risk_stress,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
         url=f"{service_url}/risk_stress",
         convention=ENGINE + "; factor shocks through the vendor loadings plus asset-class moves",
     )
     app.call_service(
         risk_stress_all,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
         url=f"{service_url}/risk_stress_all",
         convention=ENGINE + "; factor shocks through the vendor loadings plus asset-class moves",
     )
     app.call_service(
         risk_factor_decomposition,
+        forward_caller=True,
+        caller_secret_env=CALLER_SECRET,
         url=f"{service_url}/risk_factor_decomposition",
         convention=ENGINE + "; annual variance, shares sum to one with the specific share",
     )

@@ -107,3 +107,52 @@ Would a generic SQL-backed `DatasetStore` (one query per dataset id, long rows p
 3. Richer dataset shapes and calls (1, 2, 3, 4, 10): string and date columns, key-value parameters, bundles of datasets, as-of selection, aggregated missing-value warnings, and summarised `list_datasets`.
 4. A managed-Postgres run store and Office-format ingest (C14, C19, C20): audit on managed storage, and the documents the fund actually has.
 5. Credit and money-weighted analytics (12, 13, 14): XIRR/MOIC, spread duration and CS01, and a loan exit at par that is not a delisting.
+
+## Round 1 (1.0 candidate, 2026-11-24)
+
+Candidate: `integration/1.0-r1` at 5a01506 (the `round1/azure` worktree). Baseline before the round:
+`tests/mock_funds -k larchmere`, 36 passed. After: 58 passed (the 36, plus 22 in
+`tests/mock_funds/test_larchmere_round1.py`). Measured means a test or a command run here shows it. Inferred
+means read from code, docs, or the changelog, and not run.
+
+Adopted: a 2026-07-28 client over the Entra-shaped token (`test_a_2026_07_28_client...`), the AI-use report
+for a test day, `/readyz` (200, and 503 when the run store breaks), JSON logs, `_FILE` secrets, the
+descriptors checked against section 11, the performance view, and the round's friction. The fund's
+descriptors (`site/deploy/`) were not changed; the round's findings below say what they need.
+
+Round friction: the trustee's monthly report is Excel, with merged header cells and two header rows, and it
+restates the 30 September 2026 OC test for Larchmere CLO 2018-2. It was written by
+`facility/warehouse/build_larchmere_round1.py` (the trustee's file) and read by `site/larchmere_trustee.py`
+(the fund's reader). The administrator's equity statement (`build_larchmere_round1.py`) is the reference for
+`performance-report`.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity (blocks adoption / friction / cosmetic) | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1-L1 | Trustee workbook | Title rows, a group header merged over two rows (Deal, Test, and Result merged down; Current report and Restated from the prior report merged across), and column names on row 5. `pd.read_excel` with its defaults takes the title as the first column name. The reader checks the layout and fails closed | Measured (`test_the_trustee_workbook_has_two_header_rows_and_merged_cells`) | The fund's own (the trustee's layout) | friction | Ask the trustee for a single-row export or a CSV drop; keep the layout check |
+| R1-L2 | Trustee restatement | The trustee restates LARCH-2018-2 oc_e for 30 September 2026 to 1.12200, below its trigger of 1.1225, so a PASS in the prior report is a FAIL in the restated one. Our recomputed value is 1.167871, the trustee's original, and the gap to the restated figure is 0.0459 | Measured (`test_the_restatement_turns...`, `test_the_fund_reads_the_trustee_restatement...`) | Generic: a dataset has no vintage, so the platform cannot hold both figures (as Sablecroft R1-S5) | friction | The reader keeps the restatement (done). Platform: a vintage or as-of convention for datasets |
+| R1-L3 | Serving the trustee figures | The numbers are served now: `trustee_numbers_<deal>`, a lake entry in `larchmere_store.py` (two lines), one column per test. PASS and FAIL are not served (text in a numeric dataset), and restated values are not served (no vintage) | Measured (`test_the_trustee_numbers_are_a_dataset_and_its_results_are_not`) | Generic (string columns, cross-fund row 4) | friction | String columns in table datasets, or a result column kept as a separate reference table |
+| R1-L4 | Reconciliation | `performance-report` against the administrator's percent workbook (`[reference] unit = "percent"`, `sheet = "Statement"`, `header_row = 5`): 35 months compared, one break at 2025-06 (-40.00 bps, the planted value), 2026-10 only on our side, and exit status 1 | Measured (commands in the scratchpad app `larchmere-perf`) | Generic | none (works) | None |
+| R1-L5 | Reference header | `header_row = 4` (the group row) fails with "no rows of data below row 4", although 36 rows lie below it | Measured (command run) | Generic | cosmetic | Name the header the reader expected and found |
+| R1-L6 | Frequency default | `qaos app new performance-report --defaults` writes `periods_per_year = 252` for this monthly fund. At 252 the report shows ITD 33.16% (10.02% at 12) and 3Y n/a (10.02% at 12), with no warning in `report.md` | Measured (two reports, the same returns) | Generic | blocks adoption | Ask the frequency with no silent default, or infer it from the dates and warn when they disagree |
+| R1-L7 | App spec | `--defaults` cannot set `quant_agent_os_source`. The default is `git+https://github.com/yuxuzi/quant-agent-os@v0.9.0` (`questions.yml`), so a candidate needs a spec edit | Measured (the written spec had no such key; added by hand) | Generic | friction | A source option on `app new`, or an environment default |
+| R1-L8 | Run record | `qaos app create` recorded run 78cfd84dcb8f42ffae44dcba317c0eec in the default home, `/Users/yuxuz/.quant-agent-os/runs.db`, because the round had not set `QUANT_AGENT_OS_HOME` yet. Not removed; the later commands used a scratchpad home | Measured (the command's own output) | Generic | friction | Print the home that a record goes to, or do not record app creation in the user's home |
+| R1-L9 | AI-use report: who | The principal is the Entra object id (a1000000-0000-4000-8000-000000000002), not the person. With `verify = "jwks"` the same caller would be recorded as UPN@tid (measured in R1-L15) | Measured (`test_the_ai_use_report...`) | Generic (C5) | friction | `principal_claim` in the sign-in file (exists), set once the owner decides R1-L15 |
+| R1-L10 | AI-use report: what it leaves out | The loan id (LN0042), the par change, and the price of a `clo_what_if` are not in the report. Tool, dataset, and counts are. A pre-trade record needs its own log | Measured (the markdown does not contain them) | Generic by design | friction | The fund's pre-trade log; the report stays free of arguments |
+| R1-L11 | AI-use report: trades | The report counts platform approvals. Whether an approved what-if became a trade is recorded nowhere in the platform, because no approval step exists for a trade | Inferred (the report's sections; cross-fund row 9, finding 19) | Generic | friction | Per-tool approval groups (finding 19), or the order management record |
+| R1-L12 | Readiness | `/readyz` answers ready with the SQL database deleted. The datasets check reads `ids()`, which `larchmere_store.py` answers from a static list. A broken run store does give 503 and names `runs`, and does not send the error | Measured (`test_readyz_still_says_ready_when_the_sql_source_is_gone`, `test_readyz_is_503...`) | Generic (the platform's check reads `ids()`) | blocks adoption | A check that reads a declared dataset, or a store `check()`. Until then, the rotation cannot see a dead data source |
+| R1-L13 | JSON logs and file secrets | One JSON object per line with time, level, logger, and message. `LARCHMERE_INTROSPECTION_SECRET_FILE` and `PGPASSWORD_FILE` resolve. Setting `NAME` and `NAME_FILE` together is refused | Measured (`test_json_logs...`, `test_the_sign_in_secret_and_the_password...`) | Generic | none (works) | None |
+| R1-L14 | Image pin | `site/deploy/Dockerfile` pins `quant-agent-os:0.7.0`, released 2026-11-17. `/readyz`, JSON logs, and `NAME_FILE` are in Unreleased, so the pinned image lacks them, and the settings in `larchmere.env` would not take effect | Measured (the pin, by test; the changelog order, by grep). The effect is inferred | The fund's own (the pin), and generic (the release) | blocks adoption | Pin the release that carries 1.0, once the owner tags it. Do not deploy before then |
+| R1-L15 | Sign-in mode | The descriptor runs the introspection shim, with a client secret. Section 11 says Entra needs `verify = "jwks"`. Measured: the candidate's JWKS mode accepts the same tokens with no shim: `audiences = ["api://larchmere-qaos"]`, `scp` mapped to `tools:list` and `tools:call`, groups and roles together (`["4b1f...0002", "CLO.PM"]`), principal `UPN@tid` | Measured (`test_the_platforms_jwks_sign_in_takes_the_same_tokens_with_no_shim`); the deployed file not changed | Generic (the shim is the fund's stopgap; decision 0031) | friction | The owner decides, since it changes the sign-in. After the switch the shim and its Container App retire |
+| R1-L16 | Performance view (equity) | `analyze_performance` on the equity series links the view, `ui://quant-agent-os/performance.html` (`text/html;profile=mcp-app`), and the page draws 18 metrics with the warning "Left out 1 rows". It shows no IRR, MOIC, DPI, or cash-on-cash. Those are `clo_equity_returns`, which has no view | Measured (`test_the_equity_return_gets_the_view...`, `test_the_deal_cash_flow_measures...`) | Generic (cross-fund row 10) | friction | A view for the deal's flows; money-weighted measures in Quant Toolbox |
+| R1-L17 | Acceptance runs | `run_acceptance` takes no run store, so the operator's acceptance run leaves no record for the AI-use report. The function is shared by both funds | Measured (the signature; Sablecroft's test asserts it) | Generic | friction | A run-store option for `qaos eval` |
+| R1-L18 | Dataset frequency | `list_datasets` gives `equity_cf_larch_2018_2` `periods_per_year` 4, for dated flows that are mostly monthly | Measured (the listing) | Generic (finding 11) | friction | A dataset that declares its frequency |
+
+What compliance would still miss, reading the AI-use report for the test day: the loan, the size, and the price of
+each what-if (R1-L10); whether a what-if became a trade (R1-L11); which person the principal is, unless the
+sign-in names them (R1-L9); which access file applied on the day, since the header holds platform versions only;
+and the acceptance runs, which leave no record (R1-L17).
+
+The performance view against the investment committee's need for the equity tranche: the page shows the
+equity series' return statistics, and the warnings and conventions behind them. It draws no money-weighted return,
+which is what an equity investor asks (R1-L16). The horizon table is not in the page either; it is in
+`performance-report`, and it was wrong at the generated default (R1-L6).

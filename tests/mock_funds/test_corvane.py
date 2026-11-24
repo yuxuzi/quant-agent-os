@@ -12,7 +12,6 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import httpx2
 import pytest
 from typer.testing import CliRunner
 
@@ -28,7 +27,6 @@ for sub in ("facility/warehouse", "facility/gateway", "site"):
         sys.path.insert(0, str(ROOT / sub))
 
 import cognito_idp  # noqa: E402
-import corvane_introspect  # noqa: E402
 import corvane_server  # noqa: E402
 import corvane_tools  # noqa: E402
 from build_corvane import DEFAULT_SEED, FACTORS, build  # noqa: E402
@@ -463,13 +461,6 @@ def test_research_search_finds_the_minute_and_the_injection_stays_data(
     assert all(item.kind == "retrieved" for item in hostile.evidence)
 
 
-# ---- identity: a Cognito-shaped pool against the platform's sign-in ----------------------------
-
-
-def _form(token: str) -> dict[str, str]:
-    return {"token": token, "token_type_hint": "access_token"}
-
-
 def test_the_mock_pool_looks_like_cognito() -> None:
     import jwt
 
@@ -498,70 +489,68 @@ def test_the_mock_pool_looks_like_cognito() -> None:
     )
 
 
-def test_the_platforms_sign_in_cannot_use_cognito_directly_but_can_through_the_shim() -> None:
-    from quant_platform.identity.oauth import AuthorizationServer, IntrospectionVerifier
-
-    pool = cognito_idp.CognitoPool()
-    resource = "https://qaos.corvane.example.com/mcp"
-    secret = ("qaos-resource-server", "s3cret")
-    "Basic " + base64.b64encode(b"qaos-resource-server:s3cret").decode()
-
-    def shim(request: httpx2.Request) -> httpx2.Response:
-        form = dict(x.split("=", 1) for x in request.content.decode().split("&"))
-        status, body = corvane_introspect.introspect(
-            {"token": form["token"]}, request.headers.get("authorization"),
-            issuer=pool.issuer, resource=resource, client_ids=frozenset({pool.client_id}),
-            fetch_jwks=pool.jwks, basic=secret,
-        )  # fmt: skip
-        return httpx2.Response(status, json=body)
-
-    def server(url: str) -> AuthorizationServer:
-        return AuthorizationServer.model_validate(
-            {
-                "issuer": pool.issuer, "introspection_url": url, "client_id": secret[0],
-                "client_secret": secret[1], "tenant_claim": "", "groups_claim": "cognito:groups",
-            }
-        )  # fmt: skip
-
-    def verify(url: str, handler: Any, token: str) -> Any:
-        client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
-        verifier = IntrospectionVerifier(
-            [server(url)],
-            resource=resource,
-            tenants_by_issuer={pool.issuer: {"corvane"}},
-            http=client,
-        )
-        return asyncio.run(verifier.verify_token(token))
-
-    def cognito_404(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(404, json={"message": "Not Found"})
-
-    token = pool.access_token("priya")
-    assert verify(f"{pool.issuer}/oauth2/introspect", cognito_404, token) is None  # no endpoint
-    access = verify("https://introspect.corvane.example.com/oauth2/introspect", shim, token)
-    assert access is not None
-    assert access.claims[GROUPS_CLAIM] == ["pm-us-core"]
-    assert set(access.scopes) == {"tools:list", "tools:call"}
-    assert access.claims["iss"] == pool.issuer
-    # An ID token, a forged signature, and an expired token are all inactive.
-    assert verify("https://i.example.com/x", shim, pool.id_token("priya")) is None
-    other = cognito_idp.CognitoPool()
-    assert verify("https://i.example.com/x", shim, other.access_token("priya")) is None
-    late = cognito_idp.CognitoPool(clock=lambda: 1_000.0)
-    assert verify("https://i.example.com/x", shim, late.access_token("priya")) is None
-    # The machine token has no groups: it signs in as a caller with none, so per-caller access
-    # refuses all of it.
-    machine = verify("https://i.example.com/x", shim, pool.machine_token())
-    assert machine is not None and machine.claims[GROUPS_CLAIM] == []
+def _jwks_sign_in(tmp_path: Path, jwks_url: str) -> Path:
+    """The deployed sign-in file, with its keys at the loopback address the mock serves them on.
+    Deployed, the keys are found through the issuer's openid-configuration instead."""
+    text = (ROOT / "site" / "deploy" / "sign-in.toml").read_text()
+    path = tmp_path / "sign-in.toml"
+    path.write_text(text.replace('verify = "jwks"', f'verify = "jwks"\njwks_uri = "{jwks_url}"'))
+    return path
 
 
-def test_the_sign_in_file_names_cognito_claims_and_a_secret_reference() -> None:
+def test_the_platforms_sign_in_checks_cognito_tokens_by_their_signatures(tmp_path: Path) -> None:
+    from quant_platform.identity.sign_in import load_sign_in
+
+    idp = cognito_idp.start()
+    try:
+        sign_in = load_sign_in(_jwks_sign_in(tmp_path, f"{idp.url}/.well-known/jwks.json"))
+        verifier = sign_in.verifier()
+
+        def verify(token: str) -> Any:
+            return asyncio.run(verifier.verify_token(token))
+
+        access = verify(idp.pool.access_token("priya"))
+        assert access is not None
+        assert access.claims[GROUPS_CLAIM] == ["pm-us-core"]
+        assert set(access.scopes) == {"tools:list", "tools:call"}
+        assert access.subject == "priya"  # the username, not the sub UUID (principal_claim)
+        # An ID token, a forged payload, another pool's token, and an expired token are refused.
+        assert verify(idp.pool.id_token("priya")) is None
+        head, _, signature = idp.pool.access_token("priya").split(".")
+        claims = {"cognito:groups": ["risk"], "client_id": "x", "token_use": "access",
+                  "username": "priya", "scope": "qaos/tools.call", "exp": 4102444800}  # fmt: skip
+        forged = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+        assert verify(f"{head}.{forged}.{signature}") is None
+        assert verify("not-a-token") is None
+        other = cognito_idp.CognitoPool()
+        assert verify(other.access_token("priya")) is None
+        clock = idp.pool.clock
+        idp.pool.clock = lambda: 1_000.0  # issued in 1970: expired now, with the same key
+        try:
+            expired = idp.pool.access_token("priya")
+        finally:
+            idp.pool.clock = clock
+        assert verify(expired) is None
+        # A machine token has no groups, and its principal is the app client's id.
+        machine = verify(idp.pool.machine_token())
+        assert machine is not None and machine.claims[GROUPS_CLAIM] == []
+        assert machine.subject == cognito_idp.CLIENT_ID
+    finally:
+        idp.stop()
+
+
+def test_the_sign_in_file_names_cognito_claims_and_needs_no_secret() -> None:
+    from quant_platform.serve import open_sign_in
+
     sign_in = load_sign_in_file(ROOT / "site" / "deploy" / "sign-in.toml")
-    entry = sign_in.authorization_servers[0]
-    assert entry.groups_claim == "cognito:groups" and entry.tenant_claim == ""
-    assert sign_in.missing_secrets({}) == ["CORVANE_INTROSPECTION_SECRET"]
-    resolved = sign_in.resolve({"CORVANE_INTROSPECTION_SECRET": "x"})
-    assert resolved.issuers == [cognito_idp.ISSUER]
+    (entry,) = sign_in.authorization_servers
+    assert entry.jwks and entry.groups_claims == ["cognito:groups"] and entry.tenant_claim == ""
+    assert entry.principal_claim == "username" and entry.client_ids == [cognito_idp.CLIENT_ID]
+    assert sign_in.missing_secrets({}) == []  # the shim's client secret is gone
+    # The file must also open the way `qaos serve` opens it, which serves the tenant 'local' only.
+    assert open_sign_in(ROOT / "site" / "deploy" / "sign-in.toml").tenants_by_issuer == {
+        cognito_idp.ISSUER: {"local"}
+    }
     groups = {
         g.strip()
         for g in re.findall(

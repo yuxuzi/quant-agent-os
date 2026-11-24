@@ -1,12 +1,18 @@
-# Corvane's sign-in file (decision 0028): the Cognito user pool, through the introspection shim
-# (site/corvane_introspect.py) because Cognito has no introspection endpoint of its own.
+# Corvane's sign-in file (decisions 0028 and 0031): the Cognito user pool's signed access tokens,
+# checked against the pool's published keys. No introspection shim and no client secret: Cognito
+# has no introspection endpoint, and its access tokens carry a client_id and no aud.
 resource = "https://qaos.corvane.example.com/mcp"
 
 [[authorization_servers]]
 issuer = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbC123dEf"
-introspection_url = "https://introspect.corvane.example.com/oauth2/introspect"
-client_id = "qaos-resource-server"
-client_secret_env = "CORVANE_INTROSPECTION_SECRET"  # injected from Secrets Manager
-tenant = "corvane"
-tenant_claim = ""  # Cognito sends no tenant claim: every token acts in the one pinned tenant
-groups_claim = "cognito:groups"
+verify = "jwks"                              # keys from the issuer's openid-configuration
+client_ids = ["3n4b5urk1ft4fl3mg5e62d9ado"]  # the app client; these tokens have no aud
+token_use = "access"
+tenant_claim = ""                            # no tenant claim: every token acts in the one tenant
+groups_claims = ["cognito:groups"]
+principal_claim = "username"                 # audit rows name priya, not a UUID
+scope_claims = ["scope"]
+
+[authorization_servers.scope_map]
+"qaos/tools.list" = "tools:list"
+"qaos/tools.call" = "tools:call"

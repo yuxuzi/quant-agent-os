@@ -5,6 +5,7 @@ warehouse named by KPC_WAREHOUSE when it first connects.
 """
 
 import os
+import secrets
 import sys
 import tempfile
 from pathlib import Path
@@ -14,6 +15,10 @@ ROOT = Path(__file__).parent / "../../facility"
 sys.path.insert(0, str(ROOT.resolve()))
 sys.path.insert(0, str((ROOT / "warehouse").resolve()))
 sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))  # site/: warehouse_store
+
+if "KPC_RISK_CALLER_SECRET" not in os.environ and "KPC_RISK_CALLER_SECRET_FILE" not in os.environ:
+    # The risk service checks each call with the secret; a throwaway one keeps the checks offline.
+    os.environ["KPC_RISK_CALLER_SECRET"] = secrets.token_urlsafe(48)
 
 if "KPC_WAREHOUSE" not in os.environ:
     from build_warehouse import build

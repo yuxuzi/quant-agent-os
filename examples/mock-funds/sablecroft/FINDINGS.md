@@ -79,3 +79,52 @@ Dialect differences met:
 ## Not a platform gap (rightly the fund's)
 
 IRR/PME conventions, the unsmoothing profile, the ladder's gate and payout assumptions, the choice of `ret_best`, FX conversion, and the strategy codes are the fund's own tools and views; only the missing building blocks in 3, 5, 7, 10, 13, and the identity and run-store items are generic.
+
+## Round 1 (1.0 candidate, 2026-11-24)
+
+Candidate: `integration/1.0-r1` at 5a01506 (the `round1/azure` worktree). Baseline before the round:
+`tests/mock_funds -k sablecroft`, 31 passed. After: 51 passed (the 31, plus 20 in
+`tests/mock_funds/test_sablecroft_round1.py`). Measured means a test or a command run here shows it. Inferred
+means read from code, docs, or the changelog, and not run.
+
+Adopted: a 2026-07-28 client over the Entra sidecar (`test_a_2026_07_28_client...`), the AI-use report for a
+test day, `/readyz` (200, and 503 when the run store breaks), JSON logs, `_FILE` secrets, the descriptors
+checked against section 11, quarterly performance on four periods, the performance view, and a performance
+report over the administrator's revised statement. The fund's descriptors were not changed.
+
+Round friction: quarterly NAVs arrive 60 to 75 days after the quarter end (`published_date` in the curated
+table; the round's 45 to 90 days), and the last published quarter is a first print that the administrator
+revises. The feed the fund holds at the cut (2026-01-10) is written by
+`facility/warehouse/build_sablecroft_round1.py`: the last quarter of IC02, RA02, and RA03 is a first print with
+a fixed error (+1.00, -0.60, +0.80 points). The administrator's revised statement carries the finals. The
+source has no earlier print, so the first print is constructed; the answers are in `round1-answers.json`.
+
+| # | Where | What happened | Measured or inferred | Generic or the fund's own | Severity (blocks adoption / friction / cosmetic) | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1-S1 | Quarterly analytics | `analyze_performance` on `ret_final_q` IC02 (19 quarters) gives the annualised return and volatility of the hand calculation to 1e-9: geometric over 19/4 years, and the standard deviation times 2. The periods are inferred as 4 from the dates | Measured (`test_the_platform_annualises_the_quarterly_managers...`) | Generic | none (works) | None |
+| R1-S2 | Frequency choice | The frequency question offers daily, weekly, and monthly only (`questions.yml`), so a quarterly fund answers monthly and edits `periods_per_year` to 4. With `--defaults` it gets 252, as Larchmere did (R1-L6) | Measured (the choices, read; the generated config) | Generic | friction | Add quarterly to the choices and the annualisation map |
+| R1-S3 | Horizon table on quarterly data | MTD and QTD show the same figure, the quarter's return (IC02 5.26% in both), under the label MTD. A month-to-date figure does not exist for quarterly data | Measured (`reports/.../report.md`, lines 7 to 9) | Generic | friction | Horizons by frequency: MTD only for daily or weekly data |
+| R1-S4 | Stale data | The report says "As of 2025-09-30" and says nothing of the cut at 2026-01-10, where the last quarter is 102 days old. `analyze_performance` returns no warning, and no tool compares the last observation with an as-of date | Measured (`test_the_platform_annualises...`, `warnings == []`; the report text) | Generic (cross-fund row 9 family) | friction | An as-of argument, and an age warning on the last observation |
+| R1-S5 | Revision and first prints | At the cut, Q3 2025 is a first print. The report shows IC02 5.26% where the revised statement says 4.26%, and RA02 -0.26% where it says 0.34%, RA03 -2.37% where it says -3.17%. `reconcile` flags exactly those three rows, at +100, -60, and +80 bps. Nothing in the report marks the figure as preliminary | Measured (`performance-report reconcile`; `report.md`) | Generic (no vintage: finding 5, finding 6) | blocks adoption | A vintage or as-of convention for datasets, and a "preliminary" mark on a last observation that is not yet final |
+| R1-S6 | Revision bias | The revision-bias convention flags only at n of 12 or more. The store holds no quarterly estimates, so a revision history of one quarter cannot flag | Inferred (the convention text; the store's ids: no quarterly estimate dataset) | Generic | friction | A quarterly estimates dataset, and a count rule that counts quarters |
+| R1-S7 | Reconciliation wording | "57 months compared" for 19 quarter-ends across three managers | Measured (the output) | Generic | cosmetic | Say periods, not months |
+| R1-S8 | Reconciliation | Three breaks, exit status 1, no reference item unmatched, on the administrator's workbook with title rows and the header on row 4 (`header_row = 4`, sheet `Quarterly returns`) | Measured (the command) | Generic | none (works) | None |
+| R1-S9 | Readiness | `/readyz` answers ready with the warehouse folder deleted, and answers 503 naming `runs` when the run store breaks (the error text is not sent). The datasets check reads `ids()`, a static list in `sablecroft_store.py` | Measured (`test_readyz_still_says_ready_when_the_warehouse_folder_is_gone`) | Generic (the same cause as R1-L12) | blocks adoption | As R1-L12 |
+| R1-S10 | AI-use report | The principal is the oid (a0000000-...-0002 for dev.shah), not the person. The column (PM01) is not in the report, but the dataset is (`ret_final_eq_ls`, `pm_calls`), so the vintage can be read from the name, final or estimate | Measured (`test_the_ai_use_report_...`) | Generic (principal), and the fund's naming (vintage) | friction | As R1-L9 |
+| R1-S11 | Acceptance runs | The seven agreed cases pass (measured), but `run_acceptance` takes no run store, so they leave no record for the AI-use report | Measured (the signature; the run) | Generic | friction | As R1-L17 |
+| R1-S12 | Sign-in mode | With `verify = "jwks"` the mock Entra tokens are accepted with no sidecar. `aud` is the https resource, so no `api://` workaround is needed, and the groups come through as GUIDs. The deployed descriptor still runs the 93-line sidecar | Measured (`test_the_jwks_sign_in_takes_the_same_tokens_with_no_sidecar`); the descriptor not changed | Generic (C1, C3), and the fund's stopgap | friction | The owner decides, as R1-L15; then the sidecar and its container retire |
+| R1-S13 | Performance view | The page draws 18 metrics for EQ01. For the EUR manager EV03 the result carries no currency: no key in the conventions names EUR or USD, and the page cannot show one | Measured (`test_the_view_draws_the_metrics_but_not_the_currency...`) | Generic (cross-fund finding 13) | friction | Currency metadata on datasets, carried to results |
+| R1-S14 | Text glued (fixed) | The `instructions` and four `convention` strings had no spaces at their joins ("takeone fund's", "TVPI =(distributions", "Long-Nickelsindex", "Lo" + "Sharpe"). Clients read them. Fixed in `site/sablecroft_server.py`, checked by reading the joined strings | Measured (before and after, by reading the strings) | The fund's own | cosmetic (fixed) | None |
+| R1-S15 | Descriptor: run store key | The Bicep's Azure Files `accountKey` is the literal `REPLACE-with-a-secret-reference`, not a Key Vault reference. The file cannot deploy as written | Measured (`test_the_run_store_placeholder...`, by reading) | The fund's own | friction | Use a Key Vault reference before any deployment |
+| R1-S16 | Descriptor: shim | `introspection_url` is `http://127.0.0.1:8081/introspect`, but neither the Bicep nor the repository gives the shim image a port or a command (`sablecroft_entra.py` has no entry point) | Inferred (reading) | The fund's own | friction | Give the shim container a command and a port in the Bicep |
+| R1-S17 | Firm image | `Dockerfile.firm` starts `FROM quant-agent-os:local` (no version), and runs `pip install ... \|\| true`, which hides a failed driver install. AGENTS.md says never use pip | Inferred (reading) | The fund's own | friction | Pin the release; install with uv and fail the build on error |
+
+What compliance would still miss, reading the AI-use report for the test day: which column of which private fund
+was read (PM01 is not in the report, only the dataset), what the performance result was (the output is not
+recorded), and whether an analyst's refused call was a probe for a deal the analyst may not see (a refusal
+reads as a missing dataset, by design). The acceptance cases leave no record at all (R1-S11).
+
+The performance view against the investment committee's need: the page gives the return statistics of one
+series, in the order the tool returns them. The committee needs the horizon table (in `performance-report`, not
+the page), the vintage of each figure (R1-S5), the currency (R1-S13), and a flag for a last quarter that is not
+yet final (R1-S4, R1-S5). None of these is in the page.

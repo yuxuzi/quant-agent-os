@@ -38,8 +38,7 @@
         {"name": "QUANT_AGENT_OS_SIGN_IN_FILE", "value": "/opt/corvane/sign-in.toml"},
         {"name": "QUANT_AGENT_OS_RUNS_FILE", "value": "/data/runs/runs.db"},
         {"name": "QUANT_AGENT_OS_LOG_FORMAT", "value": "json"},
-        {"name": "PGPASSWORD_FILE", "value": "/run/secrets/pg-reader"},
-        {"name": "CORVANE_INTROSPECTION_SECRET_FILE", "value": "/run/secrets/introspection"}
+        {"name": "PGPASSWORD_FILE", "value": "/run/secrets/pg-reader"}
       ],
       "secrets": [
         {"name": "CORVANE_SNOWFLAKE_USER", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/snowflake:user::"},
@@ -66,10 +65,9 @@
       "image": "111122223333.dkr.ecr.us-east-1.amazonaws.com/corvane-qaos:0.7.0",
       "essential": false,
       "readonlyRootFilesystem": true,
-      "entryPoint": ["python", "-c", "import os, pathlib; root = pathlib.Path('/run/secrets'); [(root / name).write_text(os.environ[var]) for name, var in (('introspection', 'CORVANE_INTROSPECTION_SECRET'), ('pg-reader', 'PGPASSWORD'))]"],
+      "entryPoint": ["python", "-c", "import os, pathlib; root = pathlib.Path('/run/secrets'); [(root / name).write_text(os.environ[var]) for name, var in (('pg-reader', 'PGPASSWORD'),)]"],
       "mountPoints": [{"sourceVolume": "secrets", "containerPath": "/run/secrets"}],
       "secrets": [
-        {"name": "CORVANE_INTROSPECTION_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/introspection:secret::"},
         {"name": "PGPASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:corvane/knowledge-reader:password::"}
       ],
       "logConfiguration": {

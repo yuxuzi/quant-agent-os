@@ -41,3 +41,25 @@ generic ones that more than one fund met, with the round-2 work that answers the
 | 11 | Operating in a cloud | all four | `/healthz` checks nothing, logs are plain text, secrets only from the environment, no token callable for managed Postgres, no recipe for adding drivers to the image, no cloud section in the deployment guide | Done (`feat/cloud-ops`): `/readyz`, `QUANT_AGENT_OS_LOG_FORMAT=json`, `NAME_FILE` secrets, and a cloud section; the descriptors use them |
 | 12 | Ingestion reads a local folder of text, Markdown, and PDF | Larchmere, Corvane, Wrenfield | A SharePoint `.docx` was skipped; S3 and Blob need a sync first; citations are relative paths | Office loaders and object-store sources |
 | 13 | `qaos legacy scan` misreads module state | all four | State set by another module, plumbing offered as tools, a monthly entry point left out | Converter fixes |
+
+## Round 1
+
+Round 1 adopted the 1.0 candidate (`integration/1.0-r1`) at the two Azure funds. Each fund's `FINDINGS.md` has
+its own "Round 1" table (`R1-L…` for Larchmere, `R1-S…` for Sablecroft). The generic rows are below.
+Corvane and Wrenfield have not run round 1 yet.
+
+| # | Gap | Funds | Evidence | Next step |
+| --- | --- | --- | --- | --- |
+| R1-G1 | `/readyz` reads each store's `ids()`, which both funds answer from a static list, so a dead database or warehouse still answers ready | Larchmere, Sablecroft | `/readyz` is 200 with the SQL file or the warehouse folder deleted (`test_readyz_still_says_ready...`, both funds); 503 only when the run store breaks | A check that reads a declared dataset (or a store `check()`), so the readiness probe sees the data source |
+| R1-G2 | Frequency defaults to daily, has no quarterly choice, and horizons are labelled for days | Larchmere, Sablecroft | `performance-report --defaults` writes 252 for a monthly fund: ITD 33.16% against 10.02% at 12, and no warning (R1-L6). Quarterly data has no quarterly choice and shows the quarter under MTD (R1-S2, R1-S3) | Ask the frequency with no silent default; add quarterly; horizons by frequency |
+| R1-G3 | Preliminary, revised, and restated figures have no vintage, and a stale last observation is not flagged | Larchmere, Sablecroft | A last quarter's first print is the figure, and `reconcile` flags three rows against the revised statement (R1-S5). A trustee's restatement turns a PASS into a FAIL with nothing to hold both (R1-L2). Nothing compares the last date with the as-of (R1-S4) | A vintage or as-of convention for datasets; a preliminary mark; an age warning on the last observation |
+| R1-G4 | The AI-use report names the principal as an object id and holds no arguments | Larchmere, Sablecroft | `principal` is `a1000000-...-0002`, and the what-if's loan id and size are absent (R1-L9, R1-L10, R1-S10) | Use the sign-in's `principal_claim` (it exists; see R1-G6); the fund keeps its own pre-trade log |
+| R1-G5 | An acceptance run leaves no record | Larchmere, Sablecroft | `run_acceptance` takes no run store (both funds' tests; R1-L17, R1-S11) | A run-store option for `qaos eval`, so agreed cases are in the record |
+| R1-G6 | `verify = "jwks"` accepts Entra-shaped tokens with no shim (decision 0031) | Larchmere, Sablecroft | Principal `UPN@tid`; groups and roles together; audience `api://` or https as configured (R1-L15, R1-S12). Both funds still run their shims | The owners decide the sign-in switch; the shims then retire |
+| R1-G7 | Deployment descriptors pin an image that predates the features they set, or pin nothing | Larchmere, Sablecroft | `quant-agent-os:0.7.0` (released 2026-11-17) predates `/readyz`, JSON logs, and `NAME_FILE`, which are Unreleased (R1-L14). Sablecroft uses `quant-agent-os:local` and `pip ... \|\| true` (R1-S17) | Pin the release that carries 1.0, once tagged; check the pin against the features in a test |
+| R1-G8 | `app new --defaults` cannot choose the source, and `app create` recorded a run in the user's default home | Larchmere | The default source is `git+https://...@v0.9.0`; the spec needed a hand edit (R1-L7). `app create` wrote run `78cfd84d...` to `~/.quant-agent-os/runs.db` (R1-L8) | A source option on `app new`; print the home a record goes to |
+| R1-G9 | The performance view covers one series: no money-weighted measure, no currency, no vintage | Larchmere, Sablecroft | 18 metrics and no IRR or MOIC for the equity series (R1-L16); no currency for a EUR manager (R1-S13) | Money-weighted measures and currency metadata (cross-fund rows 10 and 13) |
+| R1-G10 | A reconciliation reference that names a group row as its header fails with a misleading message | Larchmere | `header_row = 4` gives "no rows of data below row 4", with 36 rows below (R1-L5) | Name the header the reader expected and the one it found |
+
+Round 1 also met two things that work: a 2026-07-28 client gets the same results over both handshakes, and
+`performance-report` reconciles a percent or two-row workbook, exiting 1 on a break (R1-L4, R1-S8).
