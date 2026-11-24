@@ -15,6 +15,9 @@ figure is `SPIN_OFF_ADJUSTMENT_BP` basis points lower in the administrator's fil
 from __future__ import annotations
 
 import datetime as dt
+import io
+import re
+import zipfile
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -87,3 +90,21 @@ def write_workbook(path: Path, columns: Mapping[str, Iterable[tuple[str, float]]
             value = None if entry is None else round(entry[1] * 100, 6)  # percent, 6 places
             sheet.cell(row=offset, column=column, value=value)
     book.save(path)
+    _pin_entry_times(path)
+
+
+def _pin_entry_times(path: Path) -> None:
+    """Stamp the file with GENERATED: openpyxl stamps the time of saving on each entry and as
+    the workbook's modified time."""
+    with zipfile.ZipFile(path) as source:
+        entries = [(info, source.read(info)) for info in source.infolist()]
+    stamp = GENERATED.strftime("%Y-%m-%dT%H:%M:%SZ").encode()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target:
+        for info, data in entries:
+            pinned = zipfile.ZipInfo(info.filename, date_time=GENERATED.timetuple()[:6])
+            pinned.compress_type = zipfile.ZIP_DEFLATED
+            if info.filename == "docProps/core.xml":
+                data = re.sub(rb"(<dcterms:modified[^>]*>)[^<]*", rb"\g<1>" + stamp, data)
+            target.writestr(pinned, data)
+    path.write_bytes(buffer.getvalue())
