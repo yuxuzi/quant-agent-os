@@ -366,18 +366,18 @@ def test_readyz_is_503_and_names_the_run_store_when_it_breaks(
     assert status == 503 and '"runs"' in text and "file is gone" not in text
 
 
-def test_readyz_still_says_ready_when_the_warehouse_folder_is_gone(
+def test_readyz_is_503_naming_datasets_when_the_warehouse_folder_is_gone(
     lake: Path, tmp_path: Path, home: Path
 ) -> None:
-    """Measured gap: the datasets check reads `ids()`, a static list, so a missing warehouse passes."""
+    """R2-S1, fixed in round 2: `check()` reads the warehouse's table folders uncached."""
     import shutil
 
     copy = tmp_path / "lake-copy"
     shutil.copytree(lake, copy)
     store = SablecroftStore(LocalDeltaWarehouse(copy))
     shutil.rmtree(copy / "uc")  # the warehouse goes after the server has started
-    status, _ = _ready(store, tmp_path / "keys", MemoryRunStore())
-    assert status == 200
+    status, text = _ready(store, tmp_path / "keys", MemoryRunStore())
+    assert status == 503 and '"datasets"' in text
 
 
 # ---- 4. JSON logs and secrets from files ------------------------------------------------------

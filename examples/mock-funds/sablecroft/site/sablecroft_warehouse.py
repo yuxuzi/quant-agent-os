@@ -37,6 +37,10 @@ class SqlWarehouse(Protocol):
         """Return a string that changes when any served table's data changes."""
         ...
 
+    def check(self) -> None:
+        """Read the warehouse once, uncached, and raise if a served table cannot be read."""
+        ...
+
 
 def abfss_to_path(uri: str, lake_map: dict[str, str], root: Path) -> Path:
     """Return the local directory an `abfss://container@account.dfs.core.windows.net/path` URI
@@ -73,6 +77,7 @@ class LocalDeltaWarehouse:
         import duckdb
 
         self.root = root
+        self._table_dirs: list[Path] = []
         lake_map: dict[str, str] = json.loads((root / "lake_map.json").read_text())
         account = next(iter(lake_map)).split("@", 1)[1]
         base = abfss_to_path(f"abfss://uc@{account}/{CATALOG}", lake_map, root)
@@ -83,6 +88,7 @@ class LocalDeltaWarehouse:
         for schema in sorted(p for p in base.iterdir() if p.is_dir()):
             self._db.execute(f"CREATE SCHEMA {CATALOG}.{schema.name}")
             for table in sorted(p for p in schema.iterdir() if (p / "_delta_log").is_dir()):
+                self._table_dirs.append(table)
                 files = [str(f) for f in delta_files(table)]
                 self._db.execute(
                     f"CREATE VIEW {CATALOG}.{schema.name}.{table.name} AS SELECT * FROM "
@@ -109,6 +115,14 @@ class LocalDeltaWarehouse:
     def data_version(self) -> str:
         """Return the Delta versions of every table, joined."""
         return self._version
+
+    def check(self) -> None:
+        """Re-read the table folders from disk (not the views loaded at start) and the database."""
+        for table in self._table_dirs:
+            if not (table / "_delta_log").is_dir():
+                raise FileNotFoundError(f"The table {table} is gone from the lake.")
+            delta_version(table)
+        self.query("SELECT 1")
 
     def close(self) -> None:
         """Close the database."""

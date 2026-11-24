@@ -73,3 +73,36 @@ shape at 2025-12 (exit 1).
 **Pilot tests after Round 1:** `uv run pytest tests/pilot_fund tests/integration/test_pilot_fund.py`: 37 passed in 30.9 s
 (21 in `tests/pilot_fund`, 16 in `tests/integration/test_pilot_fund.py`; the baseline was 26). The draft's own
 `test_tools.py` passes (2). `ruff check`, `ruff format --check`, and strict `mypy` (examples included) are clean.
+
+## Round 2 (2026-11-24)
+
+Worktree `round2/funds` at `ebbf896`. Baseline before the round: `uv run pytest tests/mock_funds tests/pilot_fund
+tests/integration/test_pilot_fund.py`: 245 passed, 1 skipped (the Wrenfield Postgres test) in 100.5 s. The drill
+passed: 28.5 s of phases (29.7 s wall, against 27.5 s after Round 1).
+
+**Round-1 fixes at Kestrel:** the readiness check (#101, "every fund's DatasetStore gains check()") holds here. The
+warehouse's `ids()` reads the file through `_check_stamp`, and a probe with the file gone is not ready
+(`tests/mock_funds/test_round2.py::test_r2_kestrel_readiness_fails_when_its_warehouse_file_is_gone`, measured).
+Kestrel's `WarehouseDatasetStore` defines no `check()`; the platform's `readiness_probe` falls back to `ids()`, which
+is enough here only because `ids()` reads the file. Fixed in #104 (firm robustness) and #101 for the ready/503 split: verified round 2 by
+`tests/pilot_fund` (21 passed) and the drill's agreed cases (ok).
+
+| # | Where | What happened | Measured or inferred | Generic or Kestrel's own | Severity | Next step |
+| --- | --- | --- | --- | --- | --- | --- |
+| R2-K1 | Upgrade in place from a v0.9.0 wheel install to the candidate | An in-place upgrade kept the run store, the keys, and the knowledge store; the old key worked; the AI-use report covered calls from both versions. Rollback works only when `pyproject.toml` is restored together with `uv.lock` and `uv sync --locked` is run: restoring `uv.lock` alone left the new wheels installed, because `uv add` writes the sources into `pyproject.toml`. | Measured (orchestrator, round 2) | Generic | friction | Runbook fixed in the same pull request: the rollback steps restore both files and run `uv sync --locked`. |
+| R2-K2 | `WarehouseDatasetStore` has no `check()` | Readiness works through `ids()`, not a declared check. A store that answers `ids()` from a cache would pass the probe while its file is gone. | Measured (readiness probe, file gone: NOT READY) | Generic (the protocol) | cosmetic | Open: add `check()` to the store (the fund's file). |
+
+### Round 2 data model notes
+
+| Standard table | Where it lives today | Keys and identifiers | History or vintages | Reshaping in `warehouse_store.py` |
+| --- | --- | --- | --- | --- |
+| Security master | Not a table in the warehouse; the desk and instrument names are in the positions tables | desk name, instrument ids as the warehouse writes them | none | `_desk_returns`, `_pivot` |
+| Prices | Market datasets built per dataset id (`MARKET`) | date by instrument | no vintages | `_pivot`, `_number` |
+| Returns (by fund, book, strategy, benchmark) | `desk_returns_*` per desk, `bench_returns` | date by desk | none | `_desk_returns` (one column per desk) |
+| Holdings or positions | `positions_<desk>` per desk | date, desk, instrument | none | `_csv` with `_number` |
+| Measures (risk, analytics) | Vendor model: `_vendor_loadings`, `_vendor_covariance`, `_vendor_specific`, dated by `_model_date` | date, factor | model date only, no revisions | a fixed layout per table |
+| Reference (calendars, FX) | None in the store; the calendar comes from the dates in the tables | date | none | none |
+
+What a standard set would save: the per-desk tables would be one long table keyed by desk, and the vendor model would
+have a model date key. What does not fit: the vendor model's covariance layout (a matrix per date) and a per-desk
+column in the returns.

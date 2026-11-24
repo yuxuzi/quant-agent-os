@@ -55,6 +55,7 @@ def build_app() -> FirmApp:
     app.expose(
         credit.spread_duration_dts,
         mv=Frame, sprdur=Frame, oas=Frame, static=Frame, rating=Frame, capital=Series,
+        returns=Frame,
         convention="DTS = sum of (market value / capital) x spread duration x OAS in bp; defaulted "
         "bonds left out",
     )  # fmt: skip
