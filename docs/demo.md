@@ -17,6 +17,23 @@ day. Each step prints what the tools returned:
 uv run python examples/portfolio-intelligence/demo.py
 ```
 
+## Open with an application (optional, five minutes)
+
+For an audience that cares about reported numbers, such as a COO, start here. Generate the report application,
+point it at a returns file, and reconcile it with an administrator's figures:
+
+```bash
+qaos app new performance-report demo-report --defaults --yes
+cd demo-report
+uv run demo-report report            # horizon tables, risk, charts: HTML, Markdown, Excel, JSON
+uv run demo-report reconcile admin_returns.xlsx --tolerance-bps 1
+```
+
+With `--defaults` it runs on synthetic returns. To show a break, set `returns` in `config.toml` to a returns
+file and give the administrator's workbook under `[reference]` (its unit and where its table starts); every
+month that differs is listed with its size in basis points. What to say: the application is the firm's own
+code, its tests guard the numbers, and a coding assistant can change it within them.
+
 ## Set up beforehand
 
 You need [uv](https://docs.astral.sh/uv/), a checkout of this repository, and
@@ -56,7 +73,13 @@ curl -s -H "Authorization: Bearer $AUDITOR_KEY" "http://127.0.0.1:8000/v1/runs?l
 curl -s -H "Authorization: Bearer $AUDITOR_KEY" "http://127.0.0.1:8000/v1/runs/$RUN_ID" | python3 -m json.tool
 ```
 
-Find the refused read in the second command's output, under `calls`: its `refused` field says
+For the compliance view of the same session, run, on the server's host:
+
+```bash
+qaos runs report --from 2026-11-01 --to 2026-12-01
+```
+
+It lists each person's calls, refusals, and approvals, with no content. Find the refused read in the second command's output, under `calls`: its `refused` field says
 `dataset.read value-book`, and the portfolio manager never sees that field. The call also records the
 tool's version, a hash of its input, its status, and the versions of the data it used.
 
