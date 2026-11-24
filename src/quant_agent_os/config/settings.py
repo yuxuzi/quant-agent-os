@@ -25,6 +25,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from quant_agent_os.observability.logging import LOG_FORMATS
 from quant_agent_os.tools.permissions import (
     READ_ONLY,
     Permission,
@@ -87,6 +88,7 @@ class Settings(BaseSettings):
     preapproved_permissions: frozenset[Permission] = frozenset()  # every tool; prefer the next
     preapproved_tools: dict[Permission, frozenset[str]] = Field(default_factory=dict)
     log_level: str = "INFO"
+    log_format: str = "text"  # QUANT_AGENT_OS_LOG_FORMAT: "text", or "json" for a log service
     store: str = Field(default_factory=lambda: str(home_dir() / "knowledge.db"))
     datasets_dir: Path = Field(default_factory=lambda: home_dir() / "datasets")
     runs_file: Path = Field(default_factory=lambda: home_dir() / "runs.db")
@@ -103,6 +105,13 @@ class Settings(BaseSettings):
     @classmethod
     def _expand_optional_user(cls, value: Path | None) -> Path | None:
         return value.expanduser() if value is not None else None
+
+    @field_validator("log_format")
+    @classmethod
+    def _known_log_format(cls, value: str) -> str:
+        if value not in LOG_FORMATS:
+            raise ValueError(f"QUANT_AGENT_OS_LOG_FORMAT must be one of {', '.join(LOG_FORMATS)}")
+        return value
 
     @field_validator("preapproved_tools")
     @classmethod
@@ -147,6 +156,7 @@ class Settings(BaseSettings):
             or "(none)",
             "preapproved_tools": describe_preapproved_tools(self.preapproved_tools) or "(none)",
             "log_level": self.log_level,
+            "log_format": self.log_format,
             "store": re.sub(r"://[^/@]*@", "://***@", self.store),
             "datasets_dir": str(self.datasets_dir),
             "runs_file": str(self.runs_file),

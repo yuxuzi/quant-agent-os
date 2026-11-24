@@ -138,7 +138,8 @@ def init(
 
 def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: bool) -> None:
     """Add the sign-in rows: the file, and each provider's settings. It contacts no provider."""
-    from quant_platform.identity.sign_in import SignInError, load_sign_in_file, secret_sources
+    from quant_agent_os.config import SecretConfigError, secret_sources
+    from quant_platform.identity.sign_in import SignInError, load_sign_in_file, scope_gap
 
     try:
         sign_in = load_sign_in_file(path)
@@ -147,7 +148,12 @@ def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: 
         return
     count = len(sign_in.authorization_servers)
     add("sign-in", "ok", f"on for {sign_in.resource}, {count} identity provider(s)")
-    missing = set(sign_in.missing_secrets(secret_sources()))
+    problem = ""
+    try:
+        missing: set[str | None] = set(sign_in.missing_secrets(secret_sources()))
+    except SecretConfigError as error:
+        problem = str(error)  # a secret given twice, or an unreadable file: fails every provider
+        missing = {server.client_secret_env for server in sign_in.authorization_servers}
     for server in sign_in.authorization_servers:
         if server.jwks:
             claims = f"audiences {', '.join(server.audiences + server.client_ids)}"
@@ -156,11 +162,17 @@ def _check_sign_in(path: Path, add: Callable[[str, str, str], None], *, access: 
                 "ok",
                 f"complete; checks signatures against its keys (verify = jwks), {claims}",
             )
+            if gap := scope_gap(server.scope_map):
+                add(f"sign-in scopes: {server.issuer}", "warn", gap)
         elif server.client_secret_env in missing:
             add(
                 f"sign-in: {server.issuer}",
                 "fail",
-                f"set {server.client_secret_env} to its introspection client secret",
+                problem
+                or (
+                    f"set {server.client_secret_env} (or {server.client_secret_env}_FILE) to its "
+                    "introspection client secret"
+                ),
             )
         else:
             claims = f"tenant claim {server.tenant_claim or '(none)'}, "

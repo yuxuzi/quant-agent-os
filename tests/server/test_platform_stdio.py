@@ -51,7 +51,7 @@ def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: 
             ):
                 initialised = await session.initialize()
                 tools = (await session.list_tools()).tools
-                templates = (await session.list_resource_templates()).resourceTemplates
+                templates = (await session.list_resource_templates()).resource_templates
                 prompts = (await session.list_prompts()).prompts
                 report = await session.call_tool(
                     "research_report",
@@ -64,16 +64,20 @@ def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: 
 
     initialised, tools, templates, prompts, report, dataset, fixed, info = anyio.run(main)
 
-    assert initialised.serverInfo.name == "quant-agent-os"
-    assert initialised.serverInfo.version == version("quant-agent-os")
-    assert [str(resource.uri) for resource in fixed] == ["qaos://server/info"]
-    assert json.loads(info.contents[0].text)["platform_version"] == initialised.serverInfo.version
+    assert initialised.server_info.name == "quant-agent-os"
+    assert initialised.server_info.version == version("quant-agent-os")
+    # The performance view is a ui:// page, served beside the fixed resources (decision 0036).
+    assert [str(resource.uri) for resource in fixed] == [
+        "qaos://server/info",
+        "ui://quant-agent-os/performance.html",
+    ]
+    assert json.loads(info.contents[0].text)["platform_version"] == initialised.server_info.version
     assert {"research_report", "analyze_performance"} <= {t.name for t in tools}
     assert "check_spec" not in {t.name for t in tools}  # App Factory is asked for by name
-    assert "qaos://passage/{chunk_id}" in {t.uriTemplate for t in templates}
+    assert "qaos://passage/{chunk_id}" in {t.uri_template for t in templates}
     assert "report_on_signal" in {p.name for p in prompts}
-    assert report.isError is False
-    assert report.structuredContent["metrics"]["sharpe_ratio"] is not None
+    assert report.is_error is False
+    assert report.structured_content["metrics"]["sharpe_ratio"] is not None
     assert json.loads(dataset.contents[0].text)["datasets"][0]["rows"] == 12
     run_store = SqliteRunStore(runs)
     try:
@@ -81,3 +85,26 @@ def test_one_server_offers_the_default_toolsets_and_records_each_call(tmp_path: 
     finally:
         run_store.close()
     assert recorded == ["mcp", "mcp", "mcp"]  # the report and the two resource reads
+
+
+def test_a_2026_07_28_client_negotiates_the_new_revision_over_stdio(tmp_path: Path) -> None:
+    """Claude and other clients that speak 2026-07-28 get it; older ones keep the handshake."""
+    from mcp import Client
+
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "quant_platform.cli", "serve", "--runs", str(tmp_path / "runs.db")],
+        env={**os.environ, "QUANT_AGENT_OS_HOME": str(tmp_path / "home")},
+    )
+
+    async def main(mode: str) -> Any:
+        async with Client(parameters, mode=mode, cache=None) as client:
+            tools = sorted(tool.name for tool in (await client.list_tools()).tools)
+            return client.protocol_version, tools
+
+    modern_version, modern_tools = anyio.run(main, "auto")
+    legacy_version, legacy_tools = anyio.run(main, "legacy")
+
+    assert modern_version == "2026-07-28"
+    assert legacy_version == "2025-11-25"
+    assert modern_tools == legacy_tools and "analyze_performance" in modern_tools

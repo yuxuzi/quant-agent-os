@@ -31,12 +31,12 @@ introspection settings are not set::
     group_aliases = { "6f1c2a10-0000-4000-8000-0000000e0001" = "research-eq" }
 
 URLs must be https, except on loopback. The secret is read from the environment, then from the
-``.env`` in the home, held as a `SecretStr`, and never displayed.
+``.env`` in the home, or from the file that ``<NAME>_FILE`` names, held as a `SecretStr`, and never
+displayed (`quant_agent_os.config.read_secret`).
 """
 
 from __future__ import annotations
 
-import os
 import re
 import tomllib
 from collections.abc import Mapping
@@ -56,7 +56,7 @@ from pydantic import (
 )
 
 from quant_agent_os.api.keys import SCOPES
-from quant_agent_os.config import home_env_file
+from quant_agent_os.config import SecretConfigError, home_env_file, read_secret, secret_sources
 from quant_agent_os.tenancy import DEFAULT_TENANT, TENANT_ID
 from quant_platform.identity.jwks import Algorithm, JwksServer, JwksVerifier, default_algorithms
 from quant_platform.identity.oauth import (
@@ -69,7 +69,7 @@ from quant_platform.identity.oauth import (
 )
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from mcp.server.auth.provider import TokenVerifier
     from starlette.routing import Route
 
@@ -188,8 +188,13 @@ class ServerEntry(BaseModel):
         return self.verify == "jwks"
 
     def secret(self, environ: Mapping[str, str | None]) -> SecretStr | None:
-        """Return the client secret from ``environ``, or None when it is unset or empty."""
-        value = environ.get(self.client_secret_env) if self.client_secret_env else None
+        """Return the client secret from ``environ``, or None when it is unset or empty.
+
+        Raises `SecretConfigError` when it is given twice, or its ``_FILE`` cannot be read.
+        """
+        if not self.client_secret_env:
+            return None
+        value = read_secret(self.client_secret_env, environ)
         return SecretStr(value) if value else None
 
     def jwks_server(self) -> JwksServer:
@@ -251,17 +256,24 @@ class SignInFile(BaseModel):
     def resolve(self, environ: Mapping[str, str | None] | None = None) -> SignIn:
         """Return the sign-in with its secrets; raise `SignInError` naming any that are unset."""
         values = environ if environ is not None else secret_sources()
-        missing = self.missing_secrets(values)
+        try:
+            missing = self.missing_secrets(values)
+        except SecretConfigError as error:
+            raise SignInError(str(error)) from None
         if missing:
             raise SignInError(
-                f"Set {', '.join(missing)} to the introspection client secret (in the environment "
-                f"or {home_env_file()}); sign-in does not start without it."
+                f"Set {', '.join(missing)} to the introspection client secret, or "
+                f"{', '.join(f'{name}_FILE' for name in missing)} to a file holding it (in the "
+                f"environment or {home_env_file()}); sign-in does not start without it."
             )
         servers = []
         for entry in self.authorization_servers:
             if entry.jwks:
                 continue
-            secret = entry.secret(values)
+            try:
+                secret = entry.secret(values)
+            except SecretConfigError as error:
+                raise SignInError(str(error)) from None
             assert secret is not None and entry.introspection_url and entry.client_id  # checked
             servers.append(
                 AuthorizationServer(
@@ -302,7 +314,7 @@ class SignIn:
         """Return every tenant a signed-in user may act in."""
         return set().union(*self.tenants_by_issuer.values())
 
-    def verifier(self, http: httpx.AsyncClient | None = None) -> TokenVerifier:
+    def verifier(self, http: httpx2.AsyncClient | None = None) -> TokenVerifier:
         """Return the verifier for these providers' tokens; ``http`` is for tests.
 
         Providers that introspect are asked by `IntrospectionVerifier`, the others checked by
@@ -335,15 +347,6 @@ class SignIn:
         return protected_resource_routes(self.resource, self.issuers)
 
 
-def secret_sources() -> dict[str, str | None]:
-    """Return the home's .env overlaid by the environment: where client secrets are read."""
-    from dotenv import dotenv_values
-
-    path = home_env_file()
-    values = dict(dotenv_values(path)) if path.is_file() else {}
-    return values | dict(os.environ)
-
-
 def load_sign_in_file(path: Path) -> SignInFile:
     """Read a sign-in file without reading any secret; raise `SignInError` naming the problem."""
     try:
@@ -366,3 +369,22 @@ def load_sign_in_file(path: Path) -> SignInFile:
 def load_sign_in(path: Path, environ: Mapping[str, str | None] | None = None) -> SignIn:
     """Read a sign-in file and its secrets; raise `SignInError` for anything missing or wrong."""
     return load_sign_in_file(path).resolve(environ)
+
+
+def scope_gap(scope_map: Mapping[str, str]) -> str | None:
+    """Return a warning when ``scope_map`` grants ``tools:call`` but never ``tools:list``.
+
+    Otherwise return None.
+
+    Most MCP clients list the tools before they call one, so a token with only the call scope
+    fails at the listing. The server does not refuse such a file: it warns, at start-up and in
+    `qaos doctor`.
+    """
+    granted = set(scope_map.values())
+    if "tools:call" in granted and "tools:list" not in granted:
+        return (
+            "its scope_map grants tools:call and never tools:list. Most MCP clients list the tools "
+            "before they call one, so its users are refused at the listing; map a provider's "
+            'name to "tools:list" too.'
+        )
+    return None

@@ -34,7 +34,7 @@ from quant_platform.cli_common import (
 )
 from quant_platform.composition import DEFAULT_TOOLSETS
 from quant_platform.onboarding import connect, doctor, init
-from quant_platform.serve import serve_http, serve_stdio
+from quant_platform.serve import known_secrets, serve_http, serve_stdio
 from quant_research.cli import EmbedderOption, ModelOption
 from quant_research.cli import app as research_app
 
@@ -61,19 +61,6 @@ def _show_version(value: bool) -> None:
         raise typer.Exit()
 
 
-def _known_secrets() -> list[str]:
-    """Return the secret values this installation holds, for the log filter to redact."""
-    from quant_agent_os.config import home_env_file
-    from quant_research.config import EmbeddingSettings
-
-    try:
-        embedding = EmbeddingSettings(_env_file=home_env_file())
-    except ValidationError:
-        return []  # `qaos research` reports a bad setting where it is used
-    keys = (embedding.voyage_api_key, embedding.openai_api_key)
-    return [key.get_secret_value() for key in keys if key is not None]
-
-
 @app.callback()
 def _root(
     _version: Annotated[
@@ -89,7 +76,10 @@ def _root(
 ) -> None:
     """Quant-Agent-OS: cited research and computed metrics for AI clients, over MCP."""
     try:
-        configure_logging(get_settings().log_level, secrets=_known_secrets())
+        settings = get_settings()
+        configure_logging(
+            settings.log_level, secrets=known_secrets(), log_format=settings.log_format
+        )
     except (ConfigFileError, ValidationError, ValueError) as error:
         errors.print(f"[red]error:[/red] {escape(str(error))}")
         raise typer.Exit(1) from error
@@ -346,6 +336,8 @@ def catalog_command(
             table.add_row("resource", resource.uri_template, resource.description)
         for prompt in catalog.prompts:
             table.add_row("prompt", prompt.name, prompt.description)
+        for view in catalog.views:
+            table.add_row("view", view.uri, view.description)
         console.print(table)
     finally:
         if research is not None:

@@ -361,6 +361,6 @@ def test_the_server_offers_the_guide_but_not_create_app(tmp_path: Path) -> None:
 
     initialised, tools, checked = anyio.run(main)
 
-    assert initialised.serverInfo.name == "quant-agent-os"
+    assert initialised.server_info.name == "quant-agent-os"
     assert sorted(tools) == ["check_spec", "describe_template", "server_info"]
-    assert checked.structuredContent["check"]["ready"] is True
+    assert checked.structured_content["check"]["ready"] is True

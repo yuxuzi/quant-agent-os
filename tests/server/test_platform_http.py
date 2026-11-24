@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from typer.testing import CliRunner
@@ -27,11 +27,11 @@ BASE = "http://127.0.0.1:8000"
 
 
 @asynccontextmanager
-async def _client(app: Any, key: str) -> AsyncIterator[httpx.AsyncClient]:
+async def _client(app: Any, key: str) -> AsyncIterator[httpx2.AsyncClient]:
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app),
             base_url=BASE,
             headers={"Authorization": f"Bearer {key}"},
         ) as client,
@@ -55,7 +55,7 @@ def test_one_port_serves_every_toolset_as_mcp_and_rest(
         async with _client(app, key) as client:
             rest = (await client.get("/v1/tools")).json()
             async with (
-                streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write, _),
+                streamable_http_client(f"{BASE}/mcp", http_client=client) as (read, write),
                 ClientSession(read, write) as session,
             ):
                 initialised = await session.initialize()
@@ -69,11 +69,11 @@ def test_one_port_serves_every_toolset_as_mcp_and_rest(
 
     rest, initialised, tools, prompts, report = anyio.run(main)
 
-    assert initialised.serverInfo.name == "quant-agent-os"
+    assert initialised.server_info.name == "quant-agent-os"
     assert {item["name"] for item in rest} == {tool.name for tool in tools}
     assert "research_report" in {tool.name for tool in tools}
     assert "report_on_signal" in {prompt.name for prompt in prompts}
-    assert report.isError is False and report.structuredContent["metrics"]["sharpe_ratio"]
+    assert report.is_error is False and report.structured_content["metrics"]["sharpe_ratio"]
     (run,) = store.list_runs(5)
     assert (run.actor, run.principal) == ("mcp-http", "team")
     [usage] = store.list_usage(run.started_at, run.started_at + timedelta(hours=1))
@@ -105,7 +105,7 @@ def test_the_approval_page_is_served_only_with_a_desk(
     tenancy = single_tenant(catalog, store, PermissionPolicy())
 
     def status(app: Any) -> tuple[int, str]:
-        async def main() -> httpx.Response:
+        async def main() -> httpx2.Response:
             async with _client(app, "none") as client:
                 return await client.get("/approve/unknown")
 

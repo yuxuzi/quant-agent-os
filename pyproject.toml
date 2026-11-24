@@ -35,7 +35,7 @@ qaos = "quant_platform.cli:main"
 [project.optional-dependencies]
 # opentelemetry-api: spans and metrics per call (decision 0015, Q-17); a no-op without an SDK.
 mcp = [
-    "mcp>=1.20,<2",
+    "mcp>=2.3,<3",
     "opentelemetry-api>=1.30,<2",
 ]
 api = [
@@ -91,10 +91,11 @@ dev = [
 # Quant Toolbox's pygal, plotly, and openpyxl (decision 0026) use 2026-11-03; duckdb uses 2026-10-22;
 # sqlalchemy (decision 0032) uses 2026-11-03, so 2.1.9 (2026-11-16) is too new and the lock holds 2.1.6;
 # duckdb-engine uses the same date and locks 0.17.0 (March 2025). fpdf2 2.9.0, Pillow 13.0.0, and
-# fontTools 4.68.0 (PDF reports) use 2026-11-05.
+# fontTools 4.68.0 (PDF reports) use 2026-11-05. mcp 2.x (decision 0034) and mcp-types use 2026-10-16;
+# the new transitive httpx2, httpcore2, httpx2-jsfetch, and truststore use 2026-11-09.
 # pytemplate-uv is exempt: it is first-party (same author), and the App Factory
 # needs its 3.0 API.
-exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z", pygal = "2026-11-03T00:00:00Z", plotly = "2026-11-03T00:00:00Z", narwhals = "2026-11-03T00:00:00Z", openpyxl = "2026-11-03T00:00:00Z", et-xmlfile = "2026-11-03T00:00:00Z", importlib-metadata = "2026-11-03T00:00:00Z", zipp = "2026-11-03T00:00:00Z", sqlalchemy = "2026-11-03T00:00:00Z", duckdb = "2026-10-22T00:00:00Z", duckdb-engine = "2026-11-03T00:00:00Z", fpdf2 = "2026-11-05T00:00:00Z", pillow = "2026-11-05T00:00:00Z", fonttools = "2026-11-05T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-16T00:00:00Z", mcp = "2026-10-16T00:00:00Z", mcp-types = "2026-10-16T00:00:00Z", httpx2 = "2026-11-09T00:00:00Z", httpcore2 = "2026-11-09T00:00:00Z", httpx2-jsfetch = "2026-11-09T00:00:00Z", truststore = "2026-11-09T00:00:00Z", starlette = "2026-10-16T00:00:00Z", sse-starlette = "2026-10-16T00:00:00Z", certifi = "2026-10-16T00:00:00Z", pycparser = "2026-10-16T00:00:00Z", copier = "2026-10-16T00:00:00Z", dunamai = "2026-10-16T00:00:00Z", funcy = "2026-10-16T00:00:00Z", jinja2 = "2026-10-16T00:00:00Z", jinja2-ansible-filters = "2026-10-16T00:00:00Z", markupsafe = "2026-10-16T00:00:00Z", platformdirs = "2026-10-16T00:00:00Z", plumbum = "2026-10-16T00:00:00Z", prompt-toolkit = "2026-10-16T00:00:00Z", pyyaml = "2026-10-16T00:00:00Z", questionary = "2026-10-16T00:00:00Z", wcwidth = "2026-10-16T00:00:00Z", empyrical-reloaded = "2026-10-18T00:00:00Z", numpy = "2026-10-18T00:00:00Z", pandas = "2026-10-18T00:00:00Z", scipy = "2026-10-18T00:00:00Z", bottleneck = "2026-10-18T00:00:00Z", peewee = "2026-10-18T00:00:00Z", pytz = "2026-10-18T00:00:00Z", python-dateutil = "2026-10-18T00:00:00Z", six = "2026-10-18T00:00:00Z", tzdata = "2026-10-18T00:00:00Z", fastapi = "2026-10-18T00:00:00Z", opentelemetry-api = "2026-10-18T00:00:00Z", psycopg = "2026-10-18T00:00:00Z", psycopg-binary = "2026-10-18T00:00:00Z", pyarrow = "2026-10-22T00:00:00Z", pygal = "2026-11-03T00:00:00Z", plotly = "2026-11-03T00:00:00Z", narwhals = "2026-11-03T00:00:00Z", openpyxl = "2026-11-03T00:00:00Z", et-xmlfile = "2026-11-03T00:00:00Z", importlib-metadata = "2026-11-03T00:00:00Z", zipp = "2026-11-03T00:00:00Z", sqlalchemy = "2026-11-03T00:00:00Z", duckdb = "2026-10-22T00:00:00Z", duckdb-engine = "2026-11-03T00:00:00Z", fpdf2 = "2026-11-05T00:00:00Z", pillow = "2026-11-05T00:00:00Z", fonttools = "2026-11-05T00:00:00Z" }
 
 [tool.uv.workspace]
 # Quant Toolbox is its own distribution (decision 0027), built and versioned on its own.

@@ -23,7 +23,7 @@ from quant_agent_os.api import (
     load_keys,
 )
 from quant_agent_os.mcp import call_tool, tool_definitions
-from quant_agent_os.runs import MemoryRunStore, RunRecorder
+from quant_agent_os.runs import MemoryRunStore, RunRecorder, SqliteRunStore
 from quant_agent_os.runtime import ToolCall, ToolExecutor
 from quant_agent_os.serving import SingleTenant, Surface
 from quant_agent_os.tools import READ_ONLY, Permission, PermissionPolicy, ToolRegistry, tool
@@ -87,6 +87,29 @@ def test_health_needs_no_key_and_no_schema_pages_are_public(client: TestClient) 
     assert client.get("/healthz").json() == {"status": "ok"}
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
+
+
+def test_ready_needs_no_key_and_answers_when_the_run_store_reads(client: TestClient) -> None:
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_a_closed_run_store_is_not_ready_and_names_only_the_check(
+    keys_file: tuple[Path, dict[str, str]], tmp_path: Path
+) -> None:
+    path, _ = keys_file
+    runs = SqliteRunStore(tmp_path / "runs.db")
+    runs.close()
+    client = TestClient(build_app(REGISTRY, KeyRing(load_keys(path)), runs))
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "not ready", "failed": ["runs"]}
+    assert str(tmp_path) not in response.text and "closed" not in response.text.lower()
+    assert client.get("/healthz").json() == {"status": "ok"}  # alive, though not ready
 
 
 def test_requests_without_a_valid_key_are_refused(

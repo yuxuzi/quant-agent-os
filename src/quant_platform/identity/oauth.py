@@ -17,7 +17,7 @@ cannot make the server flood an identity provider (security review F-1), each pr
 most `INTROSPECTIONS_PER_MINUTE` introspections and `MAX_CONCURRENT_INTROSPECTIONS` at once;
 beyond that a token is refused without asking. `protected_resource_routes` publishes the RFC
 9728 metadata that points clients to the authorization servers. Needs the ``mcp`` and ``api``
-extras (httpx comes with them).
+extras (httpx2 comes with them).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from quant_agent_os.mcp.http import GROUPS_CLAIM, TENANT_CLAIM
 from quant_platform.identity.rate import TokenBucket
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from mcp.server.auth.provider import AccessToken, TokenVerifier
     from starlette.routing import Route
 
@@ -114,7 +114,7 @@ class IntrospectionVerifier:
         *,
         resource: str,
         tenants_by_issuer: dict[str, set[str]],
-        http: httpx.AsyncClient | None = None,
+        http: httpx2.AsyncClient | None = None,
         introspections_per_minute: int = INTROSPECTIONS_PER_MINUTE,
         max_concurrent: int = MAX_CONCURRENT_INTROSPECTIONS,
     ) -> None:
@@ -189,25 +189,25 @@ class IntrospectionVerifier:
         return None  # an opaque token with several providers: asking each would leak it
 
     async def _introspect(self, server: AuthorizationServer, token: str) -> dict[str, Any] | None:
-        import httpx
+        import httpx2
 
         try:
             if self.http is not None:
                 response = await self._post(self.http, server, token)
             else:
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx2.AsyncClient(timeout=5.0) as client:
                     response = await self._post(client, server, token)
             response.raise_for_status()
             claims = response.json()
-        except (httpx.HTTPError, ValueError) as error:
+        except (httpx2.HTTPError, ValueError) as error:
             logger.warning("Token introspection at %s failed: %s", server.issuer, type(error))
             return None
         return claims if isinstance(claims, dict) else None
 
     @staticmethod
     async def _post(
-        client: httpx.AsyncClient, server: AuthorizationServer, token: str
-    ) -> httpx.Response:
+        client: httpx2.AsyncClient, server: AuthorizationServer, token: str
+    ) -> httpx2.Response:
         return await client.post(
             server.introspection_url,
             data={"token": token, "token_type_hint": "access_token"},

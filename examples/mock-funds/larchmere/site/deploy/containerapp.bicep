@@ -1,6 +1,8 @@
 // Larchmere Loan Partners (fictional): the Azure resources the server runs on. Not deployed by
 // the tests. Container Apps (consumption), one replica, Log Analytics, Key Vault references, an
 // Azure Files share for the run store, and Azure Database for PostgreSQL for the knowledge store.
+// The platform's secrets arrive as files under /run/secrets (a secret volume of Key Vault
+// references), read through NAME_FILE; the log format is JSON for Log Analytics.
 param location string = resourceGroup().location
 param image string = 'larchmereacr.azurecr.io/larchmere-qaos:1'
 
@@ -55,23 +57,33 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('1.0'), memory: '2Gi' }
           env: [
             { name: 'LARCHMERE_SQL_CONNECTION', secretRef: 'sql-connection' }
-            { name: 'PGPASSWORD', secretRef: 'pg-reader' }
-            { name: 'LARCHMERE_INTROSPECTION_SECRET', secretRef: 'shim-secret' }
+            { name: 'PGPASSWORD_FILE', value: '/run/secrets/pg-reader' }
+            { name: 'LARCHMERE_INTROSPECTION_SECRET_FILE', value: '/run/secrets/shim-secret' }
             { name: 'LARCHMERE_LAKE_CATALOG', value: '/lake/catalog.json' }
+            { name: 'QUANT_AGENT_OS_LOG_FORMAT', value: 'json' }
           ]
           probes: [
             { type: 'Liveness', httpGet: { path: '/healthz', port: 8000 }, periodSeconds: 30 }
-            { type: 'Readiness', httpGet: { path: '/healthz', port: 8000 }, periodSeconds: 10 }
+            { type: 'Readiness', httpGet: { path: '/readyz', port: 8000 }, periodSeconds: 10 }
           ]
           volumeMounts: [
             { volumeName: 'runs', mountPath: '/data/runs' }
             { volumeName: 'config', mountPath: '/config' }
+            { volumeName: 'secrets', mountPath: '/run/secrets' }
           ]
         }
       ]
       volumes: [
         { name: 'runs', storageType: 'AzureFile', storageName: 'larchmere-runs' }
         { name: 'config', storageType: 'AzureFile', storageName: 'larchmere-config' }
+        {
+          name: 'secrets'
+          storageType: 'Secret'
+          secrets: [
+            { secretRef: 'pg-reader', path: 'pg-reader' }
+            { secretRef: 'shim-secret', path: 'shim-secret' }
+          ]
+        }
       ]
     }
   }

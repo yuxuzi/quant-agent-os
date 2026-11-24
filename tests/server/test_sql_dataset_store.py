@@ -332,3 +332,55 @@ def test_the_store_serves_through_the_platform_with_an_access_file(
     }
     assert refused.json()["status"] == "error"
     assert "No dataset 'returns-all'" in refused.json()["error"]
+
+
+def test_check_reads_the_source_again_when_a_cached_dataset_would_still_answer(
+    oms: Path,
+) -> None:
+    engine = sql.connect(f"sqlite:///{oms}")
+    store = SqlDatasetStore(
+        {"oms": engine},
+        [SqlDataset("returns", "SELECT day, desk, ret FROM returns", index_name="day")],
+        stamps={"oms": 3600},
+    )
+    try:
+        store.check()
+        assert store.get("returns").rows == 3
+        oms.unlink()
+
+        assert store.get("returns").rows == 3  # the dataset is cached for an hour
+        with pytest.raises(ConnectionError, match="oms"):
+            store.check()  # the probe is not cached, so it sees the deleted file
+    finally:
+        engine.dispose()
+
+
+def test_check_gives_up_on_a_source_that_hangs_and_starts_no_second_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    from quant_platform import sql_store
+
+    release = threading.Event()
+    attempts: list[int] = []
+
+    class HungEngine:
+        def dispose(self) -> None:
+            pass
+
+        def connect(self) -> None:
+            attempts.append(1)
+            release.wait()
+            raise RuntimeError("released")
+
+    monkeypatch.setattr(sql_store, "PROBE_TIMEOUT_SECONDS", 0.05)
+    store = SqlDatasetStore({"hung": HungEngine()}, [])  # type: ignore[dict-item]
+    try:
+        with pytest.raises(ConnectionError, match="hung"):
+            store.check()
+        with pytest.raises(ConnectionError, match="hung"):
+            store.check()  # the first probe still runs, so none is started
+        assert len(attempts) == 1
+    finally:
+        release.set()

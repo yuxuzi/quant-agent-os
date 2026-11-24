@@ -1,6 +1,7 @@
 """Datasets that tools read by reference, and the read-only tool that lists them."""
 
 from quant_agent_os.data.datasets import (
+    CheckableDatasetStore,
     Dataset,
     DatasetError,
     DatasetInfo,
@@ -13,10 +14,12 @@ from quant_agent_os.data.datasets import (
     infer_periods_per_year,
     parse_dataset,
     parse_date,
+    readiness_probe,
 )
 from quant_agent_os.data.tools import dataset_resources, dataset_tools
 
 __all__ = [
+    "CheckableDatasetStore",
     "Dataset",
     "DatasetError",
     "DatasetInfo",
@@ -31,4 +34,5 @@ __all__ = [
     "infer_periods_per_year",
     "parse_dataset",
     "parse_date",
+    "readiness_probe",
 ]

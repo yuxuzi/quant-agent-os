@@ -140,6 +140,17 @@ def test_generated_files_never_hold_a_secret_and_the_check_gets_only_its_variabl
     assert "[REDACTED]" in report.checks[-1].output_tail
 
 
+def test_the_check_takes_the_password_from_its_file_when_one_is_named(tmp_path: Path) -> None:
+    password = tmp_path / "pg-password"
+    password.write_text(SECRET + "\n", "utf-8")
+    checks = FakeChecks(output="Connected")
+    factory = _factory(checks, environ={"RESEARCH_PG_PASSWORD_FILE": str(password)})
+
+    factory.create(_spec(tmp_path, connection="research-pg"), check_connection=True)
+
+    assert checks.calls[-1][1] == {"DATABASE_PASSWORD": SECRET}  # the newline is not part of it
+
+
 def test_a_missing_variable_is_reported_and_not_invented(tmp_path: Path) -> None:
     checks = FakeChecks()
 

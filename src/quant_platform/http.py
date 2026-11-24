@@ -25,7 +25,15 @@ def single_tenant(catalog: Catalog, run_store: RunStore, policy: PermissionPolic
         ToolRegistry(catalog.tools), policy, approvals=run_store, access=catalog.access
     )
     return SingleTenant(
-        Surface(executor, catalog.resources, catalog.prompts, run_store, catalog.toolsets)
+        Surface(
+            executor,
+            catalog.resources,
+            catalog.prompts,
+            run_store,
+            catalog.toolsets,
+            views=catalog.views,
+            checks=catalog.checks,
+        )
     )
 
 

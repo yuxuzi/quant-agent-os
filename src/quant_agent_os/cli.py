@@ -16,7 +16,16 @@ from typer.core import TyperGroup
 from quant_agent_os.api.keys import SCOPES, ApiKeyError, Scope, add_key
 from quant_agent_os.config import get_settings
 from quant_agent_os.data import DatasetError, DirectoryDatasetStore
-from quant_agent_os.runs import AuditEvent, RunStoreError, SqliteRunStore, audit_lines
+from quant_agent_os.runs import (
+    AuditEvent,
+    RunStoreError,
+    SqliteRunStore,
+    audit_lines,
+    read_usage_report,
+    render_csv,
+    render_json,
+    render_markdown,
+)
 from quant_agent_os.tenancy import DEFAULT_TENANT, TenantError, check_tenant
 
 console = Console()
@@ -281,6 +290,46 @@ def export_runs(
             sys.stdout.write(json.dumps(line, sort_keys=True) + "\n")
             count += 1
     errors.print(f"{count} records.")
+
+
+@runs_app.command("report")
+def report_runs(
+    start: Annotated[
+        datetime,
+        typer.Option("--from", formats=["%Y-%m-%d"], help="First day, UTC, included (YYYY-MM-DD)."),
+    ],
+    end: Annotated[
+        datetime,
+        typer.Option(
+            "--to", formats=["%Y-%m-%d"], help="Day after the last, UTC, not included (YYYY-MM-DD)."
+        ),
+    ],
+    output_format: Annotated[
+        str, typer.Option("--format", help="Output format: markdown, csv, or json.")
+    ] = "markdown",
+    runs: RunsOption = None,
+) -> None:
+    """Show how AI clients used the platform over a period, as counts and names.
+
+    It counts calls by principal, tool, and dataset, with refusals and approvals.
+
+    It leaves out arguments, outputs, retrieved text, and error text.
+
+    It is a record for your compliance staff, not proof that any use complied with policy.
+    """
+    renderers = {"markdown": render_markdown, "csv": render_csv, "json": render_json}
+    if output_format not in renderers:
+        errors.print(
+            f"[red]error:[/red] --format is markdown, csv, or json, not {output_format!r}."
+        )
+        raise typer.Exit(2)
+    first, last = _utc(start), _utc(end)
+    if last <= first:
+        errors.print("[red]error:[/red] --to must be after --from.")
+        raise typer.Exit(2)
+    with _existing_run_store(runs) as store:
+        report = read_usage_report(store, start=first, end=last, generated_at=datetime.now(UTC))
+    sys.stdout.write(renderers[output_format](report))
 
 
 @runs_app.command("prune")

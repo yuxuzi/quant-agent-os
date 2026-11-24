@@ -14,6 +14,14 @@ from quant_agent_os.runs.models import (
 )
 from quant_agent_os.runs.recorder import NotAwaitingApprovalError, RunNotFoundError, RunRecorder
 from quant_agent_os.runs.redaction import redact
+from quant_agent_os.runs.report import (
+    UsageReport,
+    build_usage_report,
+    read_usage_report,
+    render_csv,
+    render_json,
+    render_markdown,
+)
 from quant_agent_os.runs.store import (
     MemoryRunStore,
     Pruned,
@@ -43,9 +51,15 @@ __all__ = [
     "StoredRun",
     "UsageEvent",
     "UsageGrouping",
+    "UsageReport",
     "UsageTotal",
     "audit_lines",
+    "build_usage_report",
     "check_run_store",
+    "read_usage_report",
     "redact",
+    "render_csv",
+    "render_json",
+    "render_markdown",
     "summarize",
 ]

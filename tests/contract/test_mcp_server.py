@@ -1,4 +1,8 @@
-"""The MCP stdio transport forwards to the adapter: same tools, same results, same errors."""
+"""The MCP stdio transport forwards to the adapter: same tools, same results, same errors.
+
+Every in-process check runs twice, over the 2025-11-25 handshake and over 2026-07-28, and both
+must give the same answer (decision 0034).
+"""
 
 import json
 import sys
@@ -6,9 +10,8 @@ from typing import Any
 
 import anyio
 import pytest
-from mcp.client.session import ClientSession
-from mcp.shared.exceptions import McpError
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client
+from mcp.shared.exceptions import MCPError
 from portfolio_tools import build_registry
 from pydantic import BaseModel
 
@@ -51,40 +54,64 @@ REGISTRY = ToolRegistry([*build_registry().specs(), fetch_page])
 EXECUTOR = ToolExecutor(REGISTRY, PermissionPolicy())
 
 
-def _session(check: Any) -> Any:
-    async def main() -> Any:
-        server = build_server(EXECUTOR, name="test", instructions="Use the tools.")
-        async with create_connected_server_and_client_session(server) as session:
-            return await check(session)
+# The 2025-11-25 initialize handshake, and the stateless revision without one.
+ERAS = ("legacy", "2026-07-28")
+SERVER_INFO_STAMP = "io.modelcontextprotocol/serverInfo"  # 2026-07-28 stamps each result
 
-    return anyio.run(main)
+
+def _unstamped(answer: Any) -> Any:
+    """``answer`` without the 2026-07-28 server-info stamp, which only that era sends."""
+    if isinstance(answer, tuple | list):
+        return type(answer)(_unstamped(item) for item in answer)
+    if isinstance(answer, BaseModel) and isinstance(getattr(answer, "meta", None), dict):
+        meta = {k: v for k, v in answer.meta.items() if k != SERVER_INFO_STAMP}  # type: ignore[attr-defined]
+        return answer.model_copy(update={"meta": meta or None})
+    return answer
+
+
+def _in_both_eras(make_server: Any, check: Any) -> Any:
+    """Run ``check`` against a fresh server in each era, and return the answer both gave."""
+
+    async def main(mode: str) -> Any:
+        async with Client(make_server(), mode=mode, cache=None) as client:
+            return await check(client)
+
+    answers = [_unstamped(anyio.run(main, mode)) for mode in ERAS]
+    assert answers[0] == answers[1], f"the eras disagree: {answers}"
+    return answers[0]
+
+
+def _session(check: Any) -> Any:
+    return _in_both_eras(
+        lambda: build_server(EXECUTOR, name="test", instructions="Use the tools."), check
+    )
 
 
 def test_tools_list_mirrors_the_registry_with_behaviour_hints() -> None:
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         return (await session.list_tools()).tools
 
     tools = {item.name: item for item in _session(check)}
 
     assert sorted(tools) == ["annualized_return", "fetch_page", "max_drawdown"]
-    assert tools["max_drawdown"].annotations.readOnlyHint is True
-    assert tools["max_drawdown"].annotations.openWorldHint is False
-    assert tools["fetch_page"].annotations.openWorldHint is True
+    assert tools["max_drawdown"].annotations.read_only_hint is True
+    assert tools["max_drawdown"].annotations.open_world_hint is False
+    assert tools["fetch_page"].annotations.open_world_hint is True
     descriptor = REGISTRY.get("max_drawdown").descriptor()
-    assert tools["max_drawdown"].inputSchema == compact_schema(descriptor["input_schema"])
-    assert tools["max_drawdown"].outputSchema == compact_schema(descriptor["output_schema"])
+    assert tools["max_drawdown"].input_schema == compact_schema(descriptor["input_schema"])
+    assert tools["max_drawdown"].output_schema == compact_schema(descriptor["output_schema"])
     assert tools["max_drawdown"].title == "Max drawdown"
 
 
 def test_tool_results_equal_direct_executor_calls() -> None:
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         return await session.call_tool("annualized_return", ARGUMENTS)
 
     result = _session(check)
     direct = EXECUTOR.execute(ToolCall(tool="annualized_return", arguments=ARGUMENTS))
 
-    assert result.isError is False
-    assert result.structuredContent == direct.output
+    assert result.is_error is False
+    assert result.structured_content == direct.output
     assert (
         result.content[0].text
         == call_tool(EXECUTOR, "annualized_return", ARGUMENTS)["content"][0]["text"]
@@ -92,7 +119,7 @@ def test_tool_results_equal_direct_executor_calls() -> None:
 
 
 def test_invalid_input_and_denied_calls_report_executor_errors() -> None:
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         invalid = await session.call_tool("max_drawdown", {"series_id": "s", "returns": []})
         denied = await session.call_tool("fetch_page", {"url": "https://example.com"})
         unknown = await session.call_tool("place_trade", {})
@@ -100,13 +127,13 @@ def test_invalid_input_and_denied_calls_report_executor_errors() -> None:
 
     invalid, denied, unknown = _session(check)
 
-    assert invalid.isError and invalid.content[0].text.startswith("invalid_input:")
-    assert denied.isError and denied.content[0].text.startswith("denied:")
-    assert unknown.isError and unknown.content[0].text.startswith("unknown_tool:")
-    assert invalid.structuredContent["retryable"] is True
-    assert "returns" in invalid.structuredContent["error"]
-    assert denied.structuredContent["retryable"] is False
-    assert unknown.structuredContent["hint"] == (
+    assert invalid.is_error and invalid.content[0].text.startswith("invalid_input:")
+    assert denied.is_error and denied.content[0].text.startswith("denied:")
+    assert unknown.is_error and unknown.content[0].text.startswith("unknown_tool:")
+    assert invalid.structured_content["retryable"] is True
+    assert "returns" in invalid.structured_content["error"]
+    assert denied.structured_content["retryable"] is False
+    assert unknown.structured_content["hint"] == (
         "Call one of the available tools: annualized_return, fetch_page, max_drawdown."
     )
     assert "Hint: Call one of the available tools" in unknown.content[0].text
@@ -196,26 +223,21 @@ PROMPT = PromptSpec(
 
 
 def _catalog_session(check: Any, **kwargs: Any) -> Any:
-    async def main() -> Any:
-        server = build_server(CATALOG_EXECUTOR, name="test", **kwargs)
-        async with create_connected_server_and_client_session(server) as session:
-            return await check(session)
-
-    return anyio.run(main)
+    return _in_both_eras(lambda: build_server(CATALOG_EXECUTOR, name="test", **kwargs), check)
 
 
 def test_resources_are_read_through_their_tool_with_the_same_output() -> None:
-    async def check(session: ClientSession) -> Any:
-        templates = (await session.list_resource_templates()).resourceTemplates
+    async def check(session: Client) -> Any:
+        templates = (await session.list_resource_templates()).resource_templates
         read = await session.read_resource("test://entry/abc")  # type: ignore[arg-type]
         return templates, read
 
     templates, read = _catalog_session(check, resources=[ENTRY, PAGE])
     direct = CATALOG_EXECUTOR.execute(ToolCall(tool="lookup", arguments={"key": "abc"}))
 
-    assert [item.uriTemplate for item in templates] == ["test://entry/{key}", "test://page/{url}"]
+    assert [item.uri_template for item in templates] == ["test://entry/{key}", "test://page/{url}"]
     assert read.contents[0].text == json.dumps(direct.output, sort_keys=True)
-    assert read.contents[0].mimeType == "application/json"
+    assert read.contents[0].mime_type == "application/json"
 
 
 def test_a_failed_or_unmatched_read_is_an_error_with_the_status_and_hint() -> None:
@@ -226,10 +248,10 @@ def test_a_failed_or_unmatched_read_is_an_error_with_the_status_and_hint() -> No
     with pytest.raises(ResourceReadError, match="No resource matches"):
         read_resource(CATALOG_EXECUTOR, [ENTRY], "test://other/abc")
 
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         try:
             await session.read_resource("test://entry/missing")  # type: ignore[arg-type]
-        except McpError as error:
+        except MCPError as error:
             return error.error.message
         return None
 
@@ -250,7 +272,7 @@ def test_resources_of_unserved_tools_are_not_listed_and_bad_templates_are_refuse
 
 
 def test_prompts_are_listed_and_rendered() -> None:
-    async def check(session: ClientSession) -> Any:
+    async def check(session: Client) -> Any:
         listed = (await session.list_prompts()).prompts
         got = await session.get_prompt("study", {"key": "abc"})
         return listed, got
@@ -262,10 +284,10 @@ def test_prompts_are_listed_and_rendered() -> None:
     ]
     assert got.messages[0].content.text == "Read test://entry/abc and summarise it."
 
-    async def missing(session: ClientSession) -> Any:
+    async def missing(session: Client) -> Any:
         try:
             await session.get_prompt("study", {})
-        except McpError as error:
+        except MCPError as error:
             return error.error.message
         return None
 

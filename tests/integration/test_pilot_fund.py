@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import httpx
+import httpx2
 import pytest
 
 pytest.importorskip("empyrical")
@@ -182,7 +182,7 @@ def day(
 
 
 def _token(day: Day, user: str) -> str:
-    answer = httpx.post(
+    answer = httpx2.post(
         f"{day.idp.base_url}/token",
         data={"grant_type": "password", "username": user, "password": f"kpc-{user}"},
     )
@@ -191,14 +191,14 @@ def _token(day: Day, user: str) -> str:
     return token
 
 
-def _rest(day: Day, credential: str, calls: list[tuple[str, str, Any]]) -> list[httpx.Response]:
+def _rest(day: Day, credential: str, calls: list[tuple[str, str, Any]]) -> list[httpx2.Response]:
     """Make each (method, path, json) request as ``credential``, in one server lifespan."""
 
-    async def main() -> list[httpx.Response]:
+    async def main() -> list[httpx2.Response]:
         async with (
             day.app.router.lifespan_context(day.app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=day.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=day.app),
                 base_url=RESOURCE,
                 headers={"Authorization": f"Bearer {credential}"},
             ) as client,
@@ -431,19 +431,19 @@ def test_mcp_with_a_token_and_the_run_store_names_each_user(day: Day) -> None:
     async def main() -> Any:
         async with (
             day.app.router.lifespan_context(day.app),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=day.app),
+            httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=day.app),
                 base_url=RESOURCE,
                 headers={"Authorization": f"Bearer {pm}"},
             ) as client,
-            streamable_http_client(f"{RESOURCE}/mcp", http_client=client) as (read, write, _),
+            streamable_http_client(f"{RESOURCE}/mcp", http_client=client) as (read, write),
             ClientSession(read, write) as session,
         ):
             await session.initialize()
             return await session.call_tool("kpc_desk_pnl", {"desk": "macro"})
 
     called = anyio.run(main)
-    assert called.isError is False
+    assert called.is_error is False
     _call(day, _token(day, "pm-equities"), "kpc_desk_pnl", desk="macro")
     with SqliteRunStore(get_settings().runs_file) as runs:
         recorded = {(run.actor, run.principal) for run in runs.list_runs(10)}
