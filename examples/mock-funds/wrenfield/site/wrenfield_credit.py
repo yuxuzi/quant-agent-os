@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from quant_toolbox.data import carried_forward
+
 SECTORS = {
     1: "Energy", 2: "Consumer", 3: "Healthcare", 4: "Technology", 5: "Industrials",
     6: "Financials", 7: "Media", 8: "Utilities", 9: "Materials", 10: "RealEstate",
@@ -110,6 +112,7 @@ def spread_duration_dts(
     capital: pd.Series,
     group_by: str = "sector",
     as_of: str | None = None,
+    returns: pd.DataFrame | None = None,
 ) -> DtsResult:
     """Spread duration and DTS of the bonds in ``mv``, by sector, rating, seniority, and more.
 
@@ -122,6 +125,8 @@ def spread_duration_dts(
         capital: The book's capital in USD, by date; the weights divide by it.
         group_by: sector, rating, seniority, currency, book, or none for one total.
         as_of: A business day, YYYY-MM-DD. Default: the last.
+        returns: Optional bond total returns, dates by bonds. When given, the window up to
+            ``as_of`` is checked for carried-forward prices, and the warnings name them.
     """
     if group_by not in ("sector", "rating", "seniority", "currency", "book", "none"):
         raise ValueError(
@@ -160,6 +165,11 @@ def spread_duration_dts(
             )
         )
     skipped = int((~live).sum())
+    warnings = [f"{skipped} held bonds have no spread or duration (defaulted) and are left out."]
+    if not skipped:
+        warnings = []
+    if returns is not None:
+        warnings.extend(carried_warnings(returns, day))
     return DtsResult(
         as_of=day,
         capital_usd=capital_usd,
@@ -167,10 +177,29 @@ def spread_duration_dts(
         total_spread_duration_years=sum(g.spread_duration_years for g in groups),
         total_dts_bp_years=sum(g.dts_bp_years for g in groups),
         excluded_bonds=skipped,
-        warnings=[f"{skipped} held bonds have no spread or duration (defaulted) and are left out."]
-        if skipped
-        else [],
+        warnings=warnings,
     )
+
+
+def carried_warnings(returns: pd.DataFrame, day: str, window: int = 60) -> list[str]:
+    """Warnings for carried-forward prices in the ``window`` rows of bond returns up to ``day``.
+
+    A weekday on which every bond's return is exactly zero is a closed day with carried prices;
+    a bond with a run of zero returns, or several zeros in the window, is named. Uses the
+    platform's `carried_forward` (Quant Toolbox), so the rules match the other tools.
+    """
+    frame = returns.loc[:day].tail(window)
+    dates = [pd.Timestamp(d).date() for d in frame.index]
+    assets = {str(bond): [float(value) for value in frame[bond]] for bond in frame.columns}
+    found = carried_forward(assets, dates)
+    out: list[str] = []
+    if found.closed_days:
+        days = ", ".join(d.isoformat() for d in found.closed_days)
+        out.append(f"Closed days with every bond's return exactly zero (carried prices): {days}.")
+    if found.assets:
+        bonds = ", ".join(z.asset for z in found.assets)
+        out.append(f"Bonds with carried-forward returns in the window: {bonds}.")
+    return out
 
 
 @dataclass

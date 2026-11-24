@@ -145,7 +145,7 @@ Baseline before the round: `tests/mock_funds -k sablecroft` passed in this run (
 | --- | --- | --- | --- | --- | --- | --- |
 | R2-S1 | EUR share class (EV03), `analyze_performance` and the view | Round 1's R1-S13 holds: the view draws the metrics with no currency (`test_the_view_draws_the_metrics_but_not_the_currency_of_an_eur_manager`). The store converts EUR returns to USD (`test_cash_flows_are_gross_and_eur_returns_are_converted`), so the figures are USD and the tool says nothing about it. | Measured (both tests pass) | Generic (a currency in the result's conventions) | friction | State the reporting currency and the conversion in the result's conventions. |
 | R2-S2 | `performance-report` for the EUR class | Not run this round. Inferred: the report has no currency line for a series, so a reader sees USD figures labelled as the manager's. | Inferred | Generic | friction | As R2-S1. |
-| R2-S3 | `/readyz` | Round 1's R1-S9 holds as above; the fund still has no `check()`. | Measured (round-1 test) | Fund's own store | friction | Add `check()` that reads the warehouse. |
+| R2-S3 | `/readyz` (R1-S9) | Fixed in round 2: `SablecroftStore.check()` calls the warehouse's `check()`, which re-reads each table folder's `_delta_log` from disk and runs a query (not the views loaded at start). With the warehouse folder gone, `/readyz` answers 503 naming `datasets` (`test_readyz_is_503_naming_datasets_when_the_warehouse_folder_is_gone`). | Measured (test passes) | Fund's own store | friction | Closed. |
 
 ### Round 2 data model notes
 

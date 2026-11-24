@@ -89,8 +89,8 @@ is enough here only because `ids()` reads the file. Fixed in #104 (firm robustne
 
 | # | Where | What happened | Measured or inferred | Generic or Kestrel's own | Severity | Next step |
 | --- | --- | --- | --- | --- | --- | --- |
-| R2-K1 | Upgrade in place from v0.9.0 | Not run. This round did not fetch the v0.9.0 wheel or run the runbook's backup and upgrade, so the in-place upgrade and the keep-the-stores check are open. The drill's build of the worktree wheel passed (phase 1, 0.1 s). | Not run | Generic (the upgrade path) | friction | Run the upgrade in a scratch home with the v0.9.0 wheel, then the drill. |
-| R2-K2 | `WarehouseDatasetStore` has no `check()` | Readiness works through `ids()`, not a declared check. A store that answers `ids()` from a cache would pass the probe while its file is gone. | Measured (readiness probe, file gone: NOT READY) | Generic (the protocol) | cosmetic | Add `check()` to the store (the fund's file), so the probe does not depend on `ids()` keeping its shape. |
+| R2-K1 | Upgrade in place from a v0.9.0 wheel install to the candidate | An in-place upgrade kept the run store, the keys, and the knowledge store; the old key worked; the AI-use report covered calls from both versions. Rollback works only when `pyproject.toml` is restored together with `uv.lock` and `uv sync --locked` is run: restoring `uv.lock` alone left the new wheels installed, because `uv add` writes the sources into `pyproject.toml`. | Measured (orchestrator, round 2) | Generic | friction | Runbook fixed in the same pull request: the rollback steps restore both files and run `uv sync --locked`. |
+| R2-K2 | `WarehouseDatasetStore` has no `check()` | Readiness works through `ids()`, not a declared check. A store that answers `ids()` from a cache would pass the probe while its file is gone. | Measured (readiness probe, file gone: NOT READY) | Generic (the protocol) | cosmetic | Open: add `check()` to the store (the fund's file). |
 
 ### Round 2 data model notes
 

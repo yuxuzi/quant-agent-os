@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from quant_agent_os.data import UnknownDatasetError
 from quant_agent_os.data.datasets import readiness_probe
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,10 +41,14 @@ def test_r2_kestrel_readiness_fails_when_its_warehouse_file_is_gone(tmp_path: Pa
     raise AssertionError("readiness passed with the warehouse file missing")
 
 
-def test_r2_larchmere_readiness_still_passes_with_the_sql_source_gone(tmp_path: Path) -> None:
-    """R2-L1 (measured): round 1's R1-L12 is open. `ids()` is static, so readiness passes."""
+def test_r2_larchmere_readiness_fails_with_the_sql_source_gone(tmp_path: Path) -> None:
+    """R2-L1, fixed in round 2: `check()` reads the deal database, so readiness fails."""
     store = LarchmereDatasetStore(tmp_path / "missing.db", tmp_path / "catalog")
-    readiness_probe(store)()
+    try:
+        readiness_probe(store)()
+    except UnknownDatasetError:
+        return
+    raise AssertionError("readiness passed with the deal database missing")
 
 
 def test_r2_corvane_readiness_fails_when_its_warehouse_is_unreachable() -> None:
