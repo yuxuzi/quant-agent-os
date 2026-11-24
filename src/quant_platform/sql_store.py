@@ -51,6 +51,41 @@ class Fetch(Protocol):
 Derived = Callable[[Fetch], Rows]
 
 
+class DatasetReadError(LookupError):
+    """A dataset the caller may read could not be read: its columns differ, or its query failed.
+
+    The message names the dataset and never its SQL or the driver's text, which can name other
+    tables. A missing column is named with the columns the result has. A caller sees it only for a
+    dataset the caller may already read, since a refused one answers as missing (decision 0021).
+    """
+
+
+def _database_errors() -> tuple[type[BaseException], ...]:
+    """The errors a driver raises through SQLAlchemy; the `sql` extra is installed to get here."""
+    from sqlalchemy.exc import DBAPIError
+
+    return (DBAPIError,)
+
+
+def _check_declared(item: SqlDataset, rows: Rows) -> None:
+    """Raise `DatasetReadError` if the result lacks a column the declaration names."""
+    expected: tuple[str, ...]
+    if item.shape == "long" and item.index and item.column and item.value:
+        expected = (item.index, item.column, item.value)
+    elif item.shape == "wide" and item.index:
+        expected = (item.index,)
+    else:
+        return
+    missing = [name for name in expected if name.lower() not in rows.columns]
+    if missing:
+        listed = ", ".join(f"'{name}'" for name in missing)
+        noun = "column" if len(missing) == 1 else "columns"
+        raise DatasetReadError(
+            f"Dataset '{item.id}' has no {noun} {listed}, which its declaration names; its columns "
+            f"are {', '.join(rows.columns)}."
+        )
+
+
 class SqlDatasetStore:
     """Datasets read from SQL databases, cached until a source's stamp changes."""
 
@@ -103,12 +138,19 @@ class SqlDatasetStore:
                 f"No dataset '{dataset_id}'; the datasets are {', '.join(self.ids())}."
             )
         used = self._sources_used(dataset_id)
-        stamp = tuple(self._stamp(name) for name in used)
-        with self._lock:
-            cached = self._cache.get(dataset_id)
-        if cached is not None and cached[0] == stamp:
-            return cached[1]
-        text = rows_to_csv(self._rows(dataset_id))
+        try:
+            stamp = tuple(self._stamp(name) for name in used)
+            with self._lock:
+                cached = self._cache.get(dataset_id)
+            if cached is not None and cached[0] == stamp:
+                return cached[1]
+            text = rows_to_csv(self._rows(dataset_id))
+        except _database_errors() as error:  # a failed read is never cached
+            raise DatasetReadError(
+                f"Dataset '{dataset_id}' could not be read: the database could not run its query. "
+                "A column the query names may have been renamed or removed, or the database may "
+                "be unavailable."
+            ) from error
         dataset = parse_dataset(dataset_id, text.encode("utf-8"))
         with self._lock:
             self._cache[dataset_id] = (stamp, dataset)
@@ -127,6 +169,7 @@ class SqlDatasetStore:
             calendar = self._fetch(
                 item.calendar_source or source, item.calendar, item.params_for(item.calendar)
             )
+        _check_declared(item, rows)
         try:
             return shape_rows(item, rows, calendar)
         except SqlError as error:

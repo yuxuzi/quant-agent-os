@@ -396,7 +396,12 @@ serve_apps([risk], datasets=store)
   dialect warns, because nothing in the library limits it. Give the login only read grants.
 - **Freshness.** A dataset is cached until its source's stamp changes: a SQL string returning a version, a
   time to live in seconds (default 60), or a function returning any value. Cached datasets are the same
-  objects every caller reads, under per-caller access like any other store.
+  objects every caller reads, under per-caller access like any other store. A renamed column is seen when the
+  stamp changes, so a stamp that reads a version shows it at once.
+- **A broken dataset names itself.** If the result lacks a column the declaration names, the caller gets an error
+  naming the dataset, the missing columns, and the columns the result has. If the database refuses the query, the
+  error names the dataset only, never its SQL. A failed read is not cached, and a dataset the caller may not read
+  still looks missing.
 - **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
   is where fund-specific logic stays visible.
 

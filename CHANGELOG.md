@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
   not reachable."), without the service's address, instead of "failed with an internal error". Its HTTP timeout
   is the tool's `timeout_seconds` less a fifth of it (at most 2 s), so the service's timeout fires before the
   tool's own limit and the caller is not left to a race between the two. A 4xx status is unchanged.
+- **A renamed column names its dataset.** A `SqlDatasetStore` dataset whose result lacks a column its declaration
+  names now fails with `DatasetReadError` (a `LookupError`) that names the dataset, the missing columns, and the
+  columns found. A query the database refuses fails the same way, with the dataset's id and no SQL. A failed read
+  is not cached, so a repaired dataset is read again at once. A dataset a caller may not read still looks missing.
 
 ## [0.9.0] - 2026-11-19
 
