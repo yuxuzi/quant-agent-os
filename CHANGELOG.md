@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`performance-report` shows n/a for a horizon shorter than the data's period, and counts in the data's periods.** On quarterly data MTD is n/a (it was the quarter's return under a month's name); on annual data MTD and QTD are. The reconciliation counts quarter-ends or year-ends for such data, not months, e.g. "4 comparisons: 4 quarter-ends of 1 book".
 - **`performance-report` reads the periods a year from the dates.** `periods_per_year` now defaults to `"auto"`: the median spacing of the dates gives daily (252), weekly (52), monthly (12), quarterly (4), or annual (1), and every report states the count and how it was chosen. Before, `--defaults` annualised monthly returns as daily (ITD 33.16% against 10.02% for the same file), with no warning. A set number that disagrees with the dates by more than 1.5 times is refused, naming what the dates look like; the `frequency` question is not asked for this application, and `periods_per_year` replaces it.
 - **`qaos app new --source`** sets where a generated project installs quant-agent-os (Quant Toolbox) from, a git+https URL with `@tag` or a local path, with `--defaults` as well. A template that installs no quant-agent-os refuses it. Before, `--defaults` always pinned the release on GitHub.
 

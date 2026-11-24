@@ -115,7 +115,7 @@ def reconcile_command(
             err=True,
         )
         raise typer.Exit(code=1)
-    typer.echo(f"Clean: {len(result.compared)} months agree within {tolerance_bps:g} bps.")
+    typer.echo(f"Clean: {result.summary}")
 
 
 @app.command()

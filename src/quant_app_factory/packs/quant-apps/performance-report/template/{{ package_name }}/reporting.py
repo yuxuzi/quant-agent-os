@@ -24,7 +24,7 @@ from .settings import Settings
 CONVENTIONS = [
     "Returns are simple per-bar returns, compounded geometrically.",
     "Annualised return is geometric. Volatility is the sample standard deviation, annualised.",
-    "A horizon the data does not fully cover shows n/a.",
+    "A horizon the data does not fully cover, or is shorter than its periods, shows n/a.",
     "Every figure is computed from the returns file. The report contains no interpretation.",
 ]
 

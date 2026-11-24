@@ -100,3 +100,30 @@ def resolve(dates: list[dt.date], setting: int | str) -> Periods:
         f"periods_per_year is {number}, about {DAYS_PER_YEAR / number:.3g} days a period, but the "
         f"dates are a median {spacing:g} days apart. {likely}"
     )
+
+
+PERIOD_TO_DATE = {"MTD": 1, "QTD": 3, "YTD": 12}  # the most months each one can span
+
+
+def horizon_months(label: str) -> int | None:
+    """The months a horizon spans at most: None for ITD, which runs from the first return."""
+    if label == "ITD":
+        return None
+    if label in PERIOD_TO_DATE:
+        return PERIOD_TO_DATE[label]
+    return int(label[:-1]) * (12 if label.endswith("Y") else 1)
+
+
+def shorter_than_period(label: str, periods_per_year: int) -> bool:
+    """Whether a horizon is shorter than one of the data's periods, so it cannot be shown.
+
+    MTD is shorter than a quarter, and MTD and QTD than a year. Such a figure would be the whole
+    period's return under a shorter name, so the report shows n/a instead.
+    """
+    months = horizon_months(label)
+    return months is not None and months * periods_per_year < 12
+
+
+def period_noun(count: int) -> str:
+    """The name of one period, as a report says it: "quarterly", or "3-month" for another count."""
+    return NAMES.get(count) or f"{12 / count:g}-month"

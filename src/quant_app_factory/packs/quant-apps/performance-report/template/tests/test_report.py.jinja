@@ -276,6 +276,44 @@ def test_periods_per_year_is_auto_or_a_whole_number(tmp_path: Path) -> None:
         Settings(periods_per_year=0)
 
 
+# Horizons on coarser data
+
+
+def test_a_horizon_shorter_than_the_period_is_n_a_not_the_period_under_its_name() -> None:
+    context = build_context(
+        _returns(_period_ends(12, 3), 0.02), Settings(horizons=["MTD", "QTD", "YTD", "ITD"])
+    )
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+    labels = context.settings.horizons
+
+    cells = {label: table.rows[0][1 + labels.index(label)] for label in labels}
+
+    assert cells["MTD"] is None  # a quarter's return is not a month-to-date figure
+    assert cells["QTD"] == pytest.approx(0.02)  # the quarter, as of a quarter end
+    assert cells["YTD"] == pytest.approx(1.02**4 - 1)
+    assert "n/a: MTD, shorter than the data's quarterly period" in table.note
+
+
+def test_an_annual_fund_shows_no_month_or_quarter_to_date() -> None:
+    context = build_context(
+        _returns(_period_ends(6, 12), 0.02), Settings(horizons=["MTD", "QTD", "YTD"])
+    )
+    table = section_module.horizons(context)[0]
+    assert isinstance(table, TableBlock)
+
+    assert table.rows[0][1:] == [None, None, pytest.approx(0.02)]
+    assert "n/a: MTD, QTD, shorter than the data's annual period" in table.note
+
+
+def test_reconcile_counts_are_in_the_data_periods() -> None:
+    quarter_ends = _returns(_period_ends(4, 3), 0.01)
+
+    assert reconcile(quarter_ends, quarter_ends, 1.0).summary == (
+        "4 comparisons: 4 quarter-ends of 1 book, at 1 bps tolerance."
+    )
+
+
 # Reconciliation
 
 
@@ -384,7 +422,7 @@ def test_reconcile_exits_clean_or_with_breaks(tmp_path: Path) -> None:
 
     clean = runner.invoke(app, ["reconcile", str(same), "--returns", str(ours)])
     assert clean.exit_code == 0, clean.output
-    assert "2 months agree" in clean.output
+    assert "2 comparisons: 2 months of 1 book" in clean.output
 
     broken = runner.invoke(app, ["reconcile", str(off), "--returns", str(ours)])
     assert broken.exit_code == 1

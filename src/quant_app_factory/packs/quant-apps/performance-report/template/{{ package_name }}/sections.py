@@ -39,6 +39,7 @@ from quant_toolbox.report import (
 
 from .context import Context
 from .firm.sections import SECTIONS as FIRM_SECTIONS
+from .frequency import period_noun, shorter_than_period
 
 Section = Callable[[Context], list[Block]]
 MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
@@ -48,20 +49,32 @@ def horizons(context: Context) -> list[Block]:
     """Returns by horizon, one row per book, plus the benchmark."""
     labels = context.settings.horizons
     rate = context.periods_per_year
+    short = [label for label in labels if shorter_than_period(label, rate)]
 
     def row(name: str, values: np.ndarray) -> list[float | str | None]:
-        return [name, *(horizon_return(context.dates, values, label, rate) for label in labels)]
+        return [
+            name,
+            *(
+                None if label in short else horizon_return(context.dates, values, label, rate)
+                for label in labels
+            ),
+        ]
 
     rows = [row(book, context.returns(book)) for book in context.books.columns]
     if context.benchmark is not None:
         rows.append(row(context.benchmark_name, context.benchmark))
+    note = (
+        f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: "
+        "annualised. ITD: annualised once it covers a full year."
+    )
+    if short:
+        note += f" n/a: {', '.join(short)}, shorter than the data's {period_noun(rate)} period."
     return [
         TableBlock(
             title="Returns by horizon",
             columns=[Column("Book", "text"), *(Column(label) for label in labels)],
             rows=rows,
-            note=f"As of {context.as_of}. Basis: {context.settings.basis}. Over one year: "
-            "annualised. ITD: annualised once it covers a full year.",
+            note=note,
         )
     ]
 
