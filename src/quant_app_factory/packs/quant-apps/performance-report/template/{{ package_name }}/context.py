@@ -5,9 +5,8 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-from quant_toolbox.data import FloatArray, Table
+from quant_toolbox.data import FloatArray, Frequency, Table
 
-from .frequency import Periods
 from .settings import Settings
 
 
@@ -20,7 +19,8 @@ class Context:
     benchmarks: dict[str, str] = field(default_factory=dict)  # a book -> its benchmark's column
     benchmark_returns: dict[str, FloatArray] = field(default_factory=dict)  # a column -> returns
     data_notes: list[str] = field(default_factory=list)
-    periods: Periods | None = None  # how many periods a year, and how that was chosen
+    periods: Frequency | None = None  # how many periods a year the dates show, or the settings set
+    periods_how: str = "inferred from the dates"
 
     def benchmark_of(self, book: str) -> tuple[str, FloatArray] | None:
         """The name and returns of ``book``'s benchmark, or None when it has none."""
@@ -53,7 +53,7 @@ class Context:
     def periods_per_year(self) -> int:
         """The periods a year the figures annualise with: the count resolved from the dates."""
         if self.periods is not None:
-            return self.periods.count
+            return self.periods.periods_per_year
         if isinstance(self.settings.periods_per_year, int):
             return self.settings.periods_per_year
         raise ValueError("periods_per_year is auto and unresolved; use build_context.")

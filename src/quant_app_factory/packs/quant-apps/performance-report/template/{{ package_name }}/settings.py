@@ -11,7 +11,7 @@ from typing import Any
 from quant_toolbox.performance import is_horizon
 from quant_toolbox.report import CHART_MODES
 
-from .frequency import AUTO
+AUTO = "auto"  # periods_per_year inferred from the dates
 
 
 class SettingsError(ValueError):

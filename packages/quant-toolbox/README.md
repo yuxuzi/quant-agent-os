@@ -66,4 +66,16 @@ uv run --isolated --no-project --with . --with pytest python -m pytest
 With numpy alone, tests that need an optional library skip. The repository's own `uv run pytest` runs them
 with every extra and under both metrics backends.
 
+## Stability
+
+From 1.0, the public names in `tests/api.lock.json` follow semantic versioning. A patch release changes
+no public name or signature. A minor release may add names. Removing or renaming a name, or changing a
+signature, happens only in a major release. Behaviour changes that keep every name and signature are
+stated in the changelog.
+
+To change a public name or signature: change the code, rewrite the lock with
+`QUANT_TOOLBOX_UPDATE_LOCK=1 uv run pytest packages/quant-toolbox/tests/test_api_lock.py`, and add a
+changelog entry under "Unreleased" that names the change. The lock test fails until both are done, so a
+change cannot reach a release without being stated.
+
 More: the [product page](https://github.com/yuxuzi/quant-agent-os/blob/main/docs/products/quant-toolbox.md).

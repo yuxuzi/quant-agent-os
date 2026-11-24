@@ -10,6 +10,7 @@ import calendar
 from collections.abc import Callable
 
 import numpy as np
+from quant_toolbox.data import period_noun
 from quant_toolbox.performance import (
     active_metrics,
     annualized_return,
@@ -22,6 +23,7 @@ from quant_toolbox.performance import (
     max_drawdown,
     monthly_returns,
     sharpe_ratio,
+    shorter_than_period,
     sortino_ratio,
     value_at_risk,
 )
@@ -39,7 +41,6 @@ from quant_toolbox.report import (
 
 from .context import Context
 from .firm.sections import SECTIONS as FIRM_SECTIONS
-from .frequency import period_noun, shorter_than_period
 
 Section = Callable[[Context], list[Block]]
 MONTHS = [calendar.month_abbr[number] for number in range(1, 13)]
@@ -54,10 +55,7 @@ def horizons(context: Context) -> list[Block]:
     def row(name: str, values: np.ndarray) -> list[float | str | None]:
         return [
             name,
-            *(
-                None if label in short else horizon_return(context.dates, values, label, rate)
-                for label in labels
-            ),
+            *(horizon_return(context.dates, values, label, rate) for label in labels),
         ]
 
     rows = [row(book, context.returns(book)) for book in context.books.columns]

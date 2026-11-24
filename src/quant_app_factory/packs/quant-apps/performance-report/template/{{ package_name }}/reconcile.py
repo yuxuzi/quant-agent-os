@@ -8,13 +8,12 @@ missing from the reference does not count as a break, because the reference is o
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass
 
-from quant_toolbox.data import Table, TableError
+from quant_toolbox.data import Table, TableError, infer_frequency
 from quant_toolbox.performance import monthly_returns
 from quant_toolbox.report import Column, TableBlock
-
-from .frequency import inferred_name
 
 # What a comparison of one period is called, by the data's frequency; months otherwise.
 NOUNS = {"quarterly": "quarter-ends", "annual": "year-ends"}
@@ -63,6 +62,14 @@ class Reconciliation:
         )
 
 
+def _frequency_name(dates: list[dt.date]) -> str:
+    """The name of the dates' frequency, or "" when they show none."""
+    try:
+        return infer_frequency(dates).name
+    except TableError:
+        return ""
+
+
 def reconcile(ours: Table, reference: Table, tolerance_bps: float) -> Reconciliation:
     """Compare each book that is in both tables, month by month."""
     if tolerance_bps < 0:
@@ -90,7 +97,7 @@ def reconcile(ours: Table, reference: Table, tolerance_bps: float) -> Reconcilia
             else:
                 compared.append(Difference(book, month, mine[key], theirs[key]))
     breaks = [item for item in compared if abs(item.bps) > tolerance_bps]
-    noun = NOUNS.get(inferred_name(ours.dates), "months")
+    noun = NOUNS.get(_frequency_name(ours.dates), "months")
     return Reconciliation(compared, breaks, only_ours, only_reference, tolerance_bps, noun)
 
 
