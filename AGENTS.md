@@ -99,6 +99,9 @@ and each `tools.py` holds what serving needs, so serving imports no command modu
 Before reporting work as done, run the test, lint, format, and type-check commands and report
 the real results.
 
+CI tests a pull request on Ubuntu with Python 3.12 only. Label the final pull request of a larger
+piece of work `full-ci` to run every OS and Python version, as each push to main does.
+
 ## Layout and layering
 
 `src/quant_agent_os/`, importing downward only:

@@ -1,7 +1,10 @@
 name: CI
 
+# A pull request tests on Ubuntu with Python 3.12 only. The final pull request of a larger piece of
+# work carries the label `full-ci` and gets the full matrix, as every push to main does.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 
@@ -13,8 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && '["3.12"]' || '["3.11", "3.12", "3.13", "3.14", "3.15"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
