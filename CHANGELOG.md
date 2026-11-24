@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **What 1.0 promises** (decision 0035). From 1.0 the platform follows semver over its served tools, a firm's
+  Python (`__all__` of `quant_platform`, `quant_agent_os.registration`, `quant_agent_os.testing`,
+  `quant_agent_os.tools`, and `quant_agent_os.data`), the files and settings a firm writes, the `qaos`
+  commands, the HTTP routes, and the run records. `tests/contract/public_api.lock.json` locks the Python
+  names and signatures, and `quant_agent_os.registration` and `quant_agent_os.testing` now state theirs. The
+  deprecation rule of decision 0015 returns: 90 days and one minor release before a removal, which is major.
+
+### Added
+
 - **`Refused`, for a firm's tool that refuses a caller.** Raising `quant_agent_os.registration.Refused("message")`
   from a `FirmApp` tool records the call as `denied` with that message, not retryable. A plain exception,
   including `PermissionError`, is still an internal error. Documented in the deployment guide, section 8.
