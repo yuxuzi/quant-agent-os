@@ -99,7 +99,8 @@ def reconcile_command(
                 raise TableError("Name a reference file, or set file under [reference].")
             reference = config.resolve().parent / settings.reference.file
         theirs = load_returns(reference, settings, reference=True)
-        books = [name for name in ours.columns if name != settings.benchmark]
+        benchmarks = settings.benchmark_columns()
+        books = [name for name in ours.columns if name not in benchmarks]
         result = reconcile(ours.select(books), theirs, tolerance_bps)
     except ValueError as error:
         raise _fail(error) from error

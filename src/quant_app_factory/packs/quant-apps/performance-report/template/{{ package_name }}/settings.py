@@ -61,7 +61,8 @@ class Settings:
     """Everything a report needs besides the returns."""
 
     returns: str = "demo"  # a file relative to config.toml, or "demo"
-    benchmark: str = ""  # a column of the returns file to compare against, not shown as a book
+    # A column of the returns file to compare every book against, or a table of book = "column"
+    benchmark: str | dict[str, str] = ""
     basis: str = "not stated"  # what the returns are, on every report: net, gross, or your words
     returns_unit: str = "fraction"  # fraction (0.01 is 1%) or percent (1.0 is 1%)
     periods_per_year: int | str = AUTO  # auto reads the dates; or a number such as 12
@@ -77,6 +78,12 @@ class Settings:
     excel: ExcelSource = field(default_factory=ExcelSource)
     reference: ReferenceSource = field(default_factory=ReferenceSource)
     charts: str = "static"  # static SVG; interactive or interactive-cdn need plotly
+
+    def benchmark_columns(self) -> list[str]:
+        """The columns that are benchmarks, not books: the one named, or each named in the table."""
+        if isinstance(self.benchmark, dict):
+            return list(dict.fromkeys(self.benchmark.values()))
+        return [self.benchmark] if self.benchmark else []
 
     def __post_init__(self) -> None:
         problems = [
@@ -120,7 +127,6 @@ class Settings:
 
 _FLAT = {
     "returns": str,
-    "benchmark": str,
     "basis": str,
     "returns_unit": str,
     "risk_free": float,
@@ -140,7 +146,15 @@ def load_settings(path: Path) -> Settings:
         data = tomllib.loads(path.read_text("utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise SettingsError(f"Cannot read {path}: {error}") from error
-    known = {*_FLAT, "periods_per_year", "horizons", "tearsheets", "excel", "reference"}
+    known = {
+        *_FLAT,
+        "benchmark",
+        "periods_per_year",
+        "horizons",
+        "tearsheets",
+        "excel",
+        "reference",
+    }
     unknown = sorted(set(data) - known)
     if unknown:
         raise SettingsError(f"{path}: unknown keys {', '.join(unknown)}; use {', '.join(known)}.")
@@ -152,6 +166,8 @@ def load_settings(path: Path) -> Settings:
             if not valid or isinstance(value, bool):
                 raise SettingsError(f"{path}: {key} must be {kind.__name__}, not {value!r}.")
             chosen[key] = float(value) if kind is float else value
+    if "benchmark" in data:
+        chosen["benchmark"] = _benchmark(path, data["benchmark"])
     if "periods_per_year" in data:
         chosen["periods_per_year"] = _periods(path, data["periods_per_year"])
     if "horizons" in data:
@@ -165,6 +181,19 @@ def load_settings(path: Path) -> Settings:
     if "reference" in data:
         chosen["reference"] = _reference(path, data["reference"])
     return dataclasses.replace(Settings(), **chosen)
+
+
+def _benchmark(path: Path, value: Any) -> str | dict[str, str]:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict) and all(
+        isinstance(book, str) and book and isinstance(column, str) and column
+        for book, column in value.items()
+    ):
+        return dict(value)
+    raise SettingsError(
+        f'{path}: benchmark must be a column name, or a [benchmark] table of book = "column".'
+    )
 
 
 def _periods(path: Path, value: Any) -> int | str:

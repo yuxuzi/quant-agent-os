@@ -2,6 +2,10 @@
 
 returns = "demo"           # a CSV or Excel file relative to this file, or "demo" for synthetic data
 benchmark = ""             # a column of that file to compare against, not shown as a book
+# One benchmark per book instead: delete the line above, and name each book's column here.
+# [benchmark]
+# GQ = "BM_GQ"
+# Macro = "BM_US300"
 basis = "not stated"       # what the returns are; every report states it: net, gross, or your words
 returns_unit = "fraction"  # fraction (0.01 is 1%) or percent (1.0 is 1%)
 # auto reads the periods a year from the dates and states them in every report; a number, such as

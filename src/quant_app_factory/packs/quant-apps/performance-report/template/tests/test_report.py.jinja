@@ -350,6 +350,78 @@ def test_daily_data_counts_business_days_so_a_weekend_is_not_stale() -> None:
     )
 
 
+# Benchmarks per book
+
+
+def _with_benchmarks() -> Table:
+    gq_bench = np.array([0.01 * ((n % 5) - 2) for n in range(24)])
+    us_bench = np.array([0.02 * ((n % 3) - 1) for n in range(24)])
+    macro = 0.5 * us_bench + 0.001  # its beta to BM_US300 is exactly one half
+    return Table(
+        _period_ends(24, 1),
+        ["GQ", "Macro", "BM_GQ", "BM_US300"],
+        np.column_stack([gq_bench, macro, gq_bench, us_bench]),
+    )
+
+
+def _risk_rows(context: Context) -> tuple[list[str], dict[str, list[Any]]]:
+    table = section_module.risk(context)[0]
+    assert isinstance(table, TableBlock)
+    return [column.name for column in table.columns], {str(row[0]): row for row in table.rows}
+
+
+def test_each_book_is_measured_against_its_own_benchmark_and_names_it() -> None:
+    context = build_context(
+        _with_benchmarks(), Settings(benchmark={"GQ": "BM_GQ", "Macro": "BM_US300"})
+    )
+    names, rows = _risk_rows(context)
+
+    assert context.books.columns == ["GQ", "Macro"]
+    assert rows["GQ"][names.index("Benchmark")] == "BM_GQ"
+    assert rows["GQ"][names.index("Beta")] == pytest.approx(1.0)
+    assert rows["GQ"][names.index("Tracking error")] == pytest.approx(0.0, abs=1e-12)
+    assert rows["Macro"][names.index("Benchmark")] == "BM_US300"
+    assert rows["Macro"][names.index("Beta")] == pytest.approx(0.5)
+    horizons = section_module.horizons(context)[0]
+    assert isinstance(horizons, TableBlock)
+    assert [row[0] for row in horizons.rows] == ["GQ", "Macro", "BM_GQ", "BM_US300"]
+
+
+def test_a_book_the_table_leaves_out_is_n_a_and_noted() -> None:
+    context = build_context(_with_benchmarks(), Settings(benchmark={"GQ": "BM_GQ"}))
+    names, rows = _risk_rows(context)
+
+    assert context.benchmark_of("Macro") is None
+    assert rows["Macro"][names.index("Benchmark")] == "none"
+    assert rows["Macro"][names.index("Beta")] is None
+    assert any("No benchmark is set for Macro" in note for note in context.data_notes)
+
+
+def test_a_benchmark_table_names_only_books_in_the_file() -> None:
+    with pytest.raises(TableError, match="names Nope, which is not a book"):
+        build_context(_with_benchmarks(), Settings(benchmark={"Nope": "BM_GQ"}))
+
+
+def test_the_benchmark_is_a_column_or_a_table_of_books(tmp_path: Path) -> None:
+    table = _write_csv(tmp_path / "t.toml", '[benchmark]\nGQ = "BM_GQ"\n')
+    assert load_settings(table).benchmark == {"GQ": "BM_GQ"}
+    single = _write_csv(tmp_path / "s.toml", 'benchmark = "Index"\n')
+    assert load_settings(single).benchmark == "Index"
+    with pytest.raises(SettingsError, match="benchmark must be a column name"):
+        load_settings(_write_csv(tmp_path / "n.toml", "benchmark = 3\n"))
+
+
+def test_reconcile_compares_no_benchmark_column_of_a_table(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "ours.csv", "date,GQ,BM_GQ\n2024-01-31,0.01,0.05\n2024-02-29,0.02,0.05\n")
+    theirs = _write_csv(tmp_path / "theirs.csv", "date,GQ\n2024-01-31,0.01\n2024-02-29,0.02\n")
+    _write_csv(tmp_path / "config.toml", 'returns = "ours.csv"\n[benchmark]\nGQ = "BM_GQ"\n')
+
+    done = runner.invoke(app, ["reconcile", str(theirs)])
+
+    assert done.exit_code == 0, done.output
+    assert "BM_GQ" not in done.output
+
+
 # Reconciliation
 
 

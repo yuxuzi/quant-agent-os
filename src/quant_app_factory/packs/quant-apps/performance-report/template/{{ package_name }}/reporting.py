@@ -78,21 +78,40 @@ def build_context(table: Table, settings: Settings, as_of: dt.date | None = None
     periods = resolve(table.dates, settings.periods_per_year)
     settings = dataclasses.replace(settings, periods_per_year=periods.count)
     chosen = table.until(as_of) if as_of else table
-    books = [name for name in chosen.columns if name != settings.benchmark]
-    if settings.benchmark and settings.benchmark not in chosen.columns:
+    bench_columns = settings.benchmark_columns()
+    missing = [name for name in bench_columns if name not in chosen.columns]
+    if missing:
         raise TableError(
-            f"No benchmark column {settings.benchmark!r}; the file has {', '.join(chosen.columns)}."
+            f"No benchmark column {missing[0]!r}; the file has {', '.join(chosen.columns)}."
         )
+    books = [name for name in chosen.columns if name not in bench_columns]
     if not books:
         raise TableError("The returns file has no book besides the benchmark.")
-    benchmark = chosen.column(settings.benchmark) if settings.benchmark else None
+    if isinstance(settings.benchmark, dict):
+        unknown = [book for book in settings.benchmark if book not in books]
+        if unknown:
+            raise TableError(
+                f"[benchmark] names {', '.join(unknown)}, which is not a book in the file; "
+                f"the books are {', '.join(books)}."
+            )
+        benchmarks = {
+            book: settings.benchmark[book] for book in books if book in settings.benchmark
+        }
+    else:
+        benchmarks = {book: settings.benchmark for book in books} if settings.benchmark else {}
+    notes = check_data(chosen.select(books))
+    unset = [book for book in books if book not in benchmarks]
+    if isinstance(settings.benchmark, dict) and unset:
+        notes.append(
+            f"No benchmark is set for {', '.join(unset)} under [benchmark]; their "
+            "benchmark-relative figures are n/a."
+        )
     return Context(
         books=chosen.select(books),
         settings=settings,
-        benchmark=benchmark,
-        benchmark_name=settings.benchmark,
-        data_notes=check_data(chosen.select(books))
-        + staleness_notes(chosen.dates[-1], as_of or dt.date.today(), periods),
+        benchmarks=benchmarks,
+        benchmark_returns={name: chosen.column(name) for name in bench_columns},
+        data_notes=notes + staleness_notes(chosen.dates[-1], as_of or dt.date.today(), periods),
         periods=periods,
     )
 
