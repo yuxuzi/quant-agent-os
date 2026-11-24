@@ -22,6 +22,11 @@
   `tests/unit/test_forward_caller.py`, `tests/unit/test_caller_assertion.py`, and `tests/unit/test_approvals.py`
   cover their refusals. Open questions for that review are in the decision record.
 
+- **2026-11-24, third review, for 1.0:** decisions 0030, 0031, 0034, and 0036, `/readyz`, `NAME_FILE` secrets,
+  `Refused`, service errors from `call_service`, and `qaos runs report`. Code read against the earlier method, and
+  a live `qaos serve --http` probed; [below](#third-review-for-10). Rows above that say "not yet re-reviewed" for
+  0028, 0030, and 0031 are covered there.
+
 The general model is in [security.md](security.md). This page checks it against the code and
 lists what is still open.
 
@@ -112,6 +117,10 @@ and F-2 matter much less. Severity from F-6 on is for one firm's server.
 | **F-14** | Low | **Opened 2026-11-18, mitigated.** A standing approval was server-wide: pre-approving `network` for one firm's risk service also let any other tool needing `network` run without an approval. | `QUANT_AGENT_OS_PREAPPROVED_TOOLS` names the tools (decision 0030); the server-wide form stays for compatibility and warns at start-up and in `qaos doctor`. |
 | **F-15** | Low | **Opened 2026-11-18, by design.** A forwarded caller assertion can be replayed to the same endpoint within its minute by whoever reads it, and does not bind the request's arguments. A shared secret lets its holder sign any caller. | Serve over https; one secret per service; a service that must refuse replays remembers nonces until they expire. Binding a hash of the request is an open question for the next review. |
 
+| **F-16** | Low | **Opened 2026-11-24, mitigated.** A JWKS provider that lists `client_ids` with no `token_use` accepts that client's ID tokens as well as its access tokens; Cognito puts the client id in both. | Set `token_use = "access"` for Cognito, as the guide does; `qaos serve` and `qaos doctor` now warn when it is missing. |
+| **F-17** | Low | **Opened 2026-11-24, by design.** A JWT checked against the provider's keys stays valid until it expires: disabling a user does not stop a token already issued. Introspection's window is 60 seconds (F-4). | Keep access token lifetimes short at the provider (an hour or less), and use introspection where a provider offers it and minutes matter. |
+| **F-18** | Low | **Opened 2026-11-24, by design.** `/readyz` takes no credential and reads each store once per request. | Let only the platform's health checker reach it through the proxy, which already rate-limits unauthenticated requests. |
+
 No finding allows a cross-tenant read, or an approval without an approver key. Through the platform's own tools, none
 allows a read outside a caller's access rules once they apply. A firm's own tools are outside that claim (F-6).
 
@@ -131,3 +140,26 @@ allows a read outside a caller's access rules once they apply. A firm's own tool
 3. Fix F-1 and F-5 in code, or accept them in writing. Both are fixed in 0.1.1.
 4. Have the remote surface reviewed or penetration-tested by someone independent of its
    authors.
+
+## Third review, for 1.0
+
+2026-11-24, at `main` after #110. The same method: the code against the earlier checks, then a live server. Still an
+AI agent's review, not a penetration test.
+
+| What was checked | Result | Evidence |
+| --- | --- | --- |
+| JWKS sign-in (0031): algorithms | Holds. Only listed asymmetric algorithms; never `none` or HS*; a key's declared `alg` must match the token's; a `kid` is required; `crit` headers are refused | `src/quant_platform/identity/jwks.py`, `tests/server/test_jwks_sign_in.py` |
+| JWKS sign-in: claims | Holds. Exact `iss`, `exp` required, `nbf` and `iat` within the leeway, an `aud` the file lists or, with none, a listed `client_id`; `token_use` when set | Same; F-16 for a file that sets no `token_use` |
+| JWKS sign-in: key rotation | Holds. An unknown `kid` fetches the keys again, at most once every 30 seconds, and a failed fetch refuses | `tests/server/test_jwks_sign_in.py`, "Keys: fetching, rotation, failure" |
+| Caller assertion (0030) | Holds. HMAC-SHA256 compared in constant time, 60-second lifetime, a 128-bit nonce, a secret of 32 bytes or more read at each call, refused with no authenticated caller; replay within the minute is F-15 | `src/quant_agent_os/caller_assertion.py`, `tests/unit/test_caller_assertion.py` |
+| Standing approvals for named tools (0030) | Holds. Only named tools; patterns and unknown permissions refused; the server-wide form warns (F-14) | `tests/unit/test_approvals.py` |
+| MCP on SDK 2 (0034) | Holds in both eras. No credential and a bad one: 401. A foreign `Host` or `Origin`: 400. A key without `tools:call` is refused a call over 2025-11-25 and 2026-07-28 alike | Live probe; `tests/contract/test_mcp_http.py` |
+| Views for MCP Apps (0036) | Holds. A view is listed only when one of its tools is served to that caller; reading it needs `tools:call`; the page is static, sends nothing, and sets text with `textContent` | `tests/contract/test_mcp_views.py` |
+| `/readyz` | Holds. It names failed checks only, never a path or error text, and calls no network service; F-18 | `tests/server/test_readiness.py`, live probe |
+| `NAME_FILE` secrets | Holds. Both forms set, an unreadable file, or an empty one is refused, naming the variable and path, never the content | `tests/unit/test_secrets.py` |
+| `call_service` errors and `Refused` | Holds. A service outage names the tool, never the address, headers, or body; `Refused` records `denied` with the firm's own message, so what it says is the firm's choice (F-6 applies) | `tests/unit/test_registration_service.py`, `tests/unit/test_executor.py` |
+| `qaos runs report` | Holds. An operator command; no arguments, outputs, retrieved text, or error text in any format; refused dataset ids, the caller's own strings, pass through `redact_text` | `tests/unit/test_runs_report.py` |
+
+No finding of this review allows a read outside a caller's access rules, a call without the scope, or an approval
+without an approver. The recommendations under "Before production use by a firm" stand, first among them an
+independent review.
