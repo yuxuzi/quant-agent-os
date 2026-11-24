@@ -22,6 +22,7 @@ without hand-written workarounds.
 | C7 | **Security re-reviewed.** JWKS sign-in (0031), the caller assertion and per-tool approvals (0030), the SDK 2 transport (0034), and the surfaces added here | `docs/security-review.md`, third review | W7 |
 | C8 | **A stated promise.** Which surfaces semver covers from 1.0, and how one changes | Decision 0035 | W8 |
 | C9 | **Docs true.** The README says what it does for AI clients and installs what the getting-started path needs; the demo guide runs from a generated application to a question in an AI client | `tests/contract/test_docs.py`, and a rehearsal | W8 |
+| C10 | **Quant Toolbox 1.0.** The numbers every generated application and tool share: frequency, horizons, and stale-data checks in its public API, held by known answers computed independently of both metrics backends, with its API reviewed, locked, and promised under semver | Its own suite, the API lock, and the rounds | W10 |
 
 **Python stays 3.11 to 3.15 for 1.0.** A firm's own server imports the firm's code into the same interpreter
 (decision 0020), so the platform's lowest Python is the lowest a fund's code may need. 3.11 has upstream
@@ -44,6 +45,7 @@ commands before handing back, and its result is reviewed before the pull request
 | W6 | **Mock-fund rounds** | `integration/1.0-rN`, then fixes on owning branches | [Part 3](#3-mock-fund-rounds) | Funds' facilities import nothing of the platform |
 | W7 | **Security re-review** | `docs/security-review-3` | A third review of C7's scope, with real servers in the configurations most likely to fail open | Findings fixed or accepted in writing |
 | W8 | **Promise and docs** | `docs/1.0` | Decision 0035; README, getting started, the demo guide, and the product pages for 1.0 | Docs stay true; a quality claim cites a measurement |
+| W10 | **Quant Toolbox 1.0** | `feat/toolbox-1.0` | Frequency inference (now in the `performance-report` template) and carried-forward and staleness checks (now in Quant Analytics) move into the toolbox's public API, and the template and analytics use them; horizons by the data's own frequency; known-answer tests against hand-computed references for annualisation, horizons, and drawdowns; a review of every public name before the lock is frozen; a stated semver promise | Toolbox imports nothing of the platform; its API changes only with the lock and its changelog |
 | W9 | **Release** | `release/1.0.0` | Version, changelogs, pack pins, mirrors | Only on the owner's word |
 
 ## 3. Mock-fund rounds
@@ -73,6 +75,14 @@ at all five and writes down what it finds.
 **Exit.** A round in which no fund meets a new generic finding that blocks adoption, every fund's tests and
 the Kestrel drill pass from built wheels on Linux CI, and C1 to C9 hold. Then W7, W8, and W9.
 
+**Round 1** (2026-11-24, on `integration/1.0-r1`; findings in each fund's `FINDINGS.md` on the
+`round1/*` branches). Every fund's tests and the Kestrel drill passed. Generic findings that blocked adoption:
+readiness that read nothing real, monthly data annualised as daily in `performance-report`, one benchmark per
+returns file, stale prices used silently in risk, and a firm image without drivers. All were fixed and merged
+(#98, #101, #104), with service errors, refusals by firm tools, SQL dataset errors, the view's layout, and the
+AI-use report's times and approvers. Left for later rounds or 1.x: vintages for restated figures, and the
+tool-output gaps the view shows (window dates, benchmark name, risk-free rate, VaR sign).
+
 **Candidates the rounds decide.** Each enters 1.0 only if a round shows it blocks adoption at a fund:
 
 | Gap (cross-fund row) | Next step |
@@ -90,4 +100,5 @@ the Kestrel drill pass from built wheels on Linux CI, and C1 to C9 hold. Then W7
 2. W1 and W2, as two pull requests; W5 builds on W1's SDK and goes after it.
 3. W3, W4, and W5 in parallel, each by an agent in its own worktree.
 4. Round 1 on `integration/1.0-r1`; fixes; further rounds until the exit holds.
-5. W7 and W8; then W9, on the owner's word.
+5. W10 before round 2's candidate, so the rounds test the toolbox it promises.
+6. W7 and W8; then W9, on the owner's word.
