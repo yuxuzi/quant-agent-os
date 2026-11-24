@@ -11,7 +11,14 @@ from quant_toolbox.data import TableError
 from quant_toolbox.report import Document, render_markdown
 
 from .reconcile import as_block, reconcile
-from .reporting import build_context, build_document, load_returns, open_returns, write_report
+from .reporting import (
+    build_context,
+    build_document,
+    load_returns,
+    open_returns,
+    write_reconciliation,
+    write_report,
+)
 from .sections import available, describe
 from .settings import Settings, load_settings
 
@@ -84,9 +91,13 @@ def reconcile_command(
         float, typer.Option(help="Largest difference to accept per month, in basis points.")
     ] = 1.0,
     returns: ReturnsOption = None,
+    out: Annotated[Path, typer.Option(help="Where run folders go.")] = Path("reports"),
     config: ConfigOption = Path("config.toml"),
 ) -> None:
-    """Compare monthly returns with reference figures. Exits 1 if anything fails to agree."""
+    """Compare monthly returns with reference figures. Exits 1 if anything fails to agree.
+
+    Each run writes its result to reconcile.json in a new run folder under ``out``.
+    """
     settings = _settings(config)
     try:
         ours = (
@@ -102,13 +113,18 @@ def reconcile_command(
         benchmarks = settings.benchmark_columns()
         books = [name for name in ours.columns if name not in benchmarks]
         result = reconcile(ours.select(books), theirs, tolerance_bps)
-    except ValueError as error:
+        source = str(returns) if returns else settings.returns
+        folder = write_reconciliation(
+            result, ours.select(books), reference, settings, out, source=source
+        )
+    except (ValueError, OSError) as error:
         raise _fail(error) from error
     typer.echo(render_markdown(Document("Reconciliation", blocks=[as_block(result)])))
     for note in result.only_ours:
         typer.echo(f"Ours only: {note}")
     for note in result.only_reference:
         typer.echo(f"Reference only: {note}")
+    typer.echo(f"Wrote {folder}")
     if not result.clean:
         typer.secho(
             f"{len(result.breaks)} breaks; {len(result.only_reference)} reference items unmatched.",

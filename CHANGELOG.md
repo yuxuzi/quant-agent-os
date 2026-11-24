@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`performance-report`'s `reconcile` leaves a dated record.** Each run writes `reconcile.json` to a new run folder under `reports/`: the reference file's name and SHA-256, the tolerance, the comparisons and periods, every break (book, month, ours, reference, and bps), and provenance. A restatement after a report went out is then visible beside the report's own folder.
 - **`performance-report` takes one benchmark per book.** `benchmark` may be a table of `book = "column"` under `[benchmark]`, besides the single column name. Each benchmark-relative figure uses that book's benchmark, and the risk table names it in a Benchmark column. A book the table leaves out shows n/a and is noted; a table key that is not a book is refused.
 - **`performance-report` notes a stale last date.** When the file's last date is more than two of its periods before the as-of date (`--as-of`, or today), the data notes name the last date and the gap, in days and periods. Daily data counts weekdays, so a Friday's file is current on the Monday.
 - **`performance-report` shows n/a for a horizon shorter than the data's period, and counts in the data's periods.** On quarterly data MTD is n/a (it was the quarter's return under a month's name); on annual data MTD and QTD are. The reconciliation counts quarter-ends or year-ends for such data, not months, e.g. "4 comparisons: 4 quarter-ends of 1 book".

@@ -36,6 +36,9 @@ uv run {{ project_name }} reconcile admin_returns.xlsx --tolerance-bps 1
 ```
 
 It compares each book month by month, lists every break, and exits 1 if anything fails to agree.
+Each run also writes `reconcile.json` to a new folder under `reports/`: the reference's name and
+SHA-256, the tolerance, every break, and the reconciled figures, so a restatement after a report
+went out leaves a dated record.
 The benchmark is not compared. If the administrator's file is in percent, or its table starts below
 title rows, say so under `[reference]` in `config.toml`; name the file there too, and
 `{{ project_name }} reconcile` needs no argument.

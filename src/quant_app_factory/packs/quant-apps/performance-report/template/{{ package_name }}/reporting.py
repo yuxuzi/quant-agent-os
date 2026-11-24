@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from . import __version__
 from .context import Context
 from .firm.loaders import LOADERS
 from .frequency import STALE_PERIODS, Periods, periods_behind, resolve
+from .reconcile import Reconciliation
 from .sections import available
 from .settings import Settings
 
@@ -163,6 +165,63 @@ def build_document(context: Context, tearsheet: str | None = None) -> Document:
         subtitle=f"{span}. Basis: {settings.basis}. {periods}. Computed figures only.",
         blocks=blocks,
     )
+
+
+def write_reconciliation(
+    result: Reconciliation,
+    returns: Table,
+    reference: Path,
+    settings: Settings,
+    root: Path,
+    *,
+    source: str,
+) -> Path:
+    """Write a run folder with ``reconcile.json``: the comparison, its breaks, and the reference.
+
+    Each run gets its own folder, so a restatement after a report went out leaves a dated record
+    of the reference that was compared, by name and SHA-256, beside the report's own folder.
+    """
+    created = dt.datetime.now(dt.UTC)
+    folder = audit.new_run_folder(root, audit.run_name("reconcile", created))
+    digest = hashlib.sha256(reference.read_bytes()).hexdigest()
+    months = {item.month for item in result.compared}
+    payload: dict[str, Any] = {
+        "reference": {
+            "file": reference.name,
+            "fingerprint": f"sha256:{digest}",
+            "unit": settings.reference.unit or settings.returns_unit,
+        },
+        "reconciliation": {
+            "summary": result.summary,
+            "clean": result.clean,
+            "tolerance_bps": result.tolerance_bps,
+            "comparisons": len(result.compared),
+            "periods": len(months),
+            "period_name": result.noun,
+            "books": len({item.book for item in result.compared}),
+            "breaks": [
+                {
+                    "book": item.book,
+                    "month": item.month,
+                    "ours": item.ours,
+                    "reference": item.reference,
+                    "bps": item.bps,
+                }
+                for item in result.breaks
+            ],
+            "only_ours": result.only_ours,
+            "only_reference": result.only_reference,
+        },
+        "provenance": audit.provenance(
+            version=__version__,
+            where=Path(__file__),
+            fingerprints={"data_fingerprint": returns.fingerprint()},
+            now=created,
+            source=source,
+        ),
+    }
+    audit.write_json(folder / "reconcile.json", payload)
+    return folder
 
 
 def write_report(
