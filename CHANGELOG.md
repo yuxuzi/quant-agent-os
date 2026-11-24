@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
+  and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
+  and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
+  [operations](docs/operations.md#show-how-ai-was-used).
+
 ### Changed
 
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
