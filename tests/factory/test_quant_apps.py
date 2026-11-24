@@ -119,6 +119,29 @@ def test_the_new_command_knows_each_application(
     assert f'profile = "{profile}"' in (tmp_path / "my-app.toml").read_text()
 
 
+def test_a_long_description_wraps_and_the_project_still_lints(tmp_path: Path) -> None:
+    """The description lands in the package docstring; 101 characters once broke E501."""
+    description = (
+        "Quarterly tear sheets for the equity long/short book and its benchmarks, "
+        "for the PM and risk reviews."
+    )
+    assert len(description) == 101
+
+    project = _render(tmp_path, "performance-report", description=description)
+
+    init = (project / "fund_app" / "__init__.py").read_text("utf-8")
+    assert max(len(line) for line in init.splitlines()) <= 100
+    for command in (["check", "."], ["format", "--check", "."]):
+        done = subprocess.run(
+            [sys.executable, "-m", "ruff", *command],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+
+
 # One copy of the numbers: Quant Toolbox (decision 0026)
 
 PACKS = [QUANT_APPS_PACK, BUILT_IN_PACKS["quant-baseline"]]

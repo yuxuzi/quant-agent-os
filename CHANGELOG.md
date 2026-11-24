@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **A long description no longer breaks a `performance-report` project's checks.** The description is wrapped in the package docstring, so a description of 101 characters or more passes `ruff check`.
 - **A `header_row` that holds no data says what it read.** A wrong `[excel] header_row` (or `[reference]`)
   now names the row read as the column names, its cells, and the row below it, with the first date's row,
   in place of "no rows of data below row N".
