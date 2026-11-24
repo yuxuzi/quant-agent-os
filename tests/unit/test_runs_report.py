@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -161,6 +162,11 @@ def _counts(row: Any) -> tuple[int, ...]:
     )
 
 
+def _plain(text: str) -> str:
+    """``text`` without terminal colour codes, which CI's forced colour adds to help output."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_the_header_and_principals_are_counted(store: RunStore) -> None:
     _populate(store)
     report = _report(store)
@@ -282,7 +288,8 @@ def test_a_prune_in_or_after_the_period_is_noted_and_its_calls_are_not_counted(
     store: RunStore,
 ) -> None:
     _populate(store)
-    cutoff = datetime.now(UTC)
+    # A second ahead: Windows' clock is coarse enough for a call to share "now" with the cutoff.
+    cutoff = datetime.now(UTC) + timedelta(seconds=1)
     store.prune_runs(
         cutoff,
         AuditEvent(
@@ -387,5 +394,5 @@ def test_the_report_command_refuses_bad_input(path: Path) -> None:
         str(path.with_suffix(".x")),
     ]
     assert RUNNER.invoke(app, missing).exit_code == 1
-    assert "--from" in RUNNER.invoke(app, ["runs", "report", "--help"]).output
-    assert "report" in RUNNER.invoke(app, ["runs", "--help"]).output
+    assert "--from" in _plain(RUNNER.invoke(app, ["runs", "report", "--help"]).output)
+    assert "report" in _plain(RUNNER.invoke(app, ["runs", "--help"]).output)
