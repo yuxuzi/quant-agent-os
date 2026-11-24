@@ -15,7 +15,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from quant_agent_os.data import DatasetStore, GuardedDatasetStore, dataset_resources, dataset_tools
+from quant_agent_os.data import (
+    DatasetStore,
+    GuardedDatasetStore,
+    dataset_resources,
+    dataset_tools,
+    readiness_probe,
+)
 from quant_agent_os.registration import FirmApp
 from quant_agent_os.tools import AccessPolicy, PermissionPolicy, PromptSpec, ResourceSpec, ToolSpec
 from quant_agent_os.tools.registry import DuplicateToolError
@@ -124,13 +130,14 @@ def compose(
     `GuardedDatasetStore` too. Raises `DuplicateToolError` when an extra tool reuses a served
     name: it never replaces a platform tool.
     """
-    # Readiness reads the stores themselves: a guarded view needs a caller, and has none at /readyz.
+    # Readiness reads the stores themselves, uncached: a guarded view needs a caller, and has none
+    # at /readyz, so its probe reads the store it wraps.
     checks: dict[str, Callable[[], object]] = {}
     if research is not None:
         knowledge = research.store
         checks["knowledge"] = lambda: knowledge.has_document(NO_DOCUMENT)
     if datasets is not None:
-        checks["datasets"] = datasets.ids
+        checks["datasets"] = readiness_probe(datasets)
     if (
         access is not None
         and datasets is not None

@@ -37,6 +37,8 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 DEFAULT_TTL_SECONDS = 60.0
+# How long `check` waits for one source to answer `SELECT 1`.
+PROBE_TIMEOUT_SECONDS = 5.0
 Stamp = str | int | float | Callable[[], Hashable]
 
 
@@ -91,10 +93,49 @@ class SqlDatasetStore:
         self._lock = threading.Lock()
         self._cache: dict[str, tuple[tuple[Hashable, ...], Dataset]] = {}
         self._ttl: dict[str, tuple[float, int]] = {}
+        self._probes: dict[str, threading.Thread] = {}
 
     def ids(self) -> list[str]:
         """Return every dataset id, sorted."""
         return sorted([*self.datasets, *self.derived])
+
+    def check(self) -> None:
+        """Run ``SELECT 1`` on every source, uncached, and raise if one does not answer in time.
+
+        `/readyz` calls this, so a source that has gone fails readiness at the next probe, where
+        `ids` (declared, not read) would still answer. Each probe first drops the source's idle
+        pooled connections, so it opens a new one: a pooled connection can outlive a deleted SQLite
+        file, and a server that restarted. Each source gets `PROBE_TIMEOUT_SECONDS`. A source still
+        silent then is reported, and its probe thread is left to end on its own; no new probe
+        starts for a source while its last one runs, so a hung source costs one thread, not one per
+        probe. A driver's own connect timeout (``connect_timeout`` for psycopg, ``timeout`` for
+        pyodbc) makes the probe fail sooner.
+        """
+        silent = [name for name in self.sources if not self._answers(name)]
+        if silent:
+            raise ConnectionError(f"sources not answering: {', '.join(silent)}")
+
+    def _answers(self, name: str) -> bool:
+        outcome: list[bool] = []
+
+        def probe() -> None:
+            engine = self.sources[name]
+            try:
+                engine.dispose()  # close idle connections, so the read below opens a new one
+                fetch_rows(engine, "SELECT 1")
+            except Exception:  # the probe reports a failure only; the error may name a host
+                return
+            outcome.append(True)
+
+        with self._lock:
+            running = self._probes.get(name)
+            if running is not None and running.is_alive():
+                return False
+            thread = threading.Thread(target=probe, name=f"qaos-probe-{name}", daemon=True)
+            self._probes[name] = thread
+        thread.start()
+        thread.join(PROBE_TIMEOUT_SECONDS)
+        return outcome == [True]
 
     def get(self, dataset_id: str) -> Dataset:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""

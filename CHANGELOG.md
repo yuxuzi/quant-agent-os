@@ -34,6 +34,16 @@ All notable changes to this project are documented here. The format follows
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
   `agent-tool` 1.0.2), so a generated application gets Quant Toolbox 0.8.0. Only the default pin changed;
   the published mirrors carry these versions.
+- **Datasets in readiness.** `/readyz` calls a dataset store's `check()` when it has one, and its `ids()` only when
+  it does not. `DirectoryDatasetStore.check()` fails when its folder is missing or cannot be listed, so a datasets
+  folder that does not exist is not ready. `SqlDatasetStore.check()` runs `SELECT 1` on each source, uncached, with
+  a 5-second limit. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap. A firm's store should
+  define `check()`; see the store notes in `docs/deployment.md` section 8.
+
+### Fixed
+
+- **Readiness that reads.** A `/readyz` probe of the datasets no longer passes after the store's files or database
+  are deleted: its `ids()` answered from a declared list. The run and knowledge stores were already read by a query.
 
 ## [0.9.0] - 2026-11-19
 

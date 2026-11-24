@@ -191,7 +191,10 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
 - **No replacing.** A tool with a name the server already serves stops the server at start-up. Give an
   app `prefix=True` to start its tools' names with its own.
 - **Your data.** Give `serve_apps` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
-  tools and `list_datasets` then read it by reference, and no connector is needed.
+  tools and `list_datasets` then read it by reference, and no connector is needed. Define `check()` as well: it
+  is what `/readyz` calls for datasets. It reads your source once, without a cache, and raises when the source
+  cannot be read. Without it, readiness calls `ids()`, which can answer from a list you declared, so the probe
+  passes after the source is gone. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap.
 - **Test it.** In your CI, call `check_app(risk, {"desk_var": {...}}, datasets=store)` from
   `quant_agent_os.testing`. With `lock=Path("tools.lock.json")` it also fails when a tool's schemas
   change without a big enough version bump; create the lock with `update_lock=True`.
@@ -396,6 +399,11 @@ serve_apps([risk], datasets=store)
 - **Freshness.** A dataset is cached until its source's stamp changes: a SQL string returning a version, a
   time to live in seconds (default 60), or a function returning any value. Cached datasets are the same
   objects every caller reads, under per-caller access like any other store.
+- **Readiness.** `check()`, which `/readyz` calls, runs `SELECT 1` on each source, uncached. Each probe first
+  drops a source's idle connections, so it opens a new one, and a deleted SQLite file or a restarted server
+  fails the next probe. A source that does not answer within 5 seconds fails it too. Set the driver's own
+  connect timeout in `connect_args` of `sql.connect` (`connect_timeout` for psycopg, `timeout` for pyodbc) so
+  that a hung connection fails sooner.
 - **The rare derived dataset** is a Python function in `derived=`, given a `fetch(source, sql, params)`; it
   is where fund-specific logic stays visible.
 
@@ -440,6 +448,8 @@ because a tool holding the unguarded store can read anything in it.
   and `research_report` reads it too. If two groups must not share research, run a server per corpus.
 - **`runs:read` sees every caller's runs,** including what they retrieved and computed. Give it only to auditors.
 - **Prompts and server instructions go to every caller.** Keep anything confidential out of `extra_instructions`.
+- **Readiness is not a caller.** `/readyz` has no caller, so a guarded store is checked as the store it wraps, and
+  refusals do not hide a missing source.
 - **Local use is not covered.** stdio and the SDK have no authenticated caller and trust whoever started them,
   so `serve_stdio` refuses a catalog with an access policy.
 
@@ -621,10 +631,15 @@ against the code, but nothing deploys them, so check every name and value agains
 - **One replica.** The run store is a SQLite file, so it lives on a volume the container mounts (Azure Files for
   Container Apps, Amazon EFS for Fargate), and one server writes to it. Set the replica count to one, minimum and
   maximum, or the ECS desired count to one. This holds until a PostgreSQL run store exists.
-- **Probes.** Liveness is `/healthz`: the process is up. Readiness is `/readyz`: the run store, knowledge store, and
-  datasets each answer. Point the readiness probe, or the load balancer's health check, at `/readyz`, and keep
-  `/healthz` for the container's own check. A server that cannot read its stores then leaves the rotation, and is
-  not restarted for it.
+- **Probes.** Liveness is `/healthz`: the process is up. Readiness is `/readyz`, and each store is read again on
+  every probe, not answered from a cache. The run store and the knowledge store run a query. The datasets check
+  calls each store's `check()` ([section 8](#8-add-your-own-tools)): the platform's directory store needs its
+  folder to exist and be listable, so a datasets folder that does not exist is not ready (create it with
+  `qaos init`, or mount the volume), and the SQL store runs `SELECT 1` on each source. A store with no `check()`
+  is probed by `ids()`, which is weaker. Point the readiness probe, or the load balancer's health check, at
+  `/readyz`, and keep `/healthz` for the container's own check. A server that cannot read its stores then leaves
+  the rotation, and is not restarted for it. Probe every 10 to 30 seconds: the SQL check reconnects to each source
+  on each probe.
 - **Logs.** Set `QUANT_AGENT_OS_LOG_FORMAT=json`. Each line is one JSON object (`time`, `level`, `logger`,
   `message`, and `exception` when there is one), for the platform's log service to parse. Logs go to standard
   error, which Container Apps sends to Log Analytics and ECS to CloudWatch Logs.
