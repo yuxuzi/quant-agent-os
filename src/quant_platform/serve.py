@@ -180,6 +180,7 @@ def serve_stdio(catalog: Catalog, *, runs: Path | None = None, record: bool = Tr
             ),
             resources=catalog.resources,
             prompts=catalog.prompts,
+            views=catalog.views,
         )
     finally:
         if run_store is not None:

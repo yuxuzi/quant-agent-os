@@ -346,6 +346,8 @@ def catalog_command(
             table.add_row("resource", resource.uri_template, resource.description)
         for prompt in catalog.prompts:
             table.add_row("prompt", prompt.name, prompt.description)
+        for view in catalog.views:
+            table.add_row("view", view.uri, view.description)
         console.print(table)
     finally:
         if research is not None:

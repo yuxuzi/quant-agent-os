@@ -13,6 +13,7 @@ from quant_agent_os.tools.catalog import (
     PromptSpec,
     ResourceSpec,
     UnknownResourceError,
+    ViewSpec,
 )
 from quant_agent_os.tools.contracts import (
     Deprecation,
@@ -51,6 +52,7 @@ __all__ = [
     "ToolSpec",
     "UnknownResourceError",
     "UnknownToolError",
+    "ViewSpec",
     "current_caller",
     "parse_version",
     "tool",

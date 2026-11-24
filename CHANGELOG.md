@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A performance view in MCP Apps clients** (decision 0036). `analyze_performance` links a `ui://` page,
+  `ui://quant-agent-os/performance.html`, which clients that show MCP Apps draw in place of the result's
+  text: the series, its conventions, the metrics, warnings, and evidence. The server serves the page
+  beside the tool, and every other client gets the same text result as before. Contract tests cover the
+  metadata, the page resource, and the fallback over both MCP eras; a real client has not yet shown the
+  page. See [the product page](docs/products/quant-analytics.md#see-the-result-in-your-client).
 - **`qaos runs report` shows how AI clients used the platform over a period.** It counts calls by principal, tool,
   and dataset, with refusals, approvals, and the platform versions seen, as Markdown, CSV, or JSON. It holds counts
   and names only, never arguments, outputs, retrieved text, or error text. It is an operator command, not a tool. See
@@ -25,6 +31,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The performance view leads with four figures** (annualised return, volatility, Sharpe ratio, maximum drawdown), then groups the other metrics, adds the basis the output states, and names the benchmark only when the output does. The window's dates, the benchmark's name, and the risk-free rate's value are not in the tool's output, so the page does not show them.
 - **The server speaks MCP 2026-07-28, and still the 2025-11-25 handshake** (decision 0034). It runs on the
   MCP Python SDK 2 (`mcp>=2.3,<3`): a client that speaks the stateless 2026-07-28 revision gets it, over
   HTTP and stdio, and older clients keep the `initialize` handshake, from the same endpoint. Tools,
