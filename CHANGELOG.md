@@ -43,6 +43,9 @@ All notable changes to this project are documented here. The format follows
   folder that does not exist is not ready. `SqlDatasetStore.check()` runs `SELECT 1` on each source, uncached, with
   a 5-second limit. `GuardedDatasetStore` and `MemoryDatasetStore` check the store they wrap. A firm's store should
   define `check()`; see the store notes in `docs/deployment.md` section 8.
+- **A listing scope gap is a warning.** A sign-in file whose `scope_map` grants `tools:call` and never `tools:list`
+  is warned about by `qaos doctor` and at `qaos serve` start-up, naming the provider. The listing needs `tools:list`, and
+  `docs/deployment.md` section 10 now says so. The file is still accepted.
 
 ### Fixed
 

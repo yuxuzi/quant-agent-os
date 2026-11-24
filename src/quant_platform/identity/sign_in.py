@@ -369,3 +369,22 @@ def load_sign_in_file(path: Path) -> SignInFile:
 def load_sign_in(path: Path, environ: Mapping[str, str | None] | None = None) -> SignIn:
     """Read a sign-in file and its secrets; raise `SignInError` for anything missing or wrong."""
     return load_sign_in_file(path).resolve(environ)
+
+
+def scope_gap(scope_map: Mapping[str, str]) -> str | None:
+    """Return a warning when ``scope_map`` grants ``tools:call`` but never ``tools:list``.
+
+    Otherwise return None.
+
+    Most MCP clients list the tools before they call one, so a token with only the call scope
+    fails at the listing. The server does not refuse such a file: it warns, at start-up and in
+    `qaos doctor`.
+    """
+    granted = set(scope_map.values())
+    if "tools:call" in granted and "tools:list" not in granted:
+        return (
+            "its scope_map grants tools:call and never tools:list. Most MCP clients list the tools "
+            "before they call one, so its users are refused at the listing; map a provider's "
+            'name to "tools:list" too.'
+        )
+    return None

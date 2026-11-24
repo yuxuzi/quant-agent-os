@@ -601,6 +601,12 @@ groups_claims = ["cognito:groups"]
 "qaos/tools.call" = "tools:call"
 ```
 
+Grant both scopes. The server maps each one you name, so the listing needs `tools:list` and each call needs
+`tools:call`, and most MCP clients list the tools before they call one. A token with `tools:call` alone is
+accepted, but its user is refused at the listing, and the client fails there. A scope map that grants
+`tools:call` and never `tools:list` is warned about, not refused: `qaos doctor` and `qaos serve` say so
+and name the provider.
+
 What each setting does, with its default (a setting that the other mode would ignore is refused):
 
 | Setting | Default | Meaning |
@@ -646,7 +652,8 @@ qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_A
 - **The principal is the token's subject** (`sub`) unless `principal_claim` says otherwise, recorded on every run
   as a key's principal is.
 - **Scopes map one to one,** after `scope_map`. A token never carries `runs:approve`: approving needs an approver
-  key.
+  key. A client that calls tools needs both `tools:list` (the listing) and `tools:call` (each call); a scope map
+  that grants only `tools:call` draws a warning from `qaos doctor` and `qaos serve`.
 - **Clients find the provider** from the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`, which
   every 401 names. Some providers, Entra among them, do not publish OAuth authorization-server metadata, so check that your
   connector can sign in, or set it up with the provider's addresses by hand.

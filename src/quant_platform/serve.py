@@ -97,6 +97,15 @@ def warn_about_open_access(catalog: Catalog, ring: KeyRing, sign_in: SignIn | No
         )
 
 
+def warn_about_scopes(sign_in: SignIn | None) -> None:
+    """Warn about a provider whose scope map grants ``tools:call`` and never ``tools:list``."""
+    from quant_platform.identity.sign_in import scope_gap
+
+    for server in sign_in.jwks_servers if sign_in is not None else []:
+        if gap := scope_gap(server.scope_map):
+            errors.print(f"[yellow]warning:[/yellow] {server.issuer}: {gap}")
+
+
 def _applies(access: AccessPolicy, path: Path) -> bool:
     """Return whether ``access`` is the rules of the access file at ``path``."""
     return isinstance(access, FileAccessPolicy) and access.path.resolve() == path.resolve()
@@ -235,6 +244,7 @@ def _http_app(
     try:
         warn_about_permissions(catalog.tools, catalog.policy)
         warn_about_open_access(catalog, ring, signing_in)
+        warn_about_scopes(signing_in)
         tenancy = single_tenant(catalog, run_store, catalog.policy)
         if signing_in is None:
             http_app = build_http_app(
