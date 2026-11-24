@@ -40,6 +40,7 @@ from quant_analytics.computed import (
     PerformanceOutput,
     RiskInput,
     RiskOutput,
+    carried_forward_warnings,
     historical_stress,
     model_risk,
     performance,
@@ -747,6 +748,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
             periods_per_year=periods,
         )
         output = portfolio_risk(resolved)
+        carried = carried_forward_warnings(assets, dates)
         stress, stress_note, stress_evidence = historical_stress(
             params.portfolio_id, weights, assets, dates, periods
         )
@@ -771,7 +773,7 @@ def analytics_tools(store: DatasetStore | None = None) -> ToolRegistry:
                 "historical_stress_note": stress_note,
                 "factor_model": model,
                 "conventions": conventions,
-                "warnings": [*notes, *disagreement, *output.warnings, *model_notes],
+                "warnings": [*notes, *disagreement, *output.warnings, *carried, *model_notes],
                 "evidence": [*output.evidence, *stress_evidence, *model_evidence],
                 "data_versions": resolver.versions(),
             }

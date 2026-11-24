@@ -29,6 +29,10 @@ All notable changes to this project are documented here. The format follows
   names now fails with `DatasetReadError` (a `LookupError`) that names the dataset, the missing columns, and the
   columns found. A query the database refuses fails the same way, with the dataset's id and no SQL. A failed read
   is not cached, so a repaired dataset is read again at once. A dataset a caller may not read still looks missing.
+- **`analyze_risk` warns about carried-forward prices.** Exact zero returns in a run of three or more, or more than
+  5% of a window with at least two, are named by asset and count, and a weekday on which every asset's return is
+  exactly zero is noted as a closure carried forward (dates are known for a dataset). These are warnings only: the
+  figures are unchanged, and the tool's schema and version are too.
 
 ## [0.9.0] - 2026-11-19
 
