@@ -6,6 +6,16 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Added
+
+- `data.infer_frequency(dates)` returns a `Frequency` (name and periods a year) from the median spacing
+  of the dates, and `data.check_frequency(dates, periods_per_year)` checks a stated count against
+  them. The performance-report template used to carry this logic in its own `frequency.py`; it now
+  calls these. `data.period_noun` names one period for a count, and `data.periods_behind` and
+  `data.STALE_PERIODS` count how far a last date lies behind an as-of date.
+- `performance.shorter_than_period(label, periods_per_year)` says whether a horizon is shorter than the
+  data's period (MTD on quarterly data, MTD or QTD on annual data), so the template can show n/a.
+
 ### Changed
 
 - `data.excel.read_workbook` says what it read when no data follows the header row: the row it read as

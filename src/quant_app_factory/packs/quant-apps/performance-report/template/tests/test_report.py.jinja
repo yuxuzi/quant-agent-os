@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from quant_toolbox.data import Table, TableError, demo_returns
+from quant_toolbox.data import Table, TableError, demo_returns, infer_frequency
 from quant_toolbox.report import Column, TableBlock
 from typer.testing import CliRunner
 
@@ -17,7 +17,6 @@ from {{ package_name }} import sections as section_module
 from {{ package_name }}.cli import app
 from {{ package_name }}.context import Context
 from {{ package_name }}.firm.sections import SECTIONS as FIRM_SECTIONS
-from {{ package_name }}.frequency import resolve
 from {{ package_name }}.reconcile import reconcile
 from {{ package_name }}.reporting import build_context, build_document, check_data, load_returns
 from {{ package_name }}.settings import (
@@ -225,9 +224,9 @@ def _returns(dates: list[dt.date], value: float = 0.01) -> Table:
 def test_the_periods_are_inferred_from_the_dates(
     dates: list[dt.date], periods: int, name: str
 ) -> None:
-    resolved = resolve(dates, "auto")
+    resolved = infer_frequency(dates)
 
-    assert (resolved.count, resolved.name) == (periods, name)
+    assert (resolved.periods_per_year, resolved.name) == (periods, name)
     assert Settings().periods_per_year == "auto"
 
 
@@ -263,7 +262,7 @@ def test_dates_that_match_no_frequency_ask_for_a_number() -> None:
     every_three_days = [dt.date(2024, 1, 1) + dt.timedelta(days=3 * n) for n in range(20)]
 
     with pytest.raises(TableError, match="matches no frequency"):
-        resolve(every_three_days, "auto")
+        infer_frequency(every_three_days)
 
 
 def test_periods_per_year_is_auto_or_a_whole_number(tmp_path: Path) -> None:

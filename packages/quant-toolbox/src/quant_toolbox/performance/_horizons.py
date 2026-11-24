@@ -61,6 +61,18 @@ def horizon_start(label: str, as_of: dt.date) -> dt.date | None:
     return months_before(as_of, count * 12 if label.endswith("Y") else count)
 
 
+def shorter_than_period(label: str, periods_per_year: int) -> bool:
+    """Whether a horizon is shorter than one of the data's periods, so it cannot be shown.
+
+    MTD is shorter than a quarter, and MTD and QTD than a year. Such a figure would be the whole
+    period's return under a shorter name, so `horizon_return` gives None (n/a) instead.
+    """
+    if label == "ITD":
+        return False
+    months = {"MTD": 1, "QTD": 3, "YTD": 12}.get(label) or _length_in_months(label)
+    return months * periods_per_year < 12
+
+
 def horizon_return(
     dates: list[dt.date],
     returns: FloatArray,

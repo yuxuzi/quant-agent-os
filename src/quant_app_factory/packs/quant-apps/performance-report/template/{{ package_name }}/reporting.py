@@ -10,7 +10,18 @@ from typing import Any
 
 import numpy as np
 from quant_toolbox import audit
-from quant_toolbox.data import Table, TableError, demo_returns, load_table, return_notes
+from quant_toolbox.data import (
+    STALE_PERIODS,
+    Frequency,
+    Table,
+    TableError,
+    check_frequency,
+    demo_returns,
+    infer_frequency,
+    load_table,
+    periods_behind,
+    return_notes,
+)
 from quant_toolbox.data.excel import read_workbook
 from quant_toolbox.report import Document, TextBlock, render_html, render_markdown, to_dict
 from quant_toolbox.report.excel import write_workbook
@@ -18,10 +29,9 @@ from quant_toolbox.report.excel import write_workbook
 from . import __version__
 from .context import Context
 from .firm.loaders import LOADERS
-from .frequency import STALE_PERIODS, Periods, periods_behind, resolve
 from .reconcile import Reconciliation
 from .sections import available
-from .settings import Settings
+from .settings import AUTO, Settings
 
 CONVENTIONS = [
     "Returns are simple per-bar returns, compounded geometrically.",
@@ -77,8 +87,12 @@ def build_context(table: Table, settings: Settings, as_of: dt.date | None = None
     The periods a year come from the whole file's dates, or the settings' number, which must agree
     with them; the context's settings then hold that count.
     """
-    periods = resolve(table.dates, settings.periods_per_year)
-    settings = dataclasses.replace(settings, periods_per_year=periods.count)
+    auto = settings.periods_per_year == AUTO
+    if auto:
+        periods = infer_frequency(table.dates)
+    else:
+        periods = check_frequency(table.dates, int(settings.periods_per_year))
+    settings = dataclasses.replace(settings, periods_per_year=periods.periods_per_year)
     chosen = table.until(as_of) if as_of else table
     bench_columns = settings.benchmark_columns()
     missing = [name for name in bench_columns if name not in chosen.columns]
@@ -115,10 +129,11 @@ def build_context(table: Table, settings: Settings, as_of: dt.date | None = None
         benchmark_returns={name: chosen.column(name) for name in bench_columns},
         data_notes=notes + staleness_notes(chosen.dates[-1], as_of or dt.date.today(), periods),
         periods=periods,
+        periods_how="inferred from the dates" if auto else "set in config.toml",
     )
 
 
-def staleness_notes(last: dt.date, as_of: dt.date, periods: Periods) -> list[str]:
+def staleness_notes(last: dt.date, as_of: dt.date, periods: Frequency) -> list[str]:
     """A note when the last date is more than two periods before ``as_of``, naming both."""
     behind = periods_behind(last, as_of, periods)
     if behind <= STALE_PERIODS:
@@ -128,6 +143,12 @@ def staleness_notes(last: dt.date, as_of: dt.date, periods: Periods) -> list[str
         f"The last date is {last}, {(as_of - last).days} days ({behind:.1f} {unit}) before the "
         f"as-of date {as_of}. The figures stop at {last}."
     ]
+
+
+def _periods_statement(periods: Frequency, how: str) -> str:
+    """The periods, as a report states them, such as "12 periods a year (monthly, ...)"."""
+    named = f"{periods.name}, " if periods.name else ""
+    return f"{periods.periods_per_year} periods a year ({named}{how})"
 
 
 def check_data(table: Table) -> list[str]:
@@ -158,7 +179,9 @@ def build_document(context: Context, tearsheet: str | None = None) -> Document:
     who = f"{settings.firm_name}: " if settings.firm_name else ""
     span = f"{context.dates[0]} to {context.as_of}"
     periods = (
-        context.periods.statement() if context.periods else f"{context.periods_per_year} periods"
+        _periods_statement(context.periods, context.periods_how)
+        if context.periods
+        else f"{context.periods_per_year} periods"
     )
     return Document(
         title=f"{who}{sheet.title or name}",

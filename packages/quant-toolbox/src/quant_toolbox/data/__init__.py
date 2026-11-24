@@ -16,6 +16,9 @@ adds the caller's holidays to the source's, and lets listed open days override t
 `either` combine calendars. `set_default_calendar` sets the fund's calendar once, `using_calendar`
 another for one block, and `align_to_calendar` and `session_gaps` use it when given none.
 `business_days` is weekdays only, for synthetic data.
+
+A series' frequency is `infer_frequency` from its dates, or `check_frequency` for a stated count;
+`periods_behind` counts how many periods a last date lies before an as-of date.
 """
 
 from quant_toolbox._types import BoolArray, FloatArray
@@ -44,6 +47,14 @@ from quant_toolbox.data._checks import (
     short_sample,
 )
 from quant_toolbox.data._config import ConfigError, dump_config, load_config, read_toml
+from quant_toolbox.data._frequency import (
+    STALE_PERIODS,
+    Frequency,
+    check_frequency,
+    infer_frequency,
+    period_noun,
+    periods_behind,
+)
 from quant_toolbox.data._synthetic import demo_book, demo_panel, demo_returns, random_walk_panel
 from quant_toolbox.data._tables import (
     Loader,
@@ -72,11 +83,13 @@ __all__ = [
     "MIN_OBSERVATIONS",
     "OUTLIER",
     "PERCENT_LIKE",
+    "STALE_PERIODS",
     "BoolArray",
     "Calendar",
     "CalendarError",
     "ConfigError",
     "FloatArray",
+    "Frequency",
     "Loader",
     "Panel",
     "Rows",
@@ -89,6 +102,7 @@ __all__ = [
     "aligned",
     "as_calendar",
     "business_days",
+    "check_frequency",
     "configured_calendar",
     "default_calendar",
     "demo_book",
@@ -97,6 +111,7 @@ __all__ = [
     "dump_config",
     "either",
     "fetch_rows",
+    "infer_frequency",
     "joint",
     "load_config",
     "load_csv",
@@ -104,6 +119,8 @@ __all__ = [
     "meta_path",
     "parse_date",
     "percent_like",
+    "period_noun",
+    "periods_behind",
     "pivot_long",
     "random_walk_panel",
     "read_meta",

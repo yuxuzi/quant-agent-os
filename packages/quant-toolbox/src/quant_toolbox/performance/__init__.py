@@ -39,6 +39,7 @@ from quant_toolbox.performance._horizons import (
     is_horizon,
     monthly_returns,
     months_before,
+    shorter_than_period,
     underwater,
     wealth,
 )
@@ -137,6 +138,7 @@ __all__ = [
     "rolling_volatility",
     "sharpe_ratio",
     "sharpe_standard_error",
+    "shorter_than_period",
     "simple_returns",
     "skewness",
     "sortino_ratio",
