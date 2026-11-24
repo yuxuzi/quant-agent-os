@@ -323,5 +323,6 @@ docker compose -f deploy/compose.yaml run --rm -T doctor
 | "No knowledge store" | The volume is empty or missing | Ingest, or restore. Check the compose project name: volumes belong to a project |
 | "Cannot open the run store" | The file is damaged | Restore the backup |
 | "no keyword index" | The Python running the server has no SQLite FTS5, which does not happen in this image | Use this image, or see the message |
+| `/readyz` answers 503 with `"failed": ["runs"]` (or `knowledge`, `datasets`) | That store cannot be read: a closed or missing file, or a volume that is not mounted | Check the volume is mounted and the path is right. If the file is damaged, restore it. The server's log names the check that failed, never the path |
 | The server accepts no key | The keys file is missing or invalid, and the log says why | Fix the file or restore `keys`. Nothing is accepted until then, on purpose |
 | Nothing is allowed for anyone | The access file is missing or invalid | Fix the file. Nothing is allowed until then, on purpose |

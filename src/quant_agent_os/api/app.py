@@ -1,14 +1,17 @@
 """The REST interface (decision 0011): FastAPI routes over the executor, with no business logic.
 
 Calls go through the same `ToolExecutor` and `RunRecorder` as MCP, so a REST call returns the
-output MCP returns as ``structuredContent``. Every request but ``/healthz`` needs an API key,
-or a token that ``tokens`` accepts, with the route's scope; each call is recorded as a run with
-actor ``rest`` and the credential's principal. Needs the optional ``api`` extra.
+output MCP returns as ``structuredContent``. Every request but the two health routes needs an
+API key, or a token that ``tokens`` accepts, with the route's scope; each call is recorded as a run
+with actor ``rest`` and the credential's principal. ``/healthz`` and ``/readyz`` need no credential:
+``/readyz`` reads the stores the server answers from and names only the ones that fail. Needs the
+optional ``api`` extra.
 
 No ``from __future__ import annotations`` here: FastAPI reads the route annotations at runtime,
 and they name objects local to `build_app`.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any
@@ -33,10 +36,20 @@ if TYPE_CHECKING:
 INSTALL_HINT = "install the quant-agent-os[server] extra"
 MAX_REQUEST_BYTES = 5 * 1024 * 1024
 MAX_RUNS = 100
+log = logging.getLogger(__name__)
 
 
 class ApiUnavailableError(RuntimeError):
     """Raised when FastAPI (the ``api`` extra) is not installed."""
+
+
+def _answers(probe: Callable[[], object]) -> bool:
+    """Return whether ``probe`` read its store. Its error is not reported: it may name a path."""
+    try:
+        probe()
+    except Exception:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -185,6 +198,18 @@ def build_app(
     @app.get("/healthz")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/readyz")
+    def ready() -> JSONResponse:
+        """Answer whether this server can serve: each store it reads answers a trivial read.
+
+        Makes no network call and reads no credential. A failure names the check only.
+        """
+        failed = [name for name, probe in served_by.readiness().items() if not _answers(probe)]
+        if not failed:
+            return JSONResponse({"status": "ready"})
+        log.warning("Readiness check failed: %s", ", ".join(failed))
+        return JSONResponse({"status": "not ready", "failed": failed}, status_code=503)
 
     @app.get("/v1/tools")
     def list_tools(key: Annotated[Credential, requires("tools:list")]) -> list[dict[str, Any]]:

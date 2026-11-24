@@ -93,7 +93,13 @@ restart is needed.
 ```bash
 docker compose -f deploy/compose.yaml up -d server
 curl http://127.0.0.1:8000/healthz      # {"status":"ok"}
+curl http://127.0.0.1:8000/readyz       # {"status":"ready"}
 ```
+
+`/healthz` says the process is up. `/readyz` says the server can answer: its run store, knowledge store, and
+datasets each answer a read. Otherwise it returns `503` with the names of the stores that failed, such as
+`{"status": "not ready", "failed": ["runs"]}`, and nothing else. Neither route needs a key, and neither calls an
+identity provider or an embedder.
 
 The container runs as an unprivileged user (uid 10001):
 - the root filesystem is read-only, all capabilities are dropped, and privilege escalation is

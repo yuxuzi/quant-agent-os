@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Readiness.** `GET /readyz` answers `{"status": "ready"}` when the server's run store, knowledge store, and
+  datasets each answer a read, and otherwise `503` with `"failed"` naming the stores that did not. It is on every
+  REST app, including a firm's server from `serve_apps` and `build_server_app`, needs no key, and calls no
+  identity provider or embedder. Its errors are never sent to the caller. `/healthz` is unchanged.
+
 ### Changed
 
 - **The template packs install Quant-Agent-OS 0.9.0 by default** (`quant-apps` 2.2.1, `quant-baseline` 4.1.1,
