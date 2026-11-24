@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import demo as demo_module
-import httpx
+import httpx2
 import numpy as np
 import pytest
 from book_tools import BookVarInput, firm_tools, nearest_rank_var
@@ -246,7 +246,7 @@ def test_serve_mode_prints_how_to_connect_and_serves_that_key(tmp_path: Path) ->
             _wait_until_healthy(url, server, log)
             match = re.search(r"Bearer (qaos_\S+?)\"", log.read_text("utf-8"))
             assert match is not None
-            tools = httpx.get(
+            tools = httpx2.get(
                 f"{url}/v1/tools", headers={"Authorization": f"Bearer {match[1]}"}, timeout=10
             )
         finally:

@@ -21,7 +21,7 @@ Keys are fetched from ``jwks_uri``, or from the ``jwks_uri`` in the issuer's
 `KEYS_TTL_SECONDS`, and fetched again for an unknown ``kid`` at most once per
 `REFETCH_SECONDS` per issuer, so unauthenticated requests cannot make the server flood a
 provider (security review F-1). A key fetch that fails refuses the token. Nothing is sent to the
-provider but the keys' own address, never a token. Needs the ``mcp`` and ``api`` extras (httpx and
+provider but the keys' own address, never a token. Needs the ``mcp`` and ``api`` extras (httpx2 and
 PyJWT come with them).
 """
 
@@ -47,7 +47,7 @@ from quant_platform.identity.oauth import (
 )
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from mcp.server.auth.provider import AccessToken
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ class JwksVerifier:
         *,
         resource: str,
         tenants_by_issuer: dict[str, set[str]],
-        http: httpx.AsyncClient | None = None,
+        http: httpx2.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
         keys_ttl: float = KEYS_TTL_SECONDS,
         refetch_interval: float = REFETCH_SECONDS,
@@ -210,15 +210,15 @@ class JwksVerifier:
             return held.keys.get(kid) if held is not None else None
 
     async def _fetch(self, server: JwksServer) -> dict[str, tuple[Any, str | None]] | None:
-        import httpx
+        import httpx2
 
         try:
             if self.http is not None:
                 data = await self._load(self.http, server)
             else:
-                async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_SECONDS) as client:
+                async with httpx2.AsyncClient(timeout=FETCH_TIMEOUT_SECONDS) as client:
                     data = await self._load(client, server)
-        except (httpx.HTTPError, ValueError) as error:
+        except (httpx2.HTTPError, ValueError) as error:
             logger.warning("Fetching the keys of %s failed: %s", server.issuer, type(error))
             return None
         keys = _usable_keys(data)
@@ -228,7 +228,7 @@ class JwksVerifier:
         return keys
 
     @staticmethod
-    async def _load(client: httpx.AsyncClient, server: JwksServer) -> Any:
+    async def _load(client: httpx2.AsyncClient, server: JwksServer) -> Any:
         uri = server.jwks_uri
         if uri is None:
             base = server.issuer.rstrip("/")
@@ -350,7 +350,7 @@ def _overage(claims: dict[str, Any], names: list[str]) -> bool:
     return "groups" in names and (pointed or claims.get("hasgroups") is True)
 
 
-async def _get_json(client: httpx.AsyncClient, url: str) -> Any:
+async def _get_json(client: httpx2.AsyncClient, url: str) -> Any:
     response = await client.get(url, headers={"Accept": "application/json"})
     response.raise_for_status()
     if len(response.content) > MAX_JWKS_BYTES:

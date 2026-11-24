@@ -41,6 +41,7 @@ DATABASE_METHODS = frozenset(
 NETWORK_MODULES = (
     "requests",
     "httpx",
+    "httpx2",
     "urllib.request",
     "urllib3",
     "aiohttp",
