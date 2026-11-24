@@ -188,6 +188,10 @@ serve_apps([risk], datasets=store, host="0.0.0.0")  # store: any DatasetStore
   declares `read_local_data`. **Declare any other permission yourself**, as in
   `expose(..., permissions=[Permission.NETWORK])`: the platform cannot tell that a function writes files
   or calls out.
+- **Refusing a caller.** A tool that your own code shuts a caller out of raises `Refused("message")`, from
+  `quant_agent_os.registration`, for example a desk the caller does not see. The call is recorded as `denied`
+  with that message, and the caller is told not to retry. A plain `PermissionError` is still an internal error,
+  so its text stays out of the caller's view.
 - **No replacing.** A tool with a name the server already serves stops the server at start-up. Give an
   app `prefix=True` to start its tools' names with its own.
 - **Your data.** Give `serve_apps` your own `DatasetStore`, which needs only `get` and `ids`. The analytics
@@ -257,8 +261,11 @@ risk.call_service(
   `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS='["network"]'` approves `network` for every tool the server
   serves, and draws a warning at start-up. Register only services that change nothing, or declare
   `external_action` too.
-- A failure such as an unreachable service or an error status reaches the caller as an internal error
-  with the call id; the reason is in the run record.
+- **Outages are named.** A service that is unreachable, does not answer in time, or fails with a 5xx status
+  reaches the caller as a message naming the tool and not the address: "The desk_limits service is not
+  reachable.", "did not answer within 8 s.", or "failed (HTTP 503).". The service's own timeout is the tool's
+  `timeout_seconds` less a fifth of it (at most 2 s), so it fires before the tool's limit. Other failures, such
+  as a 4xx status, reach the caller as an internal error with the call id; the reason is in the run record.
 
 **Telling the service who called.** A service that scopes its answer to the caller, such as a PM's own
 desk's VaR, can receive a signed statement of who is calling. It is off by default; turn it on per tool:
@@ -399,7 +406,12 @@ serve_apps([risk], datasets=store)
   dialect warns, because nothing in the library limits it. Give the login only read grants.
 - **Freshness.** A dataset is cached until its source's stamp changes: a SQL string returning a version, a
   time to live in seconds (default 60), or a function returning any value. Cached datasets are the same
-  objects every caller reads, under per-caller access like any other store.
+  objects every caller reads, under per-caller access like any other store. A renamed column is seen when the
+  stamp changes, so a stamp that reads a version shows it at once.
+- **A broken dataset names itself.** If the result lacks a column the declaration names, the caller gets an error
+  naming the dataset, the missing columns, and the columns the result has. If the database refuses the query, the
+  error names the dataset only, never its SQL. A failed read is not cached, and a dataset the caller may not read
+  still looks missing.
 - **Readiness.** `check()`, which `/readyz` calls, runs `SELECT 1` on each source, uncached. Each probe first
   drops a source's idle connections, so it opens a new one, and a deleted SQLite file or a restarted server
   fails the next probe. A source that does not answer within 5 seconds fails it too. Set the driver's own

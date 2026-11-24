@@ -26,6 +26,7 @@ from quant_agent_os.runs import MemoryRunStore
 from quant_agent_os.tools import FileAccessPolicy, PermissionPolicy
 from quant_agent_os.tools.access import Caller, acting_as
 from quant_platform import SqlDatasetStore, build_server_app
+from quant_platform.sql_store import DatasetReadError
 from quant_toolbox.data import Rows, SqlDataset, SqlError, sql
 
 DAYS = ["2024-01-31", "2024-02-29", "2024-03-29"]
@@ -266,6 +267,101 @@ def test_a_callable_stamp_and_a_stamp_on_an_unused_source(
 
     mtime[0] = 1
     assert store.get("growth-returns") is not first
+
+
+# ---- a declared column that is missing, and a query the database refuses -----------------------
+
+
+def test_a_declared_column_missing_from_the_result_names_the_dataset_and_the_columns_found(
+    sources: dict[str, Any], lake: Path
+) -> None:
+    item = SqlDataset(
+        "returns-renamed",
+        "SELECT day, desk, ret AS ret_1d FROM returns",
+        index="date",
+        column="desk",
+        value="ret",
+        source="oms",
+    )
+
+    with pytest.raises(DatasetReadError) as caught:
+        SqlDatasetStore(sources, [item]).get("returns-renamed")
+
+    assert str(caught.value) == (
+        "Dataset 'returns-renamed' has no columns 'date', 'ret', which its declaration names; "
+        "its columns are day, desk, ret_1d."
+    )
+
+
+def test_a_wide_dataset_without_its_index_column_names_it(sources: dict[str, Any]) -> None:
+    item = SqlDataset(
+        "wide-renamed",
+        "SELECT day, desk, ret FROM returns",
+        shape="wide",
+        index="date",
+        source="oms",
+    )
+
+    with pytest.raises(DatasetReadError, match=r"has no column 'date', which its declaration"):
+        SqlDatasetStore(sources, [item]).get("wide-renamed")
+
+
+def test_a_query_the_database_refuses_is_a_dataset_error_that_shows_no_sql(
+    sources: dict[str, Any],
+) -> None:
+    item = SqlDataset(
+        "returns-stale", "SELECT day AS date, desk, ret_1d AS ret FROM returns", source="oms"
+    )
+
+    with pytest.raises(DatasetReadError) as caught:
+        SqlDatasetStore(sources, [item]).get("returns-stale")
+
+    message = str(caught.value)
+    assert message.startswith("Dataset 'returns-stale' could not be read")
+    assert "SELECT" not in message and "FROM" not in message and "ret_1d" not in message
+    assert caught.value.__cause__ is not None  # the driver's error is kept for the chain
+
+
+def test_a_failed_read_is_not_cached_and_the_repaired_dataset_is_read_again(
+    sources: dict[str, Any], oms: Path
+) -> None:
+    item = SqlDataset("returns-live", "SELECT day AS date, desk, ret FROM returns", source="oms")
+    store = SqlDatasetStore(sources, [item], stamps={"oms": "SELECT n FROM version"})
+    before = store.get("returns-live")
+    with closing(
+        sqlite3.connect(oms)
+    ) as db:  # the data team renames a column and bumps the version
+        db.execute("ALTER TABLE returns RENAME COLUMN ret TO ret_1d")
+        db.execute("UPDATE version SET n = n + 1")
+        db.commit()
+
+    for _ in range(2):  # each call reads again: the failure was not cached
+        with pytest.raises(DatasetReadError):
+            store.get("returns-live")
+    with closing(sqlite3.connect(oms)) as db:
+        db.execute("ALTER TABLE returns RENAME COLUMN ret_1d TO ret")
+        db.execute("UPDATE version SET n = n + 1")
+        db.commit()
+
+    after = store.get("returns-live")
+    assert after is not before
+    assert after.column("growth")[0] == 0.01
+
+
+def test_a_refused_dataset_with_a_broken_declaration_still_looks_missing(
+    sources: dict[str, Any], lake: Path, tmp_path: Path
+) -> None:
+    rules = tmp_path / "access.toml"
+    rules.write_text('[groups.growth]\ndatasets = ["growth-*"]\ntools = ["list_datasets"]\n')
+    broken = SqlDataset(
+        "returns-broken", "SELECT day AS date, desk, ret_1d FROM returns", source="oms"
+    )
+    guarded = GuardedDatasetStore(
+        SqlDatasetStore(sources, [*declared(lake), broken]), FileAccessPolicy(rules)
+    )
+
+    with acting_as(Caller("carol")), pytest.raises(UnknownDatasetError, match="none have been"):
+        guarded.get("returns-broken")
 
 
 # ---- per-caller access and the server ---------------------------------------------------------

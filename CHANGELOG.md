@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`Refused`, for a firm's tool that refuses a caller.** Raising `quant_agent_os.registration.Refused("message")`
+  from a `FirmApp` tool records the call as `denied` with that message, not retryable. A plain exception,
+  including `PermissionError`, is still an internal error. Documented in the deployment guide, section 8.
 - **`performance-report`'s `reconcile` leaves a dated record.** Each run writes `reconcile.json` to a new run folder under `reports/`: the reference file's name and SHA-256, the tolerance, the comparisons and periods, every break (book, month, ours, reference, and bps), and provenance. A restatement after a report went out is then visible beside the report's own folder.
 - **`performance-report` takes one benchmark per book.** `benchmark` may be a table of `book = "column"` under `[benchmark]`, besides the single column name. Each benchmark-relative figure uses that book's benchmark, and the risk table names it in a Benchmark column. A book the table leaves out shows n/a and is noted; a table key that is not a book is refused.
 - **`performance-report` notes a stale last date.** When the file's last date is more than two of its periods before the as-of date (`--as-of`, or today), the data notes name the last date and the gap, in days and periods. Daily data counts weekdays, so a Friday's file is current on the Monday.
@@ -104,6 +107,22 @@ All notable changes to this project are documented here. The format follows
   pyarrow where the platform's final image has no uv. Each now installs in a build stage with uv, which the final
   image does not keep. `tests/contract/test_deploy_files.py` now fails on `|| true`, on a bare pip install in any
   Dockerfile, and on a uv install in a stage without uv.
+
+### Fixed
+
+- **A service outage reaches the caller as a message.** A `FirmApp.call_service` tool whose service is
+  unreachable, does not answer in time, or fails with a 5xx status now says so ("The desk_limits service is
+  not reachable."), without the service's address, instead of "failed with an internal error". Its HTTP timeout
+  is the tool's `timeout_seconds` less a fifth of it (at most 2 s), so the service's timeout fires before the
+  tool's own limit and the caller is not left to a race between the two. A 4xx status is unchanged.
+- **A renamed column names its dataset.** A `SqlDatasetStore` dataset whose result lacks a column its declaration
+  names now fails with `DatasetReadError` (a `LookupError`) that names the dataset, the missing columns, and the
+  columns found. A query the database refuses fails the same way, with the dataset's id and no SQL. A failed read
+  is not cached, so a repaired dataset is read again at once. A dataset a caller may not read still looks missing.
+- **`analyze_risk` warns about carried-forward prices.** Exact zero returns in a run of three or more, or more than
+  5% of a window with at least two, are named by asset and count, and a weekday on which every asset's return is
+  exactly zero is noted as a closure carried forward (dates are known for a dataset). These are warnings only: the
+  figures are unchanged, and the tool's schema and version are too.
 
 ## [0.9.0] - 2026-11-19
 

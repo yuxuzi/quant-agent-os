@@ -1,7 +1,11 @@
 """A firm's internal service as a tool (decision 0024): `FirmApp.call_service`, over loopback."""
 
 import json
+import socket
 import threading
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +43,7 @@ class Exchange:
     answer: bytes = b"{}"
     headers: dict[str, str] = field(default_factory=dict)
     requests: list[dict[str, Any]] = field(default_factory=list)
+    delay: float = 0.0  # seconds before answering, for a slow service
 
 
 @pytest.fixture
@@ -56,6 +61,7 @@ def service() -> Iterator[tuple[str, Exchange]]:
                     "body": json.loads(self.rfile.read(length)) if length else None,
                 }
             )
+            time.sleep(exchange.delay)
             self.send_response(exchange.status)
             for name, value in exchange.headers.items():
                 self.send_header(name, value)
@@ -226,16 +232,95 @@ def test_a_bad_answer_is_recorded_as_an_error(
     assert len(exchange.requests) == 1  # the redirect was not followed
 
 
-def test_an_unreachable_service_is_explained() -> None:
+def test_an_unreachable_service_is_named_without_its_address() -> None:
     app = FirmApp("risk")
     # Windows retries a refused connection for about two seconds, so keep the default timeout.
     app.call_service(desk_var, url="http://127.0.0.1:9/var", returns=Series)
 
     record = _run(app, {"returns": GROWTH})
 
-    assert record.status == "error" and record.error_detail is not None
-    assert record.error_detail.startswith(
-        "ServiceError: Cannot reach the service at http://127.0.0.1:9/var:"
+    assert record.status == "error"
+    assert record.error == "ServiceUnavailableError: The desk_var service is not reachable."
+    assert record.error_detail is None  # the caller's message; the address is not in it
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (500, "The desk_var service failed (HTTP 500)."),
+        (503, "The desk_var service failed (HTTP 503)."),
+    ],
+)
+def test_a_server_error_from_the_service_is_an_outage_for_the_caller(
+    service: tuple[str, Exchange], status: int, expected: str
+) -> None:
+    url, exchange = service
+    exchange.status, exchange.answer = status, b'{"detail": "database down"}'
+    app = FirmApp("risk")
+    app.call_service(desk_var, url=f"{url}/var", returns=Series)
+
+    record = _run(app, {"returns": GROWTH})
+
+    assert record.status == "error"
+    assert record.error == f"ServiceUnavailableError: {expected}"
+    assert url not in record.error and "database down" not in record.error
+
+
+def test_a_slow_service_times_out_before_the_tool_does(service: tuple[str, Exchange]) -> None:
+    url, exchange = service
+    exchange.delay = 2.0  # the tool's limit is 1 s, so the service's own timeout must fire first
+    app = FirmApp("risk")
+    app.call_service(desk_var, url=f"{url}/var", returns=Series, timeout_seconds=1.0)
+
+    record = _run(app, {"returns": GROWTH})
+
+    assert record.status == "error", record.error  # not "timeout": the service's clock fired
+    assert record.error == (
+        "ServiceUnavailableError: The desk_var service did not answer within 0.8 s."
+    )
+    assert len(exchange.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        urllib.error.URLError(socket.gaierror(-2, "Name or service not known")),
+        urllib.error.URLError(ConnectionRefusedError(111, "Connection refused")),
+        OSError("network is down"),
+    ],
+)
+def test_a_dns_or_connection_failure_is_not_reachable(
+    monkeypatch: pytest.MonkeyPatch, failure: BaseException
+) -> None:
+    class Opener:
+        def open(self, *args: Any, **kwargs: Any) -> None:
+            raise failure
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: Opener())
+    app = FirmApp("risk")
+    app.call_service(desk_var, url="http://risk.internal:9/var", returns=Series)
+
+    record = _run(app, {"returns": GROWTH})
+
+    assert record.error == "ServiceUnavailableError: The desk_var service is not reachable."
+    assert "risk.internal" not in record.error
+
+
+def test_a_connect_that_times_out_is_a_timeout_not_an_unreachable_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Opener:
+        def open(self, *args: Any, **kwargs: Any) -> None:
+            raise urllib.error.URLError(TimeoutError("timed out"))
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: Opener())
+    app = FirmApp("risk")
+    app.call_service(desk_var, url="http://risk.internal:9/var", returns=Series, timeout_seconds=5)
+
+    record = _run(app, {"returns": GROWTH})
+
+    assert record.error == (
+        "ServiceUnavailableError: The desk_var service did not answer within 4 s."
     )
 
 
