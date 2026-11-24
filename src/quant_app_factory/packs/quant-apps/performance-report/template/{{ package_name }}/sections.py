@@ -55,10 +55,7 @@ def horizons(context: Context) -> list[Block]:
     def row(name: str, values: np.ndarray) -> list[float | str | None]:
         return [
             name,
-            *(
-                None if label in short else horizon_return(context.dates, values, label, rate)
-                for label in labels
-            ),
+            *(horizon_return(context.dates, values, label, rate) for label in labels),
         ]
 
     rows = [row(book, context.returns(book)) for book in context.books.columns]

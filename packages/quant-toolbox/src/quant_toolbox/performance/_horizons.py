@@ -88,6 +88,8 @@ def horizon_return(
     """
     if not is_horizon(label):
         raise ValueError(f"{label!r} is not a horizon; use MTD, QTD, YTD, ITD, 3M, or 5Y.")
+    if shorter_than_period(label, periods_per_year):
+        return None
     values = np.asarray(returns, dtype=np.float64)
     known = [index for index, value in enumerate(values) if math.isfinite(value)]
     if not known:

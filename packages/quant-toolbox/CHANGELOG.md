@@ -21,6 +21,9 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ### Changed
 
+- `performance.horizon_return` returns None (n/a) for a horizon shorter than the data's period: MTD on
+  quarterly data, and MTD or QTD on annual data. The performance-report template used to do this itself.
+
 - `data.excel.read_workbook` says what it read when no data follows the header row: the row it read as
   the names, its cells, the row below it, and the first date's row. It said "no rows of data below row
   N", which did not show a blank row or a text row as the cause.
