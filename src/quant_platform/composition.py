@@ -194,9 +194,7 @@ def compose(
     for text in [extra_instructions, *(app.instructions for app in apps)]:
         if text:
             instructions = f"{instructions}\n\n{text}"
-    return Catalog(
-        tools, resources, prompts, instructions, toolsets, policy, access, checks, views
-    )
+    return Catalog(tools, resources, prompts, instructions, toolsets, policy, access, checks, views)
 
 
 def _check_extra_names(extra: Sequence[ToolSpec[Any, Any]], served: set[str]) -> None:
