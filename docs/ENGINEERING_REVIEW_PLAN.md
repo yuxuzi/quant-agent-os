@@ -4,8 +4,9 @@ What is still open. How the system works is in [architecture.md](architecture.md
 [decisions/](decisions/). Finished plans are in [plans/archive/](plans/archive/), including
 [the earlier engineering plan](plans/archive/engineering-plan.md) that defines the `B-` backlog ids.
 The most recent plan was [0.3.0, ready for a first pilot](plans/archive/pilot-ready-release.md),
-released as 0.3.0. [Templates as starting points](plans/templates.md) followed it. The current plan is
-[0.8.0, a pilot at a mock multi-asset fund](plans/proposals-0.8.md), which also carries the earlier proposals as a backlog.
+released as 0.3.0. [Templates as starting points](plans/templates.md) followed it, then
+[0.8.0, a pilot at a mock multi-asset fund](plans/proposals-0.8.md), which also carries the earlier proposals as a
+backlog. The current plan is [1.0: robust at five mock funds](plans/release-1.0.md).
 
 ## Open backlog
 
