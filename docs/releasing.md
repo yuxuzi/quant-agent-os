@@ -65,5 +65,4 @@ From 1.0, [decision 0035](decisions/0035-what-1.0-promises.md) sets them: served
 the files and settings a firm writes, `qaos` commands, HTTP routes, and run records follow semantic versioning,
 and decision 0015's deprecation rule applies (90 days and one minor release before a removal, which is major).
 `tests/contract/public_api.lock.json`, the tool lock, and Quant Toolbox's API lock hold them. The run store and
-knowledge store upgrade in place, and an older binary refuses a newer store. **Skills** state the platform
-major they were written for, and warn the user when `qaos://server/info` reports a different one.
+knowledge store upgrade in place, and an older binary refuses a newer store.

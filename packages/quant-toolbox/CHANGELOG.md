@@ -6,6 +6,11 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-24
+
+The first stable release: from here the names in `tests/api.lock.json` follow semantic versioning (see the
+README's Stability section). Released with Quant-Agent-OS 1.0.0.
+
 ### Removed
 
 - **Six internal names leave the public API before 1.0 freezes it:** `audit.json_safe`, `data.BoolArray`,

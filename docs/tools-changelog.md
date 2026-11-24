@@ -18,15 +18,21 @@ fail when they change without a big enough version bump. After raising the versi
 
 Clients read the served versions from `qaos://server/info`.
 
-**No compatibility window yet.** While the project is young, a tool may change or be removed in any
-release, under its existing name, with an entry here. The rule from
-[decision 0015](decisions/0015-metering-quotas-and-entitlements.md) (a new tool name, and at least
-90 days and a major release before removal) is suspended until the owner decides the project is
-mature enough. Version bumps and the lock still apply, so every change stays visible.
+**Deprecation, from 1.0.** The rule from
+[decision 0015](decisions/0015-metering-quotas-and-entitlements.md) applies again
+([decision 0035](decisions/0035-what-1.0-promises.md)): a breaking change ships as a new tool name beside the old one,
+which is marked deprecated, naming its replacement and a removal at least 90 days and one minor release later.
+Removal is a major release.
 
 ## Unreleased
 
 Nothing yet.
+
+## 1.0.0
+
+No served tool's schema changed. `analyze_performance` links its performance view for MCP Apps clients in its
+`_meta` (decision 0036), which is not part of its schema, and the risk and performance tools add warnings about
+carried-forward prices; neither needs a version bump.
 
 ## 0.9.0
 

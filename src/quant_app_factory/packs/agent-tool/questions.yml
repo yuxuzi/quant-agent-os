@@ -85,7 +85,7 @@ tool_name:
 quant_agent_os_source:
   type: str
   help: Where to install quant-agent-os from, a git URL (git+https://...) or a local path
-  default: git+https://github.com/yuxuzi/quant-agent-os@v0.9.0
+  default: git+https://github.com/yuxuzi/quant-agent-os@v1.0.0
   validator: >-
     {% if '"' in quant_agent_os_source or '\\' in quant_agent_os_source or '\n' in quant_agent_os_source or not quant_agent_os_source.strip() %}
     Use a git+https URL or a path written with forward slashes.
