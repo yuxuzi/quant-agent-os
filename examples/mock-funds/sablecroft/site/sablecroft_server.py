@@ -37,13 +37,13 @@ app = FirmApp(
     "sab",
     prefix=True,
     instructions=(
-        "Sablecroft's own tools are prefixed sab_. Private-fund figures (IRR, TVPI, PME) take"
+        "Sablecroft's own tools are prefixed sab_. Private-fund figures (IRR, TVPI, PME) take "
         "one fund's "
-        "column of pm_calls, pm_distributions and pm_nav, and the index in the fund's currency"
+        "column of pm_calls, pm_distributions and pm_nav, and the index in the fund's currency "
         "(idx_public SCI_US for USD "
-        "funds, SCI_EU for EUR funds). Hedge-fund returns are monthly: ret_final is lagged 15 to"
+        "funds, SCI_EU for EUR funds). Hedge-fund returns are monthly: ret_final is lagged 15 to "
         "45 days "
-        "and ret_est is not; say which vintage a number uses. Unsmoothed volatility and the Lo"
+        "and ret_est is not; say which vintage a number uses. Unsmoothed volatility and the Lo "
         "Sharpe "
         "are estimates, not measurements."
     ),
@@ -54,7 +54,7 @@ app.expose(
     calls=Series,
     distributions=Series,
     nav=Series,
-    convention="XIRR actual/365 on signed flows with NAV as a terminal inflow; TVPI ="
+    convention="XIRR actual/365 on signed flows with NAV as a terminal inflow; TVPI = "
     "(distributions + "
     "NAV) / paid-in; DPI = distributions / paid-in; RVPI = NAV / paid-in; the fund's currency",
 )
@@ -65,9 +65,9 @@ app.expose(
     distributions=Series,
     nav=Series,
     index=Series,
-    convention="Kaplan-Schoar PME = (sum D * I_T/I_t + NAV) / sum C * I_T/I_t; Long-Nickels"
+    convention="Kaplan-Schoar PME = (sum D * I_T/I_t + NAV) / sum C * I_T/I_t; Long-Nickels "
     "index IRR = "
-    "XIRR with terminal value of the index units the flows would have bought; index on the last"
+    "XIRR with terminal value of the index units the flows would have bought; index on the last "
     "day "
     "on or before each date",
 )
@@ -89,7 +89,7 @@ app.expose(
     tools.liquidity_ladder,
     name="liquidity_ladder",
     terms=Frame,
-    convention="Request at the later of as-of and lock-up end; dealing at month/quarter/year-end"
+    convention="Request at the later of as-of and lock-up end; dealing at month/quarter/year-end "
     "after "
     "notice; investor-level gate per dealing date on today's position; cash 30 days after dealing",
 )
@@ -98,7 +98,7 @@ app.expose(
     name="manager_peer_ranking",
     returns=Frame,
     terms=Frame,
-    convention="Trailing Sharpe (geometric annual return / annual vol, zero risk-free) over the"
+    convention="Trailing Sharpe (geometric annual return / annual vol, zero risk-free) over the "
     "last "
     "window months with at least min_months returns; rank within strategy, 1 = best",
 )
@@ -107,7 +107,7 @@ app.expose(
     name="revision_bias",
     estimates=Frame,
     finals=Frame,
-    convention="revision = final - estimate over months with both; t = mean / (sd / sqrt(n));"
+    convention="revision = final - estimate over months with both; t = mean / (sd / sqrt(n)); "
     "flagged "
     "when |t| > threshold and n >= 12",
 )

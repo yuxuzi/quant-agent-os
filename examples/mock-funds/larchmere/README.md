@@ -52,3 +52,8 @@ methodology summary, a market commentary (carrying an injected instruction, whic
 investor report.
 
 Tests: `tests/mock_funds/test_larchmere.py` and `test_larchmere_identity.py`.
+
+Round 1 (1.0 candidate): `tests/mock_funds/test_larchmere_round1.py`. The counterpart documents are
+`facility/warehouse/build_larchmere_round1.py ESTATE_DIR OUT_DIR`, where ESTATE_DIR is the output of
+`build_larchmere.py`. It writes the trustee's workbook, the administrator's equity statement, and the
+fund's returns file. The trustee's reader is `site/larchmere_trustee.py`.

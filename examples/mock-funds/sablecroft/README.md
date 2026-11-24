@@ -46,4 +46,9 @@ entry per dataset over `sablecroft.serving.*` views.
         examples/mock-funds/sablecroft/site/sablecroft_acceptance.toml
     uv run pytest tests/mock_funds/test_sablecroft.py -q --no-cov
 
+Round 1 (1.0 candidate): `uv run pytest tests/mock_funds/test_sablecroft_round1.py -q --no-cov`. The round's
+documents are written by `facility/warehouse/build_sablecroft_round1.py ESTATE_DIR OUT_DIR`, where
+ESTATE_DIR is the output of `build_sablecroft.py`. It writes the feed as received at the cut and the
+administrator's revised statement.
+
 What did not fit the platform is in [FINDINGS.md](FINDINGS.md).

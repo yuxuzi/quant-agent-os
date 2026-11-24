@@ -177,6 +177,15 @@ def _entries() -> dict[str, Entry]:
             deal,
         )
         out[f"equity_cf_{key}"] = Entry("sql", "", "table", deal, derived=_equity_cashflows)
+        # Round 1: the trustee's reported numbers, one column per test. Its PASS and FAIL are text,
+        # which a dataset cannot hold, so they are not served (FINDINGS, round 1).
+        out[f"trustee_numbers_{key}"] = Entry(
+            "lake",
+            "SELECT CAST(dt AS VARCHAR), test_name, reported_value "
+            "FROM trustee_tests WHERE deal_id = ?",
+            "long",
+            deal,
+        )
     return out
 
 
