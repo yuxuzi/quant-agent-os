@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
   datasets each answer a read, and otherwise `503` with `"failed"` naming the stores that did not. It is on every
   REST app, including a firm's server from `serve_apps` and `build_server_app`, needs no key, and calls no
   identity provider or embedder. Its errors are never sent to the caller. `/healthz` is unchanged.
+- **JSON logs.** `QUANT_AGENT_OS_LOG_FORMAT=json` writes one JSON object per log line (`time`, `level`, `logger`,
+  `message`, and `exception` when there is one), for a log service. The default stays `text`, and any other value
+  stops start-up. Secrets are redacted from the exception text too, in both formats. A server started with
+  `serve_http` or `serve_apps`, which a firm's own server uses, now follows the log format and level settings.
 
 ### Changed
 

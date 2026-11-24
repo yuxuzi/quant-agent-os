@@ -25,6 +25,7 @@ permissions come only from the environment or the home's `.env`.
 | `QUANT_AGENT_OS_PREAPPROVED_TOOLS` | `{}` | JSON object naming, for each consequential permission, the exact tools that run without a per-call approval (a standing approval for those tools only). See [standing approvals](#standing-approvals). |
 | `QUANT_AGENT_OS_PREAPPROVED_PERMISSIONS` | `[]` | JSON list of consequential permissions approved for every call of every tool. Kept for compatibility; the server warns at start-up that it covers every tool. Prefer `QUANT_AGENT_OS_PREAPPROVED_TOOLS`. |
 | `QUANT_AGENT_OS_LOG_LEVEL` | `INFO` | Logging level. |
+| `QUANT_AGENT_OS_LOG_FORMAT` | `text` | Log lines on stderr. `text` keeps the plain lines. `json` writes one object per line, with `time` (ISO 8601, UTC), `level`, `logger`, `message`, and `exception` when the record has one, for a log service. Any other value stops start-up. It applies to `qaos` and to a server started with `serve_http` or `serve_apps`. Secrets are redacted from the message and the exception text in both formats. |
 | `QUANT_AGENT_OS_STORE` | `knowledge.db` in the home | SQLite path or `postgresql://` URL. |
 | `QUANT_AGENT_OS_DATASETS_DIR` | `datasets/` in the home | Datasets directory. |
 | `QUANT_AGENT_OS_RUNS_FILE` | `runs.db` in the home | Run store. |
