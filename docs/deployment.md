@@ -609,6 +609,38 @@ qaos serve --http --access access.toml --sign-in sign-in.toml   # or set QUANT_A
   proxy's limit on unauthenticated requests, which is the first defence. A signed JWT cannot be revoked: it is
   accepted until its own expiry, so ask your provider for short-lived access tokens (an hour or less).
 
+## 11. Run it in a cloud container service
+
+Azure Container Apps and Amazon ECS on Fargate run the server's image with no host to manage. The mock funds'
+descriptors are examples of both: [Larchmere](../examples/mock-funds/larchmere/site/deploy/containerapp.bicep) and
+[Sablecroft](../examples/mock-funds/sablecroft/site/deploy/containerapp.bicep) use Container Apps, and
+[Corvane](../examples/mock-funds/corvane/site/deploy/ecs-task-definition.json) and
+[Wrenfield](../examples/mock-funds/wrenfield/site/deploy/ecs-task-definition.json) use ECS. The tests check them
+against the code, but nothing deploys them, so check every name and value against your own account.
+
+- **One replica.** The run store is a SQLite file, so it lives on a volume the container mounts (Azure Files for
+  Container Apps, Amazon EFS for Fargate), and one server writes to it. Set the replica count to one, minimum and
+  maximum, or the ECS desired count to one. This holds until a PostgreSQL run store exists.
+- **Probes.** Liveness is `/healthz`: the process is up. Readiness is `/readyz`: the run store, knowledge store, and
+  datasets each answer. Point the readiness probe, or the load balancer's health check, at `/readyz`, and keep
+  `/healthz` for the container's own check. A server that cannot read its stores then leaves the rotation, and is
+  not restarted for it.
+- **Logs.** Set `QUANT_AGENT_OS_LOG_FORMAT=json`. Each line is one JSON object (`time`, `level`, `logger`,
+  `message`, and `exception` when there is one), for the platform's log service to parse. Logs go to standard
+  error, which Container Apps sends to Log Analytics and ECS to CloudWatch Logs.
+- **Secrets as files.** Give each secret the platform reads as `NAME_FILE`, a path, and not as `NAME`. The
+  [convention](configuration.md#secrets-from-files) says what the server does with each. The examples mount Key
+  Vault references as a secret volume at `/run/secrets`. Fargate does not mount a Secrets Manager secret as a file,
+  so an init container receives the secret as an environment variable, writes it into a task volume, and exits;
+  the server mounts that volume read-only. A fund's own secrets, such as a warehouse login that the fund's code
+  reads from the environment, stay environment variables.
+- **TLS and rate limits.** The ingress terminates TLS: Container Apps ingress, or the load balancer's HTTPS
+  listener. Rate-limit unauthenticated requests there too, with Azure Front Door or Application Gateway's WAF, or AWS
+  WAF on the load balancer, because the server has none of its own ([the proxy section](#7-expose-it-to-your-team)).
+  MCP holds responses open, so raise the load balancer's idle timeout above its 60-second default.
+- **Sign-in.** Use Entra ID or Amazon Cognito, as in [section 10](#10-sign-in-through-your-identity-provider). With
+  `verify = "jwks"`, which both need, the server holds no client secret at all.
+
 ## Telemetry and service levels (decision 0015)
 
 Every tool call emits an OpenTelemetry span and two metrics, labelled with the tenant, the

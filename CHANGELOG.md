@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   variables) can come from `NAME_FILE`, a file whose content is the secret, as container platforms mount them.
   Setting both `NAME` and `NAME_FILE` is refused, naming both, so nothing is guessed. The convention is in the
   configuration guide.
+- **A cloud section.** `docs/deployment.md` section 11 covers Azure Container Apps and Amazon ECS on Fargate: one
+  replica, the probes (`/healthz` for liveness, `/readyz` for readiness), JSON logs, secrets as `NAME_FILE` files,
+  TLS and rate limits at the ingress, and sign-in. The mock funds' descriptors use `/readyz`, JSON logs, and file
+  secrets. They are examples the tests check against the code, and no test deploys them.
 
 ### Changed
 

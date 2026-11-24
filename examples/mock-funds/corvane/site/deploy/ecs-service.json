@@ -20,7 +20,7 @@
       "containerPort": 8000
     }
   ],
-  "_targetGroup": {"protocol": "HTTP", "port": 8000, "healthCheck": {"path": "/healthz", "matcher": "200", "intervalSeconds": 30}},
+  "_targetGroup": {"protocol": "HTTP", "port": 8000, "healthCheck": {"path": "/readyz", "matcher": "200", "intervalSeconds": 30}, "note": "readiness: the run store, knowledge store, and datasets answer; the container's own check stays /healthz"},
   "_alb": {
     "listener": "HTTPS:443",
     "certificate": "arn:aws:acm:us-east-1:111122223333:certificate/corvane-qaos",
