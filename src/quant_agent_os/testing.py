@@ -24,6 +24,8 @@ from quant_agent_os.tools.contracts import ToolContractError, ToolSpec
 from quant_agent_os.tools.permissions import READ_ONLY, PermissionPolicy
 from quant_agent_os.tools.registry import ToolRegistry
 
+__all__ = ["check_app", "check_tool"]
+
 
 def check_tool(
     spec: ToolSpec[Any, Any],

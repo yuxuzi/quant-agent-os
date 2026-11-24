@@ -52,6 +52,26 @@ from quant_agent_os.tools.permissions import Permission
 from quant_agent_os.tools.permissions import Refused as Refused  # a firm's tool refuses a caller
 from quant_agent_os.tools.registry import DuplicateToolError, ToolRegistry
 
+__all__ = [
+    "CALLER_HEADER",
+    "CallerAssertionError",
+    "DataMarker",
+    "FirmApp",
+    "Frame",
+    "FrameRef",
+    "FrameValue",
+    "Prices",
+    "Refused",
+    "Series",
+    "SeriesRef",
+    "ServiceError",
+    "ServiceUnavailableError",
+    "VerifiedCaller",
+    "service_timeout",
+    "sign_caller",
+    "verify_caller",
+]
+
 BY_REFERENCE = "Pass data as dataset references from list_datasets, not as values."
 PROVENANCE = frozenset({"data_versions", "code_version", "convention", "warnings", "evidence"})
 MERGED = frozenset({"data_versions", "warnings", "evidence"})  # a function may return its own
