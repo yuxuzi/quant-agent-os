@@ -6,6 +6,13 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ## [Unreleased]
 
+### Removed
+
+- **Six internal names leave the public API before 1.0 freezes it:** `audit.json_safe`, `data.BoolArray`,
+  `performance.BoolArray`, `performance.months_before`, `report.COLOURS`, `report.format_cell`, and
+  `research.newey_west_t_stat` (use `research.hac_t_stat`). Nothing outside the toolbox used them; the
+  functions remain inside it.
+
 ### Added
 
 - `data.infer_frequency(dates)` returns a `Frequency` (name and periods a year) from the median spacing

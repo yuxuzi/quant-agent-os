@@ -14,7 +14,7 @@ describes what a backtest of the same signal can earn. A delisted asset earns
   splits, with a purge and an embargo.
 """
 
-from quant_toolbox._hac import newey_west_lags, newey_west_t_stat
+from quant_toolbox._hac import newey_west_lags
 from quant_toolbox.research._backtest import (
     BacktestResult,
     CostDrag,
@@ -66,7 +66,6 @@ __all__ = [
     "momentum",
     "neutralize",
     "newey_west_lags",
-    "newey_west_t_stat",
     "purged_kfold_splits",
     "quantile_returns",
     "quantile_spread",

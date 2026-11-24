@@ -22,7 +22,6 @@ from quant_toolbox.report._charts import (
 )
 from quant_toolbox.report._document import (
     CHART_MODES,
-    COLOURS,
     Block,
     Cell,
     ChartBlock,
@@ -30,7 +29,6 @@ from quant_toolbox.report._document import (
     Document,
     TableBlock,
     TextBlock,
-    format_cell,
     render_html,
     render_markdown,
     to_dict,
@@ -71,7 +69,6 @@ from quant_toolbox.report._tear_sheet import HEADLINE, monthly_table, tear_sheet
 
 __all__ = [
     "CHART_MODES",
-    "COLOURS",
     "HEADLINE",
     "INTERPRETATION",
     "METRIC_KINDS",
@@ -98,7 +95,6 @@ __all__ = [
     "factor_table",
     "facts_table",
     "factsheet",
-    "format_cell",
     "format_metric",
     "group_exposure_table",
     "holdings_table",

@@ -12,9 +12,9 @@ from quant_toolbox.performance import (
     horizon_start,
     is_horizon,
     monthly_returns,
-    months_before,
     underwater,
 )
+from quant_toolbox.performance._horizons import months_before  # not public; tested here
 
 
 def _month_ends(first_year: int, count: int) -> list[dt.date]:
