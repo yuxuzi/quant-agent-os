@@ -5,15 +5,20 @@
 #
 # The platform's image sets ENTRYPOINT ["qaos"], so this one replaces it: the fund's own server
 # file is the entry point (decision 0020), not `qaos serve`.
+# uv comes from the platform's pinned image, for this one install: the platform's final stage has
+# neither uv nor pip (deploy/Dockerfile), and the RUN below removes it again.
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
+FROM ${UV_IMAGE} AS uv
 FROM quant-agent-os
 USER root
+COPY --from=uv /uv /usr/local/bin/uv
 COPY examples/mock-funds/corvane/site /opt/corvane/site
 COPY examples/mock-funds/corvane/facility/access.toml /opt/corvane/access.toml
 COPY examples/mock-funds/corvane/site/deploy/sign-in.toml /opt/corvane/sign-in.toml
 # The fund's drivers go in beside the platform's: its wheel ships neither Snowflake's connector
-# nor pandas (the fund tools' data frames). The platform's image has no pip and no uv at run time,
-# so this assumes a build stage like the platform's own; see FINDINGS.
-RUN uv pip install --python /opt/venv/bin/python snowflake-connector-python pandas pyarrow
+# nor pandas (the fund tools' data frames). The install runs as root, and uv is removed after it.
+RUN uv pip install --python /opt/venv/bin/python snowflake-connector-python pandas pyarrow \
+    && rm /usr/local/bin/uv
 USER app
 ENV QUANT_AGENT_OS_ACCESS_FILE=/opt/corvane/access.toml \
     QUANT_AGENT_OS_SIGN_IN_FILE=/opt/corvane/sign-in.toml \

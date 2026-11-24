@@ -1,10 +1,17 @@
 # Wrenfield's image: the platform's image plus the fund's code, DuckDB for the lake, and pyarrow.
-# Not run in tests. The platform's own Dockerfile installs the `postgres` extra but neither
+# Not built by any test. The platform's own Dockerfile installs the `postgres` extra but neither
 # `parquet` (pyarrow) nor duckdb, so this image adds them (see FINDINGS.md, Cloud).
 #
 #   docker build -f deploy/Dockerfile.wrenfield -t 123456789012.dkr.ecr.us-east-1.amazonaws.com/wrenfield-qaos:1 .
+# uv comes from the platform's pinned image, for this one install (its final stage has none).
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
+FROM ${UV_IMAGE} AS uv
 FROM quant-agent-os:local
-COPY wrenfield_credit.py wrenfield_store.py wrenfield_server.py wrenfield_introspection_shim.py /home/app/
+USER root
+COPY --from=uv /uv /usr/local/bin/uv
+RUN uv pip install --python /opt/venv/bin/python duckdb pyarrow && rm /usr/local/bin/uv
+USER app
+COPY wrenfield_credit.py wrenfield_store.py wrenfield_server.py /home/app/
 COPY wrenfield_sign_in.toml /etc/qaos/sign-in.toml
 COPY access.toml /etc/qaos/access.toml  # from facility/
 ENV WRENFIELD_HOST=0.0.0.0 \

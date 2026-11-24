@@ -112,7 +112,11 @@ class UserPool:
         clients: dict[str, Any] = self.config["app_clients"]
         grant = form.get("grant_type")
         now = int(self.clock())
-        scope = form.get("scope") or f"{self.config['resource_server']}/tools.call"
+        scope = (
+            form.get("scope")
+            or f"{self.config['resource_server']}/tools.list "
+            f"{self.config['resource_server']}/tools.call"
+        )
         if grant == "client_credentials":
             client_id, _, secret = _basic(authorization)
             client = clients.get(client_id)

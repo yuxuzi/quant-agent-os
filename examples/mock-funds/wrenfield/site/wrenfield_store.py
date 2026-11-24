@@ -72,6 +72,13 @@ SCALE = tuple(
 )
 BOOK_CODES = {"hy_ls": 1, "ig_rv": 2, "distressed": 3, "overlay": 4}
 POSTGRES_TTL_SECONDS = 60.0
+# Readiness reads the lake (one partition) and the OMS (one table) at most this often.
+PROBE_TTL_SECONDS = 300.0
+LAKE_PROBE = (
+    "SELECT 1 FROM read_parquet('{lake}/curated/bond_px_daily/dt=*/part-0000.parquet', "
+    "hive_partitioning=true) LIMIT 1"
+)
+OMS_PROBE = "SELECT 1 FROM pos_eod LIMIT 1"
 
 Source = Literal["lake", "oms"]
 Cell = float | None
@@ -314,6 +321,8 @@ class WrenfieldDatasetStore:
         self._checked = 0.0
         self._cache: dict[str, Dataset] = {}
         self._lake: Any = None
+        self._probed: float | None = None
+        self.probe_ttl_seconds = PROBE_TTL_SECONDS
 
     def _local_oms_url(self) -> str:
         return sqlite_url(self.base / self.uri_map[OMS_URI])
@@ -323,8 +332,22 @@ class WrenfieldDatasetStore:
         return self.base / self.uri_map[LAKE_URI]
 
     def ids(self) -> list[str]:
-        """Return every dataset id, sorted."""
+        """Return every dataset id, sorted. `/readyz` reads this, so it first reads the lake and the
+        database, once per ``probe_ttl_seconds``: a store that stopped answering then fails here."""
+        self._probe()
         return sorted([*SPECS, *CUSTOM])
+
+    def _probe(self) -> None:
+        """Read both stores unless a read succeeded within the TTL. A failed read is not
+        remembered: the next check reads again, so a broken store stays not ready."""
+        with self._lock:
+            probed = self._probed
+            if probed is not None and time.monotonic() - probed < self.probe_ttl_seconds:
+                return
+        self._rows("lake", LAKE_PROBE, None)  # outside the lock: _rows takes it
+        self._rows("oms", OMS_PROBE, None)
+        with self._lock:
+            self._probed = time.monotonic()
 
     def get(self, dataset_id: str) -> Dataset:
         """Return dataset ``dataset_id``, or raise `UnknownDatasetError` naming the others."""
