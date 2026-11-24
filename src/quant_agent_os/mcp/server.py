@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from quant_agent_os import __version__
 from quant_agent_os.mcp.adapters import (
+    UI_EXTENSION,
     ResourceReadError,
     call_result,
     call_tool,
@@ -25,16 +26,24 @@ from quant_agent_os.mcp.adapters import (
     get_prompt,
     prompt_definitions,
     read_resource,
+    read_view,
     resource_templates,
     served_resources,
+    served_views,
     tool_definitions,
+    view_resources,
 )
 from quant_agent_os.runs.recorder import RunRecorder
 from quant_agent_os.runtime.call import ToolCall
 from quant_agent_os.runtime.executor import ToolCallRecord, ToolExecutor
 from quant_agent_os.serving import Surface
 from quant_agent_os.tools.access import Caller, bind_caller
-from quant_agent_os.tools.catalog import PromptArgumentError, PromptSpec, ResourceSpec
+from quant_agent_os.tools.catalog import (
+    PromptArgumentError,
+    PromptSpec,
+    ResourceSpec,
+    ViewSpec,
+)
 
 if TYPE_CHECKING:
     from mcp.server.context import ServerRequestContext
@@ -85,15 +94,18 @@ def build_server(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
+    views: list[ViewSpec] | None = None,
     route: Route | None = None,
 ) -> Server[Any]:
     """Return an MCP server whose tools are the executor's allowed tools.
 
     ``resources`` are served when their tool is; reading one calls that tool. ``prompts`` are
-    offered as they are. A server without either does not advertise them. With a ``recorder``,
-    every tool call and resource read is persisted as a one-call run. Over HTTP, ``route``
-    replaces ``executor``, ``recorder``, ``resources``, and ``prompts``: it checks each
-    request's scope and returns its caller's tenant surface and recorder (decision 0013).
+    offered as they are. ``views`` are served when one of their tools is, and reading one returns
+    its static page, for clients that show MCP Apps (decision 0036). A server without any of these
+    does not advertise them. With a ``recorder``, every tool call and resource read is persisted as
+    a one-call run; a view read is not a call. Over HTTP, ``route`` replaces ``executor``,
+    ``recorder``, ``resources``, ``prompts``, and ``views``: it checks each request's scope and
+    returns its caller's tenant surface and recorder (decision 0013).
 
     The server speaks MCP 2026-07-28 and, for older clients, the 2025-11-25 handshake and the
     revisions before it (decision 0034). The handlers are the same for both.
@@ -109,7 +121,12 @@ def build_server(
     if route is None:
         if executor is None:
             raise ValueError("Give an executor, or a route for each request.")
-        surface = Surface(executor, served_resources(executor, resources or []), prompts or [])
+        surface = Surface(
+            executor,
+            served_resources(executor, resources or []),
+            prompts or [],
+            views=served_views(executor, views or []),
+        )
         static = Served(surface, recorder)
 
     def serve(ctx: ServerRequestContext[Any, Any], scope: str) -> Served:
@@ -130,6 +147,7 @@ def build_server(
                 served_resources(surface.executor, surface.resources),
                 surface.prompts,
                 surface.run_store,
+                views=served_views(surface.executor, surface.views),
             ),
             served.recorder,
             served.approvals,
@@ -149,7 +167,7 @@ def build_server(
                     annotations=types.ToolAnnotations(**definition["annotations"]),
                     _meta=definition["_meta"],
                 )
-                for definition in tool_definitions(served.surface.executor)
+                for definition in tool_definitions(served.surface.executor, served.surface.views)
             ]
         )
 
@@ -200,11 +218,12 @@ def build_server(
         ctx: ServerRequestContext[Any, Any], params: Any
     ) -> types.ListResourcesResult:
         surface = serve(ctx, "tools:list").surface
+        definitions = [
+            *fixed_resources(surface.executor, surface.resources),
+            *view_resources(surface.views),
+        ]
         return types.ListResourcesResult(
-            resources=[
-                types.Resource(**definition)
-                for definition in fixed_resources(surface.executor, surface.resources)
-            ]
+            resources=[types.Resource(**definition) for definition in definitions]
         )
 
     async def list_templates(
@@ -223,6 +242,15 @@ def build_server(
     ) -> types.ReadResourceResult:
         served = serve(ctx, "tools:call")
         uri = str(params.uri)
+        view = read_view(served.surface.views, uri)
+        if view is not None:  # a static page: no tool is called, so no run is recorded
+            return types.ReadResourceResult(
+                contents=[
+                    types.TextResourceContents(
+                        uri=uri, mimeType=view["mimeType"], text=view["text"]
+                    )
+                ]
+            )
         try:
             contents = await anyio.to_thread.run_sync(
                 functools.partial(
@@ -262,9 +290,11 @@ def build_server(
         except PromptArgumentError as error:
             raise MCPError(code=types.INVALID_PARAMS, message=str(error)) from None
 
-    has_resources = route is not None or (static is not None and bool(static.surface.resources))
+    has_resources = route is not None or (
+        static is not None and bool(static.surface.resources or static.surface.views)
+    )
     has_prompts = route is not None or (static is not None and bool(static.surface.prompts))
-    return Server(
+    server: Server[Any] = Server(
         name,
         version=__version__,
         instructions=instructions,
@@ -276,6 +306,10 @@ def build_server(
         on_list_prompts=list_prompts if has_prompts else None,
         on_get_prompt=handle_prompt if has_prompts else None,
     )
+    # A route serves each caller its own views, so it always says it may show them.
+    if route is not None or (static is not None and static.surface.views):
+        server.extensions[UI_EXTENSION] = {}
+    return server
 
 
 async def serve_stdio(
@@ -286,8 +320,9 @@ async def serve_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
+    views: list[ViewSpec] | None = None,
 ) -> None:
-    """Serve the executor's tools (and any resources and prompts) over stdin and stdout."""
+    """Serve the executor's tools (and any resources, prompts, and views) over stdin and stdout."""
     server = build_server(
         executor,
         name=name,
@@ -295,6 +330,7 @@ async def serve_stdio(
         recorder=recorder,
         resources=resources,
         prompts=prompts,
+        views=views,
     )
     from mcp.server.stdio import stdio_server
 
@@ -310,6 +346,7 @@ def run_stdio(
     recorder: RunRecorder | None = None,
     resources: list[ResourceSpec] | None = None,
     prompts: list[PromptSpec] | None = None,
+    views: list[ViewSpec] | None = None,
 ) -> None:
     """Blocking entry point for console commands; raises `MCPUnavailableError` without the extra."""
     try:
@@ -325,5 +362,6 @@ def run_stdio(
             recorder=recorder,
             resources=resources,
             prompts=prompts,
+            views=views,
         )
     )
