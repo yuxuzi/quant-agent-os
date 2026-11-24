@@ -23,6 +23,7 @@ from quant_agent_os.tools import AccessFileError, FileAccessPolicy
 from quant_app_factory.cli import app as factory_app
 from quant_app_factory.legacy_cli import app as legacy_app
 from quant_platform.acceptance import GoldFileError, load_gold, run_acceptance
+from quant_platform.adapters import AdapterError, write_stub
 from quant_platform.cli_common import (
     DatasetsOption,
     StoreOption,
@@ -37,6 +38,41 @@ from quant_platform.onboarding import connect, doctor, init
 from quant_platform.serve import known_secrets, serve_http, serve_stdio
 from quant_research.cli import EmbedderOption, ModelOption
 from quant_research.cli import app as research_app
+
+adapter_app = typer.Typer(
+    help="Stub adapters: a typed file that maps a fund's source to a standard table.",
+    no_args_is_help=True,
+)
+
+
+@adapter_app.command("new")
+def adapter_new(
+    name: Annotated[
+        str, typer.Argument(help="Adapter name: lower case letters, digits, underscores.")
+    ],
+    table: Annotated[
+        str, typer.Option("--table", help="Standard table: returns, prices, and so on.")
+    ],
+    out: Annotated[
+        Path, typer.Option("--out", help="Folder to write the two files into (default: here).")
+    ] = Path(),
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite files that already exist.")
+    ] = False,
+) -> None:
+    """Write NAME_adapter.py and test_NAME_adapter.py: the test fails until read is filled in."""
+    try:
+        written = write_stub(name, table, out, force=force)
+    except AdapterError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from error
+    for path in written:
+        typer.echo(f"Wrote {path}")
+
+
+# Mounted under the core `data` group: `qaos data adapter new`. Core cannot import this module.
+data_app.add_typer(adapter_app, name="adapter")
+
 
 app = typer.Typer(
     help="Quant-Agent-OS: cited research and computed metrics for AI clients, over MCP.",

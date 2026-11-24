@@ -20,6 +20,11 @@ another for one block, and `align_to_calendar` and `session_gaps` use it when gi
 A series' frequency is `infer_frequency` from its dates, or `check_frequency` for a stated count;
 `periods_behind` counts how many periods a last date lies before an as-of date. `carried_forward`
 reports the returns that suggest carried-forward prices: zero runs, and closed weekdays.
+
+`quant_toolbox.data.model` describes the six standard tables a fund maps its data into (decision
+0037): `TABLES` gives each one's columns and key, `validate` names every problem with a set of
+columns, `as_of` picks each row's latest vintage on or before a date, and `to_wide` pivots a long
+table to a `Table`.
 """
 
 from quant_toolbox._types import FloatArray

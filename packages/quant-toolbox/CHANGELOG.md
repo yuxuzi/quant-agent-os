@@ -15,6 +15,13 @@ public API, always with an entry here and a rewritten `tests/api.lock.json`.
 
 ### Added
 
+- `data.model` describes the six standard tables of decision 0037 (`securities`, `prices`, `returns`,
+  `holdings`, `measures`, `reference`): `TABLES` maps each name to its `TableSpec` (columns with
+  types, the key, and a docstring). `validate(table_name, columns)` returns every problem as text,
+  naming missing required columns, wrong types with their row, empty required cells, and repeated
+  keys. `as_of(rows, date, vintage=None)` keeps each key's latest vintage on or before the date, or
+  the exact vintage asked for. `to_wide(columns, ...)` pivots a long table to a wide `Table`.
+
 - `data.infer_frequency(dates)` returns a `Frequency` (name and periods a year) from the median spacing
   of the dates, and `data.check_frequency(dates, periods_per_year)` checks a stated count against
   them. The performance-report template used to carry this logic in its own `frequency.py`; it now

@@ -79,6 +79,11 @@
     "from_pandas": "def(frame: 'Any') -> 'Table'",
     "to_pandas": "def(table: 'Table') -> 'Any'"
   },
+  "quant_toolbox.data.model": {
+    "as_of": "def(rows: 'Sequence[Mapping[str, Any]]', date: 'dt.date', vintage: 'dt.date | None' = None, *, key: 'Sequence[str]' = ('entity', 'date')) -> 'list[dict[str, Any]]'",
+    "to_wide": "def(columns: 'Mapping[str, Sequence[Any]]', *, names: 'str' = 'entity', value: 'str' = 'value', date: 'str' = 'date', where: 'Mapping[str, object] | None' = None) -> 'Table'",
+    "validate": "def(table_name: 'str', columns: 'Mapping[str, Sequence[Any]]') -> 'list[str]'"
+  },
   "quant_toolbox.data.sql": {
     "connect": "def(url: 'str | URL', *, credential: 'Credential | None' = None, read_only: 'bool' = True, **engine_kwargs: 'Any') -> 'Engine'",
     "fetch_rows": "def(engine: 'Engine', sql: 'str', params: 'Mapping[str, object] | None' = None) -> 'Rows'",
