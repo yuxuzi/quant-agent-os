@@ -117,6 +117,10 @@ export QUANT_AGENT_OS_SIGN_IN_FILE="$FUND/site/sign-in.toml"
 export KESTREL_INTROSPECTION_SECRET=kpc-introspection-fixture
 export QUANT_AGENT_OS_GRANTED_PERMISSIONS='["read_local_data", "network"]'
 export QUANT_AGENT_OS_PREAPPROVED_TOOLS='{"network": ["risk_desks", "risk_exposure", "risk_desk_var", "risk_stress", "risk_stress_all", "risk_factor_decomposition"]}'
+export QUANT_AGENT_OS_LOG_FORMAT=json
+# The server signs each risk call with a secret the risk service checks, named by a file (decision 0030).
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))' > "$WORK/risk-caller.secret"
+export KPC_RISK_CALLER_SECRET_FILE="$WORK/risk-caller.secret"
 mkdir -p "$KPC_OUTPUT"
 
 phase "3. build the warehouse"
@@ -148,17 +152,21 @@ uv run --no-sync python site/kestrel_server.py </dev/null >"$LOGS/server.log" 2>
 PIDS+=($!)
 wait_for "$GATEWAY/.well-known/oauth-authorization-server" gateway "$LOGS/gateway.log"
 wait_for "$SERVER/healthz" server "$LOGS/server.log"
-wait_for "$RISK/risk_desks" "risk service" "$LOGS/risk.log" -X POST -H 'Content-Type: application/json' -d '{}'
+wait_for "$RISK/openapi.json" "risk service" "$LOGS/risk.log"
 grep -E "^Serving" "$LOGS/server.log" || true
 
 phase "8. the fund's day, as each user"
-uv run python drill_client.py --server "$SERVER" --gateway "$GATEWAY" --warehouse "$KPC_WAREHOUSE"
+uv run python drill_client.py --server "$SERVER" --gateway "$GATEWAY" --risk "$RISK" --warehouse "$KPC_WAREHOUSE"
 
 phase "9. the agreed cases"
 uv run python site/kestrel_server.py acceptance site/acceptance.toml | tee "$LOGS/acceptance.md" | head -3
 
 phase "10. who called what"
 uv run qaos runs show | tee "$LOGS/runs.log" | head -40
+# The AI-use report for the day, UTC: today's calls, by principal, tool, and dataset, with no content.
+read -r FROM TO < <(python3 -c 'import datetime as d; t = d.datetime.now(d.timezone.utc).date(); print(t, t + d.timedelta(days=1))')
+uv run qaos runs report --from "$FROM" --to "$TO" > "$LOGS/ai-use.md"
+head -12 "$LOGS/ai-use.md"
 finish
 
 printf '\n== summary\n'

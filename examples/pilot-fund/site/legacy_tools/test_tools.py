@@ -22,8 +22,11 @@ import uvicorn
 from warehouse_store import WarehouseDatasetStore
 
 from quant_agent_os.testing import check_app
+from quant_agent_os.tools import Caller
 
 HERE = Path(__file__).parent
+# The risk service checks each call's caller (decision 0030), so the checks act as a risk user.
+CHECKER = Caller(principal="contract-check", groups=frozenset({"risk"}))
 DRAFTED = ["facades.py", "server.py", "stubs.py", "service/app.py"]
 STORE = WarehouseDatasetStore(Path(os.environ["KPC_WAREHOUSE"]))
 EXAMPLES: dict[str, dict[str, Any]] = {
@@ -75,7 +78,7 @@ def test_every_tool_meets_the_contract(service_url: str) -> None:
     """check_app calls each tool with its example, directly and over MCP, and checks the output."""
     for app in server.build_apps(service_url):
         examples = {name: EXAMPLES[name] for name in app.names}
-        check_app(app, examples, datasets=STORE)
+        check_app(app, examples, datasets=STORE, caller=CHECKER)
 
 
 def test_no_decision_is_left_open() -> None:

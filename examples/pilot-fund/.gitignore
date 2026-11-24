@@ -2,3 +2,5 @@
 facility/warehouse/*.db
 facility/warehouse/known_answers.json
 pnl_*.csv
+# The risk caller secret: created by the operator, never committed.
+site/*.secret

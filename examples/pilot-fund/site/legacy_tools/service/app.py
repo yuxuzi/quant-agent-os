@@ -13,11 +13,19 @@ import math
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from kestrel_quant.risk_engine.engine import RiskEngine as LegacyRiskEngine
 from pydantic import BaseModel
+
+from quant_agent_os.caller_assertion import CALLER_HEADER, CallerAssertionError, verify_caller
+from quant_agent_os.config.secrets import read_secret
+
+# The platform signs each call's caller with this secret (stubs.py) and this service checks it. The
+# secret is named by a file, KPC_RISK_CALLER_SECRET_FILE, or by the variable itself (decision 0030).
+CALLER_SECRET = "KPC_RISK_CALLER_SECRET"
+RISK_GROUP = "risk"  # the group access.toml gives the risk engine
 
 OBJECTS: dict[str, Any] = {}
 # One lock per legacy object: requests run on several threads, and the engine's cache and
@@ -30,6 +38,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Build each legacy object once: the slow set-up happens here, not per call."""
     # The firm's defaults: the latest warehouse day, CONFIG's 500-day lookback, and the
     # risk committee's scenarios.json. KPC_WAREHOUSE names the warehouse.
+    secret = read_secret(CALLER_SECRET)
+    if secret is None:
+        raise RuntimeError(
+            f"Set {CALLER_SECRET} or {CALLER_SECRET}_FILE: every call is checked with it."
+        )
+    OBJECTS["caller_secret"] = secret
     OBJECTS["risk_engine"] = LegacyRiskEngine()
     OBJECTS["risk_engine"].load()  # slow: reads the warehouse and the vendor model
     yield
@@ -39,13 +53,33 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="kestrel_quant risk service", lifespan=lifespan)
 
 
+def _admitted(tool: str) -> Any:
+    """A dependency that refuses a call unless the platform vouched for a risk-group caller.
+
+    A call with no assertion, or a forged, expired, or other tool's one, is 401. A verified caller
+    outside the risk group is 403. Only the platform holds the secret, so only it can vouch.
+    """
+
+    def admit(
+        assertion: Annotated[str | None, Header(alias=CALLER_HEADER)] = None,
+    ) -> None:
+        try:
+            caller = verify_caller(assertion, OBJECTS["caller_secret"], tool=tool)
+        except CallerAssertionError:
+            raise HTTPException(401, "The caller is not verified.") from None
+        if RISK_GROUP not in caller.groups:
+            raise HTTPException(403, "Only the risk group reaches the risk engine.")
+
+    return admit
+
+
 class RiskDesksRequest(BaseModel):
     """The arguments of risk_desks."""
 
     pass
 
 
-@app.post("/risk_desks")
+@app.post("/risk_desks", dependencies=[Depends(_admitted("risk_desks"))])
 def risk_desks(request: RiskDesksRequest) -> Any:
     """The desks the engine holds a book for."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
@@ -60,7 +94,7 @@ class RiskExposureRequest(BaseModel):
     desk: str
 
 
-@app.post("/risk_exposure")
+@app.post("/risk_exposure", dependencies=[Depends(_admitted("risk_exposure"))])
 def risk_exposure(request: RiskExposureRequest) -> Any:
     """A desk's gross and net market value in USD, and its positions."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
@@ -78,7 +112,7 @@ class RiskDeskVarRequest(BaseModel):
     method: str = "historical"
 
 
-@app.post("/risk_desk_var")
+@app.post("/risk_desk_var", dependencies=[Depends(_admitted("risk_desk_var"))])
 def risk_desk_var(request: RiskDeskVarRequest) -> Any:
     """Value at risk in USD, a positive number: the loss not exceeded with ``confidence``."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
@@ -94,7 +128,7 @@ class RiskStressRequest(BaseModel):
     scenario: str
 
 
-@app.post("/risk_stress")
+@app.post("/risk_stress", dependencies=[Depends(_admitted("risk_stress"))])
 def risk_stress(request: RiskStressRequest) -> Any:
     """A desk's P&L in USD under one scenario."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
@@ -109,7 +143,7 @@ class RiskStressAllRequest(BaseModel):
     desk: str
 
 
-@app.post("/risk_stress_all")
+@app.post("/risk_stress_all", dependencies=[Depends(_admitted("risk_stress_all"))])
 def risk_stress_all(request: RiskStressAllRequest) -> Any:
     """A desk's P&L in USD under every scenario."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
@@ -124,7 +158,9 @@ class RiskFactorDecompositionRequest(BaseModel):
     desk: str
 
 
-@app.post("/risk_factor_decomposition")
+@app.post(
+    "/risk_factor_decomposition", dependencies=[Depends(_admitted("risk_factor_decomposition"))]
+)
 def risk_factor_decomposition(request: RiskFactorDecompositionRequest) -> Any:
     """Each factor's share of the desk's model variance, and the specific share."""
     arguments = request.model_dump(exclude_none=True)  # None: the legacy default
