@@ -2596,7 +2596,7 @@ wheels = [
 
 [[package]]
 name = "pytemplate-uv"
-version = "3.2.0"
+version = "3.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "copier" },
@@ -2604,9 +2604,9 @@ dependencies = [
     { name = "rich" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/d6/0106ad7445bbb8182d120ddd8c929b0edfaeea2662d73941d78071ca6ce7/pytemplate_uv-3.2.0.tar.gz", hash = "sha256:f63187cfe4c2d4dc9394624f3dbe66ec728285a45483c68a3bd779117215cf81", size = 145107, upload-time = "2026-11-17T22:57:13.296Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/8f/1cf91420de427a7a8eb53131add5e1614db8caee2d667e54c474331a82f9/pytemplate_uv-3.6.0.tar.gz", hash = "sha256:396c3eb632e141f0eef00558faa45d41dac0660f772aab716947c90187f96fa7", size = 148448, upload-time = "2026-11-25T22:54:00.92Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/62/1f7d4b74c1442eaf80ae9b8737e8d66b897e5a3d86f54d1e37e5dab968b2/pytemplate_uv-3.2.0-py3-none-any.whl", hash = "sha256:276602f962290ca2fd9fcafc6e836948f6c7c9e176baf478757af0dbd9428554", size = 160619, upload-time = "2026-11-17T22:57:11.871Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/82/12830dd4a9250812f51031c83b3c749b1db800a88dfe8e311bc524b6dc87/pytemplate_uv-3.6.0-py3-none-any.whl", hash = "sha256:379673835a01a3c272efb718bb51811465396b0e517ab49edc2cd4ba9cb6d3e3", size = 162646, upload-time = "2026-11-25T22:53:59.416Z" },
 ]
 
 [[package]]
@@ -2854,7 +2854,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.20,<7" },
-    { name = "pytemplate-uv", marker = "extra == 'factory'", specifier = ">=3.2,<4" },
+    { name = "pytemplate-uv", marker = "extra == 'factory'", specifier = ">=3.4,<4" },
     { name = "quant-agent-os", extras = ["analytics", "excel", "factory", "interactive", "parquet", "pdf", "postgres", "server", "sql"], marker = "extra == 'all'" },
     { name = "quant-agent-os", extras = ["api", "mcp"], marker = "extra == 'server'" },
     { name = "quant-agent-os", extras = ["toolbox", "empyrical"], marker = "extra == 'analytics'" },

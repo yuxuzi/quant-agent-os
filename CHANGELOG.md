@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The App Factory's template packs declare `categories` and `keywords`, so pytemplate-hub's site files
+  them under its filters and search: quant-apps 2.4.0, quant-baseline 4.2.0, and agent-tool 1.1.0. No
+  generated file changes. The `factory` extra now needs pytemplate-uv 3.4 or later, which reads those
+  keys.
+
 ## [1.0.0] - 2026-11-24
 
 1.0 is the release a fund can rely on ([plan](docs/plans/release-1.0.md)). It speaks MCP 2026-07-28 as well as the
