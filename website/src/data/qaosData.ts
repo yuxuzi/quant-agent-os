@@ -287,7 +287,7 @@ export const FALLBACK_TOOLS: ToolCatalogEntry[] = [
     toolset: 'research',
     version: '1.2.0',
     permissions: ['read_local_data'],
-    description: 'Cited BM25 + entity-link + fact-graph (+ optional vector) retrieval over the firm corpus with source filters.',
+    description: 'Cited keyword search with entity links and a small graph of extracted facts, plus optional semantic search, over the firm corpus.',
     sampleArgs: { query: 'momentum crash risk in growth portfolios' },
   },
   {
@@ -513,7 +513,7 @@ export const COMPETITIVE_MATRIX = [
     alternative: 'DIY MCP Server (FastMCP / SDK)',
     strength: 'First tool takes a couple days; you own the code.',
     gap: 'Per-user dataset guards, single-use approvals, audit trail, numerical acceptance tests, and retrieval evals remain unbuilt.',
-    qaosEdge: 'Ships complete Core governance + deterministic financial testing for ~20% of one NY quant dev base salary.',
+    qaosEdge: 'Ships per-caller access, approvals, audit, and known-answer financial tests already built.',
   },
   {
     alternative: 'Generic MCP Gateways (Kong / MintMCP)',
