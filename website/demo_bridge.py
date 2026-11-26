@@ -246,9 +246,7 @@ def create_bridge_app(state: BridgeState) -> FastAPI:
             )
             calls: list[dict[str, Any]] = []
             for item in runs_list:
-                detail = (
-                    (await client.get(f"/v1/runs/{item['run_id']}")).raise_for_status().json()
-                )
+                detail = (await client.get(f"/v1/runs/{item['run_id']}")).raise_for_status().json()
                 principal = detail["run"]["principal"]
                 for call in detail["calls"]:
                     calls.append(
