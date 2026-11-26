@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 12 106 76" role="img" aria-label="Quant-Agent-OS">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34f5a8"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <!-- network -->
+  <g stroke="#10b981" stroke-width="1.6" fill="none" stroke-linejoin="round">
+    <path d="M62 27 L78 18 L92 25 L100 38 L97 58 L84 67 L74 56 L70 40 L78 18 M70 40 L86 44 L100 38 M86 44 L97 58 M70 40 L58 38"/>
+  </g>
+  <g fill="url(#g)">
+    <circle cx="78" cy="18" r="4"/><circle cx="92" cy="25" r="3"/><circle cx="100" cy="38" r="4.5"/>
+    <circle cx="97" cy="58" r="4"/><circle cx="84" cy="67" r="3.5"/><circle cx="74" cy="56" r="3"/>
+    <circle cx="70" cy="40" r="4"/><circle cx="86" cy="44" r="3.5"/><circle cx="58" cy="38" r="3.5"/>
+  </g>
+  <!-- clock -->
+  <circle cx="44" cy="50" r="34" fill="#06100d" stroke="url(#g)" stroke-width="4"/>
+  <g stroke="#e6edf5" stroke-width="2" stroke-linecap="round">
+    <path d="M44 22 V27 M44 73 V78 M16 50 H21"/>
+  </g>
+  <g stroke="#34f5a8" stroke-width="1.6" stroke-linecap="round">
+    <path d="M30 26 L32 29 M24 33 L27 35 M24 67 L27 65 M64 33 L61 35"/>
+  </g>
+  <g stroke="#fff" stroke-width="3" stroke-linecap="round">
+    <path d="M44 50 L28 40 M44 50 L58 36"/>
+  </g>
+  <circle cx="44" cy="50" r="3" fill="#06100d" stroke="#34f5a8" stroke-width="2"/>
+  <!-- bell curve and bars -->
+  <path d="M20 72 C30 72 34 58 44 58 C54 58 58 72 68 72" fill="none" stroke="#34f5a8" stroke-width="1.6"/>
+  <g fill="#34f5a8">
+    <rect x="31" y="68" width="4" height="5"/><rect x="37" y="63" width="4" height="10"/>
+    <rect x="43" y="60" width="4" height="13"/><rect x="49" y="64" width="4" height="9"/>
+    <rect x="55" y="68" width="4" height="5"/>
+  </g>
+</svg>
