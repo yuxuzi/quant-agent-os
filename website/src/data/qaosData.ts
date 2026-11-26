@@ -35,18 +35,18 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
       result: {
         book: 'growth',
         var: 0.0772,
-        weights: { NVDA: 0.3, MSFT: 0.25, AAPL: 0.2, AMZN: 0.15, META: 0.1 },
+        weights: { ALDER: 0.35, BIRCH: 0.3, CEDAR: 0.2, DOGWOOD: 0.15 },
         convention: 'Historical, nearest rank, one period, at current weights, no scaling.',
-        periods: 24,
+        periods: 36,
         data_versions: {
           'dataset:growth-weights': 'sha256:8f4e2b9a1c30d411',
-          'dataset:growth-assets': 'sha256:4a91c07d2e8b5520',
+          'dataset:growth-assets': 'sha256:d3678f776ae52953',
         },
         evidence: [
           {
             kind: 'computed',
             statement: 'The 95% historical VaR of the growth book is 7.72% of capital over one period.',
-            sources: [{ source_id: 'growth-assets', location: '24 periods' }],
+            sources: [{ source_id: 'growth-assets', location: '36 periods' }],
           },
         ],
       },
@@ -61,7 +61,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     tool: 'analyze_risk',
     arguments: {
       portfolio_id: 'growth',
-      weights: { NVDA: 0.3, MSFT: 0.25, AAPL: 0.2, AMZN: 0.15, META: 0.1 },
+      weights: { ALDER: 0.35, BIRCH: 0.3, CEDAR: 0.2, DOGWOOD: 0.15 },
       asset_returns: { dataset: 'growth-assets' },
       factor_returns: { dataset: 'factors', columns: ['market', 'size', 'value', 'momentum'] },
     },
@@ -74,22 +74,22 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
       result: {
         portfolio_id: 'growth',
         volatility: 0.1703,
-        var_95_cornish_fisher: 0.0841,
-        concentration: { herfindahl: 0.225, effective_positions: 4.44 },
+        parametric_var: -0.0862,
+        concentration: { herfindahl: 0.275, effective_positions: 3.64 },
         factors: {
-          exposures: { market: 1.18, size: -0.24, value: -0.42, momentum: 0.51 },
-          r_squared: 0.814,
+          exposures: { market: 1.15, size: 0.22, value: -0.34, momentum: 0.51 },
+          r_squared: 0.986,
         },
-        conventions: { source: 'numpy', periods_per_year: 12 },
+        conventions: { source: 'numpy sample covariance and least squares', periods_per_year: 12 },
         data_versions: {
-          'dataset:growth-assets': 'sha256:4a91c07d2e8b5520',
-          'dataset:factors': 'sha256:c10e84f29b17a604',
+          'dataset:growth-assets': 'sha256:d3678f776ae52953',
+          'dataset:factors': 'sha256:5b37ee735c5b8b64',
         },
         evidence: [
           {
             kind: 'computed',
             statement: 'Annualised volatility 17.03%; momentum factor exposure +0.51.',
-            sources: [{ source_id: 'growth-assets', location: '24 periods' }],
+            sources: [{ source_id: 'growth-assets', location: '36 periods' }],
           },
         ],
       },
@@ -164,7 +164,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           },
           {
             kind: 'computed',
-            statement: 'Sharpe ratio -0.05; maximum drawdown -14.20% over 24 months.',
+            statement: 'Sharpe ratio -0.05; maximum drawdown -14.20% over 36 months.',
             sources: [{ source_id: 'growth-book', location: 'column book' }],
           },
         ],
@@ -277,7 +277,7 @@ export const FALLBACK_TOOLS: ToolCatalogEntry[] = [
     description: 'Euler volatility contributions, Cornish-Fisher VaR, factor exposures, historical stress, and factor models.',
     sampleArgs: {
       portfolio_id: 'growth',
-      weights: { NVDA: 0.3, MSFT: 0.25, AAPL: 0.2, AMZN: 0.15, META: 0.1 },
+      weights: { ALDER: 0.35, BIRCH: 0.3, CEDAR: 0.2, DOGWOOD: 0.15 },
       asset_returns: { dataset: 'growth-assets' },
       factor_returns: { dataset: 'factors', columns: ['market', 'size', 'value', 'momentum'] },
     },
