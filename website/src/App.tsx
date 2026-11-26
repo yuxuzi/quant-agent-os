@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Check, Play, ShieldCheck, Terminal, Wrench } from 'lucide-react';
 import {
-  COMMERCIAL_LADDER,
   COMPETITIVE_MATRIX,
   DEMO_SCENARIOS,
   FALLBACK_TOOLS,
@@ -26,7 +25,6 @@ const NAV = [
   ['tools', 'Tools'],
   ['tutorial', 'Tutorial'],
   ['proof', 'Proof'],
-  ['pricing', 'Pricing'],
 ] as const;
 
 function Section({ id, title, lead, children }: { id: string; title: string; lead: string; children: ReactNode }) {
@@ -300,28 +298,6 @@ function Proof() {
   );
 }
 
-function Pricing() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-4">
-      {COMMERCIAL_LADDER.map((s) => (
-        <div
-          key={s.step}
-          className={`rounded-xl border p-5 ${
-            s.highlight ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-white/10'
-          }`}
-        >
-          <p className="text-xs text-slate-500">{s.step}</p>
-          <h3 className="mt-1 font-medium">{s.name}</h3>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{s.price}</p>
-          <p className="text-xs text-slate-500">{s.cadence}</p>
-          <p className="mt-3 text-sm text-slate-400">{s.scope}</p>
-          <p className="mt-3 text-sm text-slate-300">{s.deliverable}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <div className="bg-grid-pattern min-h-screen">
@@ -382,9 +358,6 @@ export default function App() {
         </Section>
         <Section id="proof" title="Proof" lead="Who it is for, where it was tried, and what it is not.">
           <Proof />
-        </Section>
-        <Section id="pricing" title="Pricing ladder" lead="Evaluate for free, then buy only the next step.">
-          <Pricing />
         </Section>
       </main>
 
