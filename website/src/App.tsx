@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Check, Play, ShieldCheck, Terminal, Wrench } from 'lucide-react';
+import { Check, Play, Terminal, Wrench } from 'lucide-react';
 import {
   COMPETITIVE_MATRIX,
   DEMO_SCENARIOS,
@@ -304,7 +304,10 @@ export default function App() {
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#080B10]/85 backdrop-blur">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <a href="#top" className="flex items-center gap-2 font-semibold">
-            <ShieldCheck size={18} className="text-emerald-400" /> Quant-Agent-OS
+            <img src="/logo-mark.svg" alt="" className="h-8 w-auto" />
+            <span>
+              Quant-Agent-<span className="text-emerald-400">OS</span>
+            </span>
           </a>
           <ul className="hidden gap-6 text-sm text-slate-400 md:flex">
             {NAV.map(([id, label]) => (
